@@ -1982,6 +1982,14 @@ export async function registerRoutes(
       const imported: string[] = [];
       const errors: Array<{ row: number; ticker: string; reason: string }> = [];
       const createdPortfolios: string[] = [];
+      let alreadyExisting = 0;
+
+      // Preload existing transaction IDs for this user so we can skip duplicates silently
+      const existingIds = new Set<string>();
+      if (hasIdColumn) {
+        const existingTxns = await storage.getTransactionsByUser(userId);
+        for (const t of existingTxns) existingIds.add(t.id);
+      }
       
       for (let i = 0; i < dataLines.length; i++) {
         const line = dataLines[i].trim();
@@ -2078,7 +2086,8 @@ export async function registerRoutes(
             continue;
           }
           
-          if (isNaN(price) || price <= 0) {
+          // For DIVIDEND allow negative prices (withholding tax entries from brokers like XTB)
+          if (isNaN(price) || price === 0 || (price < 0 && upperType !== "DIVIDEND")) {
             errors.push({ row: i + 2, ticker, reason: `Neplatná cena: ${priceStr}` });
             continue;
           }
@@ -2143,10 +2152,27 @@ export async function registerRoutes(
           
           // Use custom ID if provided in CSV
           if (customId) {
+            // Skip silently if a transaction with this ID already exists for the user
+            if (existingIds.has(customId)) {
+              alreadyExisting++;
+              continue;
+            }
             transactionData.id = customId;
           }
-          
-          const transaction = await storage.createTransaction(transactionData);
+
+          let transaction;
+          try {
+            transaction = await storage.createTransaction(transactionData);
+          } catch (insertErr: any) {
+            const msg = String(insertErr?.message || "");
+            if (msg.includes("duplicate key") || insertErr?.code === "23505") {
+              alreadyExisting++;
+              if (customId) existingIds.add(customId);
+              continue;
+            }
+            throw insertErr;
+          }
+          if (customId) existingIds.add(customId);
           
           // Update holdings (skip if this is a DIVIDEND transaction)
           if (upperType !== "DIVIDEND") {
@@ -2191,7 +2217,7 @@ export async function registerRoutes(
         }
       }
       
-      console.log(`[CSV Import] FINISHED: Imported ${imported.length}, Errors ${errors.length}`);
+      console.log(`[CSV Import] FINISHED: Imported ${imported.length}, Already existing ${alreadyExisting}, Errors ${errors.length}`);
       if (errors.length > 0) {
         console.log(`[CSV Import] Errors:`, JSON.stringify(errors));
       }
@@ -2199,6 +2225,7 @@ export async function registerRoutes(
       res.json({
         imported: imported.length,
         skipped: errors.length,
+        alreadyExisting,
         importedTickers: Array.from(new Set(imported)),
         createdPortfolios: Array.from(new Set(createdPortfolios)),
         errors,

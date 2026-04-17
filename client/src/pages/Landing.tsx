@@ -152,7 +152,7 @@ export default function Landing() {
             <div className="p-2 bg-primary rounded-lg">
               <TrendingUp className="h-8 w-8 text-primary-foreground" />
             </div>
-            <span className="text-3xl font-bold">PortfólioTracker</span>
+            <span className="text-3xl font-bold">Moneiqwise</span>
           </div>
           
           <h1 className="text-4xl font-bold mb-6 leading-tight">
@@ -217,7 +217,7 @@ export default function Landing() {
             <div className="p-2 bg-primary rounded-lg">
               <TrendingUp className="h-6 w-6 text-primary-foreground" />
             </div>
-            <span className="text-2xl font-bold">PortfólioTracker</span>
+            <span className="text-2xl font-bold">Moneiqwise</span>
           </div>
 
           <Card className="border-0 shadow-lg">

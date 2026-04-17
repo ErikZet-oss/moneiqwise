@@ -25,6 +25,7 @@ import type { Transaction } from "@shared/schema";
 interface ImportResult {
   imported: number;
   skipped: number;
+  alreadyExisting?: number;
   importedTickers: string[];
   errors: Array<{ row: number; ticker: string; reason: string }>;
 }
@@ -154,9 +155,12 @@ export default function History() {
       invalidateAllQueries();
       
       if (data.errors.length === 0) {
+        const existingSuffix = data.alreadyExisting && data.alreadyExisting > 0
+          ? `, už existujúcich ${data.alreadyExisting}`
+          : "";
         toast({
           title: "Import dokončený",
-          description: `Úspešne importovaných ${data.imported} transakcií.`,
+          description: `Úspešne importovaných ${data.imported} transakcií${existingSuffix}.`,
         });
       } else {
         toast({
@@ -416,6 +420,7 @@ export default function History() {
                           </AlertTitle>
                           <AlertDescription>
                             Importovaných: {importResult.imported} transakcií
+                            {importResult.alreadyExisting !== undefined && importResult.alreadyExisting > 0 && ` | Už existujúcich: ${importResult.alreadyExisting}`}
                             {importResult.skipped > 0 && ` | Preskočených: ${importResult.skipped}`}
                           </AlertDescription>
                         </Alert>
