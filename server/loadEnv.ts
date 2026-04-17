@@ -1,6 +1,8 @@
 import { config } from "dotenv";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
+import { join } from "path";
+import fs from "fs";
 
-const projectRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
-config({ path: join(projectRoot, ".env") });
+const envPath = join(process.cwd(), ".env");
+if (fs.existsSync(envPath)) {
+  config({ path: envPath });
+}
