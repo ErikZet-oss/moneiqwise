@@ -24,6 +24,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useTheme } from "@/hooks/useTheme";
 import { BrokerLogo } from "@/components/BrokerLogo";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { User as UserType } from "@shared/schema";
 
 const menuItems = [
@@ -94,6 +95,12 @@ export function AppSidebar() {
   const getSelectedPortfolioName = () => {
     if (isAllPortfolios) return "Všetky portfóliá";
     return selectedPortfolio?.name || "Vybrať portfólio";
+  };
+
+  const handleLogout = async () => {
+    await apiRequest("POST", "/api/logout");
+    queryClient.clear();
+    window.location.href = "/";
   };
 
   return (
@@ -225,15 +232,13 @@ export function AppSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton 
-              asChild
+            <SidebarMenuButton
               data-testid="button-logout"
               className="text-xs md:text-sm py-1.5 md:py-2"
+              onClick={handleLogout}
             >
-              <a href="/api/logout">
-                <LogOut className="h-4 w-4 md:h-5 md:w-5" />
-                <span>Odhlásiť sa</span>
-              </a>
+              <LogOut className="h-4 w-4 md:h-5 md:w-5" />
+              <span>Odhlásiť sa</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

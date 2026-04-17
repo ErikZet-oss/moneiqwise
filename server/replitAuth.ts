@@ -1,67 +1,420 @@
 import type { Express, Request, Response, NextFunction, RequestHandler } from "express";
-import { storage } from "./storage";
+import session from "express-session";
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from "crypto";
+import { and, eq, gt, isNull } from "drizzle-orm";
+import { db } from "./db";
+import { localAuthAccounts, localPasswordResets, users } from "@shared/schema";
+
 type LocalAuthUser = {
   claims: {
     sub: string;
-    email?: string;
-    first_name?: string;
-    last_name?: string;
-    profile_image_url?: string;
   };
 };
 
-let localUserReady: Promise<void> | null = null;
+type RateLimitState = {
+  count: number;
+  windowStartMs: number;
+};
 
-function getLocalClaims() {
+type LockoutState = {
+  failedAttempts: number;
+  lockedUntilMs?: number;
+};
+
+const endpointRateLimits = new Map<string, RateLimitState>();
+const loginLockouts = new Map<string, LockoutState>();
+
+function parseBool(value: string | undefined, defaultValue: boolean) {
+  if (value === undefined) return defaultValue;
+  return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
+}
+
+function isRemoteIp(ip: string | undefined) {
+  if (!ip) return false;
+  return !["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(ip);
+}
+
+function hashPassword(password: string, salt: string) {
+  return scryptSync(password, salt, 64).toString("hex");
+}
+
+function hashResetToken(token: string) {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+function verifyPassword(password: string, salt: string, expectedHash: string) {
+  const actual = Buffer.from(hashPassword(password, salt), "hex");
+  const expected = Buffer.from(expectedHash, "hex");
+  if (actual.length !== expected.length) return false;
+  return timingSafeEqual(actual, expected);
+}
+
+function evaluatePasswordStrength(password: string) {
+  const checks = {
+    minLength: password.length >= 8,
+    lowercase: /[a-z]/.test(password),
+    uppercase: /[A-Z]/.test(password),
+    number: /[0-9]/.test(password),
+    symbol: /[^A-Za-z0-9]/.test(password),
+  };
+  const score = Object.values(checks).filter(Boolean).length;
+  return { checks, score, isStrong: score >= 4 };
+}
+
+function getRateLimitConfig() {
   return {
-    sub: process.env.LOCAL_USER_ID || "local-user",
-    email: process.env.LOCAL_USER_EMAIL || "local@example.com",
-    first_name: process.env.LOCAL_USER_FIRST_NAME || "Local",
-    last_name: process.env.LOCAL_USER_LAST_NAME || "User",
-    profile_image_url: process.env.LOCAL_USER_PROFILE_IMAGE_URL || undefined,
+    windowMs: Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS || "60000"),
+    maxRequests: Number(process.env.AUTH_RATE_LIMIT_MAX_REQUESTS || "25"),
   };
 }
 
-async function ensureLocalUserExists() {
-  if (!localUserReady) {
-    const claims = getLocalClaims();
-    localUserReady = storage
-      .upsertUser({
-        id: claims.sub,
-        email: claims.email,
-        firstName: claims.first_name,
-        lastName: claims.last_name,
-        profileImageUrl: claims.profile_image_url,
-      })
-      .then(() => undefined);
+function getLockoutConfig() {
+  return {
+    maxFailedAttempts: Number(process.env.AUTH_LOCKOUT_MAX_ATTEMPTS || "5"),
+    lockoutMinutes: Number(process.env.AUTH_LOCKOUT_MINUTES || "15"),
+  };
+}
+
+function applyRateLimit(req: Request, keyPrefix: string) {
+  const { windowMs, maxRequests } = getRateLimitConfig();
+  const ipKey = req.ip || "unknown-ip";
+  const key = `${keyPrefix}:${ipKey}`;
+  const now = Date.now();
+  const state = endpointRateLimits.get(key);
+
+  if (!state || now - state.windowStartMs >= windowMs) {
+    endpointRateLimits.set(key, { count: 1, windowStartMs: now });
+    return { allowed: true as const };
   }
-  await localUserReady;
+
+  state.count += 1;
+  endpointRateLimits.set(key, state);
+  if (state.count <= maxRequests) {
+    return { allowed: true as const };
+  }
+
+  const retryAfterSec = Math.max(1, Math.ceil((windowMs - (now - state.windowStartMs)) / 1000));
+  return { allowed: false as const, retryAfterSec };
+}
+
+function getLockoutKey(email: string) {
+  return email.trim().toLowerCase();
+}
+
+function isLoginLocked(email: string) {
+  const key = getLockoutKey(email);
+  const state = loginLockouts.get(key);
+  if (!state?.lockedUntilMs) {
+    return { locked: false as const };
+  }
+
+  const now = Date.now();
+  if (state.lockedUntilMs <= now) {
+    loginLockouts.delete(key);
+    return { locked: false as const };
+  }
+
+  return { locked: true as const, retryAfterSec: Math.ceil((state.lockedUntilMs - now) / 1000) };
+}
+
+function registerLoginFailure(email: string) {
+  const key = getLockoutKey(email);
+  const config = getLockoutConfig();
+  const state = loginLockouts.get(key) || { failedAttempts: 0 };
+  state.failedAttempts += 1;
+  if (state.failedAttempts >= config.maxFailedAttempts) {
+    state.lockedUntilMs = Date.now() + config.lockoutMinutes * 60 * 1000;
+    state.failedAttempts = 0;
+  }
+  loginLockouts.set(key, state);
+  return state;
+}
+
+function clearLoginFailures(email: string) {
+  loginLockouts.delete(getLockoutKey(email));
+}
+
+function validateCredentials(req: Request, res: Response, options: { requireStrongPassword?: boolean } = {}) {
+  const { email, password } = req.body ?? {};
+  if (typeof email !== "string" || typeof password !== "string") {
+    res.status(400).json({ message: "Email a heslo su povinne." });
+    return null;
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail || password.length < 6) {
+    res.status(400).json({ message: "Email musi byt vyplneny a heslo aspon 6 znakov." });
+    return null;
+  }
+
+  if (options.requireStrongPassword) {
+    const strength = evaluatePasswordStrength(password);
+    if (!strength.isStrong) {
+      res.status(400).json({ message: "Heslo je slabe. Pouzi aspon 8 znakov, velke/male pismeno, cislo a symbol." });
+      return null;
+    }
+  }
+
+  return { email: normalizedEmail, password };
+}
+
+async function findAccountByEmail(email: string) {
+  const [account] = await db
+    .select()
+    .from(localAuthAccounts)
+    .where(eq(localAuthAccounts.email, email));
+  return account;
+}
+
+async function createAccount(email: string, password: string, firstName?: string, lastName?: string) {
+  const salt = randomBytes(16).toString("hex");
+  const passwordHash = hashPassword(password, salt);
+
+  const [user] = await db
+    .insert(users)
+    .values({
+      email,
+      firstName: firstName?.trim() || null,
+      lastName: lastName?.trim() || null,
+      profileImageUrl: null,
+    })
+    .returning();
+
+  await db.insert(localAuthAccounts).values({
+    userId: user.id,
+    email,
+    passwordHash,
+    passwordSalt: salt,
+  });
+
+  return user;
+}
+
+async function createPasswordReset(email: string, userId: string) {
+  const token = randomBytes(24).toString("hex");
+  const tokenHash = hashResetToken(token);
+  const ttlMinutes = Number(process.env.LOCAL_AUTH_RESET_TOKEN_MINUTES || "30");
+  const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000);
+
+  await db.insert(localPasswordResets).values({
+    userId,
+    email,
+    tokenHash,
+    expiresAt,
+  });
+
+  return { token, expiresAt };
+}
+
+async function consumePasswordReset(email: string, token: string) {
+  const tokenHash = hashResetToken(token);
+  const [record] = await db
+    .select()
+    .from(localPasswordResets)
+    .where(
+      and(
+        eq(localPasswordResets.email, email),
+        eq(localPasswordResets.tokenHash, tokenHash),
+        isNull(localPasswordResets.usedAt),
+        gt(localPasswordResets.expiresAt, new Date()),
+      ),
+    );
+
+  if (!record) return null;
+
+  await db
+    .update(localPasswordResets)
+    .set({ usedAt: new Date() })
+    .where(eq(localPasswordResets.id, record.id));
+
+  return record;
 }
 
 export async function setupAuth(app: Express) {
-  await ensureLocalUserExists();
+  const allowRemote = parseBool(process.env.LOCAL_AUTH_ALLOW_REMOTE, false);
+  const sessionSecret = process.env.SESSION_SECRET || process.env.LOCAL_AUTH_SESSION_SECRET || "dev-only-change-me";
 
-  app.use(async (req: Request, _res: Response, next: NextFunction) => {
+  app.set("trust proxy", 1);
+  app.use(
+    session({
+      name: "moneiqwise.sid",
+      secret: sessionSecret,
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        maxAge: 1000 * 60 * 60 * 24 * 14,
+      },
+    }),
+  );
+
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (!allowRemote && isRemoteIp(req.ip)) {
+      return res.status(403).json({ message: "Local auth is enabled only for localhost requests." });
+    }
+
+    const sessionUserId = req.session?.userId;
+    if (!sessionUserId) return next();
+    (req as any).user = { claims: { sub: sessionUserId } } as LocalAuthUser;
+    (req as any).isAuthenticated = () => true;
+    return next();
+  });
+
+  app.post("/api/login", async (req: Request, res: Response) => {
     try {
-      await ensureLocalUserExists();
-      (req as any).user = { claims: getLocalClaims() } as LocalAuthUser;
-      (req as any).isAuthenticated = () => true;
-      next();
-    } catch (error) {
-      next(error);
+      const values = validateCredentials(req, res);
+      if (!values) return;
+      const rememberMe = Boolean(req.body?.rememberMe);
+
+      const rate = applyRateLimit(req, "login");
+      if (!rate.allowed) {
+        res.setHeader("Retry-After", rate.retryAfterSec.toString());
+        return res.status(429).json({ message: "Prilis vela pokusov. Skus to o chvilu." });
+      }
+
+      const lock = isLoginLocked(values.email);
+      if (lock.locked) {
+        res.setHeader("Retry-After", lock.retryAfterSec.toString());
+        return res.status(429).json({ message: "Ucet je docasne zamknuty po viacerych neuspesnych pokusoch." });
+      }
+
+      const account = await findAccountByEmail(values.email);
+      if (!account || !verifyPassword(values.password, account.passwordSalt, account.passwordHash)) {
+        registerLoginFailure(values.email);
+        return res.status(401).json({ message: "Nespravny email alebo heslo." });
+      }
+
+      clearLoginFailures(values.email);
+      req.session.userId = account.userId;
+      if (rememberMe) {
+        req.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 30;
+      } else {
+        req.session.cookie.expires = false as any;
+      }
+      return res.status(200).json({ ok: true });
+    } catch (_error) {
+      return res.status(500).json({ message: "Prihlasenie zlyhalo. Spusti `npm run db:push` a skus znova." });
     }
   });
 
-  app.get("/api/login", (_req: Request, res: Response) => {
-    res.redirect("/");
+  app.post("/api/register", async (req: Request, res: Response) => {
+    try {
+      const rate = applyRateLimit(req, "register");
+      if (!rate.allowed) {
+        res.setHeader("Retry-After", rate.retryAfterSec.toString());
+        return res.status(429).json({ message: "Prilis vela pokusov o registraciu. Skus to neskor." });
+      }
+
+      const values = validateCredentials(req, res, { requireStrongPassword: true });
+      if (!values) return;
+      const rememberMe = Boolean(req.body?.rememberMe);
+
+      const { firstName, lastName } = req.body ?? {};
+      const existing = await findAccountByEmail(values.email);
+      if (existing) {
+        return res.status(409).json({ message: "Ucet s tymto emailom uz existuje." });
+      }
+
+      const user = await createAccount(
+        values.email,
+        values.password,
+        typeof firstName === "string" ? firstName : undefined,
+        typeof lastName === "string" ? lastName : undefined,
+      );
+      req.session.userId = user.id;
+      if (rememberMe) {
+        req.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 30;
+      } else {
+        req.session.cookie.expires = false as any;
+      }
+      return res.status(201).json({ ok: true });
+    } catch (_error) {
+      return res.status(500).json({ message: "Registracia zlyhala. Spusti `npm run db:push` a skus znova." });
+    }
   });
 
-  app.get("/api/callback", (_req: Request, res: Response) => {
-    res.redirect("/");
+  app.post("/api/forgot-password", async (req: Request, res: Response) => {
+    const rate = applyRateLimit(req, "forgot-password");
+    if (!rate.allowed) {
+      res.setHeader("Retry-After", rate.retryAfterSec.toString());
+      return res.status(429).json({ message: "Prilis vela reset pokusov. Skus to neskor." });
+    }
+
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    if (!email) {
+      return res.status(400).json({ message: "Email je povinny." });
+    }
+
+    try {
+      const account = await findAccountByEmail(email);
+      if (!account) {
+        return res.status(200).json({ ok: true });
+      }
+
+      const reset = await createPasswordReset(email, account.userId);
+      const debugToken = process.env.NODE_ENV === "production" ? undefined : reset.token;
+      return res.status(200).json({ ok: true, resetToken: debugToken });
+    } catch (_error) {
+      return res.status(500).json({ message: "Nepodarilo sa vytvorit reset token." });
+    }
   });
 
-  app.get("/api/logout", (_req: Request, res: Response) => {
-    res.redirect("/");
+  app.post("/api/reset-password", async (req: Request, res: Response) => {
+    const rate = applyRateLimit(req, "reset-password");
+    if (!rate.allowed) {
+      res.setHeader("Retry-After", rate.retryAfterSec.toString());
+      return res.status(429).json({ message: "Prilis vela pokusov o zmenu hesla. Skus to neskor." });
+    }
+
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+    const newPassword = typeof req.body?.newPassword === "string" ? req.body.newPassword : "";
+    if (!email || !token || !newPassword) {
+      return res.status(400).json({ message: "Email, token a nove heslo su povinne." });
+    }
+
+    const strength = evaluatePasswordStrength(newPassword);
+    if (!strength.isStrong) {
+      return res.status(400).json({ message: "Nove heslo je slabe." });
+    }
+
+    try {
+      const reset = await consumePasswordReset(email, token);
+      if (!reset) {
+        return res.status(400).json({ message: "Reset token je neplatny alebo expirovany." });
+      }
+
+      const account = await findAccountByEmail(email);
+      if (!account) {
+        return res.status(404).json({ message: "Ucet neexistuje." });
+      }
+
+      const salt = randomBytes(16).toString("hex");
+      const passwordHash = hashPassword(newPassword, salt);
+      await db
+        .update(localAuthAccounts)
+        .set({ passwordSalt: salt, passwordHash })
+        .where(eq(localAuthAccounts.id, account.id));
+
+      return res.status(200).json({ ok: true });
+    } catch (_error) {
+      return res.status(500).json({ message: "Reset hesla zlyhal." });
+    }
+  });
+
+  app.post("/api/logout", (req: Request, res: Response) => {
+    req.session.destroy(() => {
+      res.status(200).json({ ok: true });
+    });
+  });
+
+  // Backward compatibility with old links.
+  app.get("/api/login", (_req: Request, res: Response) => res.redirect("/"));
+  app.get("/api/callback", (_req: Request, res: Response) => res.redirect("/"));
+  app.get("/api/logout", (req: Request, res: Response) => {
+    req.session.destroy(() => res.redirect("/"));
   });
 }
 
@@ -73,6 +426,12 @@ export const isAuthenticated: RequestHandler = (req: Request, res: Response, nex
 
   return next();
 };
+
+declare module "express-session" {
+  interface SessionData {
+    userId?: string;
+  }
+}
 
 declare global {
   namespace Express {

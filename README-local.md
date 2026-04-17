@@ -43,6 +43,13 @@ Potom otvor `.env` a nastav hlavne:
 ```env
 DATABASE_URL=postgresql://postgres:HESLO@localhost:5432/moneiqwise
 PORT=5000
+LOCAL_AUTH_ALLOW_REMOTE=false
+LOCAL_AUTH_SESSION_SECRET=please-change-me
+LOCAL_AUTH_RESET_TOKEN_MINUTES=30
+AUTH_RATE_LIMIT_WINDOW_MS=60000
+AUTH_RATE_LIMIT_MAX_REQUESTS=25
+AUTH_LOCKOUT_MAX_ATTEMPTS=5
+AUTH_LOCKOUT_MINUTES=15
 ```
 
 Poznamka: ak mas v hesle znak `@`, musis ho v URL zapisat ako `%40`.
@@ -52,6 +59,15 @@ Priklad:
 ```env
 DATABASE_URL=postgresql://postgres:MojeHeslo%40277@localhost:5432/moneiqwise
 ```
+
+Poznamka k prihlaseniu:
+
+- appka pouziva lokalny login/registraciu (email + heslo)
+- `LOCAL_AUTH_ALLOW_REMOTE=false` povoli prihlasenie len z localhost
+- `LOCAL_AUTH_SESSION_SECRET` nastav na vlastnu hodnotu (najma mimo local dev)
+- `LOCAL_AUTH_RESET_TOKEN_MINUTES` urcuje platnost reset tokenu
+- `AUTH_RATE_LIMIT_*` limity pre login/register/reset endpointy
+- `AUTH_LOCKOUT_*` docasne zamknutie uctu po neuspesnych login pokusoch
 
 ## 3) Priprava databazy
 
@@ -63,6 +79,12 @@ Potom spusti migraciu schemy:
 
 ```powershell
 npm run db:push
+```
+
+Ak by `db:push` zlyhalo na starsich lokalnych datach, vytvor auth tabulky manualne:
+
+```powershell
+node -e "require('dotenv').config(); const { Client } = require('pg'); (async () => { const c = new Client({ connectionString: process.env.DATABASE_URL }); await c.connect(); await c.query('CREATE TABLE IF NOT EXISTS local_auth_accounts (id varchar PRIMARY KEY DEFAULT gen_random_uuid()::text, user_id varchar NOT NULL UNIQUE REFERENCES users(id), email varchar NOT NULL UNIQUE, password_hash text NOT NULL, password_salt text NOT NULL, created_at timestamp DEFAULT now())'); await c.query('CREATE TABLE IF NOT EXISTS local_password_resets (id varchar PRIMARY KEY DEFAULT gen_random_uuid()::text, user_id varchar NOT NULL REFERENCES users(id), email varchar NOT NULL, token_hash text NOT NULL UNIQUE, expires_at timestamp NOT NULL, used_at timestamp, created_at timestamp DEFAULT now())'); await c.end(); console.log('local auth tables ready'); })();"
 ```
 
 ## 4) Spustenie aplikacie
