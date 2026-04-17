@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="sk">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <meta name="description" content="Komplexný investičný portfólio tracker pre sledovanie výkonnosti vášho portfólia v reálnom čase. Analyzujte zisky a straty, spravujte transakcie." />
+    <meta property="og:title" content="PortfólioTracker - Komplexný Investičný Tracker" />
+    <meta property="og:description" content="Sledujte svoje portfólio v reálnom čase. Analyzujte zisky a straty." />
+    <meta property="og:type" content="website" />
+    <title>PortfólioTracker - Komplexný Investičný Tracker</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=JetBrains+Mono:wght@100..800&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('theme');
+          var theme = stored === 'light' || stored === 'dark'
+            ? stored
+            : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+          document.body.classList.add(theme);
+        } catch (e) {
+          document.body.classList.add('dark');
+        }
+      })();
+    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
