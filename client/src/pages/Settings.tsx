@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
-import { Loader2, Eye, EyeOff, CheckCircle2, XCircle, Key, ExternalLink, Coins, Calculator, RefreshCw, Briefcase, Plus, Pencil, Trash2, LineChart, Newspaper } from "lucide-react";
+import { Loader2, Eye, EyeOff, CheckCircle2, XCircle, Key, ExternalLink, Coins, Calculator, RefreshCw, Briefcase, Plus, Pencil, Trash2, LineChart, Newspaper, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { BrokerLogo, BrokerSelectItem, BROKER_CATALOG } from "@/components/BrokerLogo";
 import { BROKER_CODES, type Currency, type BrokerCode } from "@shared/schema";
@@ -28,7 +28,7 @@ interface ExchangeRate {
 
 export default function Settings() {
   const { toast } = useToast();
-  const { portfolios, createPortfolio, updatePortfolio, deletePortfolio } = usePortfolio();
+  const { allPortfolios, createPortfolio, updatePortfolio, deletePortfolio, setPortfolioHidden } = usePortfolio();
   const { showChart, showTooltip, hideAmounts, showNews, setShowChart, setShowTooltip, setHideAmounts, setShowNews } = useChartSettings();
   const [showAlphaVantage, setShowAlphaVantage] = useState(false);
   const [showFinnhub, setShowFinnhub] = useState(false);
@@ -41,6 +41,9 @@ export default function Settings() {
   const [isCreating, setIsCreating] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [togglingHiddenId, setTogglingHiddenId] = useState<string | null>(null);
+  const [wipeDialogOpen, setWipeDialogOpen] = useState(false);
+  const [wipeConfirmText, setWipeConfirmText] = useState("");
 
   const { data: settings, isLoading } = useQuery<ApiSettings>({
     queryKey: ["/api/settings"],
@@ -95,6 +98,47 @@ export default function Settings() {
   const handleCurrencyChange = (currency: Currency) => {
     updateSettingsMutation.mutate({ preferredCurrency: currency });
   };
+
+  const wipeAllDataMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/user/transactions/all", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ confirm: "VYMAZAT VSETKO" }),
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || "Nepodarilo sa vymazať dáta");
+      }
+      return response.json() as Promise<{
+        transactionsDeleted: number;
+        holdingsDeleted: number;
+        optionTradesDeleted: number;
+      }>;
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Všetko vymazané",
+        description: `Vymazaných ${data.transactionsDeleted} transakcií, ${data.holdingsDeleted} holdingov, ${data.optionTradesDeleted} opčných obchodov.`,
+      });
+      // After a nuclear wipe we can't just invalidate specific keys — too many
+      // pages subscribe to derived data (aggregates, quotes, realized gains,
+      // per-portfolio holdings …) and refetchOnMount is disabled by default in
+      // queryClient, so stale cached data would still flash when navigating.
+      // Clearing the whole cache guarantees every page re-fetches fresh state.
+      queryClient.clear();
+      setWipeDialogOpen(false);
+      setWipeConfirmText("");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Chyba",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   const recalculateMutation = useMutation({
     mutationFn: async () => {
@@ -163,6 +207,27 @@ export default function Settings() {
       });
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const handleToggleHidden = async (id: string, currentlyHidden: boolean) => {
+    setTogglingHiddenId(id);
+    try {
+      await setPortfolioHidden(id, !currentlyHidden);
+      toast({
+        title: currentlyHidden ? "Odkryté" : "Skryté",
+        description: currentlyHidden
+          ? "Portfólio je opäť viditeľné v celej aplikácii."
+          : "Portfólio je skryté. Transakcie ostávajú uložené a môžete ho kedykoľvek odkryť.",
+      });
+    } catch (error) {
+      toast({
+        title: "Chyba",
+        description: "Nepodarilo sa zmeniť viditeľnosť portfólia.",
+        variant: "destructive",
+      });
+    } finally {
+      setTogglingHiddenId(null);
     }
   };
 
@@ -257,24 +322,50 @@ export default function Settings() {
           </div>
           
           <div className="space-y-2">
-            {portfolios.map((portfolio) => (
-              <div 
-                key={portfolio.id} 
-                className="flex items-center justify-between p-3 bg-muted rounded-lg"
+            {allPortfolios.map((portfolio) => (
+              <div
+                key={portfolio.id}
+                className={`flex items-center justify-between p-3 rounded-lg ${
+                  portfolio.isHidden ? "bg-muted/50 opacity-70" : "bg-muted"
+                }`}
                 data-testid={`portfolio-item-${portfolio.id}`}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                   {portfolio.brokerCode ? (
                     <BrokerLogo brokerCode={portfolio.brokerCode} size="sm" />
                   ) : (
-                    <Briefcase className="h-6 w-6 text-muted-foreground" />
+                    <Briefcase className="h-6 w-6 text-muted-foreground shrink-0" />
                   )}
-                  <span className="font-medium">{portfolio.name}</span>
+                  <span className={`font-medium truncate ${portfolio.isHidden ? "line-through" : ""}`}>
+                    {portfolio.name}
+                  </span>
                   {portfolio.isDefault && (
                     <Badge variant="outline" className="text-xs">Predvolené</Badge>
                   )}
+                  {portfolio.isHidden && (
+                    <Badge variant="outline" className="text-xs text-muted-foreground">
+                      Skryté
+                    </Badge>
+                  )}
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleToggleHidden(portfolio.id, !!portfolio.isHidden)}
+                    disabled={togglingHiddenId === portfolio.id}
+                    title={portfolio.isHidden ? "Odkryť portfólio" : "Skryť portfólio"}
+                    aria-label={portfolio.isHidden ? "Odkryť portfólio" : "Skryť portfólio"}
+                    data-testid={`button-toggle-hidden-portfolio-${portfolio.id}`}
+                  >
+                    {togglingHiddenId === portfolio.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : portfolio.isHidden ? (
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -283,11 +374,13 @@ export default function Settings() {
                   >
                     <Pencil className="h-4 w-4" />
                   </Button>
-                  {!portfolio.isDefault && (
+                  {allPortfolios.length > 1 && (
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={() => setDeletePortfolioId(portfolio.id)}
+                      title="Vymazať portfólio"
+                      aria-label="Vymazať portfólio"
                       data-testid={`button-delete-portfolio-${portfolio.id}`}
                     >
                       <Trash2 className="h-4 w-4 text-destructive" />
@@ -296,7 +389,7 @@ export default function Settings() {
                 </div>
               </div>
             ))}
-            {portfolios.length === 0 && (
+            {allPortfolios.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-4">
                 Zatiaľ nemáte žiadne portfóliá.
               </p>
@@ -371,7 +464,20 @@ export default function Settings() {
           <DialogHeader>
             <DialogTitle>Vymazať portfólio</DialogTitle>
             <DialogDescription>
-              Naozaj chcete vymazať toto portfólio? Všetky transakcie a holdings v tomto portfóliu budú tiež vymazané. Táto akcia je nevratná.
+              {(() => {
+                const target = allPortfolios.find((p) => p.id === deletePortfolioId);
+                const isDefault = !!target?.isDefault;
+                return (
+                  <>
+                    Naozaj chcete vymazať {target ? <strong>„{target.name}"</strong> : "toto portfólio"}?
+                    Všetky transakcie, holdings a opcie v tomto portfóliu budú natrvalo vymazané. Táto akcia je nevratná.
+                    {isDefault && (
+                      <> Keďže ide o hlavné portfólio, automaticky sa ním stane iné z vašich portfólií.</>
+                    )}
+                    {" "}Ak chcete dáta len skryť z prehľadu a zachovať ich, použite tlačidlo oka (skryť portfólio).
+                  </>
+                );
+              })()}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -746,6 +852,135 @@ export default function Settings() {
           </div>
         </CardContent>
       </Card>
+
+      <Card className="border-destructive/50">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-destructive" />
+            <CardTitle className="text-destructive">Nebezpečná zóna</CardTitle>
+          </div>
+          <CardDescription>
+            Nezvratné operácie nad vašimi dátami. Používajte len ak viete, čo
+            robíte.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <h4 className="font-semibold">Vymazať všetky transakcie a dáta</h4>
+                <p className="text-sm text-muted-foreground">
+                  Vymaže <span className="font-medium text-foreground">všetky transakcie, holdingy a opčné obchody</span>
+                  {" "}naprieč všetkými vašimi portfóliami – vrátane tých, ktoré majú
+                  neznáme portfólio (nezaradené záznamy). Portfóliá a API kľúče
+                  zostanú zachované, aby ste mohli dáta znovu naimportovať.
+                </p>
+                <p className="text-sm font-medium text-destructive">
+                  Táto akcia je nezvratná – nedá sa vrátiť späť.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setWipeConfirmText("");
+                setWipeDialogOpen(true);
+              }}
+              data-testid="button-open-wipe-dialog"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Vymazať všetky transakcie
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog
+        open={wipeDialogOpen}
+        onOpenChange={(open) => {
+          if (!wipeAllDataMutation.isPending) {
+            setWipeDialogOpen(open);
+            if (!open) setWipeConfirmText("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Naozaj vymazať všetky dáta?
+            </DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-3 pt-2">
+                <p>
+                  Touto akciou <span className="font-semibold">natrvalo zmažete</span>:
+                </p>
+                <ul className="list-disc pl-5 space-y-1 text-sm">
+                  <li>všetky transakcie (BUY, SELL, dividendy, dane) zo všetkých portfólií</li>
+                  <li>všetky holdingy (aktuálne pozície)</li>
+                  <li>všetky opčné obchody</li>
+                  <li>aj tzv. nezaradené záznamy bez portfólia</li>
+                </ul>
+                <p className="text-sm">
+                  Portfóliá, nastavenia meny, API kľúče a prihlásenie
+                  <span className="font-medium"> zostanú</span>. Po vymazaní môžete naimportovať dáta odznova.
+                </p>
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+                  Túto akciu nie je možné vrátiť späť. Žiadny undo, žiadna záloha.
+                </div>
+                <div className="space-y-2 pt-2">
+                  <label className="text-sm font-medium text-foreground">
+                    Na potvrdenie napíšte do poľa: <span className="font-mono">VYMAZAT VSETKO</span>
+                  </label>
+                  <Input
+                    value={wipeConfirmText}
+                    onChange={(e) => setWipeConfirmText(e.target.value)}
+                    placeholder="VYMAZAT VSETKO"
+                    autoFocus
+                    disabled={wipeAllDataMutation.isPending}
+                    data-testid="input-wipe-confirm"
+                  />
+                </div>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setWipeDialogOpen(false);
+                setWipeConfirmText("");
+              }}
+              disabled={wipeAllDataMutation.isPending}
+              data-testid="button-cancel-wipe"
+            >
+              Zrušiť
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => wipeAllDataMutation.mutate()}
+              disabled={
+                wipeConfirmText.trim() !== "VYMAZAT VSETKO" ||
+                wipeAllDataMutation.isPending
+              }
+              data-testid="button-confirm-wipe"
+            >
+              {wipeAllDataMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Mažem...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Áno, vymazať všetko
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

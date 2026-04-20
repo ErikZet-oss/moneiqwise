@@ -18,7 +18,7 @@ import {
   type InsertOptionTrade,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, sql, isNull, or } from "drizzle-orm";
+import { eq, and, desc, sql, isNull, or, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // User operations - required for Replit Auth
@@ -27,12 +27,28 @@ export interface IStorage {
   
   // Portfolio operations
   getPortfoliosByUser(userId: string): Promise<Portfolio[]>;
+  getVisiblePortfolioIdsByUser(userId: string): Promise<string[]>;
   getPortfolioById(portfolioId: string, userId: string): Promise<Portfolio | undefined>;
   getDefaultPortfolio(userId: string): Promise<Portfolio | undefined>;
   createPortfolio(portfolio: InsertPortfolio): Promise<Portfolio>;
   updatePortfolio(portfolioId: string, userId: string, data: Partial<InsertPortfolio>): Promise<Portfolio>;
+  deletePortfolioCascade(portfolioId: string, userId: string): Promise<void>;
   deletePortfolio(portfolioId: string, userId: string): Promise<void>;
   ensureDefaultPortfolio(userId: string): Promise<Portfolio>;
+  migrateUnassignedToPortfolio(
+    userId: string,
+    targetPortfolioId: string,
+  ): Promise<{
+    transactionsMoved: number;
+    holdingsMoved: number;
+    holdingsMerged: number;
+    optionTradesMoved: number;
+  }>;
+  deleteAllTransactionData(userId: string): Promise<{
+    transactionsDeleted: number;
+    holdingsDeleted: number;
+    optionTradesDeleted: number;
+  }>;
   
   // Transaction operations
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
@@ -91,6 +107,19 @@ export class DatabaseStorage implements IStorage {
       .from(portfolios)
       .where(eq(portfolios.userId, userId))
       .orderBy(desc(portfolios.isDefault), portfolios.name);
+  }
+
+  async getVisiblePortfolioIdsByUser(userId: string): Promise<string[]> {
+    const rows = await db
+      .select({ id: portfolios.id })
+      .from(portfolios)
+      .where(
+        and(
+          eq(portfolios.userId, userId),
+          or(isNull(portfolios.isHidden), eq(portfolios.isHidden, false))
+        )
+      );
+    return rows.map((r) => r.id);
   }
 
   async getPortfolioById(portfolioId: string, userId: string): Promise<Portfolio | undefined> {
@@ -152,6 +181,45 @@ export class DatabaseStorage implements IStorage {
       );
   }
 
+  async deletePortfolioCascade(portfolioId: string, userId: string): Promise<void> {
+    // Remove all data referencing this portfolio, then the portfolio itself.
+    await db
+      .delete(holdings)
+      .where(
+        and(
+          eq(holdings.userId, userId),
+          eq(holdings.portfolioId, portfolioId)
+        )
+      );
+
+    await db
+      .delete(optionTrades)
+      .where(
+        and(
+          eq(optionTrades.userId, userId),
+          eq(optionTrades.portfolioId, portfolioId)
+        )
+      );
+
+    await db
+      .delete(transactions)
+      .where(
+        and(
+          eq(transactions.userId, userId),
+          eq(transactions.portfolioId, portfolioId)
+        )
+      );
+
+    await db
+      .delete(portfolios)
+      .where(
+        and(
+          eq(portfolios.id, portfolioId),
+          eq(portfolios.userId, userId)
+        )
+      );
+  }
+
   async ensureDefaultPortfolio(userId: string): Promise<Portfolio> {
     const existing = await this.getDefaultPortfolio(userId);
     if (existing) return existing;
@@ -168,6 +236,114 @@ export class DatabaseStorage implements IStorage {
       name: "Hlavné portfólio",
       isDefault: true,
     });
+  }
+
+  async migrateUnassignedToPortfolio(
+    userId: string,
+    targetPortfolioId: string,
+  ): Promise<{
+    transactionsMoved: number;
+    holdingsMoved: number;
+    holdingsMerged: number;
+    optionTradesMoved: number;
+  }> {
+    // 1) Transactions — straight bulk update.
+    const txnResult: any = await db
+      .update(transactions)
+      .set({ portfolioId: targetPortfolioId })
+      .where(and(eq(transactions.userId, userId), isNull(transactions.portfolioId)));
+
+    // 2) Option trades — same.
+    const optResult: any = await db
+      .update(optionTrades)
+      .set({ portfolioId: targetPortfolioId })
+      .where(and(eq(optionTrades.userId, userId), isNull(optionTrades.portfolioId)));
+
+    // 3) Holdings need merging if the target portfolio already has a row for
+    //    the same ticker (for example when an earlier import dropped one into
+    //    portfolio_id = NULL and a later one into the default portfolio).
+    const orphans = await db
+      .select()
+      .from(holdings)
+      .where(and(eq(holdings.userId, userId), isNull(holdings.portfolioId)));
+
+    let holdingsMoved = 0;
+    let holdingsMerged = 0;
+    for (const h of orphans) {
+      const [existing] = await db
+        .select()
+        .from(holdings)
+        .where(
+          and(
+            eq(holdings.userId, userId),
+            eq(holdings.ticker, h.ticker),
+            eq(holdings.portfolioId, targetPortfolioId),
+          ),
+        );
+
+      if (existing) {
+        const existingShares = parseFloat(existing.shares);
+        const existingInvested = parseFloat(existing.totalInvested);
+        const addShares = parseFloat(h.shares);
+        const addInvested = parseFloat(h.totalInvested);
+        const newShares = existingShares + addShares;
+        const newInvested = existingInvested + addInvested;
+        const newAvgCost = newShares > 0 ? newInvested / newShares : 0;
+
+        await db
+          .update(holdings)
+          .set({
+            shares: newShares.toFixed(8),
+            averageCost: newAvgCost.toFixed(4),
+            totalInvested: newInvested.toFixed(4),
+            companyName: existing.companyName || h.companyName,
+          })
+          .where(eq(holdings.id, existing.id));
+
+        await db.delete(holdings).where(eq(holdings.id, h.id));
+        holdingsMerged += 1;
+      } else {
+        await db
+          .update(holdings)
+          .set({ portfolioId: targetPortfolioId })
+          .where(eq(holdings.id, h.id));
+        holdingsMoved += 1;
+      }
+    }
+
+    return {
+      transactionsMoved: txnResult?.rowCount ?? 0,
+      holdingsMoved,
+      holdingsMerged,
+      optionTradesMoved: optResult?.rowCount ?? 0,
+    };
+  }
+
+  async deleteAllTransactionData(userId: string): Promise<{
+    transactionsDeleted: number;
+    holdingsDeleted: number;
+    optionTradesDeleted: number;
+  }> {
+    // Wipes ALL trading data for the user across every portfolio as well as
+    // any orphaned rows with portfolio_id = NULL. Portfolios themselves and
+    // user settings/API keys are intentionally preserved.
+    const holdingsResult: any = await db
+      .delete(holdings)
+      .where(eq(holdings.userId, userId));
+
+    const optResult: any = await db
+      .delete(optionTrades)
+      .where(eq(optionTrades.userId, userId));
+
+    const txnResult: any = await db
+      .delete(transactions)
+      .where(eq(transactions.userId, userId));
+
+    return {
+      transactionsDeleted: txnResult?.rowCount ?? 0,
+      holdingsDeleted: holdingsResult?.rowCount ?? 0,
+      optionTradesDeleted: optResult?.rowCount ?? 0,
+    };
   }
 
   async createTransaction(transaction: InsertTransaction): Promise<Transaction> {
@@ -195,12 +371,17 @@ export class DatabaseStorage implements IStorage {
         )
         .orderBy(desc(transactions.transactionDate));
     }
-    
-    // Return all transactions for the user (all portfolios)
+
+    // Return all transactions for the user across visible portfolios (plus legacy rows with no portfolio)
+    const visibleIds = await this.getVisiblePortfolioIdsByUser(userId);
+    const portfolioFilter = visibleIds.length > 0
+      ? or(isNull(transactions.portfolioId), inArray(transactions.portfolioId, visibleIds))
+      : isNull(transactions.portfolioId);
+
     return await db
       .select()
       .from(transactions)
-      .where(eq(transactions.userId, userId))
+      .where(and(eq(transactions.userId, userId), portfolioFilter))
       .orderBy(desc(transactions.transactionDate));
   }
 
@@ -219,13 +400,19 @@ export class DatabaseStorage implements IStorage {
         .orderBy(desc(transactions.transactionDate));
     }
     
+    const visibleIds = await this.getVisiblePortfolioIdsByUser(userId);
+    const portfolioFilter = visibleIds.length > 0
+      ? or(isNull(transactions.portfolioId), inArray(transactions.portfolioId, visibleIds))
+      : isNull(transactions.portfolioId);
+
     return await db
       .select()
       .from(transactions)
       .where(
         and(
           eq(transactions.userId, userId),
-          eq(transactions.ticker, ticker)
+          eq(transactions.ticker, ticker),
+          portfolioFilter
         )
       )
       .orderBy(desc(transactions.transactionDate));
@@ -280,11 +467,16 @@ export class DatabaseStorage implements IStorage {
         );
     }
     
-    // When viewing all portfolios, aggregate holdings by ticker
+    // When viewing all portfolios, aggregate holdings by ticker (excluding hidden portfolios)
+    const visibleIds = await this.getVisiblePortfolioIdsByUser(userId);
+    const portfolioFilter = visibleIds.length > 0
+      ? or(isNull(holdings.portfolioId), inArray(holdings.portfolioId, visibleIds))
+      : isNull(holdings.portfolioId);
+
     const allHoldings = await db
       .select()
       .from(holdings)
-      .where(eq(holdings.userId, userId));
+      .where(and(eq(holdings.userId, userId), portfolioFilter));
     
     // Aggregate by ticker
     const aggregatedMap = new Map<string, Holding>();
@@ -331,13 +523,19 @@ export class DatabaseStorage implements IStorage {
       return holding;
     }
     
+    const visibleIds = await this.getVisiblePortfolioIdsByUser(userId);
+    const portfolioFilter = visibleIds.length > 0
+      ? or(isNull(holdings.portfolioId), inArray(holdings.portfolioId, visibleIds))
+      : isNull(holdings.portfolioId);
+
     const [holding] = await db
       .select()
       .from(holdings)
       .where(
         and(
           eq(holdings.userId, userId),
-          eq(holdings.ticker, ticker)
+          eq(holdings.ticker, ticker),
+          portfolioFilter
         )
       );
     return holding;
@@ -461,11 +659,16 @@ export class DatabaseStorage implements IStorage {
         )
         .orderBy(desc(optionTrades.openDate));
     }
-    
+
+    const visibleIds = await this.getVisiblePortfolioIdsByUser(userId);
+    const portfolioFilter = visibleIds.length > 0
+      ? or(isNull(optionTrades.portfolioId), inArray(optionTrades.portfolioId, visibleIds))
+      : isNull(optionTrades.portfolioId);
+
     return await db
       .select()
       .from(optionTrades)
-      .where(eq(optionTrades.userId, userId))
+      .where(and(eq(optionTrades.userId, userId), portfolioFilter))
       .orderBy(desc(optionTrades.openDate));
   }
 

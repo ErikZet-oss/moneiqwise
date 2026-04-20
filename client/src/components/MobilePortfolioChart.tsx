@@ -51,7 +51,7 @@ export function MobilePortfolioChart({
 }: MobilePortfolioChartProps) {
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>("ALL");
   const { currency, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
-  const { getQueryParam } = usePortfolio();
+  const { getQueryParam, selectedPortfolio, selectedPortfolioId } = usePortfolio();
   const { showChart, showTooltip, hideAmounts, toggleHideAmounts } = useChartSettings();
   
   const maskAmount = (amount: string) => hideAmounts ? "••••••" : amount;
@@ -336,8 +336,20 @@ export function MobilePortfolioChart({
     return formatted;
   };
 
+  const portfolioLabel = selectedPortfolioId === "all"
+    ? "Všetky portfóliá"
+    : selectedPortfolio?.name ?? null;
+
   return (
     <div className="md:hidden bg-background px-4 pt-4 pb-2" data-testid="mobile-portfolio-chart">
+      {portfolioLabel && (
+        <div
+          className="text-sm font-semibold text-foreground truncate mb-1"
+          data-testid="text-mobile-portfolio-name"
+        >
+          {portfolioLabel}
+        </div>
+      )}
       <div className="flex items-center justify-between mb-1">
         <Popover>
           <PopoverTrigger asChild>

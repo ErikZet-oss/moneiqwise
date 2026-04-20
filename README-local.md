@@ -97,6 +97,12 @@ Aplikacia pobezi na:
 
 - http://localhost:5000
 
+## 4b) Prihlasenie funguje na live, ale nie local
+
+- Vzdy pouzivaj **rovnaky host** v prehliadaci: `http://localhost:5000` **alebo** `http://127.0.0.1:5000` (nemiesaj – cookies su per host).
+- Po zmene auth skus v DevTools vymazat **Local Storage** klic `portfolio-query-cache` pre tuto domenu.
+- `npm run dev` pouziva `NODE_ENV=development` – kontrola „len localhost IP“ sa pri nom **neaplikuje** (na rozdiel od produkcie).
+
 ## 5) Najcastejsi problem: "connection failed"
 
 Vo vacsine pripadov to znamena, ze nebezi backend.

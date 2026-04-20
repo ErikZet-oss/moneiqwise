@@ -20,7 +20,8 @@ import {
   Download,
   Info,
   FileSpreadsheet,
-  ArrowRight
+  ArrowRight,
+  Wrench
 } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -73,9 +74,62 @@ export default function Import() {
   const [activeTab, setActiveTab] = useState<string>("transactions");
   const [isParsing, setIsParsing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [migrateTarget, setMigrateTarget] = useState<string>("default");
 
   const { data: portfolios } = useQuery<Portfolio[]>({
     queryKey: ["/api/portfolios"],
+  });
+
+  const migrateMutation = useMutation({
+    mutationFn: async () => {
+      const body =
+        migrateTarget === "default"
+          ? {}
+          : { targetPortfolioId: migrateTarget };
+      const response = await fetch("/api/portfolios/migrate-unassigned", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || "Nepodarilo sa presunúť transakcie");
+      }
+      return response.json() as Promise<{
+        targetPortfolioId: string;
+        transactionsMoved: number;
+        holdingsMoved: number;
+        holdingsMerged: number;
+        optionTradesMoved: number;
+      }>;
+    },
+    onSuccess: (data) => {
+      const total =
+        (data.transactionsMoved || 0) +
+        (data.holdingsMoved || 0) +
+        (data.holdingsMerged || 0) +
+        (data.optionTradesMoved || 0);
+      toast({
+        title: "Presun dokončený",
+        description:
+          total === 0
+            ? "Žiadne nezaradené transakcie sa nenašli."
+            : `Presunuté: ${data.transactionsMoved} transakcií, ${data.holdingsMoved} nových holdingov, ${data.holdingsMerged} zlúčených, ${data.optionTradesMoved} opcií.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/holdings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dividends"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/realized-gains"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/options"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Chyba",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const parseMutation = useMutation({
@@ -489,6 +543,62 @@ export default function Import() {
                 <div className="text-sm text-muted-foreground">
                   Withholding tax - zrážková daň z dividend
                 </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Wrench className="h-5 w-5" />
+              Opraviť nezaradené transakcie
+            </CardTitle>
+            <CardDescription>
+              Ak ti predchádzajúci import uložil dáta tak, že sa zobrazujú len
+              pod "Všetky portfóliá" a nie v konkrétnom portfóliu, tu ich môžeš
+              presunúť. Presunie všetky transakcie, holdingy a opcie s
+              nenastaveným portfóliom do vybraného cieľa.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex-1">
+                <label className="text-sm font-medium mb-2 block">
+                  Cieľové portfólio
+                </label>
+                <Select value={migrateTarget} onValueChange={setMigrateTarget}>
+                  <SelectTrigger data-testid="select-migrate-target">
+                    <SelectValue placeholder="Vyberte portfólio" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Predvolené portfólio</SelectItem>
+                    {portfolios?.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-end">
+                <Button
+                  onClick={() => migrateMutation.mutate()}
+                  disabled={migrateMutation.isPending}
+                  data-testid="button-migrate-unassigned"
+                >
+                  {migrateMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Presúvam...
+                    </>
+                  ) : (
+                    <>
+                      <Wrench className="h-4 w-4 mr-2" />
+                      Presunúť nezaradené
+                    </>
+                  )}
+                </Button>
               </div>
             </div>
           </CardContent>

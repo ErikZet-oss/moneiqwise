@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useMemo, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { BrokerCode } from "@shared/schema";
@@ -9,11 +9,13 @@ export interface Portfolio {
   name: string;
   brokerCode: BrokerCode | null;
   isDefault: boolean;
+  isHidden: boolean;
   createdAt: Date;
 }
 
 interface PortfolioContextType {
   portfolios: Portfolio[];
+  allPortfolios: Portfolio[];
   selectedPortfolioId: string | null;
   selectedPortfolio: Portfolio | null;
   setSelectedPortfolioId: (id: string | null) => void;
@@ -22,6 +24,7 @@ interface PortfolioContextType {
   createPortfolio: (name: string, brokerCode?: BrokerCode) => Promise<Portfolio>;
   updatePortfolio: (id: string, name: string, brokerCode?: BrokerCode | null) => Promise<Portfolio>;
   deletePortfolio: (id: string) => Promise<void>;
+  setPortfolioHidden: (id: string, isHidden: boolean) => Promise<Portfolio>;
   getQueryParam: () => string;
 }
 
@@ -35,9 +38,19 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     return saved || "all";
   });
 
-  const { data: portfolios = [], isLoading } = useQuery<Portfolio[]>({
-    queryKey: ["/api/portfolios"],
+  const { data: allPortfolios = [], isLoading } = useQuery<Portfolio[]>({
+    queryKey: ["/api/portfolios", "all"],
+    queryFn: async () => {
+      const res = await fetch("/api/portfolios?includeHidden=true", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch portfolios");
+      return res.json();
+    },
   });
+
+  const portfolios = useMemo(
+    () => allPortfolios.filter((p) => !p.isHidden),
+    [allPortfolios]
+  );
 
   useEffect(() => {
     if (selectedPortfolioId) {
@@ -49,10 +62,9 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     if (portfolios.length > 0 && selectedPortfolioId !== "all") {
       const exists = portfolios.some(p => p.id === selectedPortfolioId);
       if (!exists) {
+        // Selected portfolio got hidden or removed – fall back to visible default or "all"
         const defaultPortfolio = portfolios.find(p => p.isDefault) || portfolios[0];
-        if (defaultPortfolio) {
-          setSelectedPortfolioIdState(defaultPortfolio.id);
-        }
+        setSelectedPortfolioIdState(defaultPortfolio?.id || "all");
       }
     }
   }, [portfolios, selectedPortfolioId]);
@@ -77,6 +89,24 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     },
   });
 
+  const setHiddenMutation = useMutation({
+    mutationFn: async ({ id, isHidden }: { id: string; isHidden: boolean }) => {
+      const response = await apiRequest("PUT", `/api/portfolios/${id}`, { isHidden });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portfolios"] });
+      // Data for hidden portfolio might have been included in "all" aggregations – refresh them too
+      queryClient.invalidateQueries({ queryKey: ["/api/holdings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/realized-gains"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dividends"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/options"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/news"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fees"] });
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       await apiRequest("DELETE", `/api/portfolios/${id}`);
@@ -85,6 +115,11 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
       queryClient.invalidateQueries({ queryKey: ["/api/portfolios"] });
       queryClient.invalidateQueries({ queryKey: ["/api/holdings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/realized-gains"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dividends"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/options"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/news"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fees"] });
     },
   });
 
@@ -120,10 +155,20 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const setPortfolioHidden = async (id: string, isHidden: boolean): Promise<Portfolio> => {
+    const result = await setHiddenMutation.mutateAsync({ id, isHidden });
+    if (isHidden && selectedPortfolioId === id) {
+      const fallback = allPortfolios.find((p) => !p.isHidden && p.id !== id);
+      setSelectedPortfolioIdState(fallback?.id || "all");
+    }
+    return result;
+  };
+
   return (
     <PortfolioContext.Provider
       value={{
         portfolios,
+        allPortfolios,
         selectedPortfolioId,
         selectedPortfolio,
         setSelectedPortfolioId,
@@ -132,6 +177,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
         createPortfolio,
         updatePortfolio,
         deletePortfolio,
+        setPortfolioHidden,
         getQueryParam,
       }}
     >

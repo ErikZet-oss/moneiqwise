@@ -11,6 +11,7 @@ import { ThemeProvider } from "@/hooks/useTheme";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
 import Dashboard from "@/pages/Dashboard";
+import Overview from "@/pages/Overview";
 import Transactions from "@/pages/Transactions";
 import History from "@/pages/History";
 import Profit from "@/pages/Profit";
@@ -40,6 +41,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Dashboard} />
+      <Route path="/overview" component={Overview} />
       <Route path="/transactions" component={Transactions} />
       <Route path="/history" component={History} />
       <Route path="/profit" component={Profit} />

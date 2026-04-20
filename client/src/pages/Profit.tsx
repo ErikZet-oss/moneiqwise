@@ -97,6 +97,7 @@ export default function Profit() {
   const { data: quotes, isLoading: quotesLoading } = useQuery<Record<string, StockQuote>>({
     queryKey: ["/api/quotes", holdings?.map(h => h.ticker)],
     enabled: !!holdings && holdings.length > 0,
+    staleTime: 60 * 1000,
     queryFn: async () => {
       if (!holdings || holdings.length === 0) return {};
       

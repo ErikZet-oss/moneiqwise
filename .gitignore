@@ -19,3 +19,7 @@ Thumbs.db
 .cache/
 .vite/
 coverage/
+
+# Office/Excel temporary lock files
+~$*
+

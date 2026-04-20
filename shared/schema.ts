@@ -83,6 +83,7 @@ export const portfolios = pgTable("portfolios", {
   description: text("description"),
   brokerCode: varchar("broker_code", { length: 20 }),
   isDefault: boolean("is_default").default(false),
+  isHidden: boolean("is_hidden").default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

@@ -29,9 +29,13 @@ function parseBool(value: string | undefined, defaultValue: boolean) {
   return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
 
+/** True if request is clearly not from loopback (used only in production when LOCAL_AUTH_ALLOW_REMOTE=false). */
 function isRemoteIp(ip: string | undefined) {
   if (!ip) return false;
-  return !["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(ip);
+  if (ip === "::1") return false;
+  const v4 = ip.replace(/^::ffff:/i, "");
+  if (v4.startsWith("127.")) return false;
+  return true;
 }
 
 function hashPassword(password: string, salt: string) {
@@ -132,6 +136,21 @@ function registerLoginFailure(email: string) {
 
 function clearLoginFailures(email: string) {
   loginLockouts.delete(getLockoutKey(email));
+}
+
+function regenerateSession(req: Request): Promise<void> {
+  return new Promise((resolve, reject) => {
+    req.session.regenerate((err) => (err ? reject(err) : resolve()));
+  });
+}
+
+function clearSessionCookie(res: Response) {
+  res.clearCookie("moneiqwise.sid", {
+    path: "/",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  });
 }
 
 function validateCredentials(req: Request, res: Response, options: { requireStrongPassword?: boolean } = {}) {
@@ -251,7 +270,13 @@ export async function setupAuth(app: Express) {
   );
 
   app.use((req: Request, res: Response, next: NextFunction) => {
-    if (!allowRemote && isRemoteIp(req.ip)) {
+    // V developmente neblokuj podľa IP (VPN / IPv6 / trust proxy často dajú zlé req.ip).
+    // Na produkcii ostáva ochrana, ak LOCAL_AUTH_ALLOW_REMOTE=false.
+    if (
+      process.env.NODE_ENV === "production" &&
+      !allowRemote &&
+      isRemoteIp(req.ip)
+    ) {
       return res.status(403).json({ message: "Local auth is enabled only for localhost requests." });
     }
 
@@ -281,12 +306,16 @@ export async function setupAuth(app: Express) {
       }
 
       const account = await findAccountByEmail(values.email);
-      if (!account || !verifyPassword(values.password, account.passwordSalt, account.passwordHash)) {
+      if (!account) {
+        return res.status(401).json({ message: "Nespravny email alebo heslo." });
+      }
+      if (!verifyPassword(values.password, account.passwordSalt, account.passwordHash)) {
         registerLoginFailure(values.email);
         return res.status(401).json({ message: "Nespravny email alebo heslo." });
       }
 
       clearLoginFailures(values.email);
+      await regenerateSession(req);
       req.session.userId = account.userId;
       if (rememberMe) {
         req.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 30;
@@ -323,6 +352,7 @@ export async function setupAuth(app: Express) {
         typeof firstName === "string" ? firstName : undefined,
         typeof lastName === "string" ? lastName : undefined,
       );
+      await regenerateSession(req);
       req.session.userId = user.id;
       if (rememberMe) {
         req.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 30;
@@ -405,7 +435,11 @@ export async function setupAuth(app: Express) {
   });
 
   app.post("/api/logout", (req: Request, res: Response) => {
-    req.session.destroy(() => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ message: "Odhlasenie zlyhalo." });
+      }
+      clearSessionCookie(res);
       res.status(200).json({ ok: true });
     });
   });
@@ -414,7 +448,13 @@ export async function setupAuth(app: Express) {
   app.get("/api/login", (_req: Request, res: Response) => res.redirect("/"));
   app.get("/api/callback", (_req: Request, res: Response) => res.redirect("/"));
   app.get("/api/logout", (req: Request, res: Response) => {
-    req.session.destroy(() => res.redirect("/"));
+    req.session.destroy((err) => {
+      if (err) {
+        return res.redirect("/");
+      }
+      clearSessionCookie(res);
+      res.redirect("/");
+    });
   });
 }
 

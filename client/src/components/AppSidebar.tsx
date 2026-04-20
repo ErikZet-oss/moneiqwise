@@ -1,4 +1,4 @@
-import { BarChart3, PlusCircle, History, LogOut, User, TrendingUp, Settings, Briefcase, ChevronDown, Check, Target, Banknote, Upload, Sun, Moon } from "lucide-react";
+import { BarChart3, PlusCircle, History, LogOut, User, TrendingUp, Settings, Briefcase, ChevronDown, Check, Target, Banknote, Upload, Sun, Moon, Layers } from "lucide-react";
 import { useLocation } from "wouter";
 import {
   Sidebar,
@@ -24,7 +24,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useTheme } from "@/hooks/useTheme";
 import { BrokerLogo } from "@/components/BrokerLogo";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, PORTFOLIO_QUERY_CACHE_KEY, queryClient } from "@/lib/queryClient";
 import type { User as UserType } from "@shared/schema";
 
 const menuItems = [
@@ -32,6 +32,11 @@ const menuItems = [
     title: "Prehľad",
     url: "/",
     icon: BarChart3,
+  },
+  {
+    title: "Všetky portfóliá",
+    url: "/overview",
+    icon: Layers,
   },
   {
     title: "Transakcie",
@@ -100,6 +105,11 @@ export function AppSidebar() {
   const handleLogout = async () => {
     await apiRequest("POST", "/api/logout");
     queryClient.clear();
+    try {
+      localStorage.removeItem(PORTFOLIO_QUERY_CACHE_KEY);
+    } catch {
+      // ignore
+    }
     window.location.href = "/";
   };
 

@@ -1,5 +1,10 @@
 import * as XLSX from 'xlsx';
 
+/** Odstráni kombinujúce znaky (diakritiku); nepoužívame \p{M} kvôli kompatibilite s runtime/TS. */
+function stripDiacritics(s: string): string {
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
 export interface ParsedTransaction {
   date: Date;
   ticker: string;
@@ -145,11 +150,7 @@ function findHeaderRow(data: any[][], headerKeywords: string[]): { headerIndex: 
 /** Porovnanie hlavičky stĺpca s aliasmi (EN/SK, diakritika). */
 function getColumnIndex(headers: string[], possibleNames: string[]): number {
   const norm = (s: string) =>
-    s
-      .toLowerCase()
-      .trim()
-      .normalize("NFD")
-      .replace(/\p{M}/gu, "");
+    stripDiacritics(s.toLowerCase().trim());
 
   const aliases = possibleNames.map((n) => norm(n));
   for (let i = 0; i < headers.length; i++) {
@@ -223,7 +224,7 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
     
     const operationId = idCol !== -1 ? (row[idCol] || '').toString().trim() : '';
     const typeStr = (row[typeCol] || '').toString().toLowerCase().trim();
-    const typePlain = typeStr.normalize('NFD').replace(/\p{M}/gu, '');
+    const typePlain = stripDiacritics(typeStr);
     const time = parseDate(row[timeCol]);
     const comment = commentCol !== -1 ? (row[commentCol] || '').toString() : '';
     const symbolRaw = symbolCol !== -1 ? (row[symbolCol] || '').toString().trim() : '';
@@ -466,11 +467,7 @@ export async function parseXTBFile(fileBuffer: Buffer, _fileName: string): Promi
     });
 
     // Hárok „Cash operation history“ / slovenské varianty (XTB export)
-    const sheetNorm = (s: string) =>
-      s
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/\p{M}/gu, '');
+    const sheetNorm = (s: string) => stripDiacritics(s.toLowerCase());
     const cashSheet = workbook.SheetNames.find((name) => {
       const n = sheetNorm(name);
       return (

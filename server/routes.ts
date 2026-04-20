@@ -1,6 +1,8 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
+import fs from "fs";
+import path from "path";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { insertTransactionSchema, insertPortfolioSchema, insertOptionTradeSchema } from "@shared/schema";
@@ -46,6 +48,63 @@ const HISTORICAL_CACHE_TTL = 12 * 60 * 60 * 1000; // 12 hours for historical dat
 const EXCHANGE_RATE_CACHE_TTL = 60 * 60 * 1000; // 1 hour for exchange rates
 const NEWS_CACHE_TTL = 15 * 60 * 1000; // 15 minutes for news
 
+// -----------------------------------------------------------------------------
+// Persistent disk cache
+// -----------------------------------------------------------------------------
+// The in-memory Maps above are wiped on every server restart, which means every
+// restart re-fetches 5 years of historical data for every ticker from Yahoo.
+// We serialise the caches to a JSON file on disk so they survive restarts.
+// TTL is still respected on read via the per-entry timestamp.
+const CACHE_DIR = path.join(process.cwd(), ".cache");
+const CACHE_FILE = path.join(CACHE_DIR, "prices.json");
+
+function loadCacheFromDisk(): void {
+  try {
+    if (!fs.existsSync(CACHE_FILE)) return;
+    const raw = fs.readFileSync(CACHE_FILE, "utf-8");
+    const parsed = JSON.parse(raw) as {
+      quotes?: Record<string, CacheEntry>;
+      historical?: Record<string, CacheEntry>;
+      exchangeRates?: Record<string, CacheEntry>;
+      symbols?: Record<string, CacheEntry>;
+    };
+    for (const [k, v] of Object.entries(parsed.quotes || {})) priceCache.set(k, v);
+    for (const [k, v] of Object.entries(parsed.historical || {})) historicalCache.set(k, v);
+    for (const [k, v] of Object.entries(parsed.exchangeRates || {})) exchangeRateCache.set(k, v);
+    for (const [k, v] of Object.entries(parsed.symbols || {})) symbolCache.set(k, v);
+    console.log(
+      `Disk cache loaded: ${priceCache.size} quotes, ${historicalCache.size} histories, ${exchangeRateCache.size} fx, ${symbolCache.size} symbols`,
+    );
+  } catch (err) {
+    console.warn("Failed to load disk cache (ignoring):", err);
+  }
+}
+
+let cacheSaveTimer: NodeJS.Timeout | null = null;
+function scheduleCacheSave(): void {
+  if (cacheSaveTimer) clearTimeout(cacheSaveTimer);
+  // Debounce writes — many cache entries get set in quick succession during a
+  // batch fetch; we only want one disk write after the storm settles.
+  cacheSaveTimer = setTimeout(() => {
+    try {
+      fs.mkdirSync(CACHE_DIR, { recursive: true });
+      const payload = {
+        savedAt: Date.now(),
+        quotes: Object.fromEntries(priceCache),
+        historical: Object.fromEntries(historicalCache),
+        exchangeRates: Object.fromEntries(exchangeRateCache),
+        symbols: Object.fromEntries(symbolCache),
+      };
+      fs.writeFileSync(CACHE_FILE, JSON.stringify(payload));
+    } catch (err) {
+      console.warn("Failed to persist price cache to disk:", err);
+    }
+  }, 5000);
+}
+
+// Load immediately on module init so the first request after restart is fast.
+loadCacheFromDisk();
+
 // Exchange rates interface
 interface AllExchangeRates {
   eurToUsd: number;
@@ -82,6 +141,7 @@ async function fetchAllExchangeRates(): Promise<AllExchangeRates> {
           gbpToEur: 1 / (data.rates.GBP || 0.85),
         };
         exchangeRateCache.set("ALL_RATES", { data: result, timestamp: Date.now() });
+        scheduleCacheSave();
         console.log(`Exchange rates fetched: 1 EUR = ${result.eurToUsd} USD, ${result.eurToCzk} CZK, ${result.eurToPln} PLN`);
         return result;
       }
@@ -107,6 +167,7 @@ async function fetchAllExchangeRates(): Promise<AllExchangeRates> {
           gbpToEur: 1 / (data.rates.GBP || 0.85),
         };
         exchangeRateCache.set("ALL_RATES", { data: result, timestamp: Date.now() });
+        scheduleCacheSave();
         return result;
       }
     }
@@ -410,6 +471,7 @@ async function fetchStockQuote(ticker: string): Promise<any> {
   try {
     const result = await fetchYahooQuote(ticker);
     priceCache.set(ticker, { data: result, timestamp: Date.now() });
+    scheduleCacheSave();
     console.log(`Yahoo Finance success for ${ticker}: ${result.price}`);
     return result;
   } catch (error) {
@@ -440,6 +502,7 @@ async function fetchStockQuote(ticker: string): Promise<any> {
         
         // Cache the result
         priceCache.set(ticker, { data: result, timestamp: Date.now() });
+        scheduleCacheSave();
         return result;
       }
     } catch (error) {
@@ -453,6 +516,7 @@ async function fetchStockQuote(ticker: string): Promise<any> {
       const result = await fetchFinnhubQuote(ticker);
       // Cache the result
       priceCache.set(ticker, { data: result, timestamp: Date.now() });
+      scheduleCacheSave();
       return result;
     } catch (error) {
       console.error(`Finnhub error for ${ticker}:`, error);
@@ -514,6 +578,7 @@ async function fetchHistoricalPrices(ticker: string): Promise<Record<string, num
     if (Object.keys(prices).length > 0) {
       console.log(`Yahoo Finance historical success for ${ticker}: ${Object.keys(prices).length} days`);
       historicalCache.set(ticker, { data: prices, timestamp: Date.now() });
+      scheduleCacheSave();
       return prices;
     }
   } catch (error) {
@@ -535,6 +600,7 @@ async function fetchHistoricalPrices(ticker: string): Promise<Record<string, num
         
         if (Object.keys(prices).length > 0) {
           historicalCache.set(ticker, { data: prices, timestamp: Date.now() });
+          scheduleCacheSave();
           return prices;
         }
       }
@@ -553,6 +619,7 @@ async function fetchHistoricalPrices(ticker: string): Promise<Record<string, num
       prices = await fetchFinnhubCandles(ticker);
       if (Object.keys(prices).length > 0) {
         historicalCache.set(ticker, { data: prices, timestamp: Date.now() });
+        scheduleCacheSave();
         return prices;
       }
     } catch (error) {
@@ -802,6 +869,7 @@ async function searchStocks(query: string): Promise<any[]> {
 
     // Cache the result
     symbolCache.set(cacheKey, { data: finalResults, timestamp: Date.now() });
+    scheduleCacheSave();
     return finalResults;
   } catch (error) {
     console.error(`Error searching stocks:`, error);
@@ -834,11 +902,72 @@ export async function registerRoutes(
       const userId = req.user.claims.sub;
       // Ensure user has at least one portfolio
       await storage.ensureDefaultPortfolio(userId);
-      const portfolios = await storage.getPortfoliosByUser(userId);
-      res.json(portfolios);
+      const allPortfolios = await storage.getPortfoliosByUser(userId);
+      const includeHidden = req.query.includeHidden === "true" || req.query.includeHidden === "1";
+      const result = includeHidden
+        ? allPortfolios
+        : allPortfolios.filter((p) => !p.isHidden);
+      res.json(result);
     } catch (error) {
       console.error("Error fetching portfolios:", error);
       res.status(500).json({ message: "Nepodarilo sa načítať portfóliá." });
+    }
+  });
+
+  // Destructive endpoint: wipes every transaction, holding and option trade
+  // for the authenticated user across ALL portfolios (including any rows with
+  // portfolio_id = NULL). Portfolios themselves and API keys remain intact so
+  // the user can re-import from scratch. Requires the caller to send
+  // { confirm: "VYMAZAT VSETKO" } as a guard against accidental calls.
+  app.delete("/api/user/transactions/all", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const confirm = (req.body?.confirm as string | undefined)?.trim();
+
+      if (confirm !== "VYMAZAT VSETKO") {
+        return res.status(400).json({
+          message:
+            'Pre potvrdenie musíte poslať { "confirm": "VYMAZAT VSETKO" }.',
+        });
+      }
+
+      const result = await storage.deleteAllTransactionData(userId);
+      res.json({
+        message: "Všetky transakcie a holdingy boli vymazané.",
+        ...result,
+      });
+    } catch (error) {
+      console.error("Error deleting all transaction data:", error);
+      res.status(500).json({ message: "Nepodarilo sa vymazať dáta." });
+    }
+  });
+
+  // One-shot migration: move any transactions / holdings that were saved with
+  // portfolio_id = NULL (e.g. from an earlier XTB import bug) to the user's
+  // default portfolio. Optionally the caller can pass targetPortfolioId in the
+  // body to move them somewhere other than the default.
+  app.post("/api/portfolios/migrate-unassigned", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const requestedTarget = (req.body?.targetPortfolioId as string | undefined) || undefined;
+
+      let targetPortfolioId: string;
+      if (requestedTarget) {
+        const target = await storage.getPortfolioById(requestedTarget, userId);
+        if (!target) {
+          return res.status(404).json({ message: "Cieľové portfólio neexistuje." });
+        }
+        targetPortfolioId = target.id;
+      } else {
+        const defaultPortfolio = await storage.ensureDefaultPortfolio(userId);
+        targetPortfolioId = defaultPortfolio.id;
+      }
+
+      const result = await storage.migrateUnassignedToPortfolio(userId, targetPortfolioId);
+      res.json({ targetPortfolioId, ...result });
+    } catch (error) {
+      console.error("Error migrating unassigned records:", error);
+      res.status(500).json({ message: "Nepodarilo sa presunúť priradenia." });
     }
   });
 
@@ -870,7 +999,7 @@ export async function registerRoutes(
     try {
       const userId = req.user.claims.sub;
       const portfolioId = req.params.id;
-      const { name, description, isDefault, brokerCode } = req.body;
+      const { name, description, isDefault, brokerCode, isHidden } = req.body;
 
       const existing = await storage.getPortfolioById(portfolioId, userId);
       if (!existing) {
@@ -892,6 +1021,7 @@ export async function registerRoutes(
         description: description?.trim() || null,
         brokerCode: brokerCode !== undefined ? brokerCode : existing.brokerCode,
         isDefault: isDefault !== undefined ? isDefault : existing.isDefault,
+        isHidden: isHidden !== undefined ? !!isHidden : existing.isHidden,
       });
 
       res.json(updated);
@@ -911,27 +1041,21 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Portfólio nenájdené." });
       }
 
-      // Check if this is the last portfolio
+      // Check if this is the last portfolio – we always need at least one
       const allPortfolios = await storage.getPortfoliosByUser(userId);
       if (allPortfolios.length <= 1) {
         return res.status(400).json({ message: "Nemôžete vymazať posledné portfólio." });
       }
 
-      // Check if portfolio has transactions
-      const transactions = await storage.getTransactionsByUser(userId, portfolioId);
-      if (transactions.length > 0) {
-        return res.status(400).json({ 
-          message: "Portfólio obsahuje transakcie. Najprv ich presuňte do iného portfólia alebo vymažte." 
-        });
-      }
+      // Cascade delete all data belonging to this portfolio, then the portfolio itself
+      await storage.deletePortfolioCascade(portfolioId, userId);
 
-      await storage.deletePortfolio(portfolioId, userId);
-
-      // If deleted was default, set another as default
+      // If deleted was default, promote another (prefer a visible one) as the new default
       if (existing.isDefault) {
         const remaining = await storage.getPortfoliosByUser(userId);
         if (remaining.length > 0) {
-          await storage.updatePortfolio(remaining[0].id, userId, { isDefault: true });
+          const promote = remaining.find((p) => !p.isHidden) || remaining[0];
+          await storage.updatePortfolio(promote.id, userId, { isDefault: true });
         }
       }
 
@@ -1975,20 +2099,42 @@ export async function registerRoutes(
       const hasIdColumn = headerParts.includes("id");
       const hasCurrencyColumn = headerParts.includes("mena") || headerParts.includes("currency");
       const hasPortfolioColumn = headerParts.includes("portfolio") || headerParts.includes("portfólio");
-      
+
+      console.log(`[CSV Import] Header: ${headerLine}`);
+      console.log(`[CSV Import] hasIdColumn=${hasIdColumn} hasCurrencyColumn=${hasCurrencyColumn} hasPortfolioColumn=${hasPortfolioColumn}`);
+
       // Skip header
       const dataLines = lines.slice(1);
-      
+
       const imported: string[] = [];
       const errors: Array<{ row: number; ticker: string; reason: string }> = [];
       const createdPortfolios: string[] = [];
       let alreadyExisting = 0;
 
-      // Preload existing transaction IDs for this user so we can skip duplicates silently
-      const existingIds = new Set<string>();
+      // Build a per-portfolio index of existing transaction IDs so we can skip
+      // true duplicates silently (same id re-imported into the same portfolio),
+      // while still allowing the same id to exist in a different portfolio
+      // (two separate brokerage accounts may accidentally share numeric IDs).
+      // Globally-seen IDs are tracked separately so we can drop the customId on
+      // cross-portfolio collisions and let the DB generate a fresh UUID instead
+      // of raising a 23505 unique-key error.
+      const existingIdsByPortfolio = new Map<string, Set<string>>();
+      const globallyUsedIds = new Set<string>();
       if (hasIdColumn) {
         const existingTxns = await storage.getTransactionsByUser(userId);
-        for (const t of existingTxns) existingIds.add(t.id);
+        for (const t of existingTxns) {
+          globallyUsedIds.add(t.id);
+          const key = t.portfolioId ?? "__none__";
+          let bucket = existingIdsByPortfolio.get(key);
+          if (!bucket) {
+            bucket = new Set<string>();
+            existingIdsByPortfolio.set(key, bucket);
+          }
+          bucket.add(t.id);
+        }
+        console.log(
+          `[CSV Import] Preloaded ${globallyUsedIds.size} existing transaction IDs across ${existingIdsByPortfolio.size} portfolios`
+        );
       }
       
       for (let i = 0; i < dataLines.length; i++) {
@@ -2150,14 +2296,26 @@ export async function registerRoutes(
             transactionDate,
           };
           
-          // Use custom ID if provided in CSV
+          // Duplicate detection is scoped to the TARGET portfolio only: if the
+          // same id is already present in this portfolio we treat it as a true
+          // re-import and skip it silently. If the id exists in a different
+          // portfolio (e.g. two brokers handing out the same numeric position
+          // IDs), we drop the customId and let the DB generate a fresh UUID so
+          // the row still lands – this is what the user almost always wants
+          // when they explicitly pick a new portfolio as the import target.
           if (customId) {
-            // Skip silently if a transaction with this ID already exists for the user
-            if (existingIds.has(customId)) {
+            const portfolioKey = txnPortfolioId ?? "__none__";
+            const portfolioBucket = existingIdsByPortfolio.get(portfolioKey);
+            if (portfolioBucket?.has(customId)) {
               alreadyExisting++;
               continue;
             }
-            transactionData.id = customId;
+            if (globallyUsedIds.has(customId)) {
+              // Another portfolio already owns this id; import anyway with a
+              // generated UUID to avoid a 23505 unique-key rejection.
+            } else {
+              transactionData.id = customId;
+            }
           }
 
           let transaction;
@@ -2166,13 +2324,30 @@ export async function registerRoutes(
           } catch (insertErr: any) {
             const msg = String(insertErr?.message || "");
             if (msg.includes("duplicate key") || insertErr?.code === "23505") {
-              alreadyExisting++;
-              if (customId) existingIds.add(customId);
-              continue;
+              // Shouldn't normally happen thanks to the checks above, but keep
+              // the safety net: retry once with a DB-generated id.
+              try {
+                delete transactionData.id;
+                transaction = await storage.createTransaction(transactionData);
+              } catch (retryErr) {
+                alreadyExisting++;
+                continue;
+              }
+            } else {
+              throw insertErr;
             }
-            throw insertErr;
           }
-          if (customId) existingIds.add(customId);
+          // Track the id we just wrote so subsequent rows in this batch see it.
+          if (transaction?.id) {
+            globallyUsedIds.add(transaction.id);
+            const portfolioKey = txnPortfolioId ?? "__none__";
+            let bucket = existingIdsByPortfolio.get(portfolioKey);
+            if (!bucket) {
+              bucket = new Set<string>();
+              existingIdsByPortfolio.set(portfolioKey, bucket);
+            }
+            bucket.add(transaction.id);
+          }
           
           // Update holdings (skip if this is a DIVIDEND transaction)
           if (upperType !== "DIVIDEND") {
@@ -2604,6 +2779,13 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Žiadne transakcie na uloženie." });
       }
 
+      // Always resolve to a real portfolio ID. If the client sent null (the
+      // "default" option in the import UI), use the user's default portfolio.
+      // Without this, transactions/holdings land with portfolio_id = NULL and
+      // are only visible under "All portfolios" — never under a specific one.
+      const defaultPortfolio = await storage.ensureDefaultPortfolio(userId);
+      const targetPortfolioId: string = portfolioId || defaultPortfolio.id;
+
       const imported: any[] = [];
       const errors: string[] = [];
 
@@ -2660,7 +2842,7 @@ export async function registerRoutes(
 
           const transactionData = {
             userId,
-            portfolioId: portfolioId || null,
+            portfolioId: targetPortfolioId,
             type: tx.type,
             ticker: tx.ticker.toUpperCase(),
             companyName,
@@ -2685,7 +2867,7 @@ export async function registerRoutes(
             const sharesNum = parseFloat(shares);
             const priceNum = parseFloat(pricePerShare);
             const ticker = tx.ticker.toUpperCase();
-            const currentPortfolioId = portfolioId || null;
+            const currentPortfolioId = targetPortfolioId;
             
             // Get current holding
             const currentHolding = await storage.getHoldingByUserAndTicker(userId, ticker, currentPortfolioId);
