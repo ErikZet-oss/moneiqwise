@@ -35,6 +35,8 @@ interface DividendSummary {
 
 interface PortfolioMetrics {
   totalValue: number;
+  stockValue: number;
+  cashValue: number;
   totalInvested: number;
   totalProfit: number;
   totalProfitPercent: number;
@@ -112,11 +114,12 @@ export default function Overview() {
   });
 
   const computeMetrics = (index: number): PortfolioMetrics => {
+    const portfolio = portfolios[index];
     const holdings = holdingsQueries[index]?.data ?? [];
     const realized = realizedGainsQueries[index]?.data?.totalRealized ?? 0;
     const dividends = dividendsQueries[index]?.data?.totalNet ?? 0;
 
-    let totalValue = 0;
+    let stockValue = 0;
     let totalInvested = 0;
     let dailyChange = 0;
     let anyQuote = false;
@@ -131,22 +134,34 @@ export default function Overview() {
       const quote = quotes?.[h.ticker];
       if (quote) {
         anyQuote = true;
-        totalValue += shares * convertPrice(quote.price, tickerCurrency);
+        stockValue += shares * convertPrice(quote.price, tickerCurrency);
         dailyChange += shares * convertPrice(quote.change, tickerCurrency);
       } else {
-        totalValue += invested;
+        stockValue += invested;
       }
     });
 
-    const unrealized = totalValue - totalInvested;
+    // Cash is editable per portfolio and may be held in a currency other than
+    // the user's preferred one — convert it the same way we convert holdings.
+    const rawCash = parseFloat(portfolio?.cashBalance || "0");
+    const cashCcy = (portfolio?.cashCurrency || "EUR") as any;
+    const cashValue = rawCash > 0 ? convertPrice(rawCash, cashCcy) : 0;
+
+    const totalValue = stockValue + cashValue;
+
+    // Profit / return metrics are driven only by stock positions + realized
+    // gains + dividends. Cash sitting in the account isn't a gain or a loss.
+    const unrealized = stockValue - totalInvested;
     const totalProfit = unrealized + realized + dividends;
     const totalProfitPercent = totalInvested > 0 ? (totalProfit / totalInvested) * 100 : 0;
-    const baseValue = totalValue - dailyChange;
+    const baseValue = stockValue - dailyChange;
     const dailyChangePercent = baseValue > 0 ? (dailyChange / baseValue) * 100 : 0;
-    const passiveIncomePercent = totalValue > 0 ? (dividends / totalValue) * 100 : 0;
+    const passiveIncomePercent = stockValue > 0 ? (dividends / stockValue) * 100 : 0;
 
     return {
       totalValue,
+      stockValue,
+      cashValue,
       totalInvested,
       totalProfit,
       totalProfitPercent,
@@ -246,6 +261,7 @@ export default function Overview() {
               m.totalValue > 0 ||
               m.totalInvested > 0 ||
               m.passiveIncome > 0 ||
+              m.cashValue > 0 ||
               (realizedGainsQueries[idx]?.data?.totalRealized ?? 0) !== 0;
 
             return (
@@ -278,8 +294,15 @@ export default function Overview() {
                   {holdingsLoading ? (
                     <Skeleton className="h-8 w-40" />
                   ) : (
-                    <div className="text-2xl md:text-3xl font-bold" data-testid={`overview-value-${portfolio.id}`}>
-                      {maskAmount(formatCurrency(m.totalValue))}
+                    <div>
+                      <div className="text-2xl md:text-3xl font-bold" data-testid={`overview-value-${portfolio.id}`}>
+                        {maskAmount(formatCurrency(m.totalValue))}
+                      </div>
+                      {m.cashValue > 0 && (
+                        <div className="text-xs text-muted-foreground mt-1" data-testid={`overview-cash-${portfolio.id}`}>
+                          Z toho hotovosť: {maskAmount(formatCurrency(m.cashValue))}
+                        </div>
+                      )}
                     </div>
                   )}
 
