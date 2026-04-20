@@ -4,7 +4,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { fetchAuthUser } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useState, type FormEvent } from "react";
@@ -43,10 +42,7 @@ export default function Landing() {
   const resetStrength = getPasswordStrength(resetNewPassword);
 
   const refreshAuth = async () => {
-    await queryClient.fetchQuery({
-      queryKey: ["/api/auth/user"],
-      queryFn: fetchAuthUser,
-    });
+    await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
   };
 
   const submitLogin = async (e: FormEvent) => {

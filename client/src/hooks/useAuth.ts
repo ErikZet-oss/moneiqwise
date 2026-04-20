@@ -16,7 +16,10 @@ export function useAuth() {
     queryKey: ["/api/auth/user"],
     queryFn: fetchAuthUser,
     retry: false,
-    staleTime: 1000 * 30,
+    // Must stay 0: unauthenticated responses cache `null` as success. With a
+    // positive staleTime, post-login fetchQuery/invalidate would skip the
+    // network for 30s and the UI stayed on Landing until a full reload.
+    staleTime: 0,
   });
 
   return {
