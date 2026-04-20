@@ -1,12 +1,16 @@
-import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useMemo, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Wallet, Banknote, Newspaper, ExternalLink, HelpCircle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Wallet, Banknote, Newspaper, ExternalLink, HelpCircle, Pencil, Check, X, Loader2 } from "lucide-react";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
@@ -80,8 +84,9 @@ interface NewsArticle {
 
 export default function Dashboard() {
   const { currency, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
-  const { getQueryParam, selectedPortfolio, isAllPortfolios } = usePortfolio();
+  const { getQueryParam, selectedPortfolio, isAllPortfolios, portfolios } = usePortfolio();
   const { hideAmounts, showNews } = useChartSettings();
+  const { toast } = useToast();
   const [sortField, setSortField] = useState<SortField>("ticker");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   
@@ -244,6 +249,24 @@ export default function Dashboard() {
     return { buyPremiumValue, buyTotalCost, sellCommission, openCount };
   };
 
+  // Uninvested broker cash to add on top of the stock value. Cash is tracked
+  // per portfolio in the portfolio's currency; when viewing "All portfolios"
+  // we simply sum the numbers as-is (we currently assume a single working
+  // currency per user – multi-currency cash is a later refinement).
+  const cashValue = useMemo(() => {
+    if (isAllPortfolios) {
+      return portfolios.reduce((sum, p) => {
+        const n = parseFloat(p.cashBalance ?? "0");
+        return sum + (Number.isFinite(n) ? n : 0);
+      }, 0);
+    }
+    if (selectedPortfolio) {
+      const n = parseFloat(selectedPortfolio.cashBalance ?? "0");
+      return Number.isFinite(n) ? n : 0;
+    }
+    return 0;
+  }, [isAllPortfolios, portfolios, selectedPortfolio]);
+
   const calculatePortfolioMetrics = () => {
     const hasHoldings = holdings && holdings.length > 0 && quotes;
     const hasOptions = isAllPortfolios && optionStats;
@@ -254,7 +277,9 @@ export default function Dashboard() {
     if (!hasHoldings && !hasOptions) {
       const totalProfit = stockRealizedGain + dividendGain;
       return {
-        totalValue: 0,
+        totalValue: cashValue,
+        stockValue: 0,
+        cashValue,
         totalInvested: 0,
         totalGainLoss: 0,
         totalGainLossPercent: 0,
@@ -270,7 +295,10 @@ export default function Dashboard() {
       };
     }
 
-    let totalValue = 0;
+    // `stockValue` intentionally excludes cash so gains/P&L stay a function of
+    // invested positions only. `totalValue` (what we display as "Celková
+    // hodnota") then tops it up with the uninvested cash.
+    let stockValue = 0;
     let totalInvested = 0;
     let dailyChange = 0;
 
@@ -287,10 +315,10 @@ export default function Dashboard() {
           const convertedPrice = convertPrice(quote.price, tickerCurrency);
           const convertedChange = convertPrice(quote.change, tickerCurrency);
           const currentValue = shares * convertedPrice;
-          totalValue += currentValue;
+          stockValue += currentValue;
           dailyChange += shares * convertedChange;
         } else {
-          totalValue += invested;
+          stockValue += invested;
         }
       });
     }
@@ -302,23 +330,30 @@ export default function Dashboard() {
       optionsRealizedGain = parseFloat(optionStats.totalRealizedGain);
       const openOptions = calculateOpenOptionsValue();
       openOptionsCount = openOptions.openCount;
-      totalValue += openOptions.buyPremiumValue;
-      totalValue -= openOptions.sellCommission;
+      stockValue += openOptions.buyPremiumValue;
+      stockValue -= openOptions.sellCommission;
       totalInvested += openOptions.buyTotalCost;
     }
 
-    const totalGainLoss = totalValue - totalInvested;
+    const totalGainLoss = stockValue - totalInvested;
     const totalGainLossPercent = totalInvested > 0 ? (totalGainLoss / totalInvested) * 100 : 0;
-    const dailyChangePercent = (totalValue - dailyChange) > 0 
-      ? (dailyChange / (totalValue - dailyChange)) * 100 
+    const dailyChangePercent = (stockValue - dailyChange) > 0
+      ? (dailyChange / (stockValue - dailyChange)) * 100
       : 0;
 
     const unrealizedGain = totalGainLoss;
     const totalProfit = unrealizedGain + stockRealizedGain + optionsRealizedGain + dividendGain;
     const totalProfitPercent = totalInvested > 0 ? (totalProfit / totalInvested) * 100 : 0;
 
+    // Cash tops up the headline "Total value" only; profit / invested / gain
+    // ratios above are intentionally computed against stockValue so that
+    // uninvested cash does not distort performance numbers.
+    const totalValue = stockValue + cashValue;
+
     return {
       totalValue,
+      stockValue,
+      cashValue,
       totalInvested,
       totalGainLoss,
       totalGainLossPercent,
@@ -336,6 +371,55 @@ export default function Dashboard() {
   };
 
   const metrics = calculatePortfolioMetrics();
+
+  // --- Cash edit state -----------------------------------------------------
+  // Inline edit lives here (rather than a separate component) so it shares the
+  // already-loaded portfolios list and can invalidate the right queries.
+  const [cashEditing, setCashEditing] = useState(false);
+  const [cashInput, setCashInput] = useState("");
+
+  useEffect(() => {
+    if (!cashEditing) {
+      const current = selectedPortfolio?.cashBalance ?? "";
+      setCashInput(current);
+    }
+  }, [selectedPortfolio?.id, selectedPortfolio?.cashBalance, cashEditing]);
+
+  const cashMutation = useMutation({
+    mutationFn: async ({ portfolioId, amount }: { portfolioId: string; amount: string }) => {
+      const res = await apiRequest("PATCH", `/api/portfolios/${portfolioId}/cash`, {
+        cashBalance: amount,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portfolios"] });
+      toast({ title: "Hotovosť aktualizovaná" });
+      setCashEditing(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Chyba",
+        description: error?.message || "Nepodarilo sa uložiť hotovosť.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const saveCash = () => {
+    if (!selectedPortfolio) return;
+    const normalized = cashInput.replace(",", ".").trim();
+    const parsed = Number(normalized);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      toast({
+        title: "Neplatná hodnota",
+        description: "Zadaj nezáporné číslo.",
+        variant: "destructive",
+      });
+      return;
+    }
+    cashMutation.mutate({ portfolioId: selectedPortfolio.id, amount: parsed.toFixed(2) });
+  };
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -479,7 +563,7 @@ export default function Dashboard() {
         unrealizedGain={metrics.unrealizedGain}
       />
       
-      <div className="hidden md:grid gap-3 md:grid-cols-4">
+      <div className="hidden md:grid gap-3 md:grid-cols-4 xl:grid-cols-5">
         <Card data-testid="card-total-value">
           <CardHeader className="flex flex-row items-center justify-between gap-1 pb-1 p-6 pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">
@@ -510,6 +594,102 @@ export default function Dashboard() {
                 <span className="ml-1">({metrics.openOptionsCount} otvorených opcií)</span>
               )}
             </p>
+            {metrics.cashValue > 0 && (
+              <p className="text-xs text-muted-foreground truncate">
+                Z toho hotovosť: {maskAmount(formatCurrency(metrics.cashValue))}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card data-testid="card-cash">
+          <CardHeader className="flex flex-row items-center justify-between gap-1 pb-1 p-6 pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-1">
+              <Banknote className="h-4 w-4" />
+              Hotovosť
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[280px]">
+                  <p className="font-semibold mb-1">Voľná hotovosť u brokera</p>
+                  <p className="text-xs">
+                    Peniaze, ktoré máš u brokera pripravené na investovanie, ale ešte nie sú v akciách.
+                    Započítavajú sa do „Celkovej hodnoty", ale neovplyvňujú zisk ani výkonnosť.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </CardTitle>
+            {!isAllPortfolios && selectedPortfolio && !cashEditing && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onClick={() => {
+                  setCashInput(selectedPortfolio.cashBalance ?? "0");
+                  setCashEditing(true);
+                }}
+                data-testid="button-cash-edit"
+                aria-label="Upraviť hotovosť"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent className="p-6 pt-0">
+            {cashEditing && !isAllPortfolios && selectedPortfolio ? (
+              <div className="flex items-center gap-1">
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  value={cashInput}
+                  onChange={(e) => setCashInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") saveCash();
+                    if (e.key === "Escape") setCashEditing(false);
+                  }}
+                  autoFocus
+                  className="h-9"
+                  data-testid="input-cash"
+                />
+                <Button
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  onClick={saveCash}
+                  disabled={cashMutation.isPending}
+                  data-testid="button-cash-save"
+                  aria-label="Uložiť"
+                >
+                  {cashMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Check className="h-4 w-4" />
+                  )}
+                </Button>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-9 w-9 shrink-0"
+                  onClick={() => setCashEditing(false)}
+                  disabled={cashMutation.isPending}
+                  data-testid="button-cash-cancel"
+                  aria-label="Zrušiť"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold truncate" data-testid="text-cash-value">
+                  {maskAmount(formatCurrency(metrics.cashValue))}
+                </div>
+                <p className="text-xs text-muted-foreground truncate">
+                  {isAllPortfolios
+                    ? `Súčet ${portfolios.length} ${portfolios.length === 1 ? "portfólia" : "portfólií"}`
+                    : `${selectedPortfolio?.cashCurrency ?? "EUR"} · klikni ceruzku pre úpravu`}
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
 

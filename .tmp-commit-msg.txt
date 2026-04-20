@@ -1,0 +1,8 @@
+feat(cash): per-portfolio uninvested cash balance
+
+- Add cashBalance + cashCurrency columns to portfolios (numeric(14,2), 3-char ISO)
+- New PATCH /api/portfolios/:id/cash endpoint for inline updates
+- Dashboard: dedicated Hotovost card with inline edit per selected portfolio,
+  aggregated read-only sum across visible portfolios in "All" mode
+- Cash tops up "Celkova hodnota" but is intentionally excluded from
+  profit/invested/gain ratios so performance numbers stay clean

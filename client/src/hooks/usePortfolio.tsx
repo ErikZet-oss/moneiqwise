@@ -10,6 +10,8 @@ export interface Portfolio {
   brokerCode: BrokerCode | null;
   isDefault: boolean;
   isHidden: boolean;
+  cashBalance: string;
+  cashCurrency: string;
   createdAt: Date;
 }
 

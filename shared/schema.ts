@@ -84,6 +84,12 @@ export const portfolios = pgTable("portfolios", {
   brokerCode: varchar("broker_code", { length: 20 }),
   isDefault: boolean("is_default").default(false),
   isHidden: boolean("is_hidden").default(false),
+  // Free-floating cash at the broker, not yet invested. Single currency per
+  // portfolio keeps the UI simple; multi-currency cash can come later.
+  cashBalance: numeric("cash_balance", { precision: 14, scale: 2 })
+    .notNull()
+    .default("0"),
+  cashCurrency: varchar("cash_currency", { length: 3 }).notNull().default("EUR"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

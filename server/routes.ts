@@ -1031,6 +1031,55 @@ export async function registerRoutes(
     }
   });
 
+  // Dedicated endpoint for updating the uninvested-cash balance on a
+  // portfolio. Kept separate from the generic PUT so the UI can wire a fast
+  // inline editor without having to round-trip the rest of the portfolio meta.
+  app.patch("/api/portfolios/:id/cash", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const portfolioId = req.params.id;
+      const { cashBalance, cashCurrency } = req.body ?? {};
+
+      const existing = await storage.getPortfolioById(portfolioId, userId);
+      if (!existing) {
+        return res.status(404).json({ message: "Portfólio nenájdené." });
+      }
+
+      const parsedBalance =
+        cashBalance === null || cashBalance === undefined || cashBalance === ""
+          ? null
+          : Number(cashBalance);
+      if (
+        parsedBalance !== null &&
+        (!Number.isFinite(parsedBalance) || parsedBalance < 0)
+      ) {
+        return res.status(400).json({
+          message: "Hotovosť musí byť nezáporné číslo.",
+        });
+      }
+
+      const update: Record<string, unknown> = {};
+      if (parsedBalance !== null) {
+        // Keep DB column as numeric(14,2); store as string to dodge float drift.
+        update.cashBalance = parsedBalance.toFixed(2);
+      }
+      if (typeof cashCurrency === "string" && cashCurrency.trim().length === 3) {
+        update.cashCurrency = cashCurrency.trim().toUpperCase();
+      }
+      if (Object.keys(update).length === 0) {
+        return res.status(400).json({
+          message: "Nebolo čo aktualizovať.",
+        });
+      }
+
+      const updated = await storage.updatePortfolio(portfolioId, userId, update);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating portfolio cash:", error);
+      res.status(500).json({ message: "Nepodarilo sa aktualizovať hotovosť." });
+    }
+  });
+
   app.delete("/api/portfolios/:id", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
