@@ -1,10 +1,10 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, TrendingDown, Calendar, CalendarDays, AlertCircle, BarChart3, Wallet } from "lucide-react";
+import { TrendingUp, TrendingDown, Calendar, CalendarDays, AlertCircle, BarChart3, Wallet, ChevronRight } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, ReferenceLine } from "recharts";
 import { format, startOfMonth, endOfMonth, startOfYear, endOfYear, eachDayOfInterval, eachMonthOfInterval, eachYearOfInterval, parseISO, isAfter, isBefore, isSameDay, subDays, isWeekend, startOfDay } from "date-fns";
 import { sk } from "date-fns/locale";
@@ -65,6 +65,32 @@ interface PeriodStats {
   endValue: number;
   periodProfit: number;
   percentReturn: number;
+}
+
+interface PerformancePeriodStats {
+  label: string;
+  startDate: string;
+  endDate: string;
+  startValue: number;
+  endValue: number;
+  netInflow: number;
+  profit: number;
+  percentReturn: number;
+  realizedGain: number;
+  dividends: number;
+  transactionCount: number;
+}
+
+interface YearPerformance extends PerformancePeriodStats {
+  year: number;
+  months: PerformancePeriodStats[];
+}
+
+interface PerformanceResponse {
+  currency: string;
+  years: YearPerformance[];
+  totals: PerformancePeriodStats | null;
+  computedAt: number;
 }
 
 type ViewMode = "daily" | "month" | "year" | "ytd";
@@ -146,6 +172,18 @@ export default function Profit() {
       if (!res.ok) throw new Error("Failed to fetch realized gains");
       return res.json();
     },
+  });
+
+  // Pre-aggregated year + month performance from server; cached per user and
+  // invalidated on any transaction write so repeated opens are instant.
+  const { data: performanceData, isLoading: performanceLoading } = useQuery<PerformanceResponse>({
+    queryKey: ["/api/portfolio-performance", portfolioParam],
+    queryFn: async () => {
+      const res = await fetch(`/api/portfolio-performance?portfolio=${portfolioParam}`);
+      if (!res.ok) throw new Error("Failed to fetch portfolio performance");
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
   });
 
 
@@ -649,6 +687,14 @@ export default function Profit() {
         </Card>
       </div>
 
+      {/* Year / month performance breakdown (server-aggregated, cached) */}
+      <YearMonthPerformance
+        data={performanceData}
+        loading={performanceLoading}
+        formatCurrency={formatCurrency}
+        formatPercent={formatPercent}
+      />
+
       {/* Realized Gains Section */}
       <Card>
         <CardHeader>
@@ -872,5 +918,200 @@ export default function Profit() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// Výkonnosť podľa rokov a mesiacov
+// -----------------------------------------------------------------------------
+// Purely presentational — all the heavy aggregation lives on the server (see
+// /api/portfolio-performance). This component takes the pre-computed years +
+// months and lets the user drill into any year to see monthly detail.
+function YearMonthPerformance({
+  data,
+  loading,
+  formatCurrency,
+  formatPercent,
+}: {
+  data?: PerformanceResponse;
+  loading: boolean;
+  formatCurrency: (n: number) => string;
+  formatPercent: (n: number) => string;
+}) {
+  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+
+  if (loading && !data) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CalendarDays className="h-5 w-5" />
+            Výkonnosť podľa rokov a mesiacov
+          </CardTitle>
+          <CardDescription>Ročný a mesačný prehľad výnosov portfólia</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Skeleton className="h-40 w-full" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!data || data.years.length === 0) {
+    return null;
+  }
+
+  const toggleYear = (year: number) =>
+    setExpanded((prev) => ({ ...prev, [year]: !prev[year] }));
+
+  const signClass = (value: number) =>
+    value > 0
+      ? "text-green-600 dark:text-green-500"
+      : value < 0
+      ? "text-red-600 dark:text-red-500"
+      : "text-muted-foreground";
+
+  const monthName = (label: string) => {
+    const [m] = label.split("/");
+    const idx = parseInt(m, 10) - 1;
+    const date = new Date(2000, idx, 1);
+    return format(date, "LLLL", { locale: sk });
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <CalendarDays className="h-5 w-5" />
+          Výkonnosť podľa rokov a mesiacov
+        </CardTitle>
+        <CardDescription>
+          Ročný prehľad s rozbalením na jednotlivé mesiace. Výpočet beží na serveri a je udržaný v pamäti,
+          takže opakované otvorenia sú okamžité.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-8"></TableHead>
+                <TableHead>Obdobie</TableHead>
+                <TableHead className="text-right hidden md:table-cell">Hodnota na začiatku</TableHead>
+                <TableHead className="text-right hidden md:table-cell">Hodnota na konci</TableHead>
+                <TableHead className="text-right hidden lg:table-cell">Vklady − výbery</TableHead>
+                <TableHead className="text-right">Zisk/Strata</TableHead>
+                <TableHead className="text-right">% Výnos</TableHead>
+                <TableHead className="text-right hidden lg:table-cell">Dividendy</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.years.map((year) => {
+                const isOpen = !!expanded[year.year];
+                return (
+                  <Fragment key={year.year}>
+                    <TableRow
+                      className="cursor-pointer hover:bg-muted/40"
+                      onClick={() => toggleYear(year.year)}
+                      data-testid={`row-perf-year-${year.year}`}
+                    >
+                      <TableCell>
+                        <ChevronRight
+                          className={`h-4 w-4 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                        />
+                      </TableCell>
+                      <TableCell className="font-semibold">{year.label}</TableCell>
+                      <TableCell className="text-right hidden md:table-cell">
+                        {formatCurrency(year.startValue)}
+                      </TableCell>
+                      <TableCell className="text-right hidden md:table-cell">
+                        {formatCurrency(year.endValue)}
+                      </TableCell>
+                      <TableCell className="text-right hidden lg:table-cell text-muted-foreground">
+                        {formatCurrency(year.netInflow)}
+                      </TableCell>
+                      <TableCell className={`text-right font-semibold ${signClass(year.profit)}`}>
+                        {formatCurrency(year.profit)}
+                      </TableCell>
+                      <TableCell className={`text-right font-semibold ${signClass(year.profit)}`}>
+                        {formatPercent(year.percentReturn)}
+                      </TableCell>
+                      <TableCell className="text-right hidden lg:table-cell">
+                        {year.dividends > 0 ? formatCurrency(year.dividends) : "—"}
+                      </TableCell>
+                    </TableRow>
+
+                    {isOpen && year.months.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-3">
+                          Žiadne dáta za tento rok.
+                        </TableCell>
+                      </TableRow>
+                    )}
+
+                    {isOpen &&
+                      year.months.map((m) => (
+                        <TableRow
+                          key={m.label}
+                          className="bg-muted/20"
+                          data-testid={`row-perf-month-${m.label}`}
+                        >
+                          <TableCell></TableCell>
+                          <TableCell className="pl-8 capitalize text-muted-foreground">
+                            {monthName(m.label)}
+                          </TableCell>
+                          <TableCell className="text-right hidden md:table-cell text-muted-foreground">
+                            {formatCurrency(m.startValue)}
+                          </TableCell>
+                          <TableCell className="text-right hidden md:table-cell text-muted-foreground">
+                            {formatCurrency(m.endValue)}
+                          </TableCell>
+                          <TableCell className="text-right hidden lg:table-cell text-muted-foreground">
+                            {formatCurrency(m.netInflow)}
+                          </TableCell>
+                          <TableCell className={`text-right ${signClass(m.profit)}`}>
+                            {formatCurrency(m.profit)}
+                          </TableCell>
+                          <TableCell className={`text-right ${signClass(m.profit)}`}>
+                            {formatPercent(m.percentReturn)}
+                          </TableCell>
+                          <TableCell className="text-right hidden lg:table-cell text-muted-foreground">
+                            {m.dividends > 0 ? formatCurrency(m.dividends) : "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </Fragment>
+                );
+              })}
+
+              {data.totals && (
+                <TableRow className="border-t-2 font-semibold" data-testid="row-perf-total">
+                  <TableCell></TableCell>
+                  <TableCell>Celkovo</TableCell>
+                  <TableCell className="text-right hidden md:table-cell">
+                    {formatCurrency(data.totals.startValue)}
+                  </TableCell>
+                  <TableCell className="text-right hidden md:table-cell">
+                    {formatCurrency(data.totals.endValue)}
+                  </TableCell>
+                  <TableCell className="text-right hidden lg:table-cell text-muted-foreground">
+                    {formatCurrency(data.totals.netInflow)}
+                  </TableCell>
+                  <TableCell className={`text-right ${signClass(data.totals.profit)}`}>
+                    {formatCurrency(data.totals.profit)}
+                  </TableCell>
+                  <TableCell className={`text-right ${signClass(data.totals.profit)}`}>
+                    {formatPercent(data.totals.percentReturn)}
+                  </TableCell>
+                  <TableCell className="text-right hidden lg:table-cell">
+                    {data.totals.dividends > 0 ? formatCurrency(data.totals.dividends) : "—"}
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

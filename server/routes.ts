@@ -877,6 +877,400 @@ async function searchStocks(query: string): Promise<any[]> {
   }
 }
 
+// -----------------------------------------------------------------------------
+// Portfolio performance (by year / month) — server-side aggregation
+// -----------------------------------------------------------------------------
+// Previously the client replayed every transaction for every trading day in
+// the browser to build the year/month performance table. For any portfolio
+// with a year+ of history that meant a visible stall on every page open.
+// Here we do it once on the server, memoise the result per (user, portfolio)
+// and bust the cache whenever transactions change.
+
+interface PerformancePeriodStats {
+  label: string;
+  startDate: string;
+  endDate: string;
+  startValue: number;
+  endValue: number;
+  netInflow: number;
+  profit: number;
+  percentReturn: number;
+  realizedGain: number;
+  dividends: number;
+  transactionCount: number;
+}
+
+interface YearPerformance extends PerformancePeriodStats {
+  year: number;
+  months: PerformancePeriodStats[];
+}
+
+interface PerformanceResponse {
+  currency: string;
+  years: YearPerformance[];
+  totals: PerformancePeriodStats | null;
+  computedAt: number;
+}
+
+const performanceCache = new Map<
+  string,
+  { data: PerformanceResponse; timestamp: number }
+>();
+// Long TTL is fine because we explicitly bust the cache on every write that
+// could move the numbers (transactions, imports, migrations, data wipe).
+const PERFORMANCE_CACHE_TTL = 30 * 60 * 1000;
+
+function perfCacheKey(userId: string, portfolioParam: string): string {
+  return `${userId}:${portfolioParam || "all"}`;
+}
+
+function invalidatePerformanceCache(userId: string): void {
+  const prefix = `${userId}:`;
+  for (const key of Array.from(performanceCache.keys())) {
+    if (key.startsWith(prefix)) performanceCache.delete(key);
+  }
+}
+
+type SupportedCcy = "EUR" | "USD" | "CZK" | "PLN" | "GBP";
+
+function convertAmountBetween(
+  amount: number,
+  from: SupportedCcy,
+  to: string,
+  rates: AllExchangeRates,
+): number {
+  if (from === to) return amount;
+  let eur: number;
+  switch (from) {
+    case "EUR": eur = amount; break;
+    case "USD": eur = amount * rates.usdToEur; break;
+    case "CZK": eur = amount * rates.czkToEur; break;
+    case "PLN": eur = amount * rates.plnToEur; break;
+    case "GBP": eur = amount * rates.gbpToEur; break;
+    default: eur = amount;
+  }
+  switch (to.toUpperCase()) {
+    case "EUR": return eur;
+    case "USD": return eur * rates.eurToUsd;
+    case "CZK": return eur * rates.eurToCzk;
+    case "PLN": return eur * rates.eurToPln;
+    case "GBP": return eur * rates.eurToGbp;
+    default: return eur;
+  }
+}
+
+function priceOnOrBefore(
+  history: Record<string, number> | undefined,
+  targetIso: string,
+  maxBackDays = 14,
+): number | null {
+  if (!history) return null;
+  if (history[targetIso] != null) return history[targetIso];
+  const d = new Date(`${targetIso}T00:00:00Z`);
+  for (let i = 1; i <= maxBackDays; i++) {
+    d.setUTCDate(d.getUTCDate() - 1);
+    const key = d.toISOString().slice(0, 10);
+    if (history[key] != null) return history[key];
+  }
+  return null;
+}
+
+async function computePortfolioPerformance(
+  userId: string,
+  portfolioParam: string,
+): Promise<PerformanceResponse> {
+  const userSettings = await storage.getUserSettings(userId);
+  const userCurrency = (userSettings?.preferredCurrency || "EUR").toUpperCase();
+
+  const txns = await storage.getTransactionsByUser(
+    userId,
+    portfolioParam === "all" ? null : portfolioParam,
+  );
+  if (txns.length === 0) {
+    return { currency: userCurrency, years: [], totals: null, computedAt: Date.now() };
+  }
+
+  const sorted = [...txns].sort((a, b) => {
+    const da = new Date(a.transactionDate as unknown as string).getTime();
+    const db = new Date(b.transactionDate as unknown as string).getTime();
+    return da - db;
+  });
+
+  const firstTxnDate = new Date(sorted[0].transactionDate as unknown as string);
+  const now = new Date();
+
+  // Fetch historical prices + current quotes for every ticker the user
+  // touched. Both routes hit the existing cached helpers so this is nearly
+  // free after the first request.
+  const tickerSet = new Set<string>();
+  for (const t of sorted) {
+    if (t.ticker && t.ticker.toUpperCase() !== "CASH") {
+      tickerSet.add(t.ticker.toUpperCase());
+    }
+  }
+  const tickers = Array.from(tickerSet);
+
+  const historicalPrices: Record<string, Record<string, number>> = {};
+  const currentPrices: Record<string, number> = {};
+  await Promise.all(
+    tickers.map(async (ticker) => {
+      try {
+        historicalPrices[ticker] = (await fetchHistoricalPrices(ticker)) || {};
+      } catch {
+        historicalPrices[ticker] = {};
+      }
+      try {
+        const q = await fetchStockQuote(ticker);
+        if (q && typeof q.price === "number") currentPrices[ticker] = q.price;
+      } catch {
+        // swallow – forward-fill will cover it
+      }
+    }),
+  );
+
+  const rates = await fetchAllExchangeRates();
+  const todayIso = now.toISOString().slice(0, 10);
+
+  const priceInUserCcy = (ticker: string, iso: string): number | null => {
+    const upper = ticker.toUpperCase();
+    const history = historicalPrices[upper];
+    let raw = priceOnOrBefore(history, iso);
+    if (raw == null && iso >= todayIso && currentPrices[upper] != null) {
+      raw = currentPrices[upper];
+    }
+    if (raw == null) return null;
+    return convertAmountBetween(raw, getTickerCurrency(upper), userCurrency, rates);
+  };
+
+  // Replay-holdings helper: walks sorted txns up to `iso` (inclusive) and
+  // returns current shares + total cost per ticker. O(T) per call; P×T total
+  // where P is number of boundaries (≤ 2 per month + 2 per year, <300 for
+  // 10y of history). Fine for realistic portfolios.
+  function holdingsAtIso(iso: string): Map<string, { shares: number; totalCost: number; avgCost: number }> {
+    const state = new Map<string, { shares: number; totalCost: number; avgCost: number }>();
+    for (const t of sorted) {
+      const d = new Date(t.transactionDate as unknown as string).toISOString().slice(0, 10);
+      if (d > iso) break;
+      if (t.type !== "BUY" && t.type !== "SELL") continue;
+      const shares = parseFloat(t.shares);
+      const price = parseFloat(t.pricePerShare);
+      const commission = parseFloat(t.commission || "0");
+      const key = t.ticker.toUpperCase();
+      let entry = state.get(key);
+      if (!entry) {
+        entry = { shares: 0, totalCost: 0, avgCost: 0 };
+        state.set(key, entry);
+      }
+      if (t.type === "BUY") {
+        entry.totalCost += shares * price + commission;
+        entry.shares += shares;
+        entry.avgCost = entry.shares > 0 ? entry.totalCost / entry.shares : 0;
+      } else {
+        entry.totalCost = Math.max(0, entry.totalCost - shares * entry.avgCost);
+        entry.shares = Math.max(0, entry.shares - shares);
+      }
+    }
+    return state;
+  }
+
+  function valueAt(iso: string): number {
+    const state = holdingsAtIso(iso);
+    let sum = 0;
+    state.forEach((h, ticker) => {
+      if (h.shares <= 0) return;
+      const price = priceInUserCcy(ticker, iso);
+      // Cost basis fallback avoids "vanishing" value when history is missing.
+      // Transaction cost is already stored in user currency at broker-level
+      // which for most users matches preferredCurrency; good enough.
+      sum += price != null ? h.shares * price : h.totalCost;
+    });
+    return sum;
+  }
+
+  const addDays = (iso: string, delta: number): string => {
+    const d = new Date(`${iso}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + delta);
+    return d.toISOString().slice(0, 10);
+  };
+
+  // Per-txn aggregation: one forward pass computes netInflow / realized /
+  // dividends / count per year and month. Holdings state is tracked so we
+  // can compute realized gain correctly using avg cost at time of sale.
+  const perYear = new Map<
+    number,
+    {
+      netInflow: number;
+      realized: number;
+      dividends: number;
+      count: number;
+      months: Record<number, { netInflow: number; realized: number; dividends: number; count: number }>;
+    }
+  >();
+  const bucketFor = (year: number, month: number) => {
+    let y = perYear.get(year);
+    if (!y) {
+      y = { netInflow: 0, realized: 0, dividends: 0, count: 0, months: {} };
+      perYear.set(year, y);
+    }
+    if (!y.months[month]) {
+      y.months[month] = { netInflow: 0, realized: 0, dividends: 0, count: 0 };
+    }
+    return { y, m: y.months[month] };
+  };
+
+  const replayState = new Map<string, { shares: number; totalCost: number; avgCost: number }>();
+  for (const t of sorted) {
+    const d = new Date(t.transactionDate as unknown as string);
+    const year = d.getUTCFullYear();
+    const month = d.getUTCMonth();
+    const { y, m } = bucketFor(year, month);
+    y.count++;
+    m.count++;
+
+    if (t.type === "BUY" || t.type === "SELL") {
+      const shares = parseFloat(t.shares);
+      const price = parseFloat(t.pricePerShare);
+      const commission = parseFloat(t.commission || "0");
+      const key = t.ticker.toUpperCase();
+      let entry = replayState.get(key);
+      if (!entry) {
+        entry = { shares: 0, totalCost: 0, avgCost: 0 };
+        replayState.set(key, entry);
+      }
+      if (t.type === "BUY") {
+        const gross = shares * price;
+        const inflow = gross + commission;
+        entry.totalCost += inflow;
+        entry.shares += shares;
+        entry.avgCost = entry.shares > 0 ? entry.totalCost / entry.shares : 0;
+        y.netInflow += inflow;
+        m.netInflow += inflow;
+      } else {
+        // netInflow convention: BUY cost adds, SELL proceeds (after commission) subtract.
+        // Matches the chart formula so the numbers line up.
+        const gross = shares * price;
+        const netProceeds = gross - commission;
+        const costBasis = shares * entry.avgCost;
+        const realized = netProceeds - costBasis;
+        entry.totalCost = Math.max(0, entry.totalCost - costBasis);
+        entry.shares = Math.max(0, entry.shares - shares);
+        y.netInflow -= netProceeds;
+        m.netInflow -= netProceeds;
+        y.realized += realized;
+        m.realized += realized;
+      }
+    } else if (t.type === "DIVIDEND") {
+      const shares = parseFloat(t.shares || "0");
+      const price = parseFloat(t.pricePerShare || "0");
+      const tickerCcy = getTickerCurrency(t.ticker);
+      const amount = convertAmountBetween(shares * price, tickerCcy, userCurrency, rates);
+      y.dividends += amount;
+      m.dividends += amount;
+    }
+  }
+
+  // Build output
+  const firstYear = firstTxnDate.getUTCFullYear();
+  const lastYear = now.getUTCFullYear();
+  const years: YearPerformance[] = [];
+
+  for (let yr = firstYear; yr <= lastYear; yr++) {
+    const yearStartIso = `${yr}-01-01`;
+    const yearEndIso =
+      yr === lastYear ? todayIso : `${yr}-12-31`;
+    const yearStartVal = valueAt(addDays(yearStartIso, -1));
+    const yearEndVal = valueAt(yearEndIso);
+    const agg = perYear.get(yr) ?? {
+      netInflow: 0,
+      realized: 0,
+      dividends: 0,
+      count: 0,
+      months: {} as Record<number, { netInflow: number; realized: number; dividends: number; count: number }>,
+    };
+    const yearProfit = yearEndVal - yearStartVal - agg.netInflow;
+    const yearBaseline = yearStartVal + Math.max(agg.netInflow, 0);
+    const yearPct = yearBaseline > 0 ? (yearProfit / yearBaseline) * 100 : 0;
+
+    const monthsOut: PerformancePeriodStats[] = [];
+    for (let m = 0; m < 12; m++) {
+      const monthStartIso = `${yr}-${String(m + 1).padStart(2, "0")}-01`;
+      if (monthStartIso > todayIso) continue;
+      // last day of month, capped at today
+      const monthEndDate = new Date(Date.UTC(yr, m + 1, 0));
+      const monthEndIso = monthEndDate.toISOString().slice(0, 10);
+      const boundedMonthEnd = monthEndIso > todayIso ? todayIso : monthEndIso;
+
+      const mStart = valueAt(addDays(monthStartIso, -1));
+      const mEnd = valueAt(boundedMonthEnd);
+      const mAgg = agg.months[m] ?? { netInflow: 0, realized: 0, dividends: 0, count: 0 };
+      const mProfit = mEnd - mStart - mAgg.netInflow;
+      const mBaseline = mStart + Math.max(mAgg.netInflow, 0);
+      const mPct = mBaseline > 0 ? (mProfit / mBaseline) * 100 : 0;
+
+      monthsOut.push({
+        label: `${String(m + 1).padStart(2, "0")}/${yr}`,
+        startDate: monthStartIso,
+        endDate: boundedMonthEnd,
+        startValue: mStart,
+        endValue: mEnd,
+        netInflow: mAgg.netInflow,
+        profit: mProfit,
+        percentReturn: mPct,
+        realizedGain: mAgg.realized,
+        dividends: mAgg.dividends,
+        transactionCount: mAgg.count,
+      });
+    }
+
+    years.push({
+      year: yr,
+      label: String(yr),
+      startDate: yearStartIso,
+      endDate: yearEndIso,
+      startValue: yearStartVal,
+      endValue: yearEndVal,
+      netInflow: agg.netInflow,
+      profit: yearProfit,
+      percentReturn: yearPct,
+      realizedGain: agg.realized,
+      dividends: agg.dividends,
+      transactionCount: agg.count,
+      months: monthsOut,
+    });
+  }
+
+  // Totals across the full lifetime
+  const firstIso = firstTxnDate.toISOString().slice(0, 10);
+  const openingValue = valueAt(addDays(firstIso, -1));
+  const nowValue = valueAt(todayIso);
+  const allNetInflow = years.reduce((s, y) => s + y.netInflow, 0);
+  const allRealized = years.reduce((s, y) => s + y.realizedGain, 0);
+  const allDividends = years.reduce((s, y) => s + y.dividends, 0);
+  const allCount = years.reduce((s, y) => s + y.transactionCount, 0);
+  const allProfit = nowValue - openingValue - allNetInflow;
+  const allBaseline = openingValue + Math.max(allNetInflow, 0);
+  const totals: PerformancePeriodStats = {
+    label: "Celkovo",
+    startDate: firstIso,
+    endDate: todayIso,
+    startValue: openingValue,
+    endValue: nowValue,
+    netInflow: allNetInflow,
+    profit: allProfit,
+    percentReturn: allBaseline > 0 ? (allProfit / allBaseline) * 100 : 0,
+    realizedGain: allRealized,
+    dividends: allDividends,
+    transactionCount: allCount,
+  };
+
+  return {
+    currency: userCurrency,
+    years: years.sort((a, b) => b.year - a.year),
+    totals,
+    computedAt: Date.now(),
+  };
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -932,6 +1326,7 @@ export async function registerRoutes(
       }
 
       const result = await storage.deleteAllTransactionData(userId);
+      invalidatePerformanceCache(userId);
       res.json({
         message: "Všetky transakcie a holdingy boli vymazané.",
         ...result,
@@ -964,6 +1359,7 @@ export async function registerRoutes(
       }
 
       const result = await storage.migrateUnassignedToPortfolio(userId, targetPortfolioId);
+      invalidatePerformanceCache(userId);
       res.json({ targetPortfolioId, ...result });
     } catch (error) {
       console.error("Error migrating unassigned records:", error);
@@ -1270,6 +1666,7 @@ export async function registerRoutes(
       }
       // Note: DIVIDEND transactions don't affect holdings - they are just recorded for income tracking
 
+      invalidatePerformanceCache(userId);
       res.json(transaction);
     } catch (error) {
       console.error("Error creating transaction:", error);
@@ -1609,6 +2006,7 @@ export async function registerRoutes(
         }
       }
 
+      invalidatePerformanceCache(userId);
       res.json({ message: "Transakcia bola aktualizovaná." });
     } catch (error) {
       console.error("Error updating transaction:", error);
@@ -1674,6 +2072,7 @@ export async function registerRoutes(
         }
       }
 
+      invalidatePerformanceCache(userId);
       res.json({ message: "Transakcia bola vymazaná." });
     } catch (error) {
       console.error("Error deleting transaction:", error);
@@ -1689,6 +2088,33 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching exchange rate:", error);
       res.status(500).json({ message: "Nepodarilo sa načítať kurz." });
+    }
+  });
+
+  // Portfolio performance broken down by year + month. Server-side computed
+  // and cached per (user, portfolio) so the Profit page doesn't have to
+  // replay years of transactions in the browser on every open. Cache is
+  // invalidated on every write path that touches transactions.
+  app.get("/api/portfolio-performance", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const portfolioParam = (req.query.portfolio as string) || "all";
+      const forceRefresh = req.query.refresh === "1" || req.query.refresh === "true";
+
+      const cacheKey = perfCacheKey(userId, portfolioParam);
+      const cached = performanceCache.get(cacheKey);
+      if (!forceRefresh && cached && Date.now() - cached.timestamp < PERFORMANCE_CACHE_TTL) {
+        res.setHeader("X-Performance-Cache", "hit");
+        return res.json(cached.data);
+      }
+
+      const data = await computePortfolioPerformance(userId, portfolioParam);
+      performanceCache.set(cacheKey, { data, timestamp: Date.now() });
+      res.setHeader("X-Performance-Cache", cached ? "refresh" : "miss");
+      res.json(data);
+    } catch (error) {
+      console.error("Error computing portfolio performance:", error);
+      res.status(500).json({ message: "Nepodarilo sa vypočítať výkonnosť portfólia." });
     }
   });
 
@@ -2445,7 +2871,11 @@ export async function registerRoutes(
       if (errors.length > 0) {
         console.log(`[CSV Import] Errors:`, JSON.stringify(errors));
       }
-      
+
+      if (imported.length > 0) {
+        invalidatePerformanceCache(userId);
+      }
+
       res.json({
         imported: imported.length,
         skipped: errors.length,
@@ -2979,6 +3409,10 @@ export async function registerRoutes(
         } catch (err: any) {
           errors.push(`${tx.ticker} [ID: ${tx.externalId || 'N/A'}]: ${err.message}`);
         }
+      }
+
+      if (imported.length > 0) {
+        invalidatePerformanceCache(userId);
       }
 
       res.json({
