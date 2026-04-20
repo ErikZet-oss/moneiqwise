@@ -292,29 +292,55 @@ export function MobilePortfolioChart({
     return data;
   }, [transactions, historicalPrices, quotes, selectedPeriod]);
 
+  // P&L for the selected range. The chart line jumps whenever there's a BUY
+  // or SELL inside the window, so to get an honest gain we subtract the net
+  // cash inflow that happened after the first chart point:
+  //   periodGain = lastValue − firstValue − (buys − sells inside window)
+  // For "ALL" the formula naturally collapses to totalValue − totalInvested.
   const periodChange = useMemo(() => {
     if (chartData.length < 2) {
-      // If not enough chart data, use the total gain/loss
       const change = totalValue - totalInvested;
       const percent = totalInvested > 0 ? (change / totalInvested) * 100 : 0;
       return { amount: change, percent };
     }
-    
-    const firstValue = chartData[0].value;
-    const lastValue = chartData[chartData.length - 1].value;
-    const change = lastValue - firstValue;
-    
-    // For "ALL" period or when first value is too small, use invested amount as baseline
-    if (selectedPeriod === "ALL" || firstValue < totalInvested * 0.1) {
-      const totalChange = totalValue - totalInvested;
-      const percent = totalInvested > 0 ? (totalChange / totalInvested) * 100 : 0;
-      return { amount: totalChange, percent };
+
+    const firstPoint = chartData[0];
+    const lastPoint = chartData[chartData.length - 1];
+    const firstValue = firstPoint.value;
+    const lastValue = lastPoint.value;
+
+    let netInflow = 0;
+    if (transactions) {
+      transactions.forEach((t) => {
+        if (t.type !== "BUY" && t.type !== "SELL") return;
+        const d = format(parseISO(t.transactionDate as unknown as string), "yyyy-MM-dd");
+        if (d > firstPoint.date && d <= lastPoint.date) {
+          const shares = parseFloat(t.shares);
+          const price = parseFloat(t.pricePerShare);
+          const commission = parseFloat(t.commission || "0");
+          if (t.type === "BUY") {
+            netInflow += shares * price + commission;
+          } else {
+            netInflow -= shares * price - commission;
+          }
+        }
+      });
     }
-    
-    const percent = firstValue > 0 ? (change / firstValue) * 100 : 0;
-    
+
+    const change = lastValue - firstValue - netInflow;
+    const baseline = firstValue + Math.max(netInflow, 0);
+    const percent = baseline > 0 ? (change / baseline) * 100 : 0;
     return { amount: change, percent };
-  }, [chartData, selectedPeriod, totalValue, totalInvested]);
+  }, [chartData, transactions, totalValue, totalInvested]);
+
+  const periodLabel: Record<TimePeriod, string> = {
+    "1D": "1D",
+    "1W": "1T",
+    "1M": "1M",
+    YTD: "YTD",
+    "1Y": "1R",
+    ALL: "celé obdobie",
+  };
 
   const minValue = useMemo(() => {
     if (chartData.length === 0) return 0;
@@ -482,6 +508,35 @@ export function MobilePortfolioChart({
                 Nedostatok dát pre graf
               </div>
             )}
+          </div>
+
+          <div
+            className="flex items-center justify-between mt-2 px-1"
+            data-testid="mobile-period-gain"
+          >
+            <span className="text-[11px] text-muted-foreground">
+              Za {periodLabel[selectedPeriod]}:
+            </span>
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`text-xs font-semibold ${
+                  periodChange.amount >= 0 ? "text-green-500" : "text-red-500"
+                }`}
+              >
+                {periodChange.amount >= 0 ? "+" : ""}
+                {maskAmount(formatCurrency(periodChange.amount))}
+              </span>
+              <span
+                className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                  periodChange.amount >= 0
+                    ? "bg-green-500/20 text-green-500"
+                    : "bg-red-500/20 text-red-500"
+                }`}
+              >
+                {periodChange.amount >= 0 ? "+" : ""}
+                {periodChange.percent.toFixed(2)}%
+              </span>
+            </div>
           </div>
 
           <div className="flex justify-between items-center -mx-2 mt-2">

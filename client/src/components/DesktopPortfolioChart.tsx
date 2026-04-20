@@ -275,11 +275,49 @@ export function DesktopPortfolioChart({
     return data;
   }, [transactions, historicalPrices, quotes, selectedPeriod]);
 
-  const totalGainLoss = useMemo(() => {
-    const change = totalValue - totalInvested;
-    const percent = totalInvested > 0 ? (change / totalInvested) * 100 : 0;
+  // P&L scoped to the selected time range. The chart itself plots raw
+  // portfolio value over time, which will jump up/down whenever the user
+  // buys or sells during the period. To report an honest gain/loss for the
+  // period we have to subtract that net cash inflow:
+  //   periodGain = value_now − value_at_period_start − (buys − sells in period)
+  // For "ALL" the formula naturally collapses to totalValue − totalInvested.
+  const periodGainLoss = useMemo(() => {
+    if (chartData.length < 2) {
+      const change = totalValue - totalInvested;
+      const percent = totalInvested > 0 ? (change / totalInvested) * 100 : 0;
+      return { amount: change, percent };
+    }
+
+    const firstPoint = chartData[0];
+    const lastPoint = chartData[chartData.length - 1];
+    const firstValue = firstPoint.value;
+    const lastValue = lastPoint.value;
+
+    // Sum buys/sells that happened AFTER the first chart point (same-day
+    // activity is already baked into firstValue, so don't double-count it).
+    let netInflow = 0;
+    if (transactions) {
+      transactions.forEach((t) => {
+        if (t.type !== "BUY" && t.type !== "SELL") return;
+        const d = format(parseISO(t.transactionDate as unknown as string), "yyyy-MM-dd");
+        if (d > firstPoint.date && d <= lastPoint.date) {
+          const shares = parseFloat(t.shares);
+          const price = parseFloat(t.pricePerShare);
+          const commission = parseFloat(t.commission || "0");
+          if (t.type === "BUY") {
+            netInflow += shares * price + commission;
+          } else {
+            netInflow -= shares * price - commission;
+          }
+        }
+      });
+    }
+
+    const change = lastValue - firstValue - netInflow;
+    const baseline = firstValue + Math.max(netInflow, 0);
+    const percent = baseline > 0 ? (change / baseline) * 100 : 0;
     return { amount: change, percent };
-  }, [totalValue, totalInvested]);
+  }, [chartData, transactions, totalValue, totalInvested]);
 
   const minValue = useMemo(() => {
     if (chartData.length === 0) return 0;
@@ -291,10 +329,19 @@ export function DesktopPortfolioChart({
     return Math.max(...chartData.map(d => d.value)) * 1.005;
   }, [chartData]);
 
-  const isPositive = totalGainLoss.amount >= 0;
+  const isPositive = periodGainLoss.amount >= 0;
   const chartColor = isPositive ? "#22c55e" : "#ef4444";
 
   const periods: TimePeriod[] = ["1D", "1W", "1M", "YTD", "1Y", "ALL"];
+
+  const periodLabel: Record<TimePeriod, string> = {
+    "1D": "Za 1D",
+    "1W": "Za 1T",
+    "1M": "Za 1M",
+    YTD: "Za YTD",
+    "1Y": "Za 1R",
+    ALL: "Celkový",
+  };
 
   if (!showChart) {
     return null;
@@ -305,15 +352,17 @@ export function DesktopPortfolioChart({
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg">Vývoj portfólia</CardTitle>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Celkový zisk/strata:</span>
+          <div className="flex items-center gap-2" data-testid="desktop-period-gain">
+            <span className="text-xs text-muted-foreground">
+              {periodLabel[selectedPeriod]} zisk/strata:
+            </span>
             <span className={`text-sm font-medium ${isPositive ? "text-green-500" : "text-red-500"}`}>
-              {isPositive ? "+" : ""}{formatCurrency(totalGainLoss.amount)}
+              {isPositive ? "+" : ""}{formatCurrency(periodGainLoss.amount)}
             </span>
             <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
               isPositive ? "bg-green-500/20 text-green-500" : "bg-red-500/20 text-red-500"
             }`}>
-              {isPositive ? "+" : ""}{totalGainLoss.percent.toFixed(2)}%
+              {isPositive ? "+" : ""}{periodGainLoss.percent.toFixed(2)}%
             </span>
           </div>
         </div>
