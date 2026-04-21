@@ -1,4 +1,5 @@
-import { Switch, Route } from "wouter";
+import { useEffect } from "react";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -12,7 +13,6 @@ import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
 import Dashboard from "@/pages/Dashboard";
 import Overview from "@/pages/Overview";
-import Transactions from "@/pages/Transactions";
 import History from "@/pages/History";
 import Profit from "@/pages/Profit";
 import Dividends from "@/pages/Dividends";
@@ -20,6 +20,14 @@ import Options from "@/pages/Options";
 import Settings from "@/pages/Settings";
 import Import from "@/pages/Import";
 import AssetDetail from "@/pages/AssetDetail";
+
+function RedirectToHistory() {
+  const [, setLocation] = useLocation();
+  useEffect(() => {
+    setLocation("/history");
+  }, [setLocation]);
+  return null;
+}
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -43,7 +51,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Dashboard} />
       <Route path="/overview" component={Overview} />
-      <Route path="/transactions" component={Transactions} />
+      <Route path="/transactions" component={RedirectToHistory} />
       <Route path="/history" component={History} />
       <Route path="/profit" component={Profit} />
       <Route path="/dividends" component={Dividends} />

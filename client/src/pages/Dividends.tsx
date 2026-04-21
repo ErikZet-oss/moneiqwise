@@ -337,7 +337,7 @@ export default function Dividends() {
               <Banknote className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p className="text-lg">Zatiaľ nemáte zaznamenané žiadne dividendy</p>
               <p className="text-sm mt-2">
-                Po zadaní dividend v sekcii Transakcie tu uvidíte prehľad vašich príjmov.
+                Po zadaní dividend v sekcii História tu uvidíte prehľad vašich príjmov.
               </p>
             </div>
           )}

@@ -14,13 +14,14 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { format } from "date-fns";
 import { sk } from "date-fns/locale";
-import { Trash2, Download, Upload, FileDown, AlertTriangle, CheckCircle2, Loader2, Pencil } from "lucide-react";
+import { Trash2, Download, Upload, FileDown, AlertTriangle, CheckCircle2, Loader2, Pencil, PlusCircle } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { CompanyLogo } from "@/components/CompanyLogo";
 import type { Transaction } from "@shared/schema";
+import { AddTransactionForm } from "@/components/AddTransactionForm";
 
 interface ImportResult {
   imported: number;
@@ -43,7 +44,7 @@ interface EditFormData {
 export default function History() {
   const { toast } = useToast();
   const { formatCurrency } = useCurrency();
-  const { getQueryParam } = usePortfolio();
+  const { getQueryParam, portfolios } = usePortfolio();
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [tickerFilter, setTickerFilter] = useState<string>("all");
   const [idFilter, setIdFilter] = useState<string>("");
@@ -53,6 +54,7 @@ export default function History() {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [addTransactionOpen, setAddTransactionOpen] = useState(false);
   const [editForm, setEditForm] = useState<EditFormData>({
     type: "BUY",
     ticker: "",
@@ -311,6 +313,25 @@ export default function History() {
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Dialog open={addTransactionOpen} onOpenChange={setAddTransactionOpen}>
+                <DialogTrigger asChild>
+                  <Button
+                    size="sm"
+                    disabled={portfolios.length === 0}
+                    data-testid="button-add-transaction"
+                  >
+                    <PlusCircle className="h-4 w-4 mr-2" />
+                    Pridať transakciu
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto gap-0 p-4 sm:p-6">
+                  <AddTransactionForm
+                    embed
+                    onSuccessSubmit={() => setAddTransactionOpen(false)}
+                  />
+                </DialogContent>
+              </Dialog>
+
               {selectedIds.size > 0 && (
                 <Button
                   variant="destructive"

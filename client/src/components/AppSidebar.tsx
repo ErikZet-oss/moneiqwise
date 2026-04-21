@@ -1,4 +1,4 @@
-import { BarChart3, PlusCircle, History, LogOut, User, TrendingUp, Settings, Briefcase, ChevronDown, Check, Target, Banknote, Upload, Sun, Moon, Layers } from "lucide-react";
+import { BarChart3, History, LogOut, User, TrendingUp, Settings, Briefcase, ChevronDown, Check, Target, Banknote, Upload, Sun, Moon, Layers } from "lucide-react";
 import { useLocation } from "wouter";
 import {
   Sidebar,
@@ -11,6 +11,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarHeader,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -37,11 +38,6 @@ const menuItems = [
     title: "Všetky portfóliá",
     url: "/overview",
     icon: Layers,
-  },
-  {
-    title: "Transakcie",
-    url: "/transactions",
-    icon: PlusCircle,
   },
   {
     title: "História",
@@ -72,6 +68,10 @@ const menuItems = [
 
 export function AppSidebar() {
   const [location, setLocation] = useLocation();
+  const { isMobile, setOpenMobile } = useSidebar();
+  const closeMobileSidebar = () => {
+    if (isMobile) setOpenMobile(false);
+  };
   const { user } = useAuth();
   const { portfolios, selectedPortfolioId, selectedPortfolio, setSelectedPortfolioId, isAllPortfolios } = usePortfolio();
   const { theme, toggleTheme } = useTheme();
@@ -103,6 +103,7 @@ export function AppSidebar() {
   };
 
   const handleLogout = async () => {
+    closeMobileSidebar();
     await apiRequest("POST", "/api/logout");
     queryClient.clear();
     try {
@@ -143,7 +144,10 @@ export function AppSidebar() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-56">
                 <DropdownMenuItem 
-                  onClick={() => setSelectedPortfolioId("all")}
+                  onClick={() => {
+                    setSelectedPortfolioId("all");
+                    closeMobileSidebar();
+                  }}
                   data-testid="select-portfolio-all"
                 >
                   <div className="flex items-center gap-2 w-full">
@@ -156,7 +160,10 @@ export function AppSidebar() {
                 {portfolios.map((portfolio) => (
                   <DropdownMenuItem
                     key={portfolio.id}
-                    onClick={() => setSelectedPortfolioId(portfolio.id)}
+                    onClick={() => {
+                      setSelectedPortfolioId(portfolio.id);
+                      closeMobileSidebar();
+                    }}
                     data-testid={`select-portfolio-${portfolio.id}`}
                   >
                     <div className="flex items-center gap-2 w-full">
@@ -192,6 +199,7 @@ export function AppSidebar() {
                       onClick={(e) => {
                         e.preventDefault();
                         setLocation(item.url);
+                        closeMobileSidebar();
                       }}
                     >
                       <item.icon className="h-4 w-4 md:h-5 md:w-5" />
@@ -219,6 +227,7 @@ export function AppSidebar() {
                 onClick={(e) => {
                   e.preventDefault();
                   setLocation("/settings");
+                  closeMobileSidebar();
                 }}
               >
                 <Settings className="h-4 w-4 md:h-5 md:w-5" />
