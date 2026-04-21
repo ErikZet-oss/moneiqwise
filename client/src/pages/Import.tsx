@@ -27,6 +27,7 @@ import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrency";
 import type { Portfolio } from "@shared/schema";
+import { formatShareQuantity } from "@/lib/utils";
 
 interface ParsedTransaction {
   date: string;
@@ -425,7 +426,7 @@ export default function Import() {
                                 </Badge>
                               </TableCell>
                               <TableCell className="text-right">
-                                {tx.quantity > 0 ? tx.quantity : '-'}
+                                {tx.quantity > 0 ? formatShareQuantity(tx.quantity) : '-'}
                               </TableCell>
                               <TableCell className="text-right">
                                 {tx.priceEur > 0 ? formatCurrency(tx.priceEur) : '-'}

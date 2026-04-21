@@ -48,6 +48,13 @@ const HISTORICAL_CACHE_TTL = 12 * 60 * 60 * 1000; // 12 hours for historical dat
 const EXCHANGE_RATE_CACHE_TTL = 60 * 60 * 1000; // 1 hour for exchange rates
 const NEWS_CACHE_TTL = 15 * 60 * 1000; // 15 minutes for news
 
+interface AssetProfileCacheEntry {
+  data: { sector: string; country: string };
+  timestamp: number;
+}
+const assetProfileCache = new Map<string, AssetProfileCacheEntry>();
+const ASSET_PROFILE_CACHE_TTL = 24 * 60 * 60 * 1000; // 24h — sektor/krajina sa mení zriedka
+
 // -----------------------------------------------------------------------------
 // Persistent disk cache
 // -----------------------------------------------------------------------------
@@ -262,6 +269,65 @@ function toYahooTicker(ticker: string): string {
   }
   
   return ticker;
+}
+
+async function fetchYahooAssetProfile(ticker: string): Promise<{ sector: string; country: string }> {
+  const key = ticker.toUpperCase();
+  if (key === "CASH") {
+    return { sector: "Hotovosť", country: "—" };
+  }
+
+  const cached = assetProfileCache.get(key);
+  if (cached && Date.now() - cached.timestamp < ASSET_PROFILE_CACHE_TTL) {
+    return cached.data;
+  }
+
+  const fallback = { sector: "Neznáme", country: "Neznáme" };
+
+  try {
+    const yahooTicker = toYahooTicker(key);
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(yahooTicker)}?modules=assetProfile,summaryProfile`;
+
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      },
+    });
+
+    if (!response.ok) {
+      assetProfileCache.set(key, { data: fallback, timestamp: Date.now() });
+      return fallback;
+    }
+
+    const data = await response.json();
+    const result = data?.quoteSummary?.result?.[0];
+    const ap = result?.assetProfile;
+    const sp = result?.summaryProfile;
+
+    const sectorRaw =
+      (typeof ap?.sector === "string" && ap.sector.trim()) ||
+      (typeof sp?.sector === "string" && sp.sector.trim()) ||
+      (typeof ap?.industry === "string" && ap.industry.trim()) ||
+      (typeof sp?.industry === "string" && sp.industry.trim()) ||
+      "";
+
+    const countryRaw =
+      (typeof ap?.country === "string" && ap.country.trim()) ||
+      (typeof sp?.country === "string" && sp.country.trim()) ||
+      "";
+
+    const row = {
+      sector: sectorRaw || "Nezaradené",
+      country: countryRaw || "Neznáme",
+    };
+
+    assetProfileCache.set(key, { data: row, timestamp: Date.now() });
+    return row;
+  } catch (e) {
+    console.warn(`Asset profile failed for ${key}:`, e);
+    assetProfileCache.set(key, { data: fallback, timestamp: Date.now() });
+    return fallback;
+  }
 }
 
 interface NewsArticle {
@@ -2020,6 +2086,34 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching batch quotes:", error);
       res.status(500).json({ message: "Failed to fetch batch quotes" });
+    }
+  });
+
+  // Yahoo quoteSummary — sektor a krajina pre koláčové rozloženie portfólia
+  app.post("/api/stocks/asset-profiles/batch", isAuthenticated, async (req: any, res) => {
+    try {
+      const { tickers } = req.body;
+      if (!tickers || !Array.isArray(tickers)) {
+        return res.status(400).json({ message: "Pole tickerov je povinné." });
+      }
+
+      const unique = Array.from(new Set<string>(tickers.map((t: string) => String(t).toUpperCase())));
+      const profiles: Record<string, { sector: string; country: string }> = {};
+
+      const CONCURRENCY = 4;
+      for (let i = 0; i < unique.length; i += CONCURRENCY) {
+        const batch = unique.slice(i, i + CONCURRENCY);
+        await Promise.all(
+          batch.map(async (ticker) => {
+            profiles[ticker] = await fetchYahooAssetProfile(ticker);
+          })
+        );
+      }
+
+      res.json({ profiles });
+    } catch (error) {
+      console.error("Error fetching asset profiles batch:", error);
+      res.status(500).json({ message: "Nepodarilo sa načítať profily aktív." });
     }
   });
 

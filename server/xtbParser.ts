@@ -67,18 +67,40 @@ function cleanTicker(ticker: string): string {
   return tickerMappings[cleaned] || cleaned;
 }
 
-// Parse amount string (handle commas, currency symbols, etc.)
+// Parse amount string (handle commas, currency symbols, thousands separators, NBSP)
 function parseAmount(amountStr: string | number): number {
-  if (typeof amountStr === 'number') return amountStr;
+  if (typeof amountStr === 'number') {
+    return Number.isFinite(amountStr) ? amountStr : 0;
+  }
   if (!amountStr) return 0;
-  
-  // Remove $ symbol, spaces and replace comma with dot
-  const cleaned = amountStr.toString()
+
+  let s = amountStr
+    .toString()
     .replace(/[$€£]/g, '')
-    .replace(/\s/g, '')
-    .replace(',', '.');
-  
-  return parseFloat(cleaned) || 0;
+    .replace(/[\u00a0\u202f]/g, ' ')
+    .replace(/\s+/g, '')
+    .trim();
+
+  const hasComma = s.includes(',');
+  const hasDot = s.includes('.');
+  if (hasComma && hasDot) {
+    // 1.234,56 → 1234.56 alebo 1,234.56 → 1234.56
+    if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      s = s.replace(/,/g, '');
+    }
+  } else if (hasComma && !hasDot) {
+    const parts = s.split(',');
+    if (parts.length === 2 && parts[1].length <= 4) {
+      s = `${parts[0].replace(/\D/g, '') || parts[0]}.${parts[1]}`;
+    } else {
+      s = s.replace(/,/g, '');
+    }
+  }
+
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : 0;
 }
 
 // Parse date from various formats
@@ -97,7 +119,28 @@ function parseDate(dateStr: string | Date | number): Date | null {
   }
   
   const dateString = dateStr.toString().trim();
-  
+
+  // Excel serial ako reťazec "45370" (niekedy pri exporte)
+  const numericTry = Number(dateString.replace(',', '.'));
+  if (
+    Number.isFinite(numericTry) &&
+    numericTry > 20000 &&
+    numericTry < 80000 &&
+    /^\d+([.,]\d+)?$/.test(dateString.trim())
+  ) {
+    const parsedSerial = XLSX.SSF.parse_date_code(numericTry);
+    if (parsedSerial) {
+      return new Date(
+        parsedSerial.y,
+        parsedSerial.m - 1,
+        parsedSerial.d,
+        parsedSerial.H || 0,
+        parsedSerial.M || 0,
+        parsedSerial.S || 0
+      );
+    }
+  }
+
   // Format: DD/MM/YYYY HH:MM:SS
   let match = dateString.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?/);
   if (match) {
@@ -145,6 +188,107 @@ function findHeaderRow(data: any[][], headerKeywords: string[]): { headerIndex: 
     }
   }
   return { headerIndex: -1, headers: [] };
+}
+
+/**
+ * Množstvo z komentára „3 @ 126.50“ alebo „20/25 @ 1158“ (XTB čiastočný uzáver = prvé číslo =
+ * počet kusov v riadku; „1/2“ pri malých číslach = zlomkový podiel).
+ */
+function quantityFromXtBTradeToken(qtyStr: string): number {
+  const s = qtyStr.trim();
+  if (!s.includes('/')) return parseAmount(s);
+
+  const bits = s.split('/').map((x) => x.trim()).filter(Boolean);
+  if (bits.length !== 2) return parseAmount(s);
+  const rawA = bits[0];
+  const rawB = bits[1];
+  const a = parseAmount(rawA);
+  const b = parseAmount(rawB);
+  if (!(a > 0 && b > 0)) return 0;
+
+  const intLike =
+    /^\d+$/.test(rawA.replace(/\s/g, '')) && /^\d+$/.test(rawB.replace(/\s/g, ''));
+  if (!intLike) return b !== 0 ? a / b : 0;
+
+  const ai = Math.round(a);
+  const bi = Math.round(b);
+  // „1/2“, „3/4“ … malé čísla → zlomok akcie (nie 20 ks z 25)
+  const looksLikeFractionalShare =
+    ai < bi && bi <= 12 && ai <= 5;
+  if (looksLikeFractionalShare) return ai / bi;
+
+  // „20/25“, „5/25“ … uzavretá časť pozície → prvé číslo = kusy v tomto výpise
+  if (ai <= bi) return ai;
+
+  return ai / bi;
+}
+
+/**
+ * XTB komentár (Cash operations): „CLOSE BUY 10 @ 7,867“, „OPEN BUY 3 @ 126.50“,
+ * „CLOSE BUY 20/25 @ 1158“ (čiastočný uzáver), „OPEN BUY 0,5188 @ 99,4612“, …
+ */
+function extractQtyPriceFromXTBComment(comment: string): { qty: number; rate: number } {
+  const c = (comment || '').trim();
+  if (!c) return { qty: 0, rate: 0 };
+
+  const m = c.match(/(?:OPEN|CLOSE)\s+(?:BUY|SELL)\s+([\d./,]+)\s+@\s+([\d.,]+)/i);
+  if (!m) return { qty: 0, rate: 0 };
+
+  const qty = quantityFromXtBTradeToken(m[1]);
+  const rate = parseAmount(m[2]);
+  if (qty > 0 && rate > 0) return { qty, rate };
+  return { qty: 0, rate: 0 };
+}
+
+function extractLegacyQtyFromComment(comment: string): number {
+  let quantity = 0;
+  const qtyMatch =
+    comment.match(/(\d+(?:\.\d+)?)\s*(?:@|x|ks|pcs)/i) ||
+    comment.match(/(?:BUY|SELL|CLOSE)\s+(?:BUY|SELL)?\s*(\d+(?:\.\d+)?)/i) ||
+    comment.match(/(\d+(?:\.\d+)?)\s*$/);
+  if (qtyMatch) quantity = parseAmount(qtyMatch[1]);
+  return quantity > 0 ? quantity : 0;
+}
+
+/** Určenie ks a ceny za kus: voliteľné stĺpce XTB, potom OPEN/CLOSE BUY @ …, potom fallback regex. */
+function resolveQtyPriceForTrade(
+  comment: string,
+  row: any[],
+  qtyCol: number,
+  rateCol: number,
+  totalAmountAbs: number
+): { quantity: number; pricePerShare: number } {
+  let quantity = 0;
+  if (qtyCol !== -1) {
+    const q = parseAmount(row[qtyCol]);
+    if (q > 0) quantity = q;
+  }
+
+  const parsed = extractQtyPriceFromXTBComment(comment);
+  if (quantity <= 0 && parsed.qty > 0) quantity = parsed.qty;
+
+  if (quantity <= 0) quantity = extractLegacyQtyFromComment(comment);
+
+  const rateFromCol = rateCol !== -1 ? parseAmount(row[rateCol]) : 0;
+
+  if (quantity <= 0 && parsed.rate > 0 && totalAmountAbs > 0) {
+    quantity = totalAmountAbs / parsed.rate;
+  }
+
+  if (quantity <= 0 && rateFromCol > 0 && totalAmountAbs > 0) {
+    quantity = totalAmountAbs / rateFromCol;
+  }
+
+  let pricePerShare = 0;
+  if (quantity > 0 && totalAmountAbs > 0) {
+    pricePerShare = totalAmountAbs / quantity;
+  } else if (parsed.rate > 0) {
+    pricePerShare = parsed.rate;
+  } else if (rateFromCol > 0) {
+    pricePerShare = rateFromCol;
+  }
+
+  return { quantity, pricePerShare };
 }
 
 /** Porovnanie hlavičky stĺpca s aliasmi (EN/SK, diakritika). */
@@ -207,6 +351,28 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
     'amount (eur)',
     'suma (eur)',
   ]);
+  const qtyCol = getColumnIndex(headers, [
+    'quantity',
+    'volume',
+    'units',
+    'pcs',
+    'object volume',
+    'mnozstvo',
+    'množstvo',
+    'pocet',
+    'počet',
+    'kusy',
+    // nie „amount of stock“ — getColumnIndex by zhodilo stĺpec „Amount“ s podreťazcom „amount“
+  ]);
+  const rateCol = getColumnIndex(headers, [
+    'open rate',
+    'unit price',
+    'price per share',
+    'course',
+    'kurz',
+    'executed course',
+    'execution price',
+  ]);
   
   if (typeCol === -1 || timeCol === -1 || amountCol === -1) {
     log.push({
@@ -251,12 +417,13 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
     
     // Determine transaction type
     
-    // STOCK PURCHASE - BUY
+    // STOCK PURCHASE - BUY (vrátane „Stocks/ETF purchase“ z anglického exportu)
     if (
       typeStr.includes('purchase') ||
       typeStr.includes('nákup') ||
       typePlain.includes('nakup') ||
-      typePlain.includes('stock buy')
+      typePlain.includes('stock buy') ||
+      typeStr.includes('etf') && typeStr.includes('compra')
     ) {
       if (!ticker) {
         log.push({
@@ -267,17 +434,23 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
         continue;
       }
       
-      // Extract quantity from comment (e.g., "CLOSE BUY 5 @ 123.45")
-      let quantity = 0;
-      const qtyMatch = comment.match(/(\d+(?:\.\d+)?)\s*(?:@|x|ks|pcs)/i) || 
-                       comment.match(/(?:BUY|SELL|CLOSE)\s+(?:BUY|SELL)?\s*(\d+(?:\.\d+)?)/i) ||
-                       comment.match(/(\d+(?:\.\d+)?)\s*$/);
-      if (qtyMatch) {
-        quantity = parseFloat(qtyMatch[1]);
-      }
-      
       const totalAmount = Math.abs(amount);
-      const pricePerShare = quantity > 0 ? totalAmount / quantity : 0;
+      const { quantity, pricePerShare } = resolveQtyPriceForTrade(
+        comment,
+        row,
+        qtyCol,
+        rateCol,
+        totalAmount
+      );
+
+      if (!quantity || quantity <= 0 || !pricePerShare || !Number.isFinite(pricePerShare)) {
+        log.push({
+          row: i + 1,
+          status: 'warning',
+          message: `Nákup: nepodarilo sa určiť množstvo/cenu (ID ${operationId}, komentár: ${comment.slice(0, 80)})`,
+        });
+        continue;
+      }
       
       transactions.push({
         date: time,
@@ -301,7 +474,8 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
       typeStr.includes('sale') ||
       typeStr.includes('predaj') ||
       typePlain.includes('predaj') ||
-      typePlain.includes('stock sell')
+      typePlain.includes('stock sell') ||
+      (typeStr.includes('etf') && typeStr.includes('vende'))
     ) {
       if (!ticker) {
         log.push({
@@ -312,17 +486,23 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
         continue;
       }
       
-      // Extract quantity from comment
-      let quantity = 0;
-      const qtyMatch = comment.match(/(\d+(?:\.\d+)?)\s*(?:@|x|ks|pcs)/i) || 
-                       comment.match(/(?:BUY|SELL|CLOSE)\s+(?:BUY|SELL)?\s*(\d+(?:\.\d+)?)/i) ||
-                       comment.match(/(\d+(?:\.\d+)?)\s*$/);
-      if (qtyMatch) {
-        quantity = parseFloat(qtyMatch[1]);
-      }
-      
       const totalAmount = Math.abs(amount);
-      const pricePerShare = quantity > 0 ? totalAmount / quantity : 0;
+      const { quantity, pricePerShare } = resolveQtyPriceForTrade(
+        comment,
+        row,
+        qtyCol,
+        rateCol,
+        totalAmount
+      );
+
+      if (!quantity || quantity <= 0 || !pricePerShare || !Number.isFinite(pricePerShare)) {
+        log.push({
+          row: i + 1,
+          status: 'warning',
+          message: `Predaj: nepodarilo sa určiť množstvo/cenu (ID ${operationId}, komentár: ${comment.slice(0, 80)})`,
+        });
+        continue;
+      }
       
       transactions.push({
         date: time,
@@ -485,7 +665,8 @@ export async function parseXTBFile(fileBuffer: Buffer, _fileName: string): Promi
 
     if (cashSheet) {
       const worksheet = workbook.Sheets[cashSheet];
-      const data = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: false }) as any[][];
+      // raw: true — čísla a dátumy ako hodnoty bunky (nie lokalizovaný text); zníži chyby pri sumách a dátumoch
+      const data = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true }) as any[][];
 
       log.push({
         row: 0,

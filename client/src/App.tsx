@@ -19,6 +19,7 @@ import Dividends from "@/pages/Dividends";
 import Options from "@/pages/Options";
 import Settings from "@/pages/Settings";
 import Import from "@/pages/Import";
+import Allocation from "@/pages/Allocation";
 import AssetDetail from "@/pages/AssetDetail";
 
 function RedirectToHistory() {
@@ -57,6 +58,7 @@ function Router() {
       <Route path="/dividends" component={Dividends} />
       <Route path="/options" component={Options} />
       <Route path="/import" component={Import} />
+      <Route path="/allocation" component={Allocation} />
       <Route path="/settings" component={Settings} />
       <Route path="/asset/:ticker" component={AssetDetail} />
       <Route component={NotFound} />

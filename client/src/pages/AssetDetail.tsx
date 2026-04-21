@@ -23,6 +23,7 @@ import { BrokerLogo } from "@/components/BrokerLogo";
 import { useCurrency } from "@/hooks/useCurrency";
 import { useChartSettings } from "@/hooks/useChartSettings";
 import type { BrokerCode, Transaction } from "@shared/schema";
+import { formatShareQuantity } from "@/lib/utils";
 
 type PositionRow = {
   portfolioId: string | null;
@@ -301,7 +302,7 @@ export default function AssetDetail() {
         <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <div className="text-xs text-muted-foreground">Počet kusov</div>
-            <div className="text-lg font-semibold">{data.totals.shares.toFixed(4)}</div>
+            <div className="text-lg font-semibold">{formatShareQuantity(data.totals.shares)}</div>
           </div>
           <div>
             <div className="text-xs text-muted-foreground">Priemerná nákupná cena (vážená)</div>
@@ -345,7 +346,7 @@ export default function AssetDetail() {
                         <span className="truncate">{p.portfolioName}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-right font-mono">{p.shares.toFixed(4)}</TableCell>
+                    <TableCell className="text-right font-mono">{formatShareQuantity(p.shares)}</TableCell>
                     <TableCell className="text-right">
                       {mask(formatCurrency(convertPrice(p.averageCost, tc)))}
                     </TableCell>
@@ -515,7 +516,7 @@ export default function AssetDetail() {
                     <TableCell className="text-right font-mono text-sm">
                       {tx.type === "DIVIDEND" || tx.type === "TAX"
                         ? "—"
-                        : parseFloat(tx.shares).toFixed(4)}
+                        : formatShareQuantity(parseFloat(tx.shares))}
                     </TableCell>
                     <TableCell className="text-right text-sm">
                       {tx.type === "TAX"

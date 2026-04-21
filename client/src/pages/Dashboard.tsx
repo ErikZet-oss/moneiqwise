@@ -19,6 +19,7 @@ import { CompanyLogo } from "@/components/CompanyLogo";
 import { MobilePortfolioChart } from "@/components/MobilePortfolioChart";
 import { DesktopPortfolioChart } from "@/components/DesktopPortfolioChart";
 import type { Holding } from "@shared/schema";
+import { formatShareQuantity } from "@/lib/utils";
 
 interface RealizedGainSummary {
   totalRealized: number;
@@ -1166,7 +1167,7 @@ export default function Dashboard() {
                                 {holding.ticker}
                               </a>
                               <span className="text-[9px] text-muted-foreground">
-                                {shares.toFixed(1)} ks
+                                {formatShareQuantity(shares)} ks
                               </span>
                             </div>
                             <p className="text-[9px] text-muted-foreground truncate">{holding.companyName}</p>
@@ -1305,7 +1306,7 @@ export default function Dashboard() {
                             </div>
                           </TableCell>
                           <TableCell className="text-muted-foreground">{holding.companyName}</TableCell>
-                          <TableCell className="text-right">{shares.toFixed(4)}</TableCell>
+                          <TableCell className="text-right">{formatShareQuantity(shares)}</TableCell>
                           <TableCell className="text-right">{maskAmount(formatCurrency(avgCostDisplay))}</TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1">

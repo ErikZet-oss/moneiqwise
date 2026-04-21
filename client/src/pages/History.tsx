@@ -22,6 +22,7 @@ import { usePortfolio } from "@/hooks/usePortfolio";
 import { CompanyLogo } from "@/components/CompanyLogo";
 import type { Transaction } from "@shared/schema";
 import { AddTransactionForm } from "@/components/AddTransactionForm";
+import { formatShareQuantity } from "@/lib/utils";
 
 interface ImportResult {
   imported: number;
@@ -609,7 +610,7 @@ export default function History() {
                               ) : transaction.type === "DIVIDEND" ? (
                                 <div className="text-[10px] text-blue-500">+{formatCurrency(total)}</div>
                               ) : (
-                                <div className="text-[10px] text-muted-foreground">{shares.toFixed(2)} ks</div>
+                                <div className="text-[10px] text-muted-foreground">{formatShareQuantity(shares)} ks</div>
                               )}
                             </div>
                           </div>
@@ -747,7 +748,7 @@ export default function History() {
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="text-right">{shares.toFixed(4)}</TableCell>
+                      <TableCell className="text-right">{formatShareQuantity(shares)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(price)}</TableCell>
                       <TableCell className="text-right text-muted-foreground">
                         {commission > 0 ? formatCurrency(commission) : "-"}
