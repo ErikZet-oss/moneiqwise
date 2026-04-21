@@ -31,6 +31,8 @@ export interface IStorage {
   getPortfolioById(portfolioId: string, userId: string): Promise<Portfolio | undefined>;
   getDefaultPortfolio(userId: string): Promise<Portfolio | undefined>;
   createPortfolio(portfolio: InsertPortfolio): Promise<Portfolio>;
+  getNextPortfolioSortOrder(userId: string): Promise<number>;
+  reorderPortfolios(userId: string, orderedIds: string[]): Promise<void>;
   updatePortfolio(portfolioId: string, userId: string, data: Partial<InsertPortfolio>): Promise<Portfolio>;
   deletePortfolioCascade(portfolioId: string, userId: string): Promise<void>;
   deletePortfolio(portfolioId: string, userId: string): Promise<void>;
@@ -115,7 +117,7 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(portfolios)
       .where(eq(portfolios.userId, userId))
-      .orderBy(desc(portfolios.isDefault), portfolios.name);
+      .orderBy(asc(portfolios.sortOrder), asc(portfolios.createdAt));
   }
 
   async getVisiblePortfolioIdsByUser(userId: string): Promise<string[]> {
@@ -163,6 +165,39 @@ export class DatabaseStorage implements IStorage {
       .values(portfolio)
       .returning();
     return result;
+  }
+
+  async getNextPortfolioSortOrder(userId: string): Promise<number> {
+    const rows = await db
+      .select({ sortOrder: portfolios.sortOrder })
+      .from(portfolios)
+      .where(eq(portfolios.userId, userId));
+    if (rows.length === 0) return 0;
+    return Math.max(...rows.map((r) => r.sortOrder)) + 1;
+  }
+
+  async reorderPortfolios(userId: string, orderedIds: string[]): Promise<void> {
+    const userPortfolios = await db
+      .select({ id: portfolios.id })
+      .from(portfolios)
+      .where(eq(portfolios.userId, userId));
+    const idSet = new Set(userPortfolios.map((p) => p.id));
+    if (orderedIds.length !== idSet.size) {
+      throw new Error("REORDER_LENGTH_MISMATCH");
+    }
+    for (const id of orderedIds) {
+      if (!idSet.has(id)) {
+        throw new Error("REORDER_UNKNOWN_ID");
+      }
+    }
+    await db.transaction(async (tx) => {
+      for (let i = 0; i < orderedIds.length; i++) {
+        await tx
+          .update(portfolios)
+          .set({ sortOrder: i, updatedAt: new Date() })
+          .where(and(eq(portfolios.id, orderedIds[i]!), eq(portfolios.userId, userId)));
+      }
+    });
   }
 
   async updatePortfolio(portfolioId: string, userId: string, data: Partial<InsertPortfolio>): Promise<Portfolio> {

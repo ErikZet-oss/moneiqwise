@@ -10,6 +10,7 @@ export interface Portfolio {
   brokerCode: BrokerCode | null;
   isDefault: boolean;
   isHidden: boolean;
+  sortOrder: number;
   cashBalance: string;
   cashCurrency: string;
   createdAt: Date;
@@ -27,6 +28,7 @@ interface PortfolioContextType {
   updatePortfolio: (id: string, name: string, brokerCode?: BrokerCode | null) => Promise<Portfolio>;
   deletePortfolio: (id: string) => Promise<void>;
   setPortfolioHidden: (id: string, isHidden: boolean) => Promise<Portfolio>;
+  reorderPortfolios: (orderedIds: string[]) => Promise<void>;
   getQueryParam: () => string;
 }
 
@@ -129,6 +131,16 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     },
   });
 
+  const reorderMutation = useMutation({
+    mutationFn: async (orderedIds: string[]) => {
+      await apiRequest("PUT", "/api/portfolios/reorder", { orderedIds });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portfolios"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/overview"] });
+    },
+  });
+
   const isAllPortfolios = selectedPortfolioId === "all";
   const selectedPortfolio = isAllPortfolios 
     ? null 
@@ -170,6 +182,10 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     return result;
   };
 
+  const reorderPortfolios = async (orderedIds: string[]): Promise<void> => {
+    await reorderMutation.mutateAsync(orderedIds);
+  };
+
   return (
     <PortfolioContext.Provider
       value={{
@@ -184,6 +200,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
         updatePortfolio,
         deletePortfolio,
         setPortfolioHidden,
+        reorderPortfolios,
         getQueryParam,
       }}
     >

@@ -1389,18 +1389,42 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Názov portfólia je povinný." });
       }
 
+      const sortOrder = await storage.getNextPortfolioSortOrder(userId);
+
       const portfolio = await storage.createPortfolio({
         userId,
         name: name.trim(),
         description: description?.trim() || null,
         brokerCode: brokerCode || null,
         isDefault: false,
+        sortOrder,
       });
 
       res.json(portfolio);
     } catch (error) {
       console.error("Error creating portfolio:", error);
       res.status(500).json({ message: "Nepodarilo sa vytvoriť portfólio." });
+    }
+  });
+
+  app.put("/api/portfolios/reorder", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const orderedIds = req.body?.orderedIds;
+      if (!Array.isArray(orderedIds) || orderedIds.some((id: unknown) => typeof id !== "string")) {
+        return res.status(400).json({
+          message: "Očakávané pole orderedIds (pole ID portfólií v novom poradí).",
+        });
+      }
+      await storage.reorderPortfolios(userId, orderedIds as string[]);
+      const allPortfolios = await storage.getPortfoliosByUser(userId);
+      res.json(allPortfolios);
+    } catch (error: any) {
+      if (error?.message === "REORDER_LENGTH_MISMATCH" || error?.message === "REORDER_UNKNOWN_ID") {
+        return res.status(400).json({ message: "Neplatné poradie portfólií." });
+      }
+      console.error("Error reordering portfolios:", error);
+      res.status(500).json({ message: "Nepodarilo sa uložiť poradie portfólií." });
     }
   });
 

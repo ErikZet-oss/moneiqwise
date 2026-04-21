@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   index,
+  integer,
   jsonb,
   pgTable,
   timestamp,
@@ -84,6 +85,8 @@ export const portfolios = pgTable("portfolios", {
   brokerCode: varchar("broker_code", { length: 20 }),
   isDefault: boolean("is_default").default(false),
   isHidden: boolean("is_hidden").default(false),
+  /** Lower values appear first in lists (sidebar, settings). */
+  sortOrder: integer("sort_order").notNull().default(0),
   // Free-floating cash at the broker, not yet invested. Single currency per
   // portfolio keeps the UI simple; multi-currency cash can come later.
   cashBalance: numeric("cash_balance", { precision: 14, scale: 2 })

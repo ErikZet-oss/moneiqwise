@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
-import { Loader2, Eye, EyeOff, CheckCircle2, XCircle, Key, ExternalLink, Coins, Calculator, RefreshCw, Briefcase, Plus, Pencil, Trash2, LineChart, Newspaper, AlertTriangle } from "lucide-react";
+import { Loader2, Eye, EyeOff, CheckCircle2, XCircle, Key, ExternalLink, Coins, Calculator, RefreshCw, Briefcase, Plus, Pencil, Trash2, LineChart, Newspaper, AlertTriangle, ChevronUp, ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { BrokerLogo, BrokerSelectItem, BROKER_CATALOG } from "@/components/BrokerLogo";
 import { BROKER_CODES, type Currency, type BrokerCode } from "@shared/schema";
@@ -28,7 +28,7 @@ interface ExchangeRate {
 
 export default function Settings() {
   const { toast } = useToast();
-  const { allPortfolios, createPortfolio, updatePortfolio, deletePortfolio, setPortfolioHidden } = usePortfolio();
+  const { allPortfolios, createPortfolio, updatePortfolio, deletePortfolio, setPortfolioHidden, reorderPortfolios } = usePortfolio();
   const { showChart, showTooltip, hideAmounts, showNews, setShowChart, setShowTooltip, setHideAmounts, setShowNews } = useChartSettings();
   const [showAlphaVantage, setShowAlphaVantage] = useState(false);
   const [showFinnhub, setShowFinnhub] = useState(false);
@@ -42,6 +42,7 @@ export default function Settings() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [togglingHiddenId, setTogglingHiddenId] = useState<string | null>(null);
+  const [reorderingPortfolio, setReorderingPortfolio] = useState(false);
   const [wipeDialogOpen, setWipeDialogOpen] = useState(false);
   const [wipeConfirmText, setWipeConfirmText] = useState("");
 
@@ -167,6 +168,27 @@ export default function Settings() {
     return key.substring(0, 4) + "••••••••" + key.substring(key.length - 4);
   };
 
+  const handleMovePortfolio = async (index: number, direction: "up" | "down") => {
+    const target = direction === "up" ? index - 1 : index + 1;
+    if (target < 0 || target >= allPortfolios.length) return;
+    const ids = allPortfolios.map((p) => p.id);
+    const tmp = ids[index];
+    ids[index] = ids[target]!;
+    ids[target] = tmp!;
+    setReorderingPortfolio(true);
+    try {
+      await reorderPortfolios(ids);
+    } catch {
+      toast({
+        title: "Chyba",
+        description: "Nepodarilo sa uložiť poradie portfólií.",
+        variant: "destructive",
+      });
+    } finally {
+      setReorderingPortfolio(false);
+    }
+  };
+
   const handleCreatePortfolio = async () => {
     if (!newPortfolioName.trim()) return;
     setIsCreating(true);
@@ -276,7 +298,7 @@ export default function Settings() {
             <CardTitle>Správa portfólií</CardTitle>
           </div>
           <CardDescription>
-            Vytvárajte a spravujte svoje investičné portfóliá. Každé portfólio môže obsahovať vlastné transakcie a holdings.
+            Vytvárajte a spravujte svoje investičné portfóliá. Poradie v tomto zozname (šípky nahor/nadol) určuje aj poradie v menu aplikácie.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -322,15 +344,43 @@ export default function Settings() {
           </div>
           
           <div className="space-y-2">
-            {allPortfolios.map((portfolio) => (
+            {allPortfolios.map((portfolio, index) => (
               <div
                 key={portfolio.id}
-                className={`flex items-center justify-between p-3 rounded-lg ${
+                className={`flex items-center justify-between gap-2 p-3 rounded-lg ${
                   portfolio.isHidden ? "bg-muted/50 opacity-70" : "bg-muted"
                 }`}
                 data-testid={`portfolio-item-${portfolio.id}`}
               >
-                <div className="flex items-center gap-3 min-w-0">
+                <div className="flex flex-col gap-0.5 shrink-0">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    disabled={index === 0 || reorderingPortfolio}
+                    onClick={() => handleMovePortfolio(index, "up")}
+                    aria-label="Posunúť nahor"
+                    title="Posunúť nahor"
+                    data-testid={`button-portfolio-up-${portfolio.id}`}
+                  >
+                    <ChevronUp className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    disabled={index === allPortfolios.length - 1 || reorderingPortfolio}
+                    onClick={() => handleMovePortfolio(index, "down")}
+                    aria-label="Posunúť nadol"
+                    title="Posunúť nadol"
+                    data-testid={`button-portfolio-down-${portfolio.id}`}
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="flex items-center gap-3 min-w-0 flex-1">
                   {portfolio.brokerCode ? (
                     <BrokerLogo brokerCode={portfolio.brokerCode} size="sm" />
                   ) : (
