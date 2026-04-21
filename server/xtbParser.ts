@@ -37,33 +37,39 @@ export interface XTBImportResult {
   };
 }
 
-// Ticker cleaning - remove exchange suffixes for yfinance compatibility
+/**
+ * Normalizácia tickeru pre Yahoo Finance.
+ * Neodstraňujeme .DE / .L / .MI / … — Yahoo ich pri európskych nástrojoch vyžaduje (napr. SXR8.DE, RR.L).
+ * Odstránenie .DE/.L spôsobovalo zlé kotácie ETF a 0 % zisku (iný nástroj alebo prázdne dáta).
+ * Redundantné je hlavne .US (US akcie Yahoo uvádza bez prípony).
+ */
 function cleanTicker(ticker: string): string {
-  if (!ticker) return '';
-  
+  if (!ticker) return "";
+
   let cleaned = ticker.toUpperCase().trim();
-  
-  // Remove common exchange suffixes
-  const suffixesToRemove = [
-    '.US', '.UK', '.DE', '.FR', '.NL', '.IT', '.ES', '.PL', '.CZ',
-    '.EU', '.L', '.PA', '.AS', '.MI', '.MC', '.WA', '.PR', '.PAR'
-  ];
-  
-  for (const suffix of suffixesToRemove) {
+
+  // XTB „.UK“ (Londýn) → Yahoo „.L“ (LSE)
+  if (cleaned.endsWith(".UK")) {
+    cleaned = `${cleaned.slice(0, -3)}.L`;
+  }
+
+  const redundantSuffixes = [".US"];
+  for (const suffix of redundantSuffixes) {
     if (cleaned.endsWith(suffix)) {
       cleaned = cleaned.slice(0, -suffix.length);
       break;
     }
   }
-  
-  // Handle special ticker mappings for yfinance
+
   const tickerMappings: Record<string, string> = {
-    'BRK.B': 'BRK-B',
-    'BRK.A': 'BRK-A',
-    'BF.B': 'BF-B',
-    'BF.A': 'BF-A',
+    "BRK.B": "BRK-B",
+    "BRK.A": "BRK-A",
+    "BF.B": "BF-B",
+    "BF.A": "BF-A",
+    // XTB niekedy po úprave prípon len „RR“ — Rolls-Royce Holdings je na LSE ako RR.L
+    RR: "RR.L",
   };
-  
+
   return tickerMappings[cleaned] || cleaned;
 }
 
@@ -308,6 +314,36 @@ function getColumnIndex(headers: string[], possibleNames: string[]): number {
   return -1;
 }
 
+/**
+ * XTB často má stĺpec Symbol aj ISIN; ak sa zhodí skôr ISIN, ETF sa importuje pod ISIN (zlá cena/kotácia).
+ * Preferuj symbol/ticker pred ISIN.
+ */
+function getSymbolColumnIndex(headers: string[]): number {
+  const norm = (s: string) => stripDiacritics((s || "").toLowerCase().trim());
+
+  const ranked: { i: number; rank: number }[] = [];
+  for (let i = 0; i < headers.length; i++) {
+    const h = norm(headers[i]);
+    if (!h) continue;
+
+    let rank = 100;
+    if (h === "symbol" || h === "ticker") rank = 0;
+    else if (h.includes("symbol")) rank = 1;
+    else if (h.includes("ticker")) rank = 2;
+    else if (h.includes("instrument")) rank = 3;
+    else if (h === "isin") rank = 5;
+    else if (h.includes("isin")) rank = 6;
+    else continue;
+
+    ranked.push({ i, rank });
+  }
+
+  ranked.sort((a, b) => a.rank - b.rank);
+  if (ranked.length > 0) return ranked[0].i;
+
+  return getColumnIndex(headers, ["symbol", "ticker", "isin"]);
+}
+
 // Parse CASH OPERATION HISTORY sheet
 function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransaction[] {
   const transactions: ParsedTransaction[] = [];
@@ -342,7 +378,7 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
   const typeCol = getColumnIndex(headers, ['type', 'typ', 'druh']);
   const timeCol = getColumnIndex(headers, ['time', 'čas', 'dátum', 'datum', 'date']);
   const commentCol = getColumnIndex(headers, ['comment', 'komentár', 'komentar', 'poznámka', 'poznamka']);
-  const symbolCol = getColumnIndex(headers, ['symbol', 'ticker', 'isin']);
+  const symbolCol = getSymbolColumnIndex(headers);
   const amountCol = getColumnIndex(headers, [
     'amount',
     'suma',
