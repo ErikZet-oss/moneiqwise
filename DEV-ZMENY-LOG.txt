@@ -9,6 +9,8 @@ Formát položky:
 
 --- Aktuálna session / posledné commity --------------------------------
 
+[2026-04-21] git 9869460 — XTB import: ponechané burzové prípony (Yahoo: SXR8.DE, RR.L), stĺpec symbol pred ISIN, mapovanie RR → RR.L, .UK → .L.
+
 [2026-04-21] git 99b3a3e — Obnovenie zoznamu portfólií na mobile (bez persist `/api/portfolios` v localStorage; refetch pri mount/focus). BrokerLogo: logo vyplní celý box (`h-full w-full object-contain`, bez paddingu).
 
 [2026-04-21] git 321187c — Pridaný tento súbor DEV-ZMENY-LOG.txt (história commitov spätne + návod na ďalšie zápisy).
