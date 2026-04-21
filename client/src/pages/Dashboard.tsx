@@ -583,101 +583,6 @@ export default function Dashboard() {
         unrealizedGain={metrics.unrealizedGain}
       />
 
-      {/* Celý metrický grid vrátane hotovosti je nižšie len pre md+; na mobile tu zobrazíme hotovosť samostatne */}
-      <div className="md:hidden px-4">
-        <Card data-testid="card-cash-mobile">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2 p-4 pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-1">
-              <Banknote className="h-4 w-4" />
-              Hotovosť
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent className="max-w-[280px]">
-                  <p className="font-semibold mb-1">Voľná hotovosť u brokera</p>
-                  <p className="text-xs">
-                    Peniaze pripravené na investovanie. Započítajú sa do celkovej hodnoty, neovplyvňujú však zisk ani výkonnosť.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </CardTitle>
-            {!isAllPortfolios && selectedPortfolio && !cashEditing && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-9 w-9 shrink-0 touch-manipulation"
-                onClick={() => {
-                  setCashInput(selectedPortfolio.cashBalance ?? "0");
-                  setCashEditing(true);
-                }}
-                data-testid="button-cash-edit-mobile"
-                aria-label="Upraviť hotovosť"
-              >
-                <Pencil className="h-4 w-4" />
-              </Button>
-            )}
-          </CardHeader>
-          <CardContent className="p-4 pt-0">
-            {cashEditing && !isAllPortfolios && selectedPortfolio ? (
-              <div className="flex flex-wrap items-center gap-2">
-                <Input
-                  type="text"
-                  inputMode="decimal"
-                  value={cashInput}
-                  onChange={(e) => setCashInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") saveCash();
-                    if (e.key === "Escape") setCashEditing(false);
-                  }}
-                  autoFocus
-                  className="h-11 min-w-0 flex-1 text-base"
-                  data-testid="input-cash-mobile"
-                />
-                <Button
-                  size="sm"
-                  className="h-11 shrink-0 touch-manipulation"
-                  onClick={saveCash}
-                  disabled={cashMutation.isPending}
-                  data-testid="button-cash-save-mobile"
-                >
-                  {cashMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <>
-                      <Check className="h-4 w-4 mr-1" />
-                      Uložiť
-                    </>
-                  )}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-11 shrink-0 touch-manipulation"
-                  onClick={() => setCashEditing(false)}
-                  disabled={cashMutation.isPending}
-                  data-testid="button-cash-cancel-mobile"
-                >
-                  <X className="h-4 w-4 mr-1" />
-                  Zrušiť
-                </Button>
-              </div>
-            ) : (
-              <>
-                <div className="text-2xl font-bold truncate" data-testid="text-cash-value-mobile">
-                  {maskAmount(formatCurrency(metrics.cashValue))}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {isAllPortfolios
-                    ? `Súčet ${portfolios.length} ${portfolios.length === 1 ? "portfólia" : "portfólií"}`
-                    : `${selectedPortfolio?.cashCurrency ?? "EUR"} · klepnite na ceruzku pre úpravu`}
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-      
       <div className="hidden md:grid gap-3 md:grid-cols-4 xl:grid-cols-5">
         <Card data-testid="card-total-value">
           <CardHeader className="flex flex-row items-center justify-between gap-1 pb-1 p-6 pb-2">
@@ -976,27 +881,104 @@ export default function Dashboard() {
             <p className="text-xs">Celková suma poplatkov za transakcie s akciami a opciami (otváracia + zatváracia provízia).</p>
           </TooltipContent>
         </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="bg-card rounded-lg p-2.5 border cursor-help">
-              <div className="text-[10px] text-muted-foreground mb-0.5 flex items-center gap-1">
-                Denná zmena
-                <HelpCircle className="h-2.5 w-2.5" />
-              </div>
-              <div className={`text-xs font-semibold ${getChangeColor(metrics.dailyChange)}`}>
-                {maskAmount(formatCurrency(metrics.dailyChange))}
-              </div>
-              <div className={`text-[10px] ${getChangeColor(metrics.dailyChangePercent)}`}>
-                {formatPercent(metrics.dailyChangePercent)}
-              </div>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent className="max-w-[250px]">
-            <p className="font-semibold mb-1">Denná zmena</p>
-            <p className="text-xs">Zmena hodnoty portfólia za dnešný obchodný deň na základe aktuálnych trhových cien.</p>
-          </TooltipContent>
-        </Tooltip>
+        <div className="bg-card rounded-lg p-2 border flex flex-col min-h-[3.25rem]">
+          <div className="flex items-start justify-between gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="min-w-0 flex-1 cursor-help text-left">
+                  <div className="text-[10px] text-muted-foreground mb-0.5 flex items-center gap-1">
+                    <Banknote className="h-2.5 w-2.5 shrink-0" />
+                    Hotovosť
+                    <HelpCircle className="h-2.5 w-2.5" />
+                  </div>
+                  <div
+                    className="text-xs font-semibold tabular-nums truncate text-foreground"
+                    data-testid="text-cash-value-mobile"
+                  >
+                    {maskAmount(formatCurrency(metrics.cashValue))}
+                  </div>
+                  <div className="text-[9px] text-muted-foreground truncate mt-0.5 leading-tight">
+                    {isAllPortfolios
+                      ? portfolios.length === 1
+                        ? "1 portfólio"
+                        : portfolios.length >= 2 && portfolios.length <= 4
+                          ? `${portfolios.length} portfóliá`
+                          : `${portfolios.length} portfólií`
+                      : `${selectedPortfolio?.cashCurrency ?? "EUR"}`}
+                  </div>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[260px]">
+                <p className="font-semibold mb-1">Voľná hotovosť u brokera</p>
+                <p className="text-xs">
+                  Započítava sa do celkovej hodnoty; neovplyvňuje zisk ani výkonnosť. Pri „Všetky portfóliá“ je súčet hotovostí.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+            {!isAllPortfolios && selectedPortfolio && !cashEditing && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0 touch-manipulation -mr-0.5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCashInput(selectedPortfolio.cashBalance ?? "0");
+                  setCashEditing(true);
+                }}
+                data-testid="button-cash-edit-mobile"
+                aria-label="Upraviť hotovosť"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
+
+      {cashEditing && !isAllPortfolios && selectedPortfolio && (
+        <div className="md:hidden px-4 mt-2 flex flex-wrap items-center gap-2">
+          <Input
+            type="text"
+            inputMode="decimal"
+            value={cashInput}
+            onChange={(e) => setCashInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") saveCash();
+              if (e.key === "Escape") setCashEditing(false);
+            }}
+            autoFocus
+            className="h-10 min-w-0 flex-1 text-base"
+            data-testid="input-cash-mobile"
+          />
+          <Button
+            size="sm"
+            className="h-10 shrink-0 touch-manipulation"
+            onClick={saveCash}
+            disabled={cashMutation.isPending}
+            data-testid="button-cash-save-mobile"
+          >
+            {cashMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <>
+                <Check className="h-4 w-4 mr-1" />
+                Uložiť
+              </>
+            )}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-10 shrink-0 touch-manipulation"
+            onClick={() => setCashEditing(false)}
+            disabled={cashMutation.isPending}
+            data-testid="button-cash-cancel-mobile"
+          >
+            <X className="h-4 w-4 mr-1" />
+            Zrušiť
+          </Button>
+        </div>
+      )}
       
       <div className="md:hidden grid gap-2 grid-cols-2 px-4">
         <Tooltip>
