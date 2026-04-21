@@ -121,6 +121,7 @@ export default function Import() {
   const [isParsing, setIsParsing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [migrateTarget, setMigrateTarget] = useState<string>("default");
+  const [recalcHoldingsTarget, setRecalcHoldingsTarget] = useState<string>("default");
 
   const { data: portfolios } = useQuery<Portfolio[]>({
     queryKey: ["/api/portfolios"],
@@ -168,6 +169,49 @@ export default function Import() {
       queryClient.invalidateQueries({ queryKey: ["/api/dividends"] });
       queryClient.invalidateQueries({ queryKey: ["/api/realized-gains"] });
       queryClient.invalidateQueries({ queryKey: ["/api/options"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Chyba",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const recalcHoldingsMutation = useMutation({
+    mutationFn: async () => {
+      const list = portfolios ?? [];
+      if (list.length === 0) {
+        throw new Error("Nemáš žiadne portfólio.");
+      }
+      const portfolioId =
+        recalcHoldingsTarget === "default"
+          ? (list.find((p) => p.isDefault) ?? list[0]).id
+          : recalcHoldingsTarget;
+      const response = await fetch(
+        `/api/portfolios/${portfolioId}/recalculate-holdings`,
+        {
+          method: "POST",
+          credentials: "include",
+        },
+      );
+      if (!response.ok) {
+        throw new Error(await readHttpErrorMessage(response));
+      }
+      return response.json() as Promise<{ synced: number }>;
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Pozície prepočítané",
+        description:
+          data.synced === 0
+            ? "Žiadne akciové transakcie v tomto portfóliu."
+            : `Prepočítaných ${data.synced} tickerov podľa histórie nákupov a predajov.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/holdings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/overview"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
     },
     onError: (error: Error) => {
       toast({
@@ -646,6 +690,63 @@ export default function Import() {
                       <Wrench className="h-4 w-4 mr-2" />
                       Presunúť nezaradené
                     </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Wrench className="h-5 w-5" />
+              Prepočítať akciové pozície
+            </CardTitle>
+            <CardDescription>
+              Po importe z XTB môžu ostať nezrovnalosti (napr. stále „5 ks“ hoci
+              predaj je v histórii). Toto znovu vypočíta množstvá a priemerné
+              ceny z výpisu transakcií (BUY/SELL) v zvolenom portfóliu.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex-1">
+                <label className="text-sm font-medium mb-2 block">Portfólio</label>
+                <Select
+                  value={recalcHoldingsTarget}
+                  onValueChange={setRecalcHoldingsTarget}
+                >
+                  <SelectTrigger data-testid="select-recalc-holdings-target">
+                    <SelectValue placeholder="Vyberte portfólio" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Predvolené portfólio</SelectItem>
+                    {portfolios?.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-end">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => recalcHoldingsMutation.mutate()}
+                  disabled={
+                    recalcHoldingsMutation.isPending || !portfolios?.length
+                  }
+                  data-testid="button-recalc-holdings"
+                >
+                  {recalcHoldingsMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Prepočítavam...
+                    </>
+                  ) : (
+                    <>Prepočítať z transakcií</>
                   )}
                 </Button>
               </div>

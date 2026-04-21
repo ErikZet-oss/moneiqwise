@@ -1337,6 +1337,66 @@ async function computePortfolioPerformance(
   };
 }
 
+/**
+ * Rebuilds a single holding from all BUY/SELL rows in DB, chronologically.
+ * Fixes XTB import when a SELL was stored but incremental update skipped
+ * (e.g. SELL before holding existed, or out-of-order application).
+ */
+async function syncHoldingFromTradeTransactions(
+  userId: string,
+  portfolioId: string,
+  tickerUpper: string,
+  companyName: string,
+): Promise<void> {
+  const all = await storage.getTransactionsByUserAndTicker(
+    userId,
+    tickerUpper,
+    portfolioId,
+  );
+  const trades = all
+    .filter((t) => t.type === "BUY" || t.type === "SELL")
+    .sort(
+      (a, b) =>
+        new Date(a.transactionDate as unknown as string).getTime() -
+        new Date(b.transactionDate as unknown as string).getTime(),
+    );
+
+  let shares = 0;
+  let totalCostBasis = 0;
+
+  for (const txn of trades) {
+    const s = parseFloat(txn.shares);
+    const p = parseFloat(txn.pricePerShare);
+    const c = parseFloat(txn.commission || "0");
+    if (!(s > 0) || !Number.isFinite(p)) continue;
+
+    if (txn.type === "BUY") {
+      totalCostBasis += s * p + c;
+      shares += s;
+    } else {
+      const avgCost = shares > 0 ? totalCostBasis / shares : 0;
+      const soldCost = s * avgCost;
+      shares = Math.max(0, shares - s);
+      totalCostBasis = Math.max(0, totalCostBasis - soldCost);
+    }
+  }
+
+  if (shares > 0.00000001) {
+    const avgCost = totalCostBasis / shares;
+    await storage.upsertHolding(
+      userId,
+      tickerUpper,
+      companyName,
+      shares.toFixed(8),
+      avgCost.toFixed(4),
+      totalCostBasis.toFixed(4),
+      portfolioId,
+    );
+  } else {
+    await storage.deleteHolding(userId, tickerUpper, portfolioId);
+  }
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -1463,6 +1523,44 @@ export async function registerRoutes(
       res.status(500).json({ message: "Nepodarilo sa vyčistiť osireté záznamy." });
     }
   });
+
+  /** Oprava pozícií po starom XTB importe: prepočet z všetkých BUY/SELL v portfóliu */
+  app.post(
+    "/api/portfolios/:portfolioId/recalculate-holdings",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const userId = req.user.claims.sub;
+        const portfolioId = req.params.portfolioId as string;
+        const portfolio = await storage.getPortfolioById(portfolioId, userId);
+        if (!portfolio) {
+          return res.status(404).json({ message: "Portfólio neexistuje." });
+        }
+        const txs = await storage.getTransactionsByUser(userId, portfolioId);
+        const tickerToCompany = new Map<string, string>();
+        for (const t of txs) {
+          if (t.type !== "BUY" && t.type !== "SELL") continue;
+          const u = t.ticker.toUpperCase();
+          if (!tickerToCompany.has(u)) {
+            tickerToCompany.set(u, (t.companyName || u).trim() || u);
+          }
+        }
+        for (const [tickerU, cn] of Array.from(tickerToCompany.entries())) {
+          await syncHoldingFromTradeTransactions(userId, portfolioId, tickerU, cn);
+        }
+        invalidatePerformanceCache(userId);
+        res.json({ synced: tickerToCompany.size });
+      } catch (error: any) {
+        console.error("Error recalculating holdings:", error);
+        res.status(500).json({
+          message:
+            error?.message && typeof error.message === "string"
+              ? error.message
+              : "Nepodarilo sa prepočítať pozície.",
+        });
+      }
+    },
+  );
 
   app.post("/api/portfolios", isAuthenticated, async (req: any, res) => {
     try {
@@ -3607,8 +3705,16 @@ export async function registerRoutes(
       // Cache company names to avoid repeated API calls
       const companyNameCache: Record<string, string> = {};
 
-      for (let i = 0; i < transactions.length; i++) {
-        const tx = transactions[i];
+      const sortedTransactions = [...transactions].sort(
+        (a: { date: string | Date }, b: { date: string | Date }) =>
+          new Date(a.date).getTime() - new Date(b.date).getTime(),
+      );
+
+      /** Upper ticker → company name — full holding replay after batch */
+      const tickersNeedingHoldingsSync = new Map<string, string>();
+
+      for (let i = 0; i < sortedTransactions.length; i++) {
+        const tx = sortedTransactions[i];
         try {
           // Skip TAX entries without a proper ticker
           if (tx.type === 'TAX' && (!tx.ticker || tx.ticker === 'TAX')) {
@@ -3691,74 +3797,26 @@ export async function registerRoutes(
           imported.push(transaction);
           if (extId) existingExternalIds.add(extId);
 
-          // Update holdings for BUY and SELL transactions
-          if (tx.type === 'BUY' || tx.type === 'SELL') {
-            const sharesNum = parseFloat(shares);
-            const priceNum = parseFloat(pricePerShare);
-            const ticker = tx.ticker.toUpperCase();
-            const currentPortfolioId = targetPortfolioId;
-            
-            // Get current holding
-            const currentHolding = await storage.getHoldingByUserAndTicker(userId, ticker, currentPortfolioId);
-            
-            if (tx.type === 'BUY') {
-              const totalCost = sharesNum * priceNum;
-              
-              if (currentHolding) {
-                const currentShares = parseFloat(currentHolding.shares);
-                const currentTotalInvested = parseFloat(currentHolding.totalInvested);
-                const newShares = currentShares + sharesNum;
-                const newTotalInvested = currentTotalInvested + totalCost;
-                const newAverageCost = newTotalInvested / newShares;
-
-                await storage.upsertHolding(
-                  userId,
-                  ticker,
-                  companyName,
-                  newShares.toFixed(8),
-                  newAverageCost.toFixed(4),
-                  newTotalInvested.toFixed(4),
-                  currentPortfolioId
-                );
-              } else {
-                const avgCost = totalCost / sharesNum;
-                await storage.upsertHolding(
-                  userId,
-                  ticker,
-                  companyName,
-                  sharesNum.toFixed(8),
-                  avgCost.toFixed(4),
-                  totalCost.toFixed(4),
-                  currentPortfolioId
-                );
-              }
-            } else if (tx.type === 'SELL' && currentHolding) {
-              const currentShares = parseFloat(currentHolding.shares);
-              const currentTotalInvested = parseFloat(currentHolding.totalInvested);
-              const avgCost = parseFloat(currentHolding.averageCost);
-              
-              const newShares = currentShares - sharesNum;
-              const soldCost = sharesNum * avgCost;
-              const newTotalInvested = currentTotalInvested - soldCost;
-              
-              if (newShares > 0.00000001) {
-                await storage.upsertHolding(
-                  userId,
-                  ticker,
-                  companyName,
-                  newShares.toFixed(8),
-                  avgCost.toFixed(4),
-                  newTotalInvested.toFixed(4),
-                  currentPortfolioId
-                );
-              } else {
-                await storage.deleteHolding(userId, ticker, currentPortfolioId);
-              }
-            }
+          if (tx.type === "BUY" || tx.type === "SELL") {
+            tickersNeedingHoldingsSync.set(
+              tx.ticker.toUpperCase(),
+              companyName,
+            );
           }
         } catch (err: any) {
           errors.push(`${tx.ticker} [ID: ${tx.externalId || 'N/A'}]: ${err.message}`);
         }
+      }
+
+      for (const [tickerU, cn] of Array.from(
+        tickersNeedingHoldingsSync.entries(),
+      )) {
+        await syncHoldingFromTradeTransactions(
+          userId,
+          targetPortfolioId,
+          tickerU,
+          cn,
+        );
       }
 
       if (imported.length > 0) {

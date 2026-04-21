@@ -66,6 +66,8 @@ function cleanTicker(ticker: string): string {
     "BRK.A": "BRK-A",
     "BF.B": "BF-B",
     "BF.A": "BF-A",
+    "UST.FR": "UST.MI",
+    "ASML.NL": "ASML",
     // XTB export niekedy má len „RR“ — pre kotácie Yahoo použiť Xetra (RRU.DE)
     RR: "RRU.DE",
   };
@@ -523,9 +525,10 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
         message: `[${operationId}] BUY ${quantity} ${ticker} @ ${pricePerShare.toFixed(2)} EUR = ${totalAmount.toFixed(2)} EUR`,
       });
     }
-    // STOCK SALE - SELL
+    // STOCK SALE - SELL (anglický export často „Sell“ / „Stock sell“ — bez podreťazca „sale“)
     else if (
       typeStr.includes('sale') ||
+      /\bsell\b/i.test(typeStr) ||
       typeStr.includes('predaj') ||
       typePlain.includes('predaj') ||
       typePlain.includes('stock sell') ||
