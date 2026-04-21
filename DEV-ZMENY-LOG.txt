@@ -9,6 +9,8 @@ Formát položky:
 
 --- Aktuálna session / posledné commity --------------------------------
 
+[2026-04-21] git 321187c — Pridaný tento súbor DEV-ZMENY-LOG.txt (história commitov spätne + návod na ďalšie zápisy).
+
 [2026-04-21] git 0a59d6e — Broker logá cez logo.dev (rovnaký Brand API token ako CompanyLogo); domény podľa BrokerCode; pri zlyhaní alebo „other“ fallback na farebný štvor so skratkou. Úpravy stránky Rozloženie (Allocation). Úpravy XTB parsera (server/xtbParser.ts). Pred commitom odstránený nepoužitý balík simple-icons z lokálneho package.json (do commitu nešiel, ak bol zhodný s origin).
 
 [2026-04-21] git 269b769 — Rozloženie portfólia (koláče), formátovanie kusov akcií, opravy XTB XLSX.
@@ -55,4 +57,4 @@ Formát položky:
 2. Sem pridaj riadok s dátumom, hashom (krátky `git log -1 --oneline`) a 1–2 vetami čo sa zmenilo.
 3. Voliteľne dopíš poznámku „mimo gitu“ (design rozhodnutie, bug, ktorý nebol v commite).
 
-Koniec súboru (aktualizované: 2026-04-21)
+Koniec súboru (aktualizované: 2026-04-21 — vrátane záznamu o tomto logu)
