@@ -7,8 +7,9 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
 import { BrokerLogo } from "@/components/BrokerLogo";
-import { ArrowRightLeft, Eye, EyeOff, HelpCircle } from "lucide-react";
+import { ArrowRightLeft, Eye, EyeOff, HelpCircle, Loader2, RefreshCw } from "lucide-react";
 import type { Transaction, Holding } from "@shared/schema";
 
 interface StockQuote {
@@ -39,6 +40,8 @@ interface MobilePortfolioChartProps {
   totalProfit?: number;
   totalProfitPercent?: number;
   unrealizedGain?: number;
+  onRefreshQuotes?: () => void | Promise<void>;
+  quotesRefreshing?: boolean;
 }
 
 export function MobilePortfolioChart({ 
@@ -48,7 +51,9 @@ export function MobilePortfolioChart({
   dailyChangePercent,
   totalProfit = 0,
   totalProfitPercent = 0,
-  unrealizedGain = 0
+  unrealizedGain = 0,
+  onRefreshQuotes,
+  quotesRefreshing = false,
 }: MobilePortfolioChartProps) {
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>("ALL");
   const { currency, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
@@ -411,10 +416,28 @@ export function MobilePortfolioChart({
         </button>
       </div>
       
-      <div className="flex items-baseline gap-2 mb-0.5">
+      <div className="flex items-baseline gap-2 mb-0.5 flex-wrap">
         <span className="text-3xl font-bold tracking-tight" data-testid="text-mobile-total-value">
           {maskAmount(formatLargeNumber(totalValue))}
         </span>
+        {onRefreshQuotes && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0 touch-manipulation"
+            disabled={quotesRefreshing}
+            onClick={() => void onRefreshQuotes()}
+            aria-label="Obnoviť ceny a dennú zmenu"
+            data-testid="button-mobile-refresh-quotes"
+          >
+            {quotesRefreshing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+          </Button>
+        )}
         <span className="text-sm text-muted-foreground flex items-center gap-1">
           {currency}
           <ArrowRightLeft className="h-3 w-3" />

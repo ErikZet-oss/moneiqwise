@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
-import { TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Wallet, Banknote, Newspaper, ExternalLink, HelpCircle, Pencil, Check, X, Loader2 } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Wallet, Banknote, Newspaper, ExternalLink, HelpCircle, Pencil, Check, X, Loader2, RefreshCw } from "lucide-react";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
@@ -74,6 +74,28 @@ interface StockQuote {
   changePercent: number;
 }
 
+async function fetchDashboardQuotesBatch(
+  tickers: string[],
+  refresh: boolean,
+): Promise<Record<string, StockQuote>> {
+  const res = await fetch("/api/stocks/quotes/batch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ tickers, refresh }),
+  });
+
+  if (!res.ok) throw new Error("Failed to fetch quotes");
+
+  const data = await res.json();
+
+  if (data.errors && Object.keys(data.errors).length > 0) {
+    console.warn("Some quotes failed to fetch:", data.errors);
+  }
+
+  return data.quotes as Record<string, StockQuote>;
+}
+
 interface NewsArticle {
   ticker: string;
   title: string;
@@ -128,7 +150,11 @@ export default function Dashboard() {
     },
   });
 
-  const { data: quotesData, dataUpdatedAt } = useQuery<Record<string, StockQuote>>({
+  const {
+    data: quotesData,
+    dataUpdatedAt,
+    isFetching: quotesFetching,
+  } = useQuery<Record<string, StockQuote>>({
     queryKey: ["/api/quotes", holdings?.map(h => h.ticker)],
     enabled: !!holdings && holdings.length > 0,
     // Quotes are the one thing we want reasonably fresh during market hours.
@@ -138,28 +164,21 @@ export default function Dashboard() {
     staleTime: 60 * 1000,
     queryFn: async () => {
       if (!holdings || holdings.length === 0) return {};
-      
       const tickers = holdings.map(h => h.ticker);
-      const res = await fetch("/api/stocks/quotes/batch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ tickers }),
-      });
-      
-      if (!res.ok) throw new Error("Failed to fetch quotes");
-      
-      const data = await res.json();
-      
-      if (data.errors && Object.keys(data.errors).length > 0) {
-        console.warn("Some quotes failed to fetch:", data.errors);
-      }
-      
-      return data.quotes as Record<string, StockQuote>;
+      return fetchDashboardQuotesBatch(tickers, false);
     },
   });
   
   const quotes = quotesData;
+
+  const refreshDashboardQuotes = useCallback(async () => {
+    if (!holdings || holdings.length === 0) return;
+    const tickers = holdings.map((h) => h.ticker);
+    await queryClient.fetchQuery({
+      queryKey: ["/api/quotes", tickers],
+      queryFn: () => fetchDashboardQuotesBatch(tickers, true),
+    });
+  }, [holdings, queryClient]);
   
   const formatLastUpdated = (timestamp: number) => {
     const date = new Date(timestamp);
@@ -596,6 +615,8 @@ export default function Dashboard() {
         totalProfit={metrics.totalProfit}
         totalProfitPercent={metrics.totalProfitPercent}
         unrealizedGain={metrics.unrealizedGain}
+        onRefreshQuotes={refreshDashboardQuotes}
+        quotesRefreshing={quotesFetching}
       />
 
       <div className="hidden md:grid gap-3 md:grid-cols-4 xl:grid-cols-5">
@@ -618,6 +639,24 @@ export default function Dashboard() {
                 </TooltipContent>
               </Tooltip>
             </CardTitle>
+            {holdings && holdings.length > 0 && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 shrink-0"
+                disabled={quotesFetching}
+                onClick={() => refreshDashboardQuotes()}
+                aria-label="Obnoviť ceny a dennú zmenu"
+                data-testid="button-dashboard-refresh-quotes"
+              >
+                {quotesFetching ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            )}
           </CardHeader>
           <CardContent className="p-6 pt-0">
             <div className="text-2xl font-bold truncate" data-testid="text-total-value">

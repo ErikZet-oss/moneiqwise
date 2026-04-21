@@ -39,7 +39,7 @@ export interface XTBImportResult {
 
 /**
  * Normalizácia tickeru pre Yahoo Finance.
- * Neodstraňujeme .DE / .L / .MI / … — Yahoo ich pri európskych nástrojoch vyžaduje (napr. SXR8.DE, RR.L).
+ * Neodstraňujeme .DE / .L / .MI / … — Yahoo ich pri európskych nástrojoch vyžaduje (napr. SXR8.DE, RRU.DE).
  * Odstránenie .DE/.L spôsobovalo zlé kotácie ETF a 0 % zisku (iný nástroj alebo prázdne dáta).
  * Redundantné je hlavne .US (US akcie Yahoo uvádza bez prípony).
  */
@@ -66,8 +66,8 @@ function cleanTicker(ticker: string): string {
     "BRK.A": "BRK-A",
     "BF.B": "BF-B",
     "BF.A": "BF-A",
-    // XTB niekedy po úprave prípon len „RR“ — Rolls-Royce Holdings je na LSE ako RR.L
-    RR: "RR.L",
+    // XTB export niekedy má len „RR“ — pre kotácie Yahoo použiť Xetra (RRU.DE)
+    RR: "RRU.DE",
   };
 
   return tickerMappings[cleaned] || cleaned;

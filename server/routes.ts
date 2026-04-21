@@ -526,10 +526,10 @@ async function fetchFinnhubQuote(ticker: string): Promise<any> {
   }
 }
 
-async function fetchStockQuote(ticker: string): Promise<any> {
-  // Check cache first
+async function fetchStockQuote(ticker: string, skipCache = false): Promise<any> {
+  // Check cache first (unless user explicitly refreshes quotes)
   const cached = priceCache.get(ticker);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+  if (!skipCache && cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return cached.data;
   }
 
@@ -2044,7 +2044,7 @@ export async function registerRoutes(
   // Batch get stock quotes - fetches multiple tickers in parallel for better performance
   app.post("/api/stocks/quotes/batch", isAuthenticated, async (req: any, res) => {
     try {
-      const { tickers } = req.body;
+      const { tickers, refresh } = req.body;
       
       if (!tickers || !Array.isArray(tickers)) {
         return res.status(400).json({ message: "Tickers array required" });
@@ -2079,7 +2079,7 @@ export async function registerRoutes(
               };
             }
             
-            const quote = await fetchStockQuote(ticker);
+            const quote = await fetchStockQuote(ticker, !!refresh);
             return { ticker, data: quote };
           } catch (error: any) {
             return { ticker, error: error.message || "Failed to fetch quote" };

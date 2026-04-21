@@ -1,9 +1,16 @@
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useCallback, useMemo, useState, type MouseEvent } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Briefcase, TrendingUp, TrendingDown, Loader2 } from "lucide-react";
+import {
+  Briefcase,
+  TrendingUp,
+  TrendingDown,
+  Loader2,
+  RefreshCw,
+} from "lucide-react";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
@@ -48,7 +55,26 @@ async function fetchOverviewBundle(): Promise<OverviewBundle> {
   return res.json();
 }
 
+async function fetchOverviewQuotesBatch(
+  tickers: string[],
+  refresh: boolean,
+): Promise<Record<string, StockQuote>> {
+  const res = await fetch("/api/stocks/quotes/batch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ tickers, refresh }),
+  });
+  if (!res.ok) throw new Error("Failed to fetch quotes");
+  const data = await res.json();
+  return data.quotes as Record<string, StockQuote>;
+}
+
 export default function Overview() {
+  const queryClient = useQueryClient();
+  const [refreshingPortfolioId, setRefreshingPortfolioId] = useState<string | null>(
+    null,
+  );
   const { portfolios, setSelectedPortfolioId, isLoading: portfoliosLoading } = usePortfolio();
   const { convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
   const { hideAmounts } = useChartSettings();
@@ -78,20 +104,13 @@ export default function Overview() {
     return Array.from(set).sort();
   }, [overview]);
 
-  const { data: quotes } = useQuery<Record<string, StockQuote>>({
+  const {
+    data: quotes,
+    isFetching: quotesFetching,
+  } = useQuery<Record<string, StockQuote>>({
     queryKey: ["/api/quotes-overview", allTickers.join(",")],
     enabled: allTickers.length > 0,
-    queryFn: async () => {
-      const res = await fetch("/api/stocks/quotes/batch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ tickers: allTickers }),
-      });
-      if (!res.ok) throw new Error("Failed to fetch quotes");
-      const data = await res.json();
-      return data.quotes as Record<string, StockQuote>;
-    },
+    queryFn: () => fetchOverviewQuotesBatch(allTickers, false),
     staleTime: 60 * 1000,
     gcTime: 30 * 60 * 1000,
     refetchOnMount: false,
@@ -185,6 +204,41 @@ export default function Overview() {
     setLocation("/");
   };
 
+  const quotesQueryKey = useMemo(
+    () => ["/api/quotes-overview", allTickers.join(",")] as const,
+    [allTickers],
+  );
+
+  const refreshAllQuotes = useCallback(async () => {
+    if (allTickers.length === 0) return;
+    await queryClient.fetchQuery({
+      queryKey: quotesQueryKey,
+      queryFn: () => fetchOverviewQuotesBatch(allTickers, true),
+    });
+  }, [allTickers, queryClient, quotesQueryKey]);
+
+  const refreshPortfolioQuotes = useCallback(
+    async (portfolioId: string, e: MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      const row = overview?.byPortfolioId[portfolioId];
+      const tickers =
+        row?.holdings?.map((h) => h.ticker).filter(Boolean) ?? [];
+      if (tickers.length === 0 || allTickers.length === 0) return;
+      setRefreshingPortfolioId(portfolioId);
+      try {
+        const fresh = await fetchOverviewQuotesBatch(tickers, true);
+        queryClient.setQueryData<Record<string, StockQuote>>(
+          quotesQueryKey,
+          (prev) => ({ ...(prev ?? {}), ...fresh }),
+        );
+      } finally {
+        setRefreshingPortfolioId(null);
+      }
+    },
+    [allTickers.length, overview?.byPortfolioId, queryClient, quotesQueryKey],
+  );
+
   const metricsByPortfolioId = useMemo(() => {
     const map = new Map<string, PortfolioMetrics>();
     if (!overview?.byPortfolioId) return map;
@@ -239,8 +293,31 @@ export default function Overview() {
             <div className="text-xs text-muted-foreground uppercase tracking-wide">
               Celková hodnota
             </div>
-            <div className="text-2xl font-bold" data-testid="text-overview-grand-total">
-              {maskAmount(formatCurrency(grandTotal))}
+            <div className="flex items-center justify-end gap-1">
+              <div
+                className="text-2xl font-bold"
+                data-testid="text-overview-grand-total"
+              >
+                {maskAmount(formatCurrency(grandTotal))}
+              </div>
+              {allTickers.length > 0 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  disabled={quotesFetching || refreshingPortfolioId !== null}
+                  onClick={() => refreshAllQuotes()}
+                  aria-label="Obnoviť ceny všetkých portfólií"
+                  data-testid="button-overview-refresh-all-quotes"
+                >
+                  {quotesFetching ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                </Button>
+              )}
             </div>
           </div>
         )}
@@ -295,8 +372,40 @@ export default function Overview() {
                     <Skeleton className="h-8 w-40" />
                   ) : (
                     <div>
-                      <div className="text-2xl md:text-3xl font-bold" data-testid={`overview-value-${portfolio.id}`}>
-                        {maskAmount(formatCurrency(m.totalValue))}
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <div
+                          className="text-2xl md:text-3xl font-bold"
+                          data-testid={`overview-value-${portfolio.id}`}
+                        >
+                          {maskAmount(formatCurrency(m.totalValue))}
+                        </div>
+                        {bundleRow &&
+                          bundleRow.holdings &&
+                          bundleRow.holdings.length > 0 &&
+                          allTickers.length > 0 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 shrink-0"
+                              disabled={
+                                quotesFetching ||
+                                refreshingPortfolioId !== null
+                              }
+                              onClick={(e) =>
+                                refreshPortfolioQuotes(portfolio.id, e)
+                              }
+                              aria-label="Obnoviť ceny a dennú zmenu"
+                              data-testid={`button-overview-refresh-quotes-${portfolio.id}`}
+                            >
+                              {quotesFetching ||
+                              refreshingPortfolioId === portfolio.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <RefreshCw className="h-4 w-4" />
+                              )}
+                            </Button>
+                          )}
                       </div>
                       {m.cashValue !== 0 && (
                         <div className="text-xs text-muted-foreground mt-1" data-testid={`overview-cash-${portfolio.id}`}>
