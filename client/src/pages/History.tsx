@@ -78,6 +78,7 @@ export default function History() {
   const invalidateAllQueries = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
     queryClient.invalidateQueries({ queryKey: ["/api/holdings"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/overview"] });
     queryClient.invalidateQueries({ queryKey: ["/api/dividends"] });
     queryClient.invalidateQueries({ queryKey: ["/api/realized-gains"] });
     queryClient.invalidateQueries({ queryKey: ["/api/portfolios"] });

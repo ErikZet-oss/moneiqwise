@@ -60,6 +60,13 @@ export interface IStorage {
   
   // Holdings operations
   getHoldingsByUser(userId: string, portfolioId?: string | null): Promise<Holding[]>;
+  /** Single fetch for Overview page: holdings + totals per visible portfolio (no N× round-trips). */
+  getOverviewBundle(userId: string): Promise<{
+    byPortfolioId: Record<
+      string,
+      { holdings: Holding[]; totalRealized: number; dividendNet: number }
+    >;
+  }>;
   getHoldingByUserAndTicker(userId: string, ticker: string, portfolioId?: string | null): Promise<Holding | undefined>;
   getHoldingsForTickerAcrossPortfolios(userId: string, ticker: string): Promise<Holding[]>;
   getTransactionsForTickerAcrossPortfolios(userId: string, ticker: string): Promise<Transaction[]>;
@@ -511,6 +518,88 @@ export class DatabaseStorage implements IStorage {
     }
     
     return Array.from(aggregatedMap.values());
+  }
+
+  async getOverviewBundle(userId: string): Promise<{
+    byPortfolioId: Record<
+      string,
+      { holdings: Holding[]; totalRealized: number; dividendNet: number }
+    >;
+  }> {
+    const visibleIds = await this.getVisiblePortfolioIdsByUser(userId);
+    if (visibleIds.length === 0) {
+      return { byPortfolioId: {} };
+    }
+
+    const holdingsRows = await db
+      .select()
+      .from(holdings)
+      .where(
+        and(eq(holdings.userId, userId), inArray(holdings.portfolioId, visibleIds)),
+      );
+
+    const txnPortfolioFilter = or(
+      isNull(transactions.portfolioId),
+      inArray(transactions.portfolioId, visibleIds),
+    );
+    const txnRows = await db
+      .select()
+      .from(transactions)
+      .where(and(eq(transactions.userId, userId), txnPortfolioFilter));
+
+    const holdingsByPid = new Map<string, Holding[]>();
+    for (const id of visibleIds) holdingsByPid.set(id, []);
+    for (const h of holdingsRows) {
+      const pid = h.portfolioId;
+      if (pid && holdingsByPid.has(pid)) holdingsByPid.get(pid)!.push(h);
+    }
+
+    const txnsByPid = new Map<string, Transaction[]>();
+    for (const id of visibleIds) txnsByPid.set(id, []);
+    for (const t of txnRows) {
+      const pid = t.portfolioId;
+      if (pid && txnsByPid.has(pid)) txnsByPid.get(pid)!.push(t);
+    }
+
+    const byPortfolioId: Record<
+      string,
+      { holdings: Holding[]; totalRealized: number; dividendNet: number }
+    > = {};
+
+    for (const id of visibleIds) {
+      const list = txnsByPid.get(id) ?? [];
+
+      let totalRealized = 0;
+      for (const txn of list) {
+        if (txn.type === "SELL") {
+          totalRealized += parseFloat(txn.realizedGain || "0");
+        }
+      }
+
+      let dividendNet = 0;
+      const dividendTransactions = list.filter((t) => t.type === "DIVIDEND");
+      const taxTransactions = list.filter((t) => t.type === "TAX");
+      for (const txn of dividendTransactions) {
+        const shares = parseFloat(txn.shares);
+        const dividendPerShare = parseFloat(txn.pricePerShare);
+        const tax = parseFloat(txn.commission || "0");
+        const gross = shares * dividendPerShare;
+        dividendNet += gross - tax;
+      }
+      for (const txn of taxTransactions) {
+        const shares = parseFloat(txn.shares);
+        const pricePerShare = parseFloat(txn.pricePerShare);
+        dividendNet += shares * pricePerShare;
+      }
+
+      byPortfolioId[id] = {
+        holdings: holdingsByPid.get(id) ?? [],
+        totalRealized,
+        dividendNet,
+      };
+    }
+
+    return { byPortfolioId };
   }
 
   async getHoldingByUserAndTicker(userId: string, ticker: string, portfolioId?: string | null): Promise<Holding | undefined> {

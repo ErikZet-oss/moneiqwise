@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useQuery, useQueries } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -17,20 +17,15 @@ interface StockQuote {
   changePercent: number;
 }
 
-interface RealizedGainSummary {
-  totalRealized: number;
-  realizedYTD: number;
-  realizedThisMonth: number;
-  realizedToday: number;
-  transactionCount: number;
-}
-
-interface DividendSummary {
-  totalNet: number;
-  netYTD: number;
-  netThisMonth: number;
-  netToday: number;
-  transactionCount: number;
+interface OverviewBundle {
+  byPortfolioId: Record<
+    string,
+    {
+      holdings: Holding[];
+      totalRealized: number;
+      dividendNet: number;
+    }
+  >;
 }
 
 interface PortfolioMetrics {
@@ -47,6 +42,12 @@ interface PortfolioMetrics {
   hasQuotes: boolean;
 }
 
+async function fetchOverviewBundle(): Promise<OverviewBundle> {
+  const res = await fetch("/api/overview", { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to fetch overview");
+  return res.json();
+}
+
 export default function Overview() {
   const { portfolios, setSelectedPortfolioId, isLoading: portfoliosLoading } = usePortfolio();
   const { convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
@@ -55,46 +56,27 @@ export default function Overview() {
 
   const maskAmount = (amount: string) => (hideAmounts ? "••••••" : amount);
 
-  const holdingsQueries = useQueries({
-    queries: portfolios.map((p) => ({
-      queryKey: ["/api/holdings", p.id],
-      queryFn: async (): Promise<Holding[]> => {
-        const res = await fetch(`/api/holdings?portfolio=${p.id}`);
-        if (!res.ok) throw new Error("Failed to fetch holdings");
-        return res.json();
-      },
-    })),
-  });
-
-  const realizedGainsQueries = useQueries({
-    queries: portfolios.map((p) => ({
-      queryKey: ["/api/realized-gains", p.id],
-      queryFn: async (): Promise<RealizedGainSummary> => {
-        const res = await fetch(`/api/realized-gains?portfolio=${p.id}`);
-        if (!res.ok) throw new Error("Failed to fetch realized gains");
-        return res.json();
-      },
-    })),
-  });
-
-  const dividendsQueries = useQueries({
-    queries: portfolios.map((p) => ({
-      queryKey: ["/api/dividends", p.id],
-      queryFn: async (): Promise<DividendSummary> => {
-        const res = await fetch(`/api/dividends?portfolio=${p.id}`);
-        if (!res.ok) throw new Error("Failed to fetch dividends");
-        return res.json();
-      },
-    })),
+  const {
+    data: overview,
+    isPending: overviewPending,
+    isFetching: overviewFetching,
+  } = useQuery({
+    queryKey: ["/api/overview"],
+    queryFn: fetchOverviewBundle,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   const allTickers = useMemo(() => {
     const set = new Set<string>();
-    holdingsQueries.forEach((q) => {
-      q.data?.forEach((h) => set.add(h.ticker));
+    if (!overview?.byPortfolioId) return [];
+    Object.values(overview.byPortfolioId).forEach(({ holdings }) => {
+      holdings.forEach((h) => set.add(h.ticker));
     });
     return Array.from(set).sort();
-  }, [holdingsQueries.map((q) => q.data).join("|")]);
+  }, [overview]);
 
   const { data: quotes } = useQuery<Record<string, StockQuote>>({
     queryKey: ["/api/quotes-overview", allTickers.join(",")],
@@ -111,14 +93,18 @@ export default function Overview() {
       return data.quotes as Record<string, StockQuote>;
     },
     staleTime: 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
-  const computeMetrics = (index: number): PortfolioMetrics => {
-    const portfolio = portfolios[index];
-    const holdings = holdingsQueries[index]?.data ?? [];
-    const realized = realizedGainsQueries[index]?.data?.totalRealized ?? 0;
-    const dividends = dividendsQueries[index]?.data?.totalNet ?? 0;
-
+  const computeMetrics = (
+    holdings: Holding[],
+    realized: number,
+    dividends: number,
+    portfolioCashBalance: string | undefined,
+    portfolioCashCurrency: string | undefined,
+  ): PortfolioMetrics => {
     let stockValue = 0;
     let totalInvested = 0;
     let dailyChange = 0;
@@ -141,16 +127,12 @@ export default function Overview() {
       }
     });
 
-    // Cash is editable per portfolio and may be held in a currency other than
-    // the user's preferred one — convert it the same way we convert holdings.
-    const rawCash = parseFloat(portfolio?.cashBalance || "0");
-    const cashCcy = (portfolio?.cashCurrency || "EUR") as any;
+    const rawCash = parseFloat(portfolioCashBalance || "0");
+    const cashCcy = (portfolioCashCurrency || "EUR") as any;
     const cashValue = rawCash > 0 ? convertPrice(rawCash, cashCcy) : 0;
 
     const totalValue = stockValue + cashValue;
 
-    // Profit / return metrics are driven only by stock positions + realized
-    // gains + dividends. Cash sitting in the account isn't a gain or a loss.
     const unrealized = stockValue - totalInvested;
     const totalProfit = unrealized + realized + dividends;
     const totalProfitPercent = totalInvested > 0 ? (totalProfit / totalInvested) * 100 : 0;
@@ -201,19 +183,35 @@ export default function Overview() {
     setLocation("/");
   };
 
-  const anyLoading =
-    portfoliosLoading ||
-    holdingsQueries.some((q) => q.isLoading) ||
-    realizedGainsQueries.some((q) => q.isLoading) ||
-    dividendsQueries.some((q) => q.isLoading);
+  const metricsByPortfolioId = useMemo(() => {
+    const map = new Map<string, PortfolioMetrics>();
+    if (!overview?.byPortfolioId) return map;
+    for (const p of portfolios) {
+      const row = overview.byPortfolioId[p.id];
+      const holdings = row?.holdings ?? [];
+      const realized = row?.totalRealized ?? 0;
+      const dividends = row?.dividendNet ?? 0;
+      map.set(
+        p.id,
+        computeMetrics(holdings, realized, dividends, p.cashBalance, p.cashCurrency),
+      );
+    }
+    return map;
+    // quotes / currency helpers must trigger recompute when quotes arrive
+  }, [overview, portfolios, quotes, convertPrice, getTickerCurrency]);
 
   const grandTotal = useMemo(() => {
     let total = 0;
-    portfolios.forEach((_, idx) => {
-      total += computeMetrics(idx).totalValue;
+    metricsByPortfolioId.forEach((m) => {
+      total += m.totalValue;
     });
     return total;
-  }, [portfolios, holdingsQueries.map((q) => q.data).join("|"), quotes]);
+  }, [metricsByPortfolioId]);
+
+  const overviewLoading = overviewPending || (!overview && overviewFetching);
+
+  const anyLoading =
+    portfoliosLoading || overviewLoading;
 
   if (portfoliosLoading) {
     return (
@@ -254,15 +252,15 @@ export default function Overview() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {portfolios.map((portfolio, idx) => {
-            const holdingsLoading = holdingsQueries[idx]?.isLoading;
-            const m = computeMetrics(idx);
+          {portfolios.map((portfolio) => {
+            const m = metricsByPortfolioId.get(portfolio.id);
+            const bundleRow = overview?.byPortfolioId[portfolio.id];
             const hasAnyActivity =
-              m.totalValue > 0 ||
-              m.totalInvested > 0 ||
-              m.passiveIncome > 0 ||
-              m.cashValue > 0 ||
-              (realizedGainsQueries[idx]?.data?.totalRealized ?? 0) !== 0;
+              (m?.totalValue ?? 0) > 0 ||
+              (m?.totalInvested ?? 0) > 0 ||
+              (m?.passiveIncome ?? 0) > 0 ||
+              (m?.cashValue ?? 0) > 0 ||
+              (bundleRow?.totalRealized ?? 0) !== 0;
 
             return (
               <Card
@@ -291,7 +289,7 @@ export default function Overview() {
                     </span>
                   </div>
 
-                  {holdingsLoading ? (
+                  {overviewLoading || !m ? (
                     <Skeleton className="h-8 w-40" />
                   ) : (
                     <div>
@@ -306,7 +304,9 @@ export default function Overview() {
                     </div>
                   )}
 
-                  {hasAnyActivity ? (
+                  {overviewLoading || !m ? (
+                    <Skeleton className="h-16 w-full mt-1" />
+                  ) : hasAnyActivity ? (
                     <div className="space-y-1.5 text-sm">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-muted-foreground">Celkový zisk</span>

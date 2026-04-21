@@ -119,6 +119,7 @@ export default function Import() {
       });
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/holdings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/overview"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dividends"] });
       queryClient.invalidateQueries({ queryKey: ["/api/realized-gains"] });
       queryClient.invalidateQueries({ queryKey: ["/api/options"] });
@@ -193,6 +194,7 @@ export default function Import() {
       });
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/holdings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/overview"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dividends"] });
       setParseResult(null);
     },

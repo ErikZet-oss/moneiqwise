@@ -1308,6 +1308,19 @@ export async function registerRoutes(
     }
   });
 
+  // Overview page: holdings + realizovaný zisk + dividendy naraz na portfólio,
+  // namiesto 3×N samostatných HTTP dotazov z klienta (veľké zrýchlenie Pri prehľade).
+  app.get("/api/overview", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const bundle = await storage.getOverviewBundle(userId);
+      res.json(bundle);
+    } catch (error) {
+      console.error("Error fetching overview bundle:", error);
+      res.status(500).json({ message: "Nepodarilo sa načítať prehľad." });
+    }
+  });
+
   // Destructive endpoint: wipes every transaction, holding and option trade
   // for the authenticated user across ALL portfolios (including any rows with
   // portfolio_id = NULL). Portfolios themselves and API keys remain intact so

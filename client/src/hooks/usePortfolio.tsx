@@ -78,6 +78,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/portfolios"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/overview"] });
     },
   });
 
@@ -88,6 +89,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/portfolios"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/overview"] });
     },
   });
 
@@ -98,6 +100,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/portfolios"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/overview"] });
       // Data for hidden portfolio might have been included in "all" aggregations – refresh them too
       queryClient.invalidateQueries({ queryKey: ["/api/holdings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
@@ -115,6 +118,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/portfolios"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/overview"] });
       queryClient.invalidateQueries({ queryKey: ["/api/holdings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/realized-gains"] });

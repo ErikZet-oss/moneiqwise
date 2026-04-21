@@ -137,6 +137,7 @@ export default function Transactions() {
         description: `Transakcia bola úspešne uložená.`,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/holdings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/overview"] });
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dividends"] });
       queryClient.invalidateQueries({ queryKey: ["/api/realized-gains"] });
