@@ -9,6 +9,8 @@ Formát položky:
 
 --- Aktuálna session / posledné commity --------------------------------
 
+[2026-04-21] git 136ba14 — Nastavenia: „Odstrániť osireté záznamy“ (transakcie/holdingy bez portfólia alebo s neexistujúcim portfóliom). API POST /api/portfolios/cleanup-orphans.
+
 [2026-04-21] git 52b7e0d — XTB save: preskočenie už importovaných riadkov (rovnaké externalId v tom istom portfóliu) — predchádza násobeniu ks pri opakovanom importe.
 
 [2026-04-21] git 4d58160 — Import: pri HTML/502 odpovedi z prehliadača čitateľná SK správa namiesto výpisu celého HTML.
