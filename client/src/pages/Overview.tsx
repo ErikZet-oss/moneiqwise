@@ -129,7 +129,9 @@ export default function Overview() {
 
     const rawCash = parseFloat(portfolioCashBalance || "0");
     const cashCcy = (portfolioCashCurrency || "EUR") as any;
-    const cashValue = rawCash > 0 ? convertPrice(rawCash, cashCcy) : 0;
+    const cashValue = Number.isFinite(rawCash)
+      ? convertPrice(rawCash, cashCcy)
+      : 0;
 
     const totalValue = stockValue + cashValue;
 
@@ -259,7 +261,7 @@ export default function Overview() {
               (m?.totalValue ?? 0) > 0 ||
               (m?.totalInvested ?? 0) > 0 ||
               (m?.passiveIncome ?? 0) > 0 ||
-              (m?.cashValue ?? 0) > 0 ||
+              (m?.cashValue ?? 0) !== 0 ||
               (bundleRow?.totalRealized ?? 0) !== 0;
 
             return (
@@ -296,9 +298,9 @@ export default function Overview() {
                       <div className="text-2xl md:text-3xl font-bold" data-testid={`overview-value-${portfolio.id}`}>
                         {maskAmount(formatCurrency(m.totalValue))}
                       </div>
-                      {m.cashValue > 0 && (
+                      {m.cashValue !== 0 && (
                         <div className="text-xs text-muted-foreground mt-1" data-testid={`overview-cash-${portfolio.id}`}>
-                          Z toho hotovosť: {maskAmount(formatCurrency(m.cashValue))}
+                          Z toho hotovosť / margin: {maskAmount(formatCurrency(m.cashValue))}
                         </div>
                       )}
                     </div>

@@ -10,14 +10,12 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
-import { Loader2, Eye, EyeOff, CheckCircle2, XCircle, Key, ExternalLink, Coins, Calculator, RefreshCw, Briefcase, Plus, Pencil, Trash2, LineChart, Newspaper, AlertTriangle, ChevronUp, ChevronDown } from "lucide-react";
+import { Loader2, Eye, EyeOff, Coins, Calculator, RefreshCw, Briefcase, Plus, Pencil, Trash2, LineChart, Newspaper, AlertTriangle, ChevronUp, ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { BrokerLogo, BrokerSelectItem, BROKER_CATALOG } from "@/components/BrokerLogo";
 import { BROKER_CODES, type Currency, type BrokerCode } from "@shared/schema";
 
 interface ApiSettings {
-  alphaVantageKey: string | null;
-  finnhubKey: string | null;
   preferredCurrency: Currency;
 }
 
@@ -30,10 +28,6 @@ export default function Settings() {
   const { toast } = useToast();
   const { allPortfolios, createPortfolio, updatePortfolio, deletePortfolio, setPortfolioHidden, reorderPortfolios } = usePortfolio();
   const { showChart, showTooltip, hideAmounts, showNews, setShowChart, setShowTooltip, setHideAmounts, setShowNews } = useChartSettings();
-  const [showAlphaVantage, setShowAlphaVantage] = useState(false);
-  const [showFinnhub, setShowFinnhub] = useState(false);
-  const [alphaVantageKey, setAlphaVantageKey] = useState("");
-  const [finnhubKey, setFinnhubKey] = useState("");
   const [newPortfolioName, setNewPortfolioName] = useState("");
   const [newPortfolioBroker, setNewPortfolioBroker] = useState<BrokerCode | undefined>(undefined);
   const [editingPortfolio, setEditingPortfolio] = useState<{ id: string; name: string; brokerCode: BrokerCode | null } | null>(null);
@@ -56,7 +50,7 @@ export default function Settings() {
   });
 
   const updateSettingsMutation = useMutation({
-    mutationFn: async (data: { alphaVantageKey?: string; finnhubKey?: string; preferredCurrency?: Currency }) => {
+    mutationFn: async (data: { preferredCurrency?: Currency }) => {
       return apiRequest("POST", "/api/settings", data);
     },
     onSuccess: () => {
@@ -66,8 +60,6 @@ export default function Settings() {
         title: "Uložené",
         description: "Nastavenia boli úspešne uložené.",
       });
-      setAlphaVantageKey("");
-      setFinnhubKey("");
     },
     onError: () => {
       toast({
@@ -77,24 +69,6 @@ export default function Settings() {
       });
     },
   });
-
-  const handleSaveAlphaVantage = () => {
-    if (!alphaVantageKey.trim()) return;
-    updateSettingsMutation.mutate({ alphaVantageKey: alphaVantageKey.trim() });
-  };
-
-  const handleSaveFinnhub = () => {
-    if (!finnhubKey.trim()) return;
-    updateSettingsMutation.mutate({ finnhubKey: finnhubKey.trim() });
-  };
-
-  const handleRemoveAlphaVantage = () => {
-    updateSettingsMutation.mutate({ alphaVantageKey: "" });
-  };
-
-  const handleRemoveFinnhub = () => {
-    updateSettingsMutation.mutate({ finnhubKey: "" });
-  };
 
   const handleCurrencyChange = (currency: Currency) => {
     updateSettingsMutation.mutate({ preferredCurrency: currency });
@@ -162,12 +136,6 @@ export default function Settings() {
     },
   });
 
-  const maskKey = (key: string | null) => {
-    if (!key) return "";
-    if (key.length <= 8) return "••••••••";
-    return key.substring(0, 4) + "••••••••" + key.substring(key.length - 4);
-  };
-
   const handleMovePortfolio = async (index: number, direction: "up" | "down") => {
     const target = direction === "up" ? index - 1 : index + 1;
     if (target < 0 || target >= allPortfolios.length) return;
@@ -178,10 +146,14 @@ export default function Settings() {
     setReorderingPortfolio(true);
     try {
       await reorderPortfolios(ids);
-    } catch {
+    } catch (err) {
+      const msg =
+        err instanceof Error && err.message.trim()
+          ? err.message
+          : "Nepodarilo sa uložiť poradie portfólií.";
       toast({
         title: "Chyba",
-        description: "Nepodarilo sa uložiť poradie portfólií.",
+        description: msg,
         variant: "destructive",
       });
     } finally {
@@ -287,7 +259,7 @@ export default function Settings() {
       <div>
         <h1 className="text-2xl font-bold" data-testid="text-settings-title">Údaje</h1>
         <p className="text-muted-foreground">
-          Spravujte svoje nastavenia aplikácie a API kľúče.
+          Portfóliá, zobrazenie, menu a mena pre prehľad.
         </p>
       </div>
 
@@ -660,176 +632,6 @@ export default function Settings() {
               onCheckedChange={setHideAmounts}
               data-testid="switch-hide-amounts"
             />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <Key className="h-5 w-5 text-primary" />
-            <CardTitle>API kľúče</CardTitle>
-          </div>
-          <CardDescription>
-            Pre správne fungovanie aplikácie potrebujete aspoň jeden API kľúč. 
-            Alpha Vantage je primárny zdroj, Finnhub slúži ako záloha.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <h3 className="font-medium">Alpha Vantage</h3>
-                {settings?.alphaVantageKey ? (
-                  <Badge variant="outline" className="text-green-500 border-green-500">
-                    <CheckCircle2 className="h-3 w-3 mr-1" />
-                    Aktívny
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="text-red-500 border-red-500">
-                    <XCircle className="h-3 w-3 mr-1" />
-                    Chýba
-                  </Badge>
-                )}
-              </div>
-              <a 
-                href="https://www.alphavantage.co/support/#api-key" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1"
-              >
-                Získať kľúč <ExternalLink className="h-3 w-3" />
-              </a>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Primárny zdroj cien akcií. Bezplatný limit: 25 požiadaviek/deň.
-            </p>
-            
-            {settings?.alphaVantageKey ? (
-              <div className="flex items-center gap-2">
-                <div className="flex-1 flex items-center gap-2 p-2 bg-muted rounded-md">
-                  <span className="font-mono text-sm">
-                    {showAlphaVantage ? settings.alphaVantageKey : maskKey(settings.alphaVantageKey)}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setShowAlphaVantage(!showAlphaVantage)}
-                    data-testid="button-toggle-alphavantage"
-                  >
-                    {showAlphaVantage ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                </div>
-                <Button 
-                  variant="destructive" 
-                  size="sm"
-                  onClick={handleRemoveAlphaVantage}
-                  disabled={updateSettingsMutation.isPending}
-                  data-testid="button-remove-alphavantage"
-                >
-                  Odstrániť
-                </Button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Input
-                  type="password"
-                  placeholder="Zadajte Alpha Vantage API kľúč..."
-                  value={alphaVantageKey}
-                  onChange={(e) => setAlphaVantageKey(e.target.value)}
-                  data-testid="input-alphavantage-key"
-                />
-                <Button 
-                  onClick={handleSaveAlphaVantage}
-                  disabled={!alphaVantageKey.trim() || updateSettingsMutation.isPending}
-                  data-testid="button-save-alphavantage"
-                >
-                  {updateSettingsMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    "Uložiť"
-                  )}
-                </Button>
-              </div>
-            )}
-          </div>
-
-          <div className="border-t pt-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <h3 className="font-medium">Finnhub</h3>
-                {settings?.finnhubKey ? (
-                  <Badge variant="outline" className="text-green-500 border-green-500">
-                    <CheckCircle2 className="h-3 w-3 mr-1" />
-                    Aktívny
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="text-red-500 border-red-500">
-                    <XCircle className="h-3 w-3 mr-1" />
-                    Chýba
-                  </Badge>
-                )}
-              </div>
-              <a 
-                href="https://finnhub.io/register" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1"
-              >
-                Získať kľúč <ExternalLink className="h-3 w-3" />
-              </a>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Záložný zdroj cien. Bezplatný limit: 60 požiadaviek/minútu.
-            </p>
-            
-            {settings?.finnhubKey ? (
-              <div className="flex items-center gap-2">
-                <div className="flex-1 flex items-center gap-2 p-2 bg-muted rounded-md">
-                  <span className="font-mono text-sm">
-                    {showFinnhub ? settings.finnhubKey : maskKey(settings.finnhubKey)}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setShowFinnhub(!showFinnhub)}
-                    data-testid="button-toggle-finnhub"
-                  >
-                    {showFinnhub ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                </div>
-                <Button 
-                  variant="destructive" 
-                  size="sm"
-                  onClick={handleRemoveFinnhub}
-                  disabled={updateSettingsMutation.isPending}
-                  data-testid="button-remove-finnhub"
-                >
-                  Odstrániť
-                </Button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Input
-                  type="password"
-                  placeholder="Zadajte Finnhub API kľúč..."
-                  value={finnhubKey}
-                  onChange={(e) => setFinnhubKey(e.target.value)}
-                  data-testid="input-finnhub-key"
-                />
-                <Button 
-                  onClick={handleSaveFinnhub}
-                  disabled={!finnhubKey.trim() || updateSettingsMutation.isPending}
-                  data-testid="button-save-finnhub"
-                >
-                  {updateSettingsMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    "Uložiť"
-                  )}
-                </Button>
-              </div>
-            )}
           </div>
         </CardContent>
       </Card>

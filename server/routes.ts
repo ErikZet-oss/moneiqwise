@@ -1407,7 +1407,7 @@ export async function registerRoutes(
     }
   });
 
-  app.put("/api/portfolios/reorder", isAuthenticated, async (req: any, res) => {
+  const handlePortfolioReorder = async (req: any, res: any) => {
     try {
       const userId = req.user.claims.sub;
       const orderedIds = req.body?.orderedIds;
@@ -1420,13 +1420,25 @@ export async function registerRoutes(
       const allPortfolios = await storage.getPortfoliosByUser(userId);
       res.json(allPortfolios);
     } catch (error: any) {
-      if (error?.message === "REORDER_LENGTH_MISMATCH" || error?.message === "REORDER_UNKNOWN_ID") {
-        return res.status(400).json({ message: "Neplatné poradie portfólií." });
+      const code = error?.code as string | undefined;
+      if (code === "42703") {
+        return res.status(503).json({
+          message:
+            "V databáze chýba stĺpec sort_order. Spustite migráciu (npm run db:push).",
+        });
       }
       console.error("Error reordering portfolios:", error);
-      res.status(500).json({ message: "Nepodarilo sa uložiť poradie portfólií." });
+      res.status(500).json({
+        message:
+          error?.message && typeof error.message === "string"
+            ? error.message
+            : "Nepodarilo sa uložiť poradie portfólií.",
+      });
     }
-  });
+  };
+
+  app.put("/api/portfolios/reorder", isAuthenticated, handlePortfolioReorder);
+  app.post("/api/portfolios/reorder", isAuthenticated, handlePortfolioReorder);
 
   app.put("/api/portfolios/:id", isAuthenticated, async (req: any, res) => {
     try {
@@ -1482,12 +1494,9 @@ export async function registerRoutes(
         cashBalance === null || cashBalance === undefined || cashBalance === ""
           ? null
           : Number(cashBalance);
-      if (
-        parsedBalance !== null &&
-        (!Number.isFinite(parsedBalance) || parsedBalance < 0)
-      ) {
+      if (parsedBalance !== null && !Number.isFinite(parsedBalance)) {
         return res.status(400).json({
-          message: "Hotovosť musí byť nezáporné číslo.",
+          message: "Hotovosť musí byť platné číslo (záporná hodnota = margin / dlh u brokera).",
         });
       }
 
@@ -2647,8 +2656,6 @@ export async function registerRoutes(
       const settings = await storage.getUserSettings(userId);
       
       res.json({
-        alphaVantageKey: settings?.alphaVantageKey || null,
-        finnhubKey: settings?.finnhubKey || null,
         preferredCurrency: settings?.preferredCurrency || "EUR",
       });
     } catch (error) {
@@ -2661,17 +2668,13 @@ export async function registerRoutes(
   app.post("/api/settings", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { alphaVantageKey, finnhubKey, preferredCurrency } = req.body;
-      
+      const { preferredCurrency } = req.body ?? {};
+
       const settings = await storage.upsertUserSettings(userId, {
-        alphaVantageKey,
-        finnhubKey,
         preferredCurrency: preferredCurrency || "EUR",
       });
-      
+
       res.json({
-        alphaVantageKey: settings.alphaVantageKey || null,
-        finnhubKey: settings.finnhubKey || null,
         preferredCurrency: settings.preferredCurrency || "EUR",
       });
     } catch (error) {

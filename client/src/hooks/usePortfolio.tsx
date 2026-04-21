@@ -133,7 +133,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
 
   const reorderMutation = useMutation({
     mutationFn: async (orderedIds: string[]) => {
-      await apiRequest("PUT", "/api/portfolios/reorder", { orderedIds });
+      await apiRequest("POST", "/api/portfolios/reorder", { orderedIds });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/portfolios"] });

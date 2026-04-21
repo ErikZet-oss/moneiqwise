@@ -14,8 +14,6 @@ interface ExchangeRate {
 }
 
 interface Settings {
-  alphaVantageKey: string | null;
-  finnhubKey: string | null;
   preferredCurrency: Currency;
 }
 

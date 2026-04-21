@@ -85,15 +85,24 @@ interface NewsArticle {
 
 /** Sums / amounts as entered in SK (1.234,56) or US (1234.56) style */
 function parseLocaleAmountInput(input: string): number {
-  const t = input.replace(/\s/g, "").trim();
+  let t = input.replace(/\s/g, "").trim();
   if (!t) return NaN;
+  let sign = 1;
+  if (t.startsWith("-") || t.startsWith("−")) {
+    sign = -1;
+    t = t.slice(1).trim();
+  }
+  if (!t) return NaN;
+  let n: number;
   if (t.includes(",") && t.includes(".")) {
-    return Number(t.replace(/\./g, "").replace(",", "."));
+    n = Number(t.replace(/\./g, "").replace(",", "."));
+  } else if (t.includes(",")) {
+    n = Number(t.replace(",", "."));
+  } else {
+    n = Number(t);
   }
-  if (t.includes(",")) {
-    return Number(t.replace(",", "."));
-  }
-  return Number(t);
+  if (!Number.isFinite(n)) return NaN;
+  return sign * Math.abs(n);
 }
 
 export default function Dashboard() {
@@ -264,7 +273,8 @@ export default function Dashboard() {
     return { buyPremiumValue, buyTotalCost, sellCommission, openCount };
   };
 
-  // Uninvested broker cash to add on top of the stock value. Cash is tracked
+  // Broker cash / margin net (negative = debt on margin). Added to headline
+  // total value; performance metrics stay stock-based. Cash is tracked
   // per portfolio in the portfolio's currency; when viewing "All portfolios"
   // we simply sum the numbers as-is (we currently assume a single working
   // currency per user – multi-currency cash is a later refinement).
@@ -430,10 +440,10 @@ export default function Dashboard() {
   const saveCash = () => {
     if (!selectedPortfolio) return;
     const parsed = parseLocaleAmountInput(cashInput);
-    if (!Number.isFinite(parsed) || parsed < 0) {
+    if (!Number.isFinite(parsed)) {
       toast({
         title: "Neplatná hodnota",
-        description: "Zadaj nezáporné číslo (podporovaný je aj formát 1.234,56).",
+        description: "Zadaj číslo (záporné = margin; podporovaný je aj formát 1.234,56 alebo -1.234,56).",
         variant: "destructive",
       });
       return;
@@ -614,9 +624,9 @@ export default function Dashboard() {
                 <span className="ml-1">({metrics.openOptionsCount} otvorených opcií)</span>
               )}
             </p>
-            {metrics.cashValue > 0 && (
+            {metrics.cashValue !== 0 && (
               <p className="text-xs text-muted-foreground truncate">
-                Z toho hotovosť: {maskAmount(formatCurrency(metrics.cashValue))}
+                Z toho hotovosť / margin: {maskAmount(formatCurrency(metrics.cashValue))}
               </p>
             )}
           </CardContent>
@@ -626,16 +636,16 @@ export default function Dashboard() {
           <CardHeader className="flex flex-row items-center justify-between gap-1 pb-1 p-6 pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">
               <Banknote className="h-4 w-4" />
-              Hotovosť
+              Hotovosť / margin
               <Tooltip>
                 <TooltipTrigger asChild>
                   <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                 </TooltipTrigger>
                 <TooltipContent className="max-w-[280px]">
-                  <p className="font-semibold mb-1">Voľná hotovosť u brokera</p>
+                  <p className="font-semibold mb-1">Hotovosť alebo margin saldo</p>
                   <p className="text-xs">
-                    Peniaze, ktoré máš u brokera pripravené na investovanie, ale ešte nie sú v akciách.
-                    Započítavajú sa do „Celkovej hodnoty", ale neovplyvňujú zisk ani výkonnosť.
+                    Kladná hodnota = voľná hotovosť u brokera. Záporná hodnota = čistý margin dlh (napr. účet na páku),
+                    aby sedela celková hodnota s výpisom brokera. Započítava sa do „Celkovej hodnoty“, zisk/výkonnosť ostávajú od akcií.
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -888,7 +898,7 @@ export default function Dashboard() {
                 <div className="min-w-0 flex-1 cursor-help text-left">
                   <div className="text-[10px] text-muted-foreground mb-0.5 flex items-center gap-1">
                     <Banknote className="h-2.5 w-2.5 shrink-0" />
-                    Hotovosť
+                    Hotovosť / margin
                     <HelpCircle className="h-2.5 w-2.5" />
                   </div>
                   <div
@@ -909,9 +919,9 @@ export default function Dashboard() {
                 </div>
               </TooltipTrigger>
               <TooltipContent className="max-w-[260px]">
-                <p className="font-semibold mb-1">Voľná hotovosť u brokera</p>
+                <p className="font-semibold mb-1">Hotovosť alebo margin saldo</p>
                 <p className="text-xs">
-                  Započítava sa do celkovej hodnoty; neovplyvňuje zisk ani výkonnosť. Pri „Všetky portfóliá“ je súčet hotovostí.
+                  Započítava sa do celkovej hodnoty (záporné = margin dlh). Neovplyvňuje zisk ani výkonnosť. Pri „Všetky portfóliá“ je súčet.
                 </p>
               </TooltipContent>
             </Tooltip>

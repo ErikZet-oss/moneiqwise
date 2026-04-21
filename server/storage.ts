@@ -77,7 +77,7 @@ export interface IStorage {
   
   // User settings operations
   getUserSettings(userId: string): Promise<UserSettings | undefined>;
-  upsertUserSettings(userId: string, settings: { alphaVantageKey?: string | null; finnhubKey?: string | null; preferredCurrency?: string | null }): Promise<UserSettings>;
+  upsertUserSettings(userId: string, settings: { preferredCurrency?: string | null }): Promise<UserSettings>;
   
   // Option trades operations
   createOptionTrade(trade: InsertOptionTrade): Promise<OptionTrade>;
@@ -177,25 +177,32 @@ export class DatabaseStorage implements IStorage {
   }
 
   async reorderPortfolios(userId: string, orderedIds: string[]): Promise<void> {
-    const userPortfolios = await db
-      .select({ id: portfolios.id })
-      .from(portfolios)
-      .where(eq(portfolios.userId, userId));
-    const idSet = new Set(userPortfolios.map((p) => p.id));
-    if (orderedIds.length !== idSet.size) {
-      throw new Error("REORDER_LENGTH_MISMATCH");
-    }
+    const serverOrdered = await this.getPortfoliosByUser(userId);
+    const serverIds = serverOrdered.map((p) => p.id);
+    const serverSet = new Set(serverIds);
+
+    const seen = new Set<string>();
+    const fromClient: string[] = [];
     for (const id of orderedIds) {
-      if (!idSet.has(id)) {
-        throw new Error("REORDER_UNKNOWN_ID");
+      if (typeof id !== "string" || !serverSet.has(id) || seen.has(id)) continue;
+      seen.add(id);
+      fromClient.push(id);
+    }
+
+    const merged: string[] = [...fromClient];
+    for (const id of serverIds) {
+      if (!seen.has(id)) {
+        merged.push(id);
+        seen.add(id);
       }
     }
+
     await db.transaction(async (tx) => {
-      for (let i = 0; i < orderedIds.length; i++) {
+      for (let i = 0; i < merged.length; i++) {
         await tx
           .update(portfolios)
           .set({ sortOrder: i, updatedAt: new Date() })
-          .where(and(eq(portfolios.id, orderedIds[i]!), eq(portfolios.userId, userId)));
+          .where(and(eq(portfolios.id, merged[i]!), eq(portfolios.userId, userId)));
       }
     });
   }
@@ -769,42 +776,31 @@ export class DatabaseStorage implements IStorage {
     return settings;
   }
 
-  async upsertUserSettings(
-    userId: string, 
-    settings: { alphaVantageKey?: string | null; finnhubKey?: string | null; preferredCurrency?: string | null }
-  ): Promise<UserSettings> {
+  async upsertUserSettings(userId: string, settings: { preferredCurrency?: string | null }): Promise<UserSettings> {
     const existing = await this.getUserSettings(userId);
-    
+
     if (existing) {
       const updateData: Partial<UserSettings> = { updatedAt: new Date() };
-      if (settings.alphaVantageKey !== undefined) {
-        updateData.alphaVantageKey = settings.alphaVantageKey || null;
-      }
-      if (settings.finnhubKey !== undefined) {
-        updateData.finnhubKey = settings.finnhubKey || null;
-      }
       if (settings.preferredCurrency !== undefined) {
         updateData.preferredCurrency = settings.preferredCurrency || "EUR";
       }
-      
+
       const [updated] = await db
         .update(userSettings)
         .set(updateData)
         .where(eq(userSettings.userId, userId))
         .returning();
-      return updated;
-    } else {
-      const [created] = await db
-        .insert(userSettings)
-        .values({
-          userId,
-          alphaVantageKey: settings.alphaVantageKey || null,
-          finnhubKey: settings.finnhubKey || null,
-          preferredCurrency: settings.preferredCurrency || "EUR",
-        })
-        .returning();
-      return created;
+      return updated!;
     }
+
+    const [created] = await db
+      .insert(userSettings)
+      .values({
+        userId,
+        preferredCurrency: settings.preferredCurrency || "EUR",
+      })
+      .returning();
+    return created!;
   }
 
   // Option trades operations
