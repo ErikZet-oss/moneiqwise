@@ -9,6 +9,8 @@ Formát položky:
 
 --- Aktuálna session / posledné commity --------------------------------
 
+[2026-04-21] git 99b3a3e — Obnovenie zoznamu portfólií na mobile (bez persist `/api/portfolios` v localStorage; refetch pri mount/focus). BrokerLogo: logo vyplní celý box (`h-full w-full object-contain`, bez paddingu).
+
 [2026-04-21] git 321187c — Pridaný tento súbor DEV-ZMENY-LOG.txt (história commitov spätne + návod na ďalšie zápisy).
 
 [2026-04-21] git 0a59d6e — Broker logá cez logo.dev (rovnaký Brand API token ako CompanyLogo); domény podľa BrokerCode; pri zlyhaní alebo „other“ fallback na farebný štvor so skratkou. Úpravy stránky Rozloženie (Allocation). Úpravy XTB parsera (server/xtbParser.ts). Pred commitom odstránený nepoužitý balík simple-icons z lokálneho package.json (do commitu nešiel, ak bol zhodný s origin).
