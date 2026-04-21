@@ -66,7 +66,7 @@ interface SaveResult {
   message: string;
 }
 
-/** Odpoveď môže byť JSON s { message } alebo HTML (502, brána) — inak `response.json()` spadne. */
+/** JSON { message }, alebo HTML od proxy (502…) — bez výpisu celého HTML do toastu. */
 async function readHttpErrorMessage(response: Response): Promise<string> {
   const text = await response.text();
   try {
@@ -75,13 +75,39 @@ async function readHttpErrorMessage(response: Response): Promise<string> {
       return j.message.trim();
     }
   } catch {
-    // not JSON
+    /* not JSON */
   }
-  const snippet = text.replace(/\s+/g, " ").trim().slice(0, 240);
+
+  const status = response.status;
+  const start = text.trimStart();
+
+  if (
+    start.startsWith("<!DOCTYPE") ||
+    start.startsWith("<html") ||
+    start.startsWith("<HTML")
+  ) {
+    const titleMatch = text.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    const title = titleMatch?.[1]?.replace(/\s+/g, " ").trim();
+    if (status === 502 || title === "502") {
+      return "Server nedostupný (502 Bad Gateway). Proxy alebo hosting neprepojil aplikáciu — skús znova o minútu, obnov stránku alebo skontroluj či aplikácia na hostingu beží.";
+    }
+    if (status === 503) {
+      return "Služba je dočasne nedostupná (503). Skús import znova neskôr.";
+    }
+    if (status === 504) {
+      return "Časový limit servera (504). Veľký import môže trvať dlho — skús znova alebo menší súbor.";
+    }
+    if (title && /^\d{3}$/.test(title)) {
+      return `Server vrátil chybu (${title}). Skús znova alebo kontaktuj hosting.`;
+    }
+    return `Server vrátil HTML namiesto odpovede aplikácie (HTTP ${status}). Ak problém pretrváva, pozri log na hostingu.`;
+  }
+
+  const snippet = text.replace(/\s+/g, " ").trim().slice(0, 200);
   if (snippet) {
-    return `Server: ${snippet}`;
+    return snippet;
   }
-  return `HTTP ${response.status} ${response.statusText || ""}`.trim();
+  return `HTTP ${status} ${response.statusText || ""}`.trim();
 }
 
 export default function Import() {
