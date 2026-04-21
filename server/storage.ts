@@ -18,6 +18,7 @@ import {
   type InsertOptionTrade,
 } from "@shared/schema";
 import { db } from "./db";
+import { computeRealizedGainsFromTransactions } from "./realizedGainsCompute";
 import { eq, and, desc, asc, sql, isNull, or, inArray, notInArray } from "drizzle-orm";
 
 export interface IStorage {
@@ -668,12 +669,8 @@ export class DatabaseStorage implements IStorage {
     for (const id of visibleIds) {
       const list = txnsByPid.get(id) ?? [];
 
-      let totalRealized = 0;
-      for (const txn of list) {
-        if (txn.type === "SELL") {
-          totalRealized += parseFloat(txn.realizedGain || "0");
-        }
-      }
+      const totalRealized =
+        computeRealizedGainsFromTransactions(list).totalRealized;
 
       let dividendNet = 0;
       const dividendTransactions = list.filter((t) => t.type === "DIVIDEND");

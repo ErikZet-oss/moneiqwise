@@ -7,6 +7,10 @@ import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { insertTransactionSchema, insertPortfolioSchema, insertOptionTradeSchema } from "@shared/schema";
 import { parseXTBFile, type XTBImportResult } from "./xtbParser";
+import {
+  computeRealizedGainsFromTransactions,
+  transactionLotKey,
+} from "./realizedGainsCompute";
 
 // Configure multer for file uploads
 const upload = multer({
@@ -2553,74 +2557,16 @@ export async function registerRoutes(
       const userId = req.user.claims.sub;
       const portfolioId = req.query.portfolio as string | undefined;
       const userTransactions = await storage.getTransactionsByUser(userId, portfolioId);
-      
-      // Filter SELL transactions and calculate realized gains
-      const sellTransactions = userTransactions.filter(t => t.type === "SELL");
-      
-      // Group by ticker
-      const byTicker: Record<string, { 
-        ticker: string; 
-        companyName: string; 
-        totalGain: number;
-        totalSold: number;
-        transactions: number;
-      }> = {};
-      
-      // Calculate totals for different periods
-      const now = new Date();
-      const startOfYear = new Date(now.getFullYear(), 0, 1);
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      
-      let totalRealized = 0;
-      let realizedYTD = 0;
-      let realizedThisMonth = 0;
-      let realizedToday = 0;
-      
-      for (const txn of sellTransactions) {
-        const gain = parseFloat(txn.realizedGain || "0");
-        const shares = parseFloat(txn.shares);
-        const price = parseFloat(txn.pricePerShare);
-        const sellValue = shares * price;
-        const txnDate = new Date(txn.transactionDate);
-        
-        totalRealized += gain;
-        
-        if (txnDate >= startOfYear) {
-          realizedYTD += gain;
-        }
-        if (txnDate >= startOfMonth) {
-          realizedThisMonth += gain;
-        }
-        if (txnDate >= today) {
-          realizedToday += gain;
-        }
-        
-        // Group by ticker
-        if (!byTicker[txn.ticker]) {
-          byTicker[txn.ticker] = {
-            ticker: txn.ticker,
-            companyName: txn.companyName,
-            totalGain: 0,
-            totalSold: 0,
-            transactions: 0,
-          };
-        }
-        byTicker[txn.ticker].totalGain += gain;
-        byTicker[txn.ticker].totalSold += sellValue;
-        byTicker[txn.ticker].transactions += 1;
-      }
-      
-      // Sort by total gain (biggest winners/losers first)
-      const tickerSummary = Object.values(byTicker).sort((a, b) => b.totalGain - a.totalGain);
-      
+
+      const computed = computeRealizedGainsFromTransactions(userTransactions);
+
       res.json({
-        totalRealized,
-        realizedYTD,
-        realizedThisMonth,
-        realizedToday,
-        byTicker: tickerSummary,
-        transactionCount: sellTransactions.length,
+        totalRealized: computed.totalRealized,
+        realizedYTD: computed.realizedYTD,
+        realizedThisMonth: computed.realizedThisMonth,
+        realizedToday: computed.realizedToday,
+        byTicker: computed.byTicker,
+        transactionCount: computed.transactionCount,
       });
     } catch (error) {
       console.error("Error fetching realized gains:", error);
@@ -2685,13 +2631,14 @@ export async function registerRoutes(
         const shares = parseFloat(txn.shares);
         const price = parseFloat(txn.pricePerShare);
         const commission = parseFloat(txn.commission || "0");
-        
+        const lotKey = transactionLotKey(txn);
+
         if (txn.type === "BUY") {
           // Update holdings state with BUY
-          if (!holdingsState[txn.ticker]) {
-            holdingsState[txn.ticker] = { shares: 0, avgCost: 0, totalCost: 0 };
+          if (!holdingsState[lotKey]) {
+            holdingsState[lotKey] = { shares: 0, avgCost: 0, totalCost: 0 };
           }
-          const h = holdingsState[txn.ticker];
+          const h = holdingsState[lotKey];
           const totalCost = shares * price + commission;
           const newShares = h.shares + shares;
           h.totalCost += totalCost;
@@ -2699,7 +2646,7 @@ export async function registerRoutes(
           h.shares = newShares;
         } else if (txn.type === "SELL") {
           // Calculate realized gain based on current holdings state
-          const h = holdingsState[txn.ticker];
+          const h = holdingsState[lotKey];
           if (h && h.shares > 0) {
             const costBasis = h.avgCost;
             // Realized gain = (sell price - avg cost) * shares - commission

@@ -68,8 +68,9 @@ function cleanTicker(ticker: string): string {
     "BF.A": "BF-A",
     "UST.FR": "UST.MI",
     "ASML.NL": "ASML",
-    // XTB export niekedy má len „RR“ — pre kotácie Yahoo použiť Xetra (RRU.DE)
+    // Rolls-Royce: XTB/Yahoo LSE aj pri „RR“ mapovať na Xetra pre jednotné kotácie
     RR: "RRU.DE",
+    "RR.L": "RRU.DE",
   };
 
   return tickerMappings[cleaned] || cleaned;

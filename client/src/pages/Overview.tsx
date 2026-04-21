@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState, type MouseEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -15,6 +15,7 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
 import { BrokerLogo } from "@/components/BrokerLogo";
+import { CompanyLogo } from "@/components/CompanyLogo";
 import type { Holding } from "@shared/schema";
 
 interface StockQuote {
@@ -264,6 +265,55 @@ export default function Overview() {
     return total;
   }, [metricsByPortfolioId]);
 
+  const tickerDisplayNames = useMemo(() => {
+    const map = new Map<string, string>();
+    if (!overview?.byPortfolioId) return map;
+    for (const row of Object.values(overview.byPortfolioId)) {
+      for (const h of row.holdings ?? []) {
+        if (!map.has(h.ticker)) {
+          map.set(h.ticker, (h.companyName || h.ticker).trim() || h.ticker);
+        }
+      }
+    }
+    return map;
+  }, [overview]);
+
+  /** Top 5 denných % moverov medzi držanými titulmi (podľa kotácie). */
+  const dailyMovers = useMemo(() => {
+    if (!quotes || allTickers.length === 0) {
+      return { gainers: [] as { ticker: string; name: string; pct: number }[], losers: [] as { ticker: string; name: string; pct: number }[] };
+    }
+    const rows = allTickers.map((t) => {
+      const q = quotes[t];
+      const raw = q?.changePercent;
+      const pct =
+        typeof raw === "number"
+          ? raw
+          : parseFloat(String(raw ?? ""));
+      return {
+        ticker: t,
+        name: tickerDisplayNames.get(t) ?? t,
+        pct: Number.isFinite(pct) ? pct : NaN,
+      };
+    }).filter((r) => Number.isFinite(r.pct));
+
+    const gainers = [...rows]
+      .filter((r) => r.pct > 0)
+      .sort((a, b) => b.pct - a.pct)
+      .slice(0, 5);
+    const losers = [...rows]
+      .filter((r) => r.pct < 0)
+      .sort((a, b) => a.pct - b.pct)
+      .slice(0, 5);
+
+    return { gainers, losers };
+  }, [quotes, allTickers, tickerDisplayNames]);
+
+  const formatSignedDayPct = (value: number) => {
+    const sign = value > 0 ? "+" : "";
+    return `${sign}${Math.abs(value).toFixed(2)}%`;
+  };
+
   const overviewLoading = overviewPending || (!overview && overviewFetching);
 
   const anyLoading =
@@ -322,6 +372,104 @@ export default function Overview() {
           </div>
         )}
       </div>
+
+      {portfolios.length > 0 && allTickers.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card data-testid="overview-daily-gainers">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-green-500" />
+                Najsilnejšie dnes (%)
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Z vašich držaných akcií — denná zmena podľa kotácie.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-2 pt-0">
+              {quotesFetching && !quotes ? (
+                <>
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <Skeleton key={i} className="h-10 w-full" />
+                  ))}
+                </>
+              ) : dailyMovers.gainers.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">
+                  Žiadna z držaných akcií dnes nebola v pluse.
+                </p>
+              ) : (
+                dailyMovers.gainers.map((row, idx) => (
+                  <div
+                    key={row.ticker}
+                    className="flex items-center justify-between gap-2 py-1.5 border-b border-border/60 last:border-0"
+                    data-testid={`overview-gainer-${idx}`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="text-xs text-muted-foreground tabular-nums w-5 shrink-0">
+                        {idx + 1}.
+                      </span>
+                      <CompanyLogo ticker={row.ticker} companyName={row.name} size="xs" />
+                      <div className="min-w-0">
+                        <div className="font-medium text-sm truncate">{row.ticker}</div>
+                        <div className="text-xs text-muted-foreground truncate">{row.name}</div>
+                      </div>
+                    </div>
+                    <span className="text-sm font-semibold tabular-nums text-green-500 shrink-0">
+                      {formatSignedDayPct(row.pct)}
+                    </span>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card data-testid="overview-daily-losers">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <TrendingDown className="h-4 w-4 text-red-500" />
+                Najslabšie dnes (%)
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Z vašich držaných akcií — denná zmena podľa kotácie.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-2 pt-0">
+              {quotesFetching && !quotes ? (
+                <>
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <Skeleton key={i} className="h-10 w-full" />
+                  ))}
+                </>
+              ) : dailyMovers.losers.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">
+                  Žiadna z držaných akcií dnes nebola v mínuse.
+                </p>
+              ) : (
+                dailyMovers.losers.map((row, idx) => (
+                  <div
+                    key={row.ticker}
+                    className="flex items-center justify-between gap-2 py-1.5 border-b border-border/60 last:border-0"
+                    data-testid={`overview-loser-${idx}`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="text-xs text-muted-foreground tabular-nums w-5 shrink-0">
+                        {idx + 1}.
+                      </span>
+                      <CompanyLogo ticker={row.ticker} companyName={row.name} size="xs" />
+                      <div className="min-w-0">
+                        <div className="font-medium text-sm truncate">{row.ticker}</div>
+                        <div className="text-xs text-muted-foreground truncate">{row.name}</div>
+                      </div>
+                    </div>
+                    <span className="text-sm font-semibold tabular-nums text-red-500 shrink-0">
+                      {formatSignedDayPct(row.pct)}
+                    </span>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {portfolios.length === 0 ? (
         <Card>
