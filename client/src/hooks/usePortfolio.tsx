@@ -49,6 +49,10 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
       if (!res.ok) throw new Error("Failed to fetch portfolios");
       return res.json();
     },
+    // Globálne refetchOnMount: false + persist cache spôsobovalo starý zoznam na mobile (nové portfólio z PC).
+    staleTime: 60 * 1000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 
   const portfolios = useMemo(

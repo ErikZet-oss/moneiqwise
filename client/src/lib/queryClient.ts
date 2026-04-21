@@ -62,6 +62,11 @@ function isAuthUserQueryKey(key: unknown): boolean {
   }
 }
 
+/** Portfóliá sa menia často (nové na PC); persist cache na mobile zobrazovala starý zoznam. */
+function isPortfolioListQueryKeySerialized(keyStr: string): boolean {
+  return keyStr.includes("/api/portfolios");
+}
+
 function loadCachedData(): Record<string, unknown> | null {
   try {
     const cached = localStorage.getItem(PORTFOLIO_QUERY_CACHE_KEY);
@@ -120,6 +125,7 @@ if (cachedData) {
     try {
       const queryKey = JSON.parse(key);
       if (isAuthUserQueryKey(queryKey)) return;
+      if (isPortfolioListQueryKeySerialized(key)) return;
       queryClient.setQueryData(queryKey, value);
     } catch {
       // Ignore invalid cache entries
@@ -141,6 +147,7 @@ queryClient.getQueryCache().subscribe(() => {
       if (query.state.data !== undefined && query.state.status === 'success') {
         const key = JSON.stringify(query.queryKey);
         if (key.includes("/api/auth/user")) return;
+        if (isPortfolioListQueryKeySerialized(key)) return;
         // Only cache portfolio-related data
         if (key.includes('/api/')) {
           cacheData[key] = query.state.data;

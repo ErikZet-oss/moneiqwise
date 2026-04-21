@@ -142,7 +142,7 @@ function BrokerLogoMark({
 
   return (
     <div
-      className={`${sizeClasses[size]} rounded-md overflow-hidden shrink-0 bg-muted/80 dark:bg-muted flex items-center justify-center p-0.5`}
+      className={`${sizeClasses[size]} rounded-md overflow-hidden shrink-0 bg-muted/80 dark:bg-muted`}
       title={broker.name}
       data-testid={testId}
     >
@@ -152,7 +152,7 @@ function BrokerLogoMark({
         loading="lazy"
         decoding="async"
         draggable={false}
-        className="max-h-full max-w-full object-contain"
+        className="block h-full w-full object-contain object-center"
         onError={() => setLogoFailed(true)}
       />
     </div>
