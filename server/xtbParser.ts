@@ -199,8 +199,8 @@ function findHeaderRow(data: any[][], headerKeywords: string[]): { headerIndex: 
 }
 
 /**
- * Množstvo z komentára „3 @ 126.50“ alebo „20/25 @ 1158“ (XTB čiastočný uzáver = prvé číslo =
- * počet kusov v riadku; „1/2“ pri malých číslach = zlomkový podiel).
+ * Množstvo z komentára „3 @ 126.50“ alebo „20/25 @ 1158“ / „1/6“ (čiastočný uzáver = prvé číslo =
+ * celé kusy v riadku). Zlomok akcie len ak menovateľ ≤ 5 (1/2, 3/4 …), nie 1/6 ako ⅙ akcie.
  */
 function quantityFromXtBTradeToken(qtyStr: string): number {
   const s = qtyStr.trim();
@@ -220,12 +220,13 @@ function quantityFromXtBTradeToken(qtyStr: string): number {
 
   const ai = Math.round(a);
   const bi = Math.round(b);
-  // „1/2“, „3/4“ … malé čísla → zlomok akcie (nie 20 ks z 25)
+  // Zlomok akcie: typicky menovateľ 2–5 (1/2, 3/4 …). Nie „1/6“ = 1 ks zo 6 — menovateľ > 5
+  // ber ako čiastočný uzáver pozície (prvé číslo = celé kusy v tomto riadku).
   const looksLikeFractionalShare =
-    ai < bi && bi <= 12 && ai <= 5;
+    ai < bi && bi <= 5 && ai <= 5;
   if (looksLikeFractionalShare) return ai / bi;
 
-  // „20/25“, „5/25“ … uzavretá časť pozície → prvé číslo = kusy v tomto výpise
+  // „1/6“, „20/25“, „5/25“ … prvé číslo = kusy predané/nakúpené v tomto výpise
   if (ai <= bi) return ai;
 
   return ai / bi;
