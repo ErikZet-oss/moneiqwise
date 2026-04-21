@@ -173,7 +173,8 @@ export class DatabaseStorage implements IStorage {
       .from(portfolios)
       .where(eq(portfolios.userId, userId));
     if (rows.length === 0) return 0;
-    return Math.max(...rows.map((r) => r.sortOrder)) + 1;
+    const max = Math.max(...rows.map((r) => Number(r.sortOrder ?? 0)));
+    return (Number.isFinite(max) ? max : 0) + 1;
   }
 
   async reorderPortfolios(userId: string, orderedIds: string[]): Promise<void> {

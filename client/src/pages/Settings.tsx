@@ -173,9 +173,13 @@ export default function Settings() {
       setNewPortfolioName("");
       setNewPortfolioBroker(undefined);
     } catch (error) {
+      const msg =
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : "Nepodarilo sa vytvoriť portfólio.";
       toast({
         title: "Chyba",
-        description: "Nepodarilo sa vytvoriť portfólio.",
+        description: msg,
         variant: "destructive",
       });
     } finally {

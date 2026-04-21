@@ -1275,6 +1275,9 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  const { ensurePortfolioSortOrderColumn } = await import("./schemaEnsure");
+  await ensurePortfolioSortOrderColumn();
+
   // Setup auth middleware
   await setupAuth(app);
 
@@ -1401,9 +1404,21 @@ export async function registerRoutes(
       });
 
       res.json(portfolio);
-    } catch (error) {
+    } catch (error: any) {
+      const code = error?.code as string | undefined;
+      if (code === "42703") {
+        return res.status(503).json({
+          message:
+            "V databáze chýba potrebný stĺpec (sort_order). Skúste reštart servera alebo npm run db:push.",
+        });
+      }
       console.error("Error creating portfolio:", error);
-      res.status(500).json({ message: "Nepodarilo sa vytvoriť portfólio." });
+      res.status(500).json({
+        message:
+          error?.message && typeof error.message === "string"
+            ? error.message
+            : "Nepodarilo sa vytvoriť portfólio.",
+      });
     }
   });
 
