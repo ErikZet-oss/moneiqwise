@@ -1,0 +1,58 @@
+Moneiqwise — denník zmien (ručne dopĺňaný + súhrny z git)
+================================================================
+Účel: mať prehľad čo sa robilo v projekte (commit + krátky kontext).
+Nové položky pridávaj pod aktuálny dátum; git hash slúži na nájdenie diffu na GitHub.
+
+Formát položky:
+  [YYYY-MM-DD] git <hash> — stručný popis (voliteľný kontext z práce / chatu)
+
+
+--- Aktuálna session / posledné commity --------------------------------
+
+[2026-04-21] git 0a59d6e — Broker logá cez logo.dev (rovnaký Brand API token ako CompanyLogo); domény podľa BrokerCode; pri zlyhaní alebo „other“ fallback na farebný štvor so skratkou. Úpravy stránky Rozloženie (Allocation). Úpravy XTB parsera (server/xtbParser.ts). Pred commitom odstránený nepoužitý balík simple-icons z lokálneho package.json (do commitu nešiel, ak bol zhodný s origin).
+
+[2026-04-21] git 269b769 — Rozloženie portfólia (koláče), formátovanie kusov akcií, opravy XTB XLSX.
+
+[2026-04-21] git 2f1c7c2 — Transakcie cez Históriu, AddTransactionForm, mobilný sidebar.
+
+[2026-04-21] git e175b01 — Dashboard: prepčítanie priemernej ceny a investície do preferovanej meny.
+
+[2026-04-21] git 9f8df9c — Auto-migrácia sort_order pri štarte; lepšie chybové hlášky pri portfóliach.
+
+[2026-04-21] git c2bd6b6 — Nastavenia bez API kľúčov v UI, margin hotovosti, oprava poradia portfólií.
+
+[2026-04-21] git 2bfd817 — Poradie portfólií v nastaveniach, kalendár dividend.
+
+[2026-04-21] git d1c926f — Mobilný dashboard: hotovosť v mieste dennej zmeny, menšia dlaždica.
+
+[2026-04-21] git 3cd58a6 — Zrýchlenie stránky Prehľad: jeden API balík namiesto veľa paralelných requestov.
+
+[2026-04-21] git 6cc9e41 — Stránka detailu aktíva, navigácia z prehľadu, logo brokera na mobile.
+
+[2026-04-21] git f6fc5bf — Oprava ukladania hotovosti a chybových hlások.
+
+[2026-04-21] git a794af3 — Mobilný dashboard: karta hotovosti s úpravou.
+
+[2026-04-20] git becf020 — Oprava načítania stavu po prihlásení (React Query).
+
+[2026-04-20] git 83a15d9 — Zapčítanie hotovosti do prehľadu portfólií.
+
+[2026-04-20] git 1d767a0 — Výkonnosť podľa rokov a mesiacov na stránke Profit (backend cache + rozbalenie rokov).
+
+[2026-04-20] git 32cfa0e — Graf: scope zisk/strata na vybrané obdobie.
+
+[2026-04-20] git dd36fd8 — Chore: odstránený omylom commitnutý pomocný súbor s commit message.
+
+[2026-04-20] git e9d9406 — Hotovosť po portfóliu (uninvested cash balance).
+
+[2026-04-20] git 225012c — Performance metriky, data wipe, opravy XTB/CSV importu, dev UX.
+
+[2026-04-17] git 8e19f5b — Úpravy UI a routes.
+
+
+--- Ako dopĺňať ďalej -------------------------------------------------
+1. Po významnej zmene sprav git commit ako zvyčajne.
+2. Sem pridaj riadok s dátumom, hashom (krátky `git log -1 --oneline`) a 1–2 vetami čo sa zmenilo.
+3. Voliteľne dopíš poznámku „mimo gitu“ (design rozhodnutie, bug, ktorý nebol v commite).
+
+Koniec súboru (aktualizované: 2026-04-21)
