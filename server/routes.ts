@@ -1449,6 +1449,21 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/portfolios/cleanup-orphans", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const result = await storage.deleteOrphanPortfolioReferences(userId);
+      invalidatePerformanceCache(userId);
+      res.json({
+        ...result,
+        message: `Vymazané: ${result.transactionsDeleted} transakcií, ${result.holdingsDeleted} holdingov, ${result.optionTradesDeleted} opčných obchodov (záznamy bez portfólia alebo s neplatným portfóliom).`,
+      });
+    } catch (error) {
+      console.error("Error cleaning orphan portfolio references:", error);
+      res.status(500).json({ message: "Nepodarilo sa vyčistiť osireté záznamy." });
+    }
+  });
+
   app.post("/api/portfolios", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;

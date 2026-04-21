@@ -18,7 +18,7 @@ import {
   type InsertOptionTrade,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, asc, sql, isNull, or, inArray } from "drizzle-orm";
+import { eq, and, desc, asc, sql, isNull, or, inArray, notInArray } from "drizzle-orm";
 
 export interface IStorage {
   // User operations - required for Replit Auth
@@ -45,6 +45,12 @@ export interface IStorage {
     holdingsMoved: number;
     holdingsMerged: number;
     optionTradesMoved: number;
+  }>;
+  /** Transakcie/holdingy s portfolio_id NULL alebo odkazom na už neexistujúce portfólio. */
+  deleteOrphanPortfolioReferences(userId: string): Promise<{
+    transactionsDeleted: number;
+    holdingsDeleted: number;
+    optionTradesDeleted: number;
   }>;
   deleteAllTransactionData(userId: string): Promise<{
     transactionsDeleted: number;
@@ -371,6 +377,56 @@ export class DatabaseStorage implements IStorage {
       holdingsMoved,
       holdingsMerged,
       optionTradesMoved: optResult?.rowCount ?? 0,
+    };
+  }
+
+  async deleteOrphanPortfolioReferences(userId: string): Promise<{
+    transactionsDeleted: number;
+    holdingsDeleted: number;
+    optionTradesDeleted: number;
+  }> {
+    const rows = await db
+      .select({ id: portfolios.id })
+      .from(portfolios)
+      .where(eq(portfolios.userId, userId));
+    const validIds = rows.map((r) => r.id);
+
+    if (validIds.length === 0) {
+      return {
+        transactionsDeleted: 0,
+        holdingsDeleted: 0,
+        optionTradesDeleted: 0,
+      };
+    }
+
+    const txnOrphan = or(
+      isNull(transactions.portfolioId),
+      notInArray(transactions.portfolioId, validIds),
+    );
+    const txnResult: any = await db
+      .delete(transactions)
+      .where(and(eq(transactions.userId, userId), txnOrphan));
+
+    const holdingOrphan = or(
+      isNull(holdings.portfolioId),
+      notInArray(holdings.portfolioId, validIds),
+    );
+    const holdingsResult: any = await db
+      .delete(holdings)
+      .where(and(eq(holdings.userId, userId), holdingOrphan));
+
+    const optOrphan = or(
+      isNull(optionTrades.portfolioId),
+      notInArray(optionTrades.portfolioId, validIds),
+    );
+    const optResult: any = await db
+      .delete(optionTrades)
+      .where(and(eq(optionTrades.userId, userId), optOrphan));
+
+    return {
+      transactionsDeleted: txnResult?.rowCount ?? 0,
+      holdingsDeleted: holdingsResult?.rowCount ?? 0,
+      optionTradesDeleted: optResult?.rowCount ?? 0,
     };
   }
 

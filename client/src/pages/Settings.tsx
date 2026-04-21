@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
-import { Loader2, Eye, EyeOff, Coins, Calculator, RefreshCw, Briefcase, Plus, Pencil, Trash2, LineChart, Newspaper, AlertTriangle, ChevronUp, ChevronDown } from "lucide-react";
+import { Loader2, Eye, EyeOff, Coins, Calculator, RefreshCw, Briefcase, Plus, Pencil, Trash2, LineChart, Newspaper, AlertTriangle, ChevronUp, ChevronDown, Eraser } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { BrokerLogo, BrokerSelectItem, BROKER_CATALOG } from "@/components/BrokerLogo";
 import { BROKER_CODES, type Currency, type BrokerCode } from "@shared/schema";
@@ -105,6 +105,44 @@ export default function Settings() {
       queryClient.clear();
       setWipeDialogOpen(false);
       setWipeConfirmText("");
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Chyba",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const orphanCleanupMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/portfolios/cleanup-orphans", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error((err as { message?: string }).message || "Nepodarilo sa vyčistiť záznamy");
+      }
+      return response.json() as Promise<{
+        transactionsDeleted: number;
+        holdingsDeleted: number;
+        optionTradesDeleted: number;
+        message: string;
+      }>;
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Osireté záznamy odstránené",
+        description: data.message,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/holdings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/overview"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dividends"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/realized-gains"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/options"] });
     },
     onError: (error: Error) => {
       toast({
@@ -706,6 +744,40 @@ export default function Settings() {
               automaticky použije Finnhub ako zálohu. Pre najlepší zážitok odporúčame mať oba kľúče.
             </p>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Údržba údajov</CardTitle>
+          <CardDescription>
+            Odstránenie záznamov, ktoré nie sú prepojené na žiadne tvoje portfólio (napr. po staršom importe alebo technickej chybe).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Vymaže len transakcie, holdingy a opčné obchody s prázdnym portfóliom alebo s ID portfólia, ktoré už neexistuje.
+            <span className="font-medium text-foreground"> Aktívne portfóliá a ich riadky ostanú.</span> Ak chceš zmazať všetko, použij nižšie „Vymazať všetky transakcie“.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={orphanCleanupMutation.isPending}
+            onClick={() => orphanCleanupMutation.mutate()}
+            data-testid="button-cleanup-orphans"
+          >
+            {orphanCleanupMutation.isPending ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                Čistím…
+              </>
+            ) : (
+              <>
+                <Eraser className="h-4 w-4 mr-2" />
+                Odstrániť osireté záznamy
+              </>
+            )}
+          </Button>
         </CardContent>
       </Card>
 
