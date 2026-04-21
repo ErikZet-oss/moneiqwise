@@ -9,6 +9,8 @@ Formát položky:
 
 --- Aktuálna session / posledné commity --------------------------------
 
+[2026-04-21] git 52b7e0d — XTB save: preskočenie už importovaných riadkov (rovnaké externalId v tom istom portfóliu) — predchádza násobeniu ks pri opakovanom importe.
+
 [2026-04-21] git 4d58160 — Import: pri HTML/502 odpovedi z prehliadača čitateľná SK správa namiesto výpisu celého HTML.
 
 [2026-04-21] git 8245d74 — Import/XTB: ticker v DB max 32 znakov (burzové prípony, ISIN); Import.tsx bez pádu pri ne-JSON chybách; detail Zod pri uložení. Po nasadení treba npm run db:push.
