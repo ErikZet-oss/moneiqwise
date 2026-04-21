@@ -1,11 +1,10 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   PieChart,
   Pie,
   Cell,
   Tooltip,
-  Legend,
   ResponsiveContainer,
 } from "recharts";
 import { PieChartIcon } from "lucide-react";
@@ -16,6 +15,7 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
 import type { Holding } from "@shared/schema";
+import { cn } from "@/lib/utils";
 
 interface StockQuote {
   ticker: string;
@@ -24,18 +24,10 @@ interface StockQuote {
 
 type Slice = { name: string; value: number };
 
-const CHART_FILLS = [
-  "hsl(142, 76%, 42%)",
-  "hsl(0, 72%, 55%)",
-  "hsl(220, 70%, 55%)",
-  "hsl(280, 62%, 58%)",
-  "hsl(32, 88%, 52%)",
-  "hsl(175, 58%, 42%)",
-  "hsl(340, 72%, 52%)",
-  "hsl(48, 92%, 48%)",
-  "hsl(204, 78%, 52%)",
-  "hsl(268, 58%, 54%)",
-];
+function sliceFill(i: number): string {
+  const n = (i % 5) + 1;
+  return `hsl(var(--chart-${n}))`;
+}
 
 function aggregateSlices(rows: Slice[]): Slice[] {
   const m = new Map<string, number>();
@@ -46,6 +38,30 @@ function aggregateSlices(rows: Slice[]): Slice[] {
     .map(([name, value]) => ({ name, value }))
     .filter((x) => x.value > 0)
     .sort((a, b) => b.value - a.value);
+}
+
+/** Recharts na úzkom mobile vie mať šírku 0 – počkáme na stabilný layout. */
+function useChartReady() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setReady(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+  return ready;
+}
+
+function useIsNarrowScreen() {
+  const [narrow, setNarrow] = useState(
+    typeof window !== "undefined" ? window.innerWidth < 640 : true
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 639px)");
+    const fn = () => setNarrow(mq.matches);
+    fn();
+    mq.addEventListener("change", fn);
+    return () => mq.removeEventListener("change", fn);
+  }, []);
+  return narrow;
 }
 
 export default function Allocation() {
@@ -63,6 +79,7 @@ export default function Allocation() {
   const portfolioParam = getQueryParam();
 
   const [displayMode, setDisplayMode] = useState<"percent" | "value">("percent");
+  const chartReady = useChartReady();
 
   const { data: holdings, isLoading: holdingsLoading } = useQuery<Holding[]>({
     queryKey: ["/api/holdings", portfolioParam],
@@ -226,7 +243,7 @@ export default function Allocation() {
     const value = row.value ?? row.payload?.value ?? 0;
     const pct = totalMarket > 0 ? (value / totalMarket) * 100 : 0;
     return (
-      <div className="rounded-md border bg-popover px-3 py-2 text-sm shadow-md">
+      <div className="rounded-lg border bg-popover px-3 py-2 text-sm shadow-lg">
         <div className="font-medium">{name}</div>
         <div className="text-muted-foreground">
           {mask(formatCurrency(value))}
@@ -235,15 +252,6 @@ export default function Allocation() {
         </div>
       </div>
     );
-  };
-
-  const labelFormatter = (entry: Slice) => {
-    if (totalMarket <= 0) return "";
-    const pct = (entry.value / totalMarket) * 100;
-    if (displayMode === "percent") {
-      return pct < 3 ? "" : `${pct.toFixed(0)}%`;
-    }
-    return pct < 3 ? "" : mask(formatCurrency(entry.value));
   };
 
   const loading =
@@ -257,7 +265,7 @@ export default function Allocation() {
     cashValueConv <= 0;
 
   return (
-    <div className="space-y-6 p-4 md:p-6 max-w-7xl mx-auto">
+    <div className="space-y-6 p-4 md:p-6 max-w-7xl mx-auto pb-10">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
@@ -265,8 +273,8 @@ export default function Allocation() {
             Rozloženie portfólia
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Koláčové grafy podľa akcií, sektorov a krajín (dáta o sektoroch a krajinách z Yahoo
-            Finance). Zohľadňuje aktívne portfólium v hornom výbere.
+            Podľa tickerov, sektorov a krajín (Yahoo Finance). Detail pozri v legende pod grafom –
+            na mobile ju môžeš posúvať.
           </p>
         </div>
         <ToggleGroup
@@ -275,13 +283,13 @@ export default function Allocation() {
           onValueChange={(v) => {
             if (v === "percent" || v === "value") setDisplayMode(v);
           }}
-          className="justify-start"
+          className="justify-start shrink-0"
         >
           <ToggleGroupItem value="percent" aria-label="Percentá">
             Percentá
           </ToggleGroupItem>
           <ToggleGroupItem value="value" aria-label="Hodnoty">
-            Hodnoty v {currency}
+            Hodnoty ({currency})
           </ToggleGroupItem>
         </ToggleGroup>
       </div>
@@ -310,33 +318,37 @@ export default function Allocation() {
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           <AllocationPieCard
             title="Podľa akcií"
-            description="Hodnota pozícií podľa tickerov + hotovosť na účte brokera."
+            description="Každý ticker + hotovosť"
             data={byTicker}
             total={totalMarket}
+            displayMode={displayMode}
             mask={mask}
             formatCurrency={formatCurrency}
             renderTooltip={renderTooltip}
-            labelFormatter={labelFormatter}
+            denseLegend
+            chartReady={chartReady}
           />
           <AllocationPieCard
             title="Podľa sektorov"
-            description="Súhrn podľa odvetvia (akcie a ETF podľa Yahoo)."
+            description="Odvetvie podľa Yahoo"
             data={bySector}
             total={totalMarket}
+            displayMode={displayMode}
             mask={mask}
             formatCurrency={formatCurrency}
             renderTooltip={renderTooltip}
-            labelFormatter={labelFormatter}
+            chartReady={chartReady}
           />
           <AllocationPieCard
             title="Podľa krajín"
-            description="Krajina sídla emitenta / burzy podľa Yahoo."
+            description="Krajina sídla emitenta"
             data={byCountry}
             total={totalMarket}
+            displayMode={displayMode}
             mask={mask}
             formatCurrency={formatCurrency}
             renderTooltip={renderTooltip}
-            labelFormatter={labelFormatter}
+            chartReady={chartReady}
           />
         </div>
       )}
@@ -349,78 +361,170 @@ function AllocationPieCard({
   description,
   data,
   total,
+  displayMode,
   mask,
   formatCurrency,
   renderTooltip,
-  labelFormatter,
+  denseLegend,
+  chartReady,
 }: {
   title: string;
   description: string;
   data: Slice[];
   total: number;
+  displayMode: "percent" | "value";
   mask: (s: string) => string;
   formatCurrency: (n: number) => string;
   renderTooltip: (p: {
     active?: boolean;
     payload?: Array<{ name?: string; value?: number; payload?: Slice }>;
   }) => import("react").ReactNode;
-  labelFormatter: (entry: Slice) => string;
+  /** Viac riadkov + vyšší scroll pre koláč podľa tickerov */
+  denseLegend?: boolean;
+  chartReady: boolean;
 }) {
+  const narrow = useIsNarrowScreen();
   const chartData = data.map((d) => ({ ...d }));
 
+  const innerR = narrow ? 44 : 58;
+  const outerR = narrow ? 78 : 96;
+
   return (
-    <Card className="flex flex-col">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-lg">{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
+    <Card
+      className={cn(
+        "flex flex-col overflow-hidden border-border/80 shadow-sm",
+        "bg-card/80 backdrop-blur-[2px]"
+      )}
+    >
+      <CardHeader className="pb-3 space-y-1">
+        <CardTitle className="text-lg tracking-tight">{title}</CardTitle>
+        <CardDescription className="text-xs leading-snug">{description}</CardDescription>
       </CardHeader>
-      <CardContent className="flex-1 min-h-[320px] pt-0">
+      <CardContent className="flex flex-col gap-4 pt-0 pb-5">
         {chartData.length === 0 ? (
-          <div className="flex h-[280px] items-center justify-center text-sm text-muted-foreground">
+          <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
             Nedostatok dát
           </div>
         ) : (
           <>
-            <div className="text-xs text-muted-foreground mb-2 text-center">
-              Celkom: {mask(formatCurrency(total))}
+            <div className="text-center">
+              <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                Celkom
+              </span>
+              <div className="text-lg font-semibold tabular-nums">{mask(formatCurrency(total))}</div>
             </div>
-            <ResponsiveContainer width="100%" height={280}>
-              <PieChart>
-                <Pie
-                  data={chartData}
-                  dataKey="value"
-                  nameKey="name"
-                  cx="50%"
-                  cy="48%"
-                  innerRadius={52}
-                  outerRadius={92}
-                  paddingAngle={1}
-                  labelLine={false}
-                  label={(props: Record<string, unknown>) => {
-                    const name = props.name as string | undefined;
-                    const value = props.value as number | undefined;
-                    const entry = chartData.find((x) => x.name === name && x.value === value);
-                    if (!entry) return null;
-                    return labelFormatter(entry);
-                  }}
-                >
-                  {chartData.map((_, i) => (
-                    <Cell key={i} fill={CHART_FILLS[i % CHART_FILLS.length]} stroke="transparent" />
-                  ))}
-                </Pie>
-                <Tooltip content={renderTooltip} />
-                <Legend
-                  layout="horizontal"
-                  verticalAlign="bottom"
-                  formatter={(value) => (
-                    <span className="text-xs truncate max-w-[120px] inline-block">{value}</span>
-                  )}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+
+            <div className="flex justify-center w-full min-w-0">
+              <div
+                className={cn(
+                  "w-full max-w-[280px] aspect-square max-h-[260px] sm:max-h-[280px]",
+                  !chartReady && "opacity-0 pointer-events-none"
+                )}
+              >
+                {chartReady ? (
+                  <ResponsiveContainer width="100%" height="100%" minWidth={160} minHeight={160}>
+                    <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                      <Pie
+                        data={chartData}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={innerR}
+                        outerRadius={outerR}
+                        paddingAngle={2}
+                        strokeWidth={2}
+                        stroke="hsl(var(--background))"
+                        cornerRadius={4}
+                        label={false}
+                        isAnimationActive={true}
+                      >
+                        {chartData.map((_, i) => (
+                          <Cell key={i} fill={sliceFill(i)} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={renderTooltip} wrapperStyle={{ zIndex: 50 }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="w-full h-full rounded-full bg-muted/40 animate-pulse" />
+                )}
+              </div>
+            </div>
+
+            <AllocationLegend
+              slices={chartData}
+              total={total}
+              displayMode={displayMode}
+              mask={mask}
+              formatCurrency={formatCurrency}
+              dense={denseLegend}
+            />
           </>
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function AllocationLegend({
+  slices,
+  total,
+  displayMode,
+  mask,
+  formatCurrency,
+  dense,
+}: {
+  slices: Slice[];
+  total: number;
+  displayMode: "percent" | "value";
+  mask: (s: string) => string;
+  formatCurrency: (n: number) => string;
+  dense?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-xl border border-border/70 bg-muted/25 px-2 py-2 sm:px-3",
+        dense ? "max-h-[min(260px,42vh)] sm:max-h-[220px]" : "max-h-[min(220px,38vh)] sm:max-h-[200px]",
+        "overflow-y-auto overscroll-y-contain scroll-smooth space-y-1"
+      )}
+      role="list"
+    >
+      {slices.map((slice, i) => {
+        const pct = total > 0 ? (slice.value / total) * 100 : 0;
+        const secondary =
+          displayMode === "percent"
+            ? `${pct.toFixed(1)} %`
+            : mask(formatCurrency(slice.value));
+        const primary =
+          displayMode === "percent"
+            ? mask(formatCurrency(slice.value))
+            : `${pct.toFixed(1)} %`;
+
+        return (
+          <div
+            key={`${slice.name}-${i}`}
+            role="listitem"
+            className="flex items-start justify-between gap-2 rounded-md px-1.5 py-1.5 hover:bg-muted/60 transition-colors"
+          >
+            <span className="flex items-start gap-2 min-w-0 flex-1">
+              <span
+                className="mt-1 h-2.5 w-2.5 shrink-0 rounded-sm ring-1 ring-border/60"
+                style={{ backgroundColor: sliceFill(i) }}
+                aria-hidden
+              />
+              <span className="truncate text-sm font-medium leading-tight" title={slice.name}>
+                {slice.name}
+              </span>
+            </span>
+            <span className="shrink-0 text-right text-xs tabular-nums leading-tight">
+              <span className="block text-foreground">{secondary}</span>
+              <span className="block text-muted-foreground">{primary}</span>
+            </span>
+          </div>
+        );
+      })}
+    </div>
   );
 }

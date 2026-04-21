@@ -414,6 +414,24 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
       });
       continue;
     }
+
+    /**
+     * XTB: „Close trade“ / Profit of position — samostatný hotovostný riadok pri uzavretí (FX alebo P/L).
+     * Samotný predaj/nákup je už v „Stock sale“ / „Stock purchase“ s komentárom CLOSE BUY / OPEN BUY @ …
+     * Importovať aj toto by dvojnásobilo platby — explicitne preskočiť so zrozumiteľnou správou.
+     */
+    const isCloseTradeAccounting =
+      typeStr.includes('close trade') ||
+      typePlain.includes('close trade') ||
+      typeStr.includes('closed trade');
+    if (isCloseTradeAccounting) {
+      log.push({
+        row: i + 1,
+        status: 'skipped',
+        message: `[${operationId}] Preskočené: ${typeStr.trim()} — účtovný riadok uzavretia (obchod je v Stock sale / purchase)`,
+      });
+      continue;
+    }
     
     // Determine transaction type
     
