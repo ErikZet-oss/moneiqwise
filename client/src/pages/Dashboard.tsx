@@ -484,14 +484,18 @@ export default function Dashboard() {
       const bTickerCurrency = getTickerCurrency(b.ticker);
       const aQuote = quotes[a.ticker];
       const bQuote = quotes[b.ticker];
-      const aCurrentPrice = aQuote ? convertPrice(aQuote.price, aTickerCurrency) : aAvgCost;
-      const bCurrentPrice = bQuote ? convertPrice(bQuote.price, bTickerCurrency) : bAvgCost;
+      const aAvgCostDisplay = convertPrice(aAvgCost, aTickerCurrency);
+      const bAvgCostDisplay = convertPrice(bAvgCost, bTickerCurrency);
+      const aCurrentPrice = aQuote ? convertPrice(aQuote.price, aTickerCurrency) : aAvgCostDisplay;
+      const bCurrentPrice = bQuote ? convertPrice(bQuote.price, bTickerCurrency) : bAvgCostDisplay;
       const aCurrentValue = aShares * aCurrentPrice;
       const bCurrentValue = bShares * bCurrentPrice;
       const aInvested = parseFloat(a.totalInvested);
       const bInvested = parseFloat(b.totalInvested);
-      const aGainLoss = aCurrentValue - aInvested;
-      const bGainLoss = bCurrentValue - bInvested;
+      const aInvestedDisplay = convertPrice(aInvested, aTickerCurrency);
+      const bInvestedDisplay = convertPrice(bInvested, bTickerCurrency);
+      const aGainLoss = aCurrentValue - aInvestedDisplay;
+      const bGainLoss = bCurrentValue - bInvestedDisplay;
 
       switch (sortField) {
         case "ticker":
@@ -507,8 +511,8 @@ export default function Dashboard() {
           bValue = bShares;
           break;
         case "avgCost":
-          aValue = aAvgCost;
-          bValue = bAvgCost;
+          aValue = aAvgCostDisplay;
+          bValue = bAvgCostDisplay;
           break;
         case "currentPrice":
           aValue = aCurrentPrice;
@@ -1114,7 +1118,7 @@ export default function Dashboard() {
           {!holdings || holdings.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground" data-testid="text-no-holdings">
               <p>Zatiaľ nemáte žiadne akcie.</p>
-              <p className="text-sm">Pridajte svoju prvú transakciu v sekcii "Transakcie".</p>
+              <p className="text-sm">Pridajte svoju prvú transakciu v sekcii História (tlačidlo Pridať transakciu).</p>
             </div>
           ) : (
             <>
@@ -1123,13 +1127,13 @@ export default function Dashboard() {
                 {sortedHoldings.map((holding) => {
                   const quote = quotes?.[holding.ticker];
                   const shares = parseFloat(holding.shares);
-                  const avgCost = parseFloat(holding.averageCost);
                   const tickerCurrency = getTickerCurrency(holding.ticker);
-                  const currentPrice = quote ? convertPrice(quote.price, tickerCurrency) : avgCost;
+                  const avgCostDisplay = convertPrice(parseFloat(holding.averageCost), tickerCurrency);
+                  const investedDisplay = convertPrice(parseFloat(holding.totalInvested), tickerCurrency);
+                  const currentPrice = quote ? convertPrice(quote.price, tickerCurrency) : avgCostDisplay;
                   const currentValue = shares * currentPrice;
-                  const invested = parseFloat(holding.totalInvested);
-                  const gainLoss = currentValue - invested;
-                  const gainLossPercent = invested > 0 ? (gainLoss / invested) * 100 : 0;
+                  const gainLoss = currentValue - investedDisplay;
+                  const gainLossPercent = investedDisplay > 0 ? (gainLoss / investedDisplay) * 100 : 0;
 
                   return (
                     <div
@@ -1177,7 +1181,7 @@ export default function Dashboard() {
                       </div>
                       <div className="flex items-center justify-between mt-1 text-[9px] text-muted-foreground">
                         <div className="flex items-center gap-3">
-                          <span>Priem: <span className="text-foreground">{maskAmount(formatCurrency(avgCost))}</span></span>
+                          <span>Priem: <span className="text-foreground">{maskAmount(formatCurrency(avgCostDisplay))}</span></span>
                           <span>Cena: <span className="text-foreground">{maskAmount(formatCurrency(currentPrice))}</span>
                             {quote && <span className={`ml-0.5 ${getChangeColor(quote.change)}`}>{formatPercent(quote.changePercent)}</span>}
                           </span>
@@ -1270,13 +1274,13 @@ export default function Dashboard() {
                     {sortedHoldings.map((holding) => {
                       const quote = quotes?.[holding.ticker];
                       const shares = parseFloat(holding.shares);
-                      const avgCost = parseFloat(holding.averageCost);
                       const tickerCurrency = getTickerCurrency(holding.ticker);
-                      const currentPrice = quote ? convertPrice(quote.price, tickerCurrency) : avgCost;
+                      const avgCostDisplay = convertPrice(parseFloat(holding.averageCost), tickerCurrency);
+                      const investedDisplay = convertPrice(parseFloat(holding.totalInvested), tickerCurrency);
+                      const currentPrice = quote ? convertPrice(quote.price, tickerCurrency) : avgCostDisplay;
                       const currentValue = shares * currentPrice;
-                      const invested = parseFloat(holding.totalInvested);
-                      const gainLoss = currentValue - invested;
-                      const gainLossPercent = invested > 0 ? (gainLoss / invested) * 100 : 0;
+                      const gainLoss = currentValue - investedDisplay;
+                      const gainLossPercent = investedDisplay > 0 ? (gainLoss / investedDisplay) * 100 : 0;
 
                       return (
                         <TableRow
@@ -1302,7 +1306,7 @@ export default function Dashboard() {
                           </TableCell>
                           <TableCell className="text-muted-foreground">{holding.companyName}</TableCell>
                           <TableCell className="text-right">{shares.toFixed(4)}</TableCell>
-                          <TableCell className="text-right">{maskAmount(formatCurrency(avgCost))}</TableCell>
+                          <TableCell className="text-right">{maskAmount(formatCurrency(avgCostDisplay))}</TableCell>
                           <TableCell className="text-right">
                             <div className="flex items-center justify-end gap-1">
                               {maskAmount(formatCurrency(currentPrice))}
