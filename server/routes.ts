@@ -3577,6 +3577,17 @@ export async function registerRoutes(
 
       const imported: any[] = [];
       const errors: string[] = [];
+      let skippedDuplicates = 0;
+
+      const existingInPortfolio = await storage.getTransactionsByUser(
+        userId,
+        targetPortfolioId
+      );
+      const existingExternalIds = new Set(
+        existingInPortfolio
+          .map((t) => t.externalId)
+          .filter((id): id is string => typeof id === "string" && id.trim() !== "")
+      );
 
       // Cache company names to avoid repeated API calls
       const companyNameCache: Record<string, string> = {};
@@ -3593,7 +3604,14 @@ export async function registerRoutes(
             errors.push(`Riadok ${i + 1} (ID: ${tx.externalId || 'N/A'}): Chýba ticker`);
             continue;
           }
-          
+
+          const extId =
+            typeof tx.externalId === "string" ? tx.externalId.trim() : "";
+          if (extId && existingExternalIds.has(extId)) {
+            skippedDuplicates++;
+            continue;
+          }
+
           // Fetch company name for ticker (use cache)
           let companyName = companyNameCache[tx.ticker];
           if (!companyName) {
@@ -3656,6 +3674,7 @@ export async function registerRoutes(
 
           const transaction = await storage.createTransaction(parseResult.data);
           imported.push(transaction);
+          if (extId) existingExternalIds.add(extId);
 
           // Update holdings for BUY and SELL transactions
           if (tx.type === 'BUY' || tx.type === 'SELL') {
@@ -3731,10 +3750,16 @@ export async function registerRoutes(
         invalidatePerformanceCache(userId);
       }
 
+      const dupMsg =
+        skippedDuplicates > 0
+          ? ` Preskočených ${skippedDuplicates} už importovaných riadkov (rovnaké XTB ID v tomto portfóliu).`
+          : "";
+
       res.json({
         imported: imported.length,
+        skippedDuplicates,
         errors: errors.length > 0 ? errors : undefined,
-        message: `Importovaných ${imported.length} transakcií.`,
+        message: `Importovaných ${imported.length} transakcií.${dupMsg}`,
       });
     } catch (error) {
       console.error("Error saving XTB transactions:", error);

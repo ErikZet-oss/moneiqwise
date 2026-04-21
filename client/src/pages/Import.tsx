@@ -62,6 +62,7 @@ interface XTBImportResult {
 
 interface SaveResult {
   imported: number;
+  skippedDuplicates?: number;
   errors?: string[];
   message: string;
 }
