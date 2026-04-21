@@ -18,7 +18,7 @@ import {
   type InsertOptionTrade,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, sql, isNull, or, inArray } from "drizzle-orm";
+import { eq, and, desc, asc, sql, isNull, or, inArray } from "drizzle-orm";
 
 export interface IStorage {
   // User operations - required for Replit Auth
@@ -61,6 +61,8 @@ export interface IStorage {
   // Holdings operations
   getHoldingsByUser(userId: string, portfolioId?: string | null): Promise<Holding[]>;
   getHoldingByUserAndTicker(userId: string, ticker: string, portfolioId?: string | null): Promise<Holding | undefined>;
+  getHoldingsForTickerAcrossPortfolios(userId: string, ticker: string): Promise<Holding[]>;
+  getTransactionsForTickerAcrossPortfolios(userId: string, ticker: string): Promise<Transaction[]>;
   upsertHolding(userId: string, ticker: string, companyName: string, shares: string, averageCost: string, totalInvested: string, portfolioId?: string | null): Promise<Holding>;
   deleteHolding(userId: string, ticker: string, portfolioId?: string | null): Promise<void>;
   
@@ -167,6 +169,9 @@ export class DatabaseStorage implements IStorage {
         )
       )
       .returning();
+    if (!result) {
+      throw new Error("UPDATE_PORTFOLIO_NO_ROW");
+    }
     return result;
   }
 
@@ -539,6 +544,47 @@ export class DatabaseStorage implements IStorage {
         )
       );
     return holding;
+  }
+
+  async getHoldingsForTickerAcrossPortfolios(userId: string, ticker: string): Promise<Holding[]> {
+    const normalized = ticker.trim().toLowerCase();
+    const visibleIds = await this.getVisiblePortfolioIdsByUser(userId);
+    const portfolioFilter =
+      visibleIds.length > 0
+        ? or(isNull(holdings.portfolioId), inArray(holdings.portfolioId, visibleIds))
+        : isNull(holdings.portfolioId);
+
+    return await db
+      .select()
+      .from(holdings)
+      .where(
+        and(
+          eq(holdings.userId, userId),
+          sql`lower(${holdings.ticker}) = ${normalized}`,
+          portfolioFilter
+        )
+      );
+  }
+
+  async getTransactionsForTickerAcrossPortfolios(userId: string, ticker: string): Promise<Transaction[]> {
+    const normalized = ticker.trim().toLowerCase();
+    const visibleIds = await this.getVisiblePortfolioIdsByUser(userId);
+    const portfolioFilter =
+      visibleIds.length > 0
+        ? or(isNull(transactions.portfolioId), inArray(transactions.portfolioId, visibleIds))
+        : isNull(transactions.portfolioId);
+
+    return await db
+      .select()
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.userId, userId),
+          sql`lower(${transactions.ticker}) = ${normalized}`,
+          portfolioFilter
+        )
+      )
+      .orderBy(asc(transactions.transactionDate));
   }
 
   async upsertHolding(

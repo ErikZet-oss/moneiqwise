@@ -1470,8 +1470,18 @@ export async function registerRoutes(
 
       const updated = await storage.updatePortfolio(portfolioId, userId, update);
       res.json(updated);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating portfolio cash:", error);
+      if (error?.message === "UPDATE_PORTFOLIO_NO_ROW") {
+        return res.status(404).json({ message: "Portfólio sa nepodarilo aktualizovať (nenájdené)." });
+      }
+      const code = error?.code as string | undefined;
+      if (code === "42703") {
+        return res.status(503).json({
+          message:
+            "Databáza nemá stĺpce pre hotovosť. Na serveri treba spustiť migráciu (cash_balance / cash_currency).",
+        });
+      }
       res.status(500).json({ message: "Nepodarilo sa aktualizovať hotovosť." });
     }
   });
@@ -1521,6 +1531,157 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching holdings:", error);
       res.status(500).json({ message: "Failed to fetch holdings" });
+    }
+  });
+
+  // Single-asset detail: holdings per portfolio, transactions, dividends, quote & historical prices
+  app.get("/api/assets/:ticker", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      let rawTicker = req.params.ticker as string;
+      try {
+        rawTicker = decodeURIComponent(rawTicker);
+      } catch {
+        // keep raw
+      }
+
+      const holdingRows = await storage.getHoldingsForTickerAcrossPortfolios(userId, rawTicker);
+      const txRows = await storage.getTransactionsForTickerAcrossPortfolios(userId, rawTicker);
+
+      if (holdingRows.length === 0 && txRows.length === 0) {
+        return res.status(404).json({ message: "Pre toto aktívum nemáte žiadne dáta." });
+      }
+
+      const displayTicker = holdingRows[0]?.ticker ?? txRows[0]?.ticker ?? rawTicker;
+      const upperTicker = displayTicker.toUpperCase();
+
+      const allPortfolios = await storage.getPortfoliosByUser(userId);
+      const portfolioMap = new Map(allPortfolios.map((p) => [p.id, p]));
+
+      const positions = holdingRows
+        .filter((h) => parseFloat(h.shares) > 0)
+        .map((h) => {
+          const pid = h.portfolioId;
+          const p = pid ? portfolioMap.get(pid) : undefined;
+          return {
+            portfolioId: h.portfolioId,
+            portfolioName: p?.name ?? (pid ? "Neznáme portfólio" : "Bez portfólia"),
+            brokerCode: p?.brokerCode ?? null,
+            shares: parseFloat(h.shares),
+            averageCost: parseFloat(h.averageCost),
+            totalInvested: parseFloat(h.totalInvested),
+          };
+        });
+
+      const totalShares = positions.reduce((s, p) => s + p.shares, 0);
+      const totalInvestedSum = positions.reduce((s, p) => s + p.totalInvested, 0);
+      const weightedAvgCost = totalShares > 0 ? totalInvestedSum / totalShares : 0;
+
+      const companyName =
+        holdingRows[0]?.companyName ??
+        txRows.find((t) => t.companyName)?.companyName ??
+        displayTicker;
+
+      const dividendTransactions = txRows.filter((t) => t.type === "DIVIDEND");
+      const taxTransactions = txRows.filter((t) => t.type === "TAX");
+
+      let dividendTotalGross = 0;
+      let dividendTaxTotal = 0;
+      let dividendNetTotal = 0;
+
+      for (const txn of dividendTransactions) {
+        const shares = parseFloat(txn.shares);
+        const dividendPerShare = parseFloat(txn.pricePerShare);
+        const tax = parseFloat(txn.commission || "0");
+        const gross = shares * dividendPerShare;
+        const net = gross - tax;
+        dividendTotalGross += gross;
+        dividendTaxTotal += tax;
+        dividendNetTotal += net;
+      }
+
+      for (const txn of taxTransactions) {
+        const shares = parseFloat(txn.shares);
+        const pricePerShare = parseFloat(txn.pricePerShare);
+        const taxAmount = shares * pricePerShare;
+        dividendTaxTotal += Math.abs(taxAmount);
+        dividendNetTotal += taxAmount;
+      }
+
+      const dividendPayments = dividendTransactions
+        .map((txn) => {
+          const shares = parseFloat(txn.shares);
+          const dividendPerShare = parseFloat(txn.pricePerShare);
+          const tax = parseFloat(txn.commission || "0");
+          const gross = shares * dividendPerShare;
+          const net = gross - tax;
+          const pid = txn.portfolioId;
+          return {
+            id: txn.id,
+            date: txn.transactionDate,
+            portfolioId: txn.portfolioId,
+            portfolioName: pid ? portfolioMap.get(pid)?.name ?? "—" : "Bez portfólia",
+            gross,
+            tax,
+            net,
+            currency: txn.currency || "EUR",
+          };
+        })
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      let quote: Record<string, unknown> | null = null;
+      let prices: Record<string, number> = {};
+
+      if (upperTicker === "CASH") {
+        quote = {
+          ticker: "CASH",
+          price: 1.0,
+          change: 0,
+          changePercent: 0,
+          high52: 1.0,
+          low52: 1.0,
+        };
+        prices = {};
+      } else {
+        try {
+          quote = await fetchStockQuote(upperTicker);
+        } catch {
+          quote = null;
+        }
+        try {
+          prices = await fetchHistoricalPrices(upperTicker);
+        } catch {
+          prices = {};
+        }
+      }
+
+      const marketTransactions = txRows.filter((t) => t.type === "BUY" || t.type === "SELL");
+
+      res.json({
+        ticker: displayTicker,
+        companyName,
+        positions,
+        portfolios: allPortfolios.map((p) => ({ id: p.id, name: p.name })),
+        totals: {
+          shares: totalShares,
+          totalInvested: totalInvestedSum,
+          averageCost: weightedAvgCost,
+        },
+        dividends: {
+          totalGross: dividendTotalGross,
+          totalTax: dividendTaxTotal,
+          totalNet: dividendNetTotal,
+          paymentCount: dividendTransactions.length,
+        },
+        dividendPayments,
+        marketTransactions,
+        transactions: txRows,
+        quote,
+        prices,
+      });
+    } catch (error) {
+      console.error("Error fetching asset detail:", error);
+      res.status(500).json({ message: "Nepodarilo sa načítať detail aktíva." });
     }
   });
 

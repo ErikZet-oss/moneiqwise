@@ -82,6 +82,19 @@ interface NewsArticle {
   thumbnail?: string;
 }
 
+/** Sums / amounts as entered in SK (1.234,56) or US (1234.56) style */
+function parseLocaleAmountInput(input: string): number {
+  const t = input.replace(/\s/g, "").trim();
+  if (!t) return NaN;
+  if (t.includes(",") && t.includes(".")) {
+    return Number(t.replace(/\./g, "").replace(",", "."));
+  }
+  if (t.includes(",")) {
+    return Number(t.replace(",", "."));
+  }
+  return Number(t);
+}
+
 export default function Dashboard() {
   const { currency, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
   const { getQueryParam, selectedPortfolio, isAllPortfolios, portfolios } = usePortfolio();
@@ -390,7 +403,13 @@ export default function Dashboard() {
       const res = await apiRequest("PATCH", `/api/portfolios/${portfolioId}/cash`, {
         cashBalance: amount,
       });
-      return res.json();
+      const raw = await res.text();
+      if (!raw.trim()) return null;
+      try {
+        return JSON.parse(raw);
+      } catch {
+        throw new Error("Nepodarilo sa načítať odpoveď servera.");
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/portfolios"] });
@@ -408,12 +427,11 @@ export default function Dashboard() {
 
   const saveCash = () => {
     if (!selectedPortfolio) return;
-    const normalized = cashInput.replace(",", ".").trim();
-    const parsed = Number(normalized);
+    const parsed = parseLocaleAmountInput(cashInput);
     if (!Number.isFinite(parsed) || parsed < 0) {
       toast({
         title: "Neplatná hodnota",
-        description: "Zadaj nezáporné číslo.",
+        description: "Zadaj nezáporné číslo (podporovaný je aj formát 1.234,56).",
         variant: "destructive",
       });
       return;
