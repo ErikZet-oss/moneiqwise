@@ -9,6 +9,8 @@ Formát položky:
 
 --- Aktuálna session / posledné commity --------------------------------
 
+[2026-04-21] git 4d58160 — Import: pri HTML/502 odpovedi z prehliadača čitateľná SK správa namiesto výpisu celého HTML.
+
 [2026-04-21] git 8245d74 — Import/XTB: ticker v DB max 32 znakov (burzové prípony, ISIN); Import.tsx bez pádu pri ne-JSON chybách; detail Zod pri uložení. Po nasadení treba npm run db:push.
 
 [2026-04-21] git 9869460 — XTB import: ponechané burzové prípony (Yahoo: SXR8.DE, RR.L), stĺpec symbol pred ISIN, mapovanie RR → RR.L, .UK → .L.
