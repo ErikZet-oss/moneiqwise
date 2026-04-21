@@ -66,6 +66,24 @@ interface SaveResult {
   message: string;
 }
 
+/** Odpoveď môže byť JSON s { message } alebo HTML (502, brána) — inak `response.json()` spadne. */
+async function readHttpErrorMessage(response: Response): Promise<string> {
+  const text = await response.text();
+  try {
+    const j = JSON.parse(text) as { message?: string };
+    if (typeof j?.message === "string" && j.message.trim()) {
+      return j.message.trim();
+    }
+  } catch {
+    // not JSON
+  }
+  const snippet = text.replace(/\s+/g, " ").trim().slice(0, 240);
+  if (snippet) {
+    return `Server: ${snippet}`;
+  }
+  return `HTTP ${response.status} ${response.statusText || ""}`.trim();
+}
+
 export default function Import() {
   const { toast } = useToast();
   const { formatCurrency } = useCurrency();
@@ -94,8 +112,7 @@ export default function Import() {
         body: JSON.stringify(body),
       });
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Nepodarilo sa presunúť transakcie");
+        throw new Error(await readHttpErrorMessage(response));
       }
       return response.json() as Promise<{
         targetPortfolioId: string;
@@ -146,8 +163,7 @@ export default function Import() {
       });
       
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Nepodarilo sa spracovať súbor');
+        throw new Error(await readHttpErrorMessage(response));
       }
       
       return response.json() as Promise<XTBImportResult>;
@@ -182,16 +198,19 @@ export default function Import() {
       });
       
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Nepodarilo sa uložiť transakcie');
+        throw new Error(await readHttpErrorMessage(response));
       }
       
       return response.json() as Promise<SaveResult>;
     },
     onSuccess: (data) => {
+      const warn =
+        data.errors?.length ?
+          ` ${data.errors.slice(0, 2).join(" · ")}${data.errors.length > 2 ? "…" : ""}`
+          : "";
       toast({
         title: "Import dokončený",
-        description: data.message,
+        description: `${data.message}${warn}`,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/holdings"] });

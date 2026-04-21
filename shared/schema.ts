@@ -112,7 +112,8 @@ export const transactions = pgTable("transactions", {
   userId: varchar("user_id").notNull().references(() => users.id),
   portfolioId: varchar("portfolio_id").references(() => portfolios.id),
   type: varchar("type", { length: 10 }).notNull(), // 'BUY', 'SELL', or 'DIVIDEND'
-  ticker: varchar("ticker", { length: 10 }).notNull(),
+  /** Yahoo / XTB často používajú burzové prípony (napr. SXR8.DE, RR.L); ISIN má 12 znakov. */
+  ticker: varchar("ticker", { length: 32 }).notNull(),
   companyName: text("company_name").notNull(),
   shares: numeric("shares", { precision: 18, scale: 8 }).notNull(),
   pricePerShare: numeric("price_per_share", { precision: 18, scale: 4 }).notNull(),
@@ -141,7 +142,7 @@ export const holdings = pgTable(
     id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
     userId: varchar("user_id").notNull().references(() => users.id),
     portfolioId: varchar("portfolio_id").references(() => portfolios.id),
-    ticker: varchar("ticker", { length: 10 }).notNull(),
+    ticker: varchar("ticker", { length: 32 }).notNull(),
     companyName: text("company_name").notNull(),
     shares: numeric("shares", { precision: 18, scale: 8 }).notNull(),
     averageCost: numeric("average_cost", { precision: 18, scale: 4 }).notNull(),

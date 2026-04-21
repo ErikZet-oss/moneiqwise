@@ -3644,7 +3644,13 @@ export async function registerRoutes(
 
           const parseResult = insertTransactionSchema.safeParse(transactionData);
           if (!parseResult.success) {
-            errors.push(`${tx.ticker} (${tx.type}) [ID: ${tx.externalId || 'N/A'}]: Validačná chyba`);
+            const issue = parseResult.error.issues[0];
+            const detail = issue
+              ? `${issue.path.join(".")}: ${issue.message}`
+              : parseResult.error.message;
+            errors.push(
+              `${tx.ticker} (${tx.type}) [ID: ${tx.externalId || "N/A"}]: ${detail}`
+            );
             continue;
           }
 
