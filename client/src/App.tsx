@@ -19,6 +19,7 @@ import Dividends from "@/pages/Dividends";
 import Options from "@/pages/Options";
 import Settings from "@/pages/Settings";
 import Import from "@/pages/Import";
+import AssetDetail from "@/pages/AssetDetail";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -49,6 +50,7 @@ function Router() {
       <Route path="/options" component={Options} />
       <Route path="/import" component={Import} />
       <Route path="/settings" component={Settings} />
+      <Route path="/asset/:ticker" component={AssetDetail} />
       <Route component={NotFound} />
     </Switch>
   );

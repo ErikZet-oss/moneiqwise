@@ -7,6 +7,7 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { BrokerLogo } from "@/components/BrokerLogo";
 import { ArrowRightLeft, Eye, EyeOff, HelpCircle } from "lucide-react";
 import type { Transaction, Holding } from "@shared/schema";
 
@@ -370,10 +371,18 @@ export function MobilePortfolioChart({
     <div className="md:hidden bg-background px-4 pt-4 pb-2" data-testid="mobile-portfolio-chart">
       {portfolioLabel && (
         <div
-          className="text-sm font-semibold text-foreground truncate mb-1"
-          data-testid="text-mobile-portfolio-name"
+          className="flex items-center gap-2 mb-1 min-w-0"
+          data-testid="mobile-portfolio-header"
         >
-          {portfolioLabel}
+          {selectedPortfolioId !== "all" && (
+            <BrokerLogo brokerCode={selectedPortfolio?.brokerCode} size="sm" />
+          )}
+          <div
+            className="text-sm font-semibold text-foreground truncate min-w-0"
+            data-testid="text-mobile-portfolio-name"
+          >
+            {portfolioLabel}
+          </div>
         </div>
       )}
       <div className="flex items-center justify-between mb-1">

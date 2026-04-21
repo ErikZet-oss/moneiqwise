@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -96,6 +97,7 @@ function parseLocaleAmountInput(input: string): number {
 }
 
 export default function Dashboard() {
+  const [, setLocation] = useLocation();
   const { currency, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
   const { getQueryParam, selectedPortfolio, isAllPortfolios, portfolios } = usePortfolio();
   const { hideAmounts, showNews } = useChartSettings();
@@ -1138,7 +1140,20 @@ export default function Dashboard() {
                   const gainLossPercent = invested > 0 ? (gainLoss / invested) * 100 : 0;
 
                   return (
-                    <div key={holding.id} className="py-2 border-b last:border-b-0" data-testid={`row-holding-${holding.ticker}`}>
+                    <div
+                      key={holding.id}
+                      role="button"
+                      tabIndex={0}
+                      className="py-2 border-b last:border-b-0 cursor-pointer hover:bg-muted/40 rounded-md px-1 -mx-1 transition-colors"
+                      data-testid={`row-holding-${holding.ticker}`}
+                      onClick={() => setLocation(`/asset/${encodeURIComponent(holding.ticker)}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setLocation(`/asset/${encodeURIComponent(holding.ticker)}`);
+                        }
+                      }}
+                    >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2 min-w-0 flex-1">
                           <CompanyLogo ticker={holding.ticker} companyName={holding.companyName} size="xs" />
@@ -1150,6 +1165,7 @@ export default function Dashboard() {
                                 rel="noopener noreferrer"
                                 className="font-semibold text-xs hover:text-primary"
                                 data-testid={`link-ticker-${holding.ticker}`}
+                                onClick={(e) => e.stopPropagation()}
                               >
                                 {holding.ticker}
                               </a>
@@ -1271,7 +1287,12 @@ export default function Dashboard() {
                       const gainLossPercent = invested > 0 ? (gainLoss / invested) * 100 : 0;
 
                       return (
-                        <TableRow key={holding.id} data-testid={`row-holding-${holding.ticker}`}>
+                        <TableRow
+                          key={holding.id}
+                          data-testid={`row-holding-${holding.ticker}`}
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => setLocation(`/asset/${encodeURIComponent(holding.ticker)}`)}
+                        >
                           <TableCell>
                             <div className="flex items-center gap-3">
                               <CompanyLogo ticker={holding.ticker} companyName={holding.companyName} size="md" />
@@ -1281,6 +1302,7 @@ export default function Dashboard() {
                                 rel="noopener noreferrer"
                                 className="font-medium hover:text-primary hover:underline transition-colors"
                                 data-testid={`link-ticker-${holding.ticker}`}
+                                onClick={(e) => e.stopPropagation()}
                               >
                                 {holding.ticker}
                               </a>
