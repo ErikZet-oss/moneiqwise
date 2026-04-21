@@ -9,6 +9,8 @@ Formát položky:
 
 --- Aktuálna session / posledné commity --------------------------------
 
+[2026-04-21] git 8245d74 — Import/XTB: ticker v DB max 32 znakov (burzové prípony, ISIN); Import.tsx bez pádu pri ne-JSON chybách; detail Zod pri uložení. Po nasadení treba npm run db:push.
+
 [2026-04-21] git 9869460 — XTB import: ponechané burzové prípony (Yahoo: SXR8.DE, RR.L), stĺpec symbol pred ISIN, mapovanie RR → RR.L, .UK → .L.
 
 [2026-04-21] git 99b3a3e — Obnovenie zoznamu portfólií na mobile (bez persist `/api/portfolios` v localStorage; refetch pri mount/focus). BrokerLogo: logo vyplní celý box (`h-full w-full object-contain`, bez paddingu).
