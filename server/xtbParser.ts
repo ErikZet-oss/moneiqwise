@@ -286,8 +286,12 @@ function detectFxColumns(headers: string[]): FxColumnIndices {
       "pôvodná mena",
       "povodna mena",
     ]),
-    eurValueCol: getColumnIndex(headers, [
+    eurValueCol: getColumnIndexByPriority(headers, [
       "value in eur",
+      "gross in eur",
+      "net in eur",
+      "settlement in eur",
+      "book cost in eur",
       "value (eur",
       "value (eur)",
       "value eur",
@@ -486,6 +490,21 @@ function getColumnIndex(headers: string[], possibleNames: string[]): number {
 }
 
 /**
+ * Postupne skúša presné/úzke názvy — vyhne sa tomu, že prvý stĺpec "Amount" v tabuľke
+ * (často v mene inštrumentu) prebije neskorší "Amount (EUR)".
+ */
+function getColumnIndexByPriority(
+  headers: string[],
+  candidates: string[],
+): number {
+  for (const c of candidates) {
+    const i = getColumnIndex(headers, [c]);
+    if (i >= 0) return i;
+  }
+  return -1;
+}
+
+/**
  * XTB často má stĺpec Symbol aj ISIN; ak sa zhodí skôr ISIN, ETF sa importuje pod ISIN (zlá cena/kotácia).
  * Preferuj symbol/ticker pred ISIN.
  */
@@ -571,17 +590,31 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
   const timeCol = getColumnIndex(headers, ['time', 'čas', 'dátum', 'datum', 'date']);
   const commentCol = getColumnIndex(headers, ['comment', 'komentár', 'komentar', 'poznámka', 'poznamka']);
   const symbolCol = getSymbolColumnIndex(headers);
-  const amountCol = getColumnIndex(headers, [
-    'amount',
-    'suma',
-    'částka',
-    'castka',
-    'amount (eur)',
-    'suma (eur)',
-    'hodnota', // CZ
-    'value', // EN alternative
-    'gross', // some exports
-    'kwota', // PL
+  /**
+   * Ktorý stĺpec „sumy“ brať: musí dávať odtok hotovosti v **mene účtu** (EUR) alebo
+   * nominál v cudzej mene, ktorú potom prepočítame. Ak je v CSV stĺpec s EUR, preferovať
+   * ho PRED všeobecným "Amount" (kde môže byť len nominál v USD, nie odtok v EUR).
+   * Podobne má prioritu stĺpec s „value“ v EUR, nie „Value / Nominal v mene inštrumentu“.
+   */
+  const amountCol = getColumnIndexByPriority(headers, [
+    "value in eur",
+    "gross in eur",
+    "eurový ekvivalent",
+    "eurov ekvivalent",
+    "ekvivalent v eur",
+    "settlement in eur",
+    "amount (eur)",
+    "suma (eur)",
+    "amount in eur",
+    "hodnota v eur",
+    "amount", // až nakoniec — môže byť nominál v cudzej mene
+    "suma",
+    "částka",
+    "castka",
+    "hodnota",
+    "value",
+    "gross",
+    "kwota",
   ]);
   const qtyCol = getColumnIndex(headers, [
     'quantity',

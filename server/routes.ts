@@ -21,7 +21,11 @@ import {
 } from "./realizedGainsCompute";
 import { computePnlBreakdown } from "./pnlBreakdown";
 import { buildEurPerUnitByTxnIdForTransactions } from "./eurAtTransactionDate";
-import { computeCashLedgerBreakdownEur } from "./netLedgerCashEur";
+import {
+  computeCashLedgerBreakdownEur,
+  computeCashLedgerFlowEur,
+  computeTopBuyRowsByEur,
+} from "./netLedgerCashEur";
 import { computeFifoRealizedGainsFromTransactions } from "@shared/fifoRealizedGains";
 import { computeGipsTwr } from "./twrGips";
 import { buildOpenFifoLotRowList, loadTradeTransactionsForAssetLots } from "./assetFifoLots";
@@ -1556,6 +1560,42 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error computing cash ledger breakdown:", error);
       res.status(500).json({ message: "Nepodarilo sa načítať rozpad hotovosti." });
+    }
+  });
+
+  /**
+   * Bežíci zostatok hotovosti (EUR) po každej transakcii, top-5 nákupov, prvý mínusový stav.
+   * Rovnaký rozsah portfólia ako `cash-ledger-breakdown`.
+   */
+  app.get("/api/cash-ledger-diagnostics", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const portfolio = (req.query.portfolio as string | undefined) ?? "all";
+      const rates = await fetchAllExchangeRates();
+      const list = await storage.getTransactionsForCashBreakdown(userId, portfolio);
+      const eurM = await buildEurPerUnitByTxnIdForTransactions(list);
+      const [breakdown, flowResult, topBuys] = await Promise.all([
+        computeCashLedgerBreakdownEur(list, rates),
+        computeCashLedgerFlowEur(list, rates),
+        computeTopBuyRowsByEur(list, eurM, 5),
+      ]);
+      res.json({
+        portfolio,
+        transactionCount: list.length,
+        ...breakdown,
+        flow: flowResult.rows,
+        firstRunningNegative: flowResult.firstRunningNegative,
+        topBuys,
+        notes: {
+          xtbColumnPriority:
+            "Suma nákupu: XTB stĺpec s prioritou Value in EUR, gross/net/settlement in EUR, až potom všeobecné Amount/Value (tie môžu byť nominál v cudzej mene).",
+          commissionDoubleCount:
+            "Ak je vyplnené `baseCurrencyAmount` v EUR, pevná hotovosť; commission sa k odtoku nepridáva. Pri importe môže byť commission=0, ak je poplatok v celkovej sume riadku.",
+        },
+      });
+    } catch (error) {
+      console.error("Error computing cash ledger diagnostics:", error);
+      res.status(500).json({ message: "Nepodarilo sa načítať diagnózu hotovosti." });
     }
   });
 
