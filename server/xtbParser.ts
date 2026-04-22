@@ -553,6 +553,19 @@ function isXtBExternalWireOrBankInOutType(typeStr: string): boolean {
   );
 }
 
+/**
+ * Používateľ chce transfer riadky úplne ignorovať:
+ * v XTB to býva interný presun medzi portfóliami/peňaženkami.
+ */
+function isXtBTransferLine(typeStr: string, typePlain: string): boolean {
+  return (
+    /\btransfer\b/i.test(typeStr) ||
+    typePlain.includes("prevod") ||
+    typePlain.includes("p2p") ||
+    typePlain.includes("przelew")
+  );
+}
+
 function isFreeFundsInterestLine(
   typeStr: string,
   typePlain: string,
@@ -569,6 +582,24 @@ function isFreeFundsInterestLine(
     c.includes("free-funds") ||
     c.includes("free funds");
   return hasInterest && hasFreeFunds;
+}
+
+function isFreeFundsInterestTaxLine(
+  typeStr: string,
+  typePlain: string,
+  comment: string,
+): boolean {
+  if (!isFreeFundsInterestLine(typeStr, typePlain, comment)) return false;
+  const c = stripDiacritics((comment || "").toLowerCase());
+  return (
+    typeStr.includes("tax") ||
+    typePlain.includes("tax") ||
+    typePlain.includes("withholding") ||
+    typePlain.includes("zrazkova") ||
+    c.includes("tax") ||
+    c.includes("withholding") ||
+    c.includes("zrazkova")
+  );
 }
 
 // Parse CASH OPERATION HISTORY sheet
@@ -686,6 +717,16 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
     
     const ticker = cleanTicker(symbolRaw);
 
+    // Explicitne ignoruj "transfer" riadky (interné presuny medzi portfóliami).
+    if (isXtBTransferLine(typeStr, typePlain)) {
+      log.push({
+        row: i + 1,
+        status: "skipped",
+        message: `[${operationId}] Preskočené (transfer): ${typeStr}`,
+      });
+      continue;
+    }
+
     let isDeposit =
       typeStr.includes('deposit') ||
       typePlain.includes('vklad');
@@ -801,6 +842,7 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
     }
     
     const isFreeFundsInterest = isFreeFundsInterestLine(typeStr, typePlain, comment);
+    const isFreeFundsInterestTax = isFreeFundsInterestTaxLine(typeStr, typePlain, comment);
     const resolvedDividendTicker = isFreeFundsInterest ? "CASH_INTEREST" : ticker;
     // Determine transaction type
     
@@ -979,10 +1021,11 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
       typeStr.includes('withholding tax') ||
       typeStr.includes('tax') ||
       typePlain.includes('withholding') ||
-      typePlain.includes('zrazkova')
+      typePlain.includes('zrazkova') ||
+      isFreeFundsInterestTax
     ) {
       // TAX - stored as negative
-      const taxTicker = ticker || (isFreeFundsInterest ? "CASH_INTEREST" : "");
+      const taxTicker = ticker || (isFreeFundsInterestTax || isFreeFundsInterest ? "CASH_INTEREST" : "");
       
       if (taxTicker) {
         // Find the most recent DIVIDEND transaction for the same ticker to link
