@@ -246,9 +246,14 @@ export default function Import() {
     onSuccess: (data) => {
       setParseResult(data);
       setActiveTab("transactions");
+      const n = data.transactions.length;
+      const w = data.log.filter((l) => l.status === "warning").length;
       toast({
-        title: "Súbor spracovaný",
-        description: `Nájdených ${data.summary.success} transakcií, ${data.summary.errors} chýb, ${data.summary.skipped} preskočených.`,
+        title: n > 0 ? "Súbor spracovaný" : "Súbor načítaný — žiadne transakcie",
+        description:
+          n > 0
+            ? `Nájdených ${n} transakcií. Denník: ${w} upozornení, ${data.summary.skipped} preskočených, ${data.summary.errors} chýb.`
+            : `Riadky transakcií: 0. Skontroluj denník nižšie (export musí byť z „Cash operation history“ a správny formát stĺpcov). Upozornení: ${w}.`,
       });
     },
     onError: (error: Error) => {

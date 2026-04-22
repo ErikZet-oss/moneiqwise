@@ -1047,6 +1047,10 @@ export default function History() {
                     onChange={(e) => setEditForm({ ...editForm, transactionId: e.target.value })}
                     data-testid="input-edit-tx-id"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    V portfóliu musí byť unikátne. Ak ukladanie zlyhá, skús pole vyprázdniť alebo zadať iné ID
+                    ako u inej transakcie.
+                  </p>
                 </div>
               </div>
             )}

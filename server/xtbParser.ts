@@ -383,10 +383,11 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
   const transactions: ParsedTransaction[] = [];
   const accountCurrency = parseAccountCurrencyFromXtBMeta(data);
 
-  // Hlavička: EN (type, time, amount) alebo SK (typ, čas, suma, …)
+  // Hlavička: EN (type, time, amount) alebo SK/CZ/PL (typ, druh, čas, suma, …)
   const { headerIndex, headers } = findHeaderRow(data, [
     'type',
     'typ',
+    'druh', // CZ: „Druh operace“
     'time',
     'čas',
     'datum',
@@ -395,8 +396,10 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
     'suma',
     'částka',
     'castka',
+    'hodnota', // CZ: často „Hodnota“
     'symbol',
     'id',
+    'operation', // XTB / „Operation type“
   ]);
   
   if (headerIndex === -1) {
@@ -421,6 +424,10 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
     'castka',
     'amount (eur)',
     'suma (eur)',
+    'hodnota', // CZ
+    'value', // EN alternative
+    'gross', // some exports
+    'kwota', // PL
   ]);
   const qtyCol = getColumnIndex(headers, [
     'quantity',
@@ -792,36 +799,58 @@ export async function parseXTBFile(fileBuffer: Buffer, _fileName: string): Promi
       return (
         n.includes('cash operation') ||
         n.includes('cashoper') ||
+        n.includes('cash oper') || // "Cash operation history" | skrátene
         (n.includes('cash') && n.includes('oper')) ||
         n.includes('hotovost') ||
-        n.includes('penazne oper') ||
+        n.includes('penazne oper') || // CZ: peněžní operace
+        n.includes('penezni oper') ||
+        n.includes('penežní operace') ||
+        n.includes('penizni operace') ||
         n.includes('penazneoperacie') ||
         n.includes('história hotovost') ||
         n.includes('historia hotovost') ||
-        n.includes('history of cash')
+        n.includes('history of cash') ||
+        n.includes('historie vklady') // CZ varianty
       );
     });
 
-    if (cashSheet) {
-      const worksheet = workbook.Sheets[cashSheet];
+    const sheetNameToUse =
+      cashSheet ||
+      (workbook.SheetNames.length > 0 ? workbook.SheetNames[0] : null);
+
+    if (sheetNameToUse) {
+      if (!cashSheet) {
+        log.push({
+          row: 0,
+          status: 'warning',
+          message: `Hárok s hotovosťou podľa názvu nenájdený — skúšam prvý hárok: „${workbook.SheetNames[0]}“`,
+        });
+      }
+      const worksheet = workbook.Sheets[sheetNameToUse];
       // raw: true — čísla a dátumy ako hodnoty bunky (nie lokalizovaný text); zníži chyby pri sumách a dátumoch
       const data = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true }) as any[][];
 
       log.push({
         row: 0,
         status: 'success',
-        message: `Spracovávam hárok: ${cashSheet}`,
+        message: `Spracovávam hárok: ${sheetNameToUse}`,
       });
 
       const cashTransactions = parseCashOperations(data, log);
       transactions.push(...cashTransactions);
     }
 
-    if (!cashSheet) {
+    if (!workbook.SheetNames.length) {
       log.push({
         row: 0,
-        status: 'warning',
-        message: `Nenašiel sa hárok CASH OPERATION HISTORY.`,
+        status: 'error',
+        message: 'Súbor neobsahuje žiadny hárok (prázdny XLSX).',
+      });
+    } else if (!sheetNameToUse) {
+      log.push({
+        row: 0,
+        status: 'error',
+        message: 'Nepodarilo sa otvoriť žiadny hárok.',
       });
     }
 

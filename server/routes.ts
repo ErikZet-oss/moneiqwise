@@ -65,6 +65,37 @@ interface AssetProfileCacheEntry {
 const assetProfileCache = new Map<string, AssetProfileCacheEntry>();
 const ASSET_PROFILE_CACHE_TTL = 24 * 60 * 60 * 1000; // 24h — sektor/krajina sa mení zriedka
 
+/** Mapuje Postgres 23505 na zrozumiteľnú odpoveď (najmä unikátne transaction_id v portfóliu). */
+function responseForDbUniqueViolation(err: unknown): { status: number; message: string } | null {
+  const e = err as { code?: string; constraint?: string; message?: string };
+  if (e?.code !== "23505") return null;
+  const c = (e.constraint || "").toLowerCase();
+  const m = (e.message || "").toLowerCase();
+  if (
+    c.includes("transaction_id") ||
+    m.includes("transaction_id") ||
+    c.includes("transactions_user_portfolio_transaction_id")
+  ) {
+    return {
+      status: 409,
+      message:
+        "V tomto portfóliu už existuje transakcia s rovnakým ID z brokera. Pole nechajte prázdne, alebo zadajte iné jedinečné ID (nie to isté ako pri už naimportovanej transakcii).",
+    };
+  }
+  if (c.includes("pkey") || m.includes("transactions_pkey")) {
+    return {
+      status: 409,
+      message:
+        "Transakcia s týmto interným ID už existuje. Ak nechcete nahradiť záznam, nezadávajte vlastné ID pri ukladaní.",
+    };
+  }
+  return {
+    status: 409,
+    message:
+      "Duplicitný záznam. Skontrolujte unikátnosť polí (najmä ID z brokera v rámci jedného portfólia).",
+  };
+}
+
 // -----------------------------------------------------------------------------
 // Persistent disk cache
 // -----------------------------------------------------------------------------
@@ -1958,6 +1989,11 @@ export async function registerRoutes(
       const userId = req.user.claims.sub;
       const { id: clientId, ...bodyRest } = req.body;
 
+      const transactionDate = new Date(req.body?.transactionDate);
+      if (Number.isNaN(transactionDate.getTime())) {
+        return res.status(400).json({ message: "Neplatný dátum transakcie." });
+      }
+
       // Ensure user has a default portfolio
       const defaultPortfolio = await storage.ensureDefaultPortfolio(userId);
       const portfolioId = req.body.portfolioId || defaultPortfolio.id;
@@ -1978,7 +2014,7 @@ export async function registerRoutes(
         shares,
         userId,
         portfolioId,
-        transactionDate: new Date(req.body.transactionDate),
+        transactionDate,
       };
 
       // Vklad / výber: vždy interný ticker, neovplyvňujú podiely
@@ -2022,7 +2058,7 @@ export async function registerRoutes(
           commission: "0",
           currency: orig,
           originalCurrency: orig,
-          transactionDate: new Date(req.body.transactionDate),
+          transactionDate,
           externalId: req.body.externalId || null,
           transactionId: tIdIn,
           exchangeRateAtTransaction: orig === "EUR" ? "1" : exOk.toFixed(8),
@@ -2153,6 +2189,10 @@ export async function registerRoutes(
       invalidatePerformanceCache(userId);
       res.json(transaction);
     } catch (error) {
+      const mapped = responseForDbUniqueViolation(error);
+      if (mapped) {
+        return res.status(mapped.status).json({ message: mapped.message });
+      }
       console.error("Error creating transaction:", error);
       res.status(500).json({ message: "Failed to create transaction" });
     }
@@ -2569,6 +2609,10 @@ export async function registerRoutes(
       invalidatePerformanceCache(userId);
       res.json({ message: "Transakcia bola aktualizovaná." });
     } catch (error) {
+      const mapped = responseForDbUniqueViolation(error);
+      if (mapped) {
+        return res.status(mapped.status).json({ message: mapped.message });
+      }
       console.error("Error updating transaction:", error);
       res.status(500).json({ message: "Nepodarilo sa aktualizovať transakciu." });
     }
@@ -3934,9 +3978,15 @@ export async function registerRoutes(
           if (tx.type === "BUY" || tx.type === "SELL") {
             tickersNeedingHoldingsSync.set(tickerUpper, companyName);
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
+          const mapped = responseForDbUniqueViolation(err);
+          const msg = mapped
+            ? mapped.message
+            : err instanceof Error
+              ? err.message
+              : String(err);
           errors.push(
-            `${(typeof tx.ticker === "string" && tx.ticker.trim()) || "?"} [ID: ${tx.externalId || "N/A"}]: ${err.message}`,
+            `${(typeof tx.ticker === "string" && tx.ticker.trim()) || "?"} [ID: ${tx.externalId || "N/A"}]: ${msg}`,
           );
         }
       }

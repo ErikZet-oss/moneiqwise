@@ -10,7 +10,15 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -501,6 +509,10 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
                         <FormControl>
                           <Input placeholder="napr. z výpisu XTB" {...field} data-testid="input-cash-external-id" />
                         </FormControl>
+                        <FormDescription>
+                          V jednom portfóliu musí byť toto ID vždy iné. Ak vklad dopĺňaš ručne a to isté ID už
+                          príde z importu, pole radšej nechaj prázdne — inak ukladanie zlyhá na duplicite.
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
