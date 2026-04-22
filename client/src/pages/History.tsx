@@ -81,10 +81,14 @@ export default function History() {
   const { data: transactions, isLoading } = useQuery<Transaction[]>({
     queryKey: ["/api/transactions", portfolioParam],
     queryFn: async () => {
-      const res = await fetch(`/api/transactions?portfolio=${portfolioParam}`);
+      const res = await fetch(`/api/transactions?portfolio=${encodeURIComponent(portfolioParam)}`, {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed to fetch transactions");
       return res.json();
     },
+    // Glob. refetchOnMount: false + neaktívna query pri invalidácii — týmto po návrate na stránku obnovíme dáta, ak sú neplatné.
+    refetchOnMount: true,
   });
 
   const invalidateAllQueries = () => {

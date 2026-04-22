@@ -167,7 +167,7 @@ export default function Import() {
             ? "Žiadne nezaradené transakcie sa nenašli."
             : `Presunuté: ${data.transactionsMoved} transakcií, ${data.holdingsMoved} nových holdingov, ${data.holdingsMerged} zlúčených, ${data.optionTradesMoved} opcií.`,
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"], refetchType: "all" });
       queryClient.invalidateQueries({ queryKey: ["/api/holdings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/overview"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dividends"] });
@@ -217,7 +217,7 @@ export default function Import() {
       });
       queryClient.invalidateQueries({ queryKey: ["/api/holdings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/overview"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"], refetchType: "all" });
     },
     onError: (error: Error) => {
       toast({
@@ -299,7 +299,7 @@ export default function Import() {
         title: "Import dokončený",
         description: `Cieľové portfólio: „${portName}“. V histórii ho vyber v bočnom paneli, ak transakcie nevidíš. ${data.message}${warn}`,
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"], refetchType: "all" });
       queryClient.invalidateQueries({ queryKey: ["/api/holdings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/overview"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dividends"] });

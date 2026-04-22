@@ -508,17 +508,12 @@ export class DatabaseStorage implements IStorage {
         .orderBy(desc(transactions.transactionDate));
     }
 
-    // Všetky portfóliá (vrátane skrytých) — inak transakcie v skrytom cieli importu
-    // v režime „Všetky“ v UI zmiznú, hoci v DB existujú.
-    const allPfIds = await this.getAllPortfolioIdsByUser(userId);
-    const portfolioFilter = allPfIds.length > 0
-      ? or(isNull(transactions.portfolioId), inArray(transactions.portfolioId, allPfIds))
-      : isNull(transactions.portfolioId);
-
+    // Všetky transakcie používateľa (všetky portfóliá + NULL / „osirelé“ id po zmenách).
+    // Predtým: filter inArray(portfolioId, …) vylučoval riadky, ktoré už nepasujú na existujúce id.
     return await db
       .select()
       .from(transactions)
-      .where(and(eq(transactions.userId, userId), portfolioFilter))
+      .where(eq(transactions.userId, userId))
       .orderBy(desc(transactions.transactionDate));
   }
 
@@ -537,11 +532,6 @@ export class DatabaseStorage implements IStorage {
         .orderBy(desc(transactions.transactionDate));
     }
     
-    const allPfIds = await this.getAllPortfolioIdsByUser(userId);
-    const portfolioFilter = allPfIds.length > 0
-      ? or(isNull(transactions.portfolioId), inArray(transactions.portfolioId, allPfIds))
-      : isNull(transactions.portfolioId);
-
     return await db
       .select()
       .from(transactions)
@@ -549,8 +539,7 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(transactions.userId, userId),
           eq(transactions.ticker, ticker),
-          portfolioFilter
-        )
+        ),
       )
       .orderBy(desc(transactions.transactionDate));
   }
@@ -816,12 +805,6 @@ export class DatabaseStorage implements IStorage {
 
   async getTransactionsForTickerAcrossPortfolios(userId: string, ticker: string): Promise<Transaction[]> {
     const normalized = ticker.trim().toLowerCase();
-    const allPfIds = await this.getAllPortfolioIdsByUser(userId);
-    const portfolioFilter =
-      allPfIds.length > 0
-        ? or(isNull(transactions.portfolioId), inArray(transactions.portfolioId, allPfIds))
-        : isNull(transactions.portfolioId);
-
     return await db
       .select()
       .from(transactions)
@@ -829,8 +812,7 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(transactions.userId, userId),
           sql`lower(${transactions.ticker}) = ${normalized}`,
-          portfolioFilter
-        )
+        ),
       )
       .orderBy(asc(transactions.transactionDate));
   }
