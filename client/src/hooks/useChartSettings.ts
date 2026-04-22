@@ -5,6 +5,8 @@ interface ChartSettings {
   showTooltip: boolean;
   hideAmounts: boolean;
   showNews: boolean;
+  /** Najsilnejšie / najslabšie dnes na stránke Prehľad */
+  showDailyMovers: boolean;
 }
 
 const STORAGE_KEY = "portfolio-chart-settings";
@@ -14,6 +16,7 @@ const defaultSettings: ChartSettings = {
   showTooltip: false,
   hideAmounts: false,
   showNews: true,
+  showDailyMovers: true,
 };
 
 function loadSettings(): ChartSettings {
@@ -66,10 +69,12 @@ export function useChartSettings() {
     showTooltip: settings.showTooltip,
     hideAmounts: settings.hideAmounts,
     showNews: settings.showNews,
+    showDailyMovers: settings.showDailyMovers !== false,
     setShowChart: (value: boolean) => updateSettings({ showChart: value }),
     setShowTooltip: (value: boolean) => updateSettings({ showTooltip: value }),
     setHideAmounts: (value: boolean) => updateSettings({ hideAmounts: value }),
     setShowNews: (value: boolean) => updateSettings({ showNews: value }),
+    setShowDailyMovers: (value: boolean) => updateSettings({ showDailyMovers: value }),
     toggleHideAmounts: () => updateSettings({ hideAmounts: !settings.hideAmounts }),
   };
 }

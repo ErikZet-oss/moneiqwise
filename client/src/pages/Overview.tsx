@@ -83,9 +83,17 @@ export default function Overview() {
   const [refreshingPortfolioId, setRefreshingPortfolioId] = useState<string | null>(
     null,
   );
-  const { portfolios, setSelectedPortfolioId, isLoading: portfoliosLoading } = usePortfolio();
+  const {
+    portfolios,
+    setSelectedPortfolioId,
+    isLoading: portfoliosLoading,
+    getQueryParam,
+    isAllPortfolios,
+    selectedPortfolio,
+  } = usePortfolio();
   const { convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
-  const { hideAmounts } = useChartSettings();
+  const { hideAmounts, showDailyMovers } = useChartSettings();
+  const portfolioParam = getQueryParam();
   const [, setLocation] = useLocation();
 
   const maskAmount = (amount: string) => (hideAmounts ? "••••••" : amount);
@@ -111,6 +119,20 @@ export default function Overview() {
     });
     return Array.from(set).sort();
   }, [overview]);
+
+  /** Tickery pre „najsilnejšie / najslabšie dnes“ podľa výberu portfólia v hlavičke. */
+  const moversTickers = useMemo(() => {
+    if (!overview?.byPortfolioId) return [];
+    if (isAllPortfolios || portfolioParam === "all") {
+      return allTickers;
+    }
+    const row = overview.byPortfolioId[portfolioParam];
+    const set = new Set<string>();
+    for (const h of row?.holdings ?? []) {
+      if (h.ticker) set.add(h.ticker);
+    }
+    return Array.from(set).sort();
+  }, [overview, allTickers, isAllPortfolios, portfolioParam]);
 
   const {
     data: quotes,
@@ -298,10 +320,10 @@ export default function Overview() {
 
   /** Top 5 denných % moverov medzi držanými titulmi (podľa kotácie). */
   const dailyMovers = useMemo(() => {
-    if (!quotes || allTickers.length === 0) {
+    if (!quotes || moversTickers.length === 0) {
       return { gainers: [] as { ticker: string; name: string; pct: number }[], losers: [] as { ticker: string; name: string; pct: number }[] };
     }
-    const rows = allTickers.map((t) => {
+    const rows = moversTickers.map((t) => {
       const q = quotes[t];
       const raw = q?.changePercent;
       const pct =
@@ -325,7 +347,7 @@ export default function Overview() {
       .slice(0, 5);
 
     return { gainers, losers };
-  }, [quotes, allTickers, tickerDisplayNames]);
+  }, [quotes, moversTickers, tickerDisplayNames]);
 
   const formatSignedDayPct = (value: number) => {
     const sign = value > 0 ? "+" : "";
@@ -391,7 +413,7 @@ export default function Overview() {
         )}
       </div>
 
-      {portfolios.length > 0 && allTickers.length > 0 && (
+      {showDailyMovers && portfolios.length > 0 && moversTickers.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card data-testid="overview-daily-gainers">
             <CardHeader className="pb-3">
@@ -400,7 +422,9 @@ export default function Overview() {
                 Najsilnejšie dnes (%)
               </CardTitle>
               <p className="text-xs text-muted-foreground">
-                Z vašich držaných akcií — denná zmena podľa kotácie.
+                {isAllPortfolios
+                  ? "Z držaných akcií vo všetkých portfóliách — denná zmena podľa kotácie."
+                  : `Z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ — denná zmena podľa kotácie.`}
               </p>
             </CardHeader>
             <CardContent className="space-y-2 pt-0">
@@ -447,7 +471,9 @@ export default function Overview() {
                 Najslabšie dnes (%)
               </CardTitle>
               <p className="text-xs text-muted-foreground">
-                Z vašich držaných akcií — denná zmena podľa kotácie.
+                {isAllPortfolios
+                  ? "Z držaných akcií vo všetkých portfóliách — denná zmena podľa kotácie."
+                  : `Z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ — denná zmena podľa kotácie.`}
               </p>
             </CardHeader>
             <CardContent className="space-y-2 pt-0">

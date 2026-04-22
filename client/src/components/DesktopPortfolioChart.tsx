@@ -1,8 +1,12 @@
 import { useState, useMemo } from "react";
+import type { AllExchangeRates } from "@shared/convertAmountBetween";
+import {
+  sumNetCashLedgerEurUpTo,
+  transactionNetCashDeltaEur,
+} from "@shared/netCashLedgerUpTo";
 import { useQuery } from "@tanstack/react-query";
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
 import { format, subDays, subMonths, subYears, startOfYear, parseISO, isAfter, startOfDay, isSameDay, isWeekend, endOfDay } from "date-fns";
-import { sumCashFlowEurUpTo, sumCashFlowEurFromRows } from "@shared/cashFromTransactions";
 import { sk } from "date-fns/locale";
 import { eachDayOfInterval } from "date-fns";
 import { useCurrency } from "@/hooks/useCurrency";
@@ -41,7 +45,7 @@ export function DesktopPortfolioChart({
   totalInvested
 }: DesktopPortfolioChartProps) {
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>("ALL");
-  const { currency, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
+  const { currency, convertPrice, getTickerCurrency, formatCurrency, exchangeRate } = useCurrency();
   const { getQueryParam } = usePortfolio();
   const { showChart, showTooltip } = useChartSettings();
   
@@ -64,6 +68,34 @@ export function DesktopPortfolioChart({
       return res.json();
     },
   });
+
+  const { data: eurPerUnitByTxnId } = useQuery<Record<string, number | null>>({
+    queryKey: ["/api/txn-eur-per-unit", portfolioParam],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/txn-eur-per-unit?portfolio=${encodeURIComponent(portfolioParam)}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) throw new Error("Failed to fetch txn EUR map");
+      return res.json();
+    },
+    enabled: !!transactions && transactions.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const ledgerRates: AllExchangeRates = useMemo(
+    () => ({
+      eurToUsd: exchangeRate.eurToUsd,
+      usdToEur: exchangeRate.usdToEur,
+      eurToCzk: exchangeRate.eurToCzk,
+      czkToEur: exchangeRate.czkToEur,
+      eurToPln: exchangeRate.eurToPln,
+      plnToEur: exchangeRate.plnToEur,
+      eurToGbp: exchangeRate.eurToGbp,
+      gbpToEur: exchangeRate.gbpToEur,
+    }),
+    [exchangeRate],
+  );
 
   const { data: quotes } = useQuery<Record<string, StockQuote>>({
     queryKey: ["/api/quotes", holdings?.map(h => h.ticker)],
@@ -220,11 +252,13 @@ export function DesktopPortfolioChart({
       }
     });
 
-    const cashEur = sumCashFlowEurUpTo(
+    const cashEur = sumNetCashLedgerEurUpTo(
       transactions ?? [],
       endOfDay(targetDate),
+      eurPerUnitByTxnId ?? {},
+      ledgerRates,
     );
-    return totalVal + cashEur;
+    return totalVal + convertPrice(cashEur, "EUR");
   };
 
   const chartData = useMemo(() => {
@@ -278,7 +312,15 @@ export function DesktopPortfolioChart({
     });
 
     return data;
-  }, [transactions, historicalPrices, quotes, selectedPeriod]);
+  }, [
+    transactions,
+    historicalPrices,
+    quotes,
+    selectedPeriod,
+    eurPerUnitByTxnId,
+    ledgerRates,
+    convertPrice,
+  ]);
 
   // P&L scoped to the selected time range. The chart itself plots raw
   // portfolio value over time, which will jump up/down whenever the user
@@ -300,34 +342,31 @@ export function DesktopPortfolioChart({
 
     // Sum buys/sells that happened AFTER the first chart point (same-day
     // activity is already baked into firstValue, so don't double-count it).
-    let netInflow = 0;
+    let netInflowEur = 0;
     if (transactions) {
+      const map = eurPerUnitByTxnId ?? {};
       transactions.forEach((t) => {
         const d = format(parseISO(t.transactionDate as unknown as string), "yyyy-MM-dd");
         if (d > firstPoint.date && d <= lastPoint.date) {
-          if (t.type === "BUY" || t.type === "SELL") {
-            const shares = parseFloat(t.shares);
-            const price = parseFloat(t.pricePerShare);
-            const commission = parseFloat(t.commission || "0");
-            if (t.type === "BUY") {
-              netInflow += shares * price + commission;
-            } else {
-              netInflow -= shares * price - commission;
-            }
-            return;
-          }
-          if (t.type === "DEPOSIT" || t.type === "WITHDRAWAL") {
-            netInflow += sumCashFlowEurFromRows([t]);
-          }
+          netInflowEur += transactionNetCashDeltaEur(t, map[t.id] ?? null, ledgerRates);
         }
       });
     }
+    const netInflow = convertPrice(netInflowEur, "EUR");
 
     const change = lastValue - firstValue - netInflow;
     const baseline = firstValue + Math.max(netInflow, 0);
     const percent = baseline > 0 ? (change / baseline) * 100 : 0;
     return { amount: change, percent };
-  }, [chartData, transactions, totalValue, totalInvested]);
+  }, [
+    chartData,
+    transactions,
+    totalValue,
+    totalInvested,
+    eurPerUnitByTxnId,
+    ledgerRates,
+    convertPrice,
+  ]);
 
   const minValue = useMemo(() => {
     if (chartData.length === 0) return 0;

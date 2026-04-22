@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
-import { Loader2, Eye, EyeOff, Coins, Calculator, RefreshCw, Briefcase, Plus, Pencil, Trash2, LineChart, Newspaper, AlertTriangle, ChevronUp, ChevronDown, Eraser } from "lucide-react";
+import { Loader2, Eye, EyeOff, Coins, Calculator, RefreshCw, Briefcase, Plus, Pencil, Trash2, LineChart, Newspaper, AlertTriangle, ChevronUp, ChevronDown, Eraser, TrendingUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { BrokerLogo, BrokerSelectItem, BROKER_CATALOG } from "@/components/BrokerLogo";
 import { BROKER_CODES, type Currency, type BrokerCode } from "@shared/schema";
@@ -27,7 +27,18 @@ interface ExchangeRate {
 export default function Settings() {
   const { toast } = useToast();
   const { allPortfolios, createPortfolio, updatePortfolio, deletePortfolio, setPortfolioHidden, reorderPortfolios } = usePortfolio();
-  const { showChart, showTooltip, hideAmounts, showNews, setShowChart, setShowTooltip, setHideAmounts, setShowNews } = useChartSettings();
+  const {
+    showChart,
+    showTooltip,
+    hideAmounts,
+    showNews,
+    showDailyMovers,
+    setShowChart,
+    setShowTooltip,
+    setHideAmounts,
+    setShowNews,
+    setShowDailyMovers,
+  } = useChartSettings();
   const [newPortfolioName, setNewPortfolioName] = useState("");
   const [newPortfolioBroker, setNewPortfolioBroker] = useState<BrokerCode | undefined>(undefined);
   const [editingPortfolio, setEditingPortfolio] = useState<{ id: string; name: string; brokerCode: BrokerCode | null } | null>(null);
@@ -617,7 +628,7 @@ export default function Settings() {
             <CardTitle>Zobrazenie na prehľade</CardTitle>
           </div>
           <CardDescription>
-            Nastavte, čo sa zobrazí na hlavnej stránke. Vypnutie sekcií môže urýchliť načítanie.
+            Nastavte, čo sa zobrazí na hlavnej stránke a v Prehľade. Vypnutie sekcií môže urýchliť načítanie.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -665,6 +676,23 @@ export default function Settings() {
               checked={showNews}
               onCheckedChange={setShowNews}
               data-testid="switch-show-news"
+            />
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t">
+            <div className="space-y-0.5">
+              <div className="text-sm font-medium flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                Najsilnejšie a najslabšie dnes
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Na stránke Prehľad: rebríček denných percentuálnych zmien podľa aktuálne vybraného portfólia (alebo všetkých naraz pri „Všetky“).
+              </div>
+            </div>
+            <Switch
+              checked={showDailyMovers}
+              onCheckedChange={setShowDailyMovers}
+              data-testid="switch-show-daily-movers"
             />
           </div>
 

@@ -128,40 +128,6 @@ interface NewsArticle {
   thumbnail?: string;
 }
 
-type CashLedgerDiagnostics = {
-  portfolio: string;
-  transactionCount: number;
-  flow: {
-    id: string;
-    transactionDate: string;
-    type: string;
-    ticker: string;
-    companyName: string;
-    effectEur: number;
-    runningEur: number;
-    lineEurAbsForTrade?: number;
-    baseCurrencyAmount: string | null;
-    commission: string | null;
-  }[];
-  firstRunningNegative: { atIndex: number; atDate: string; runningEur: number } | null;
-  topBuys: {
-    id: string;
-    transactionDate: string;
-    ticker: string;
-    companyName: string;
-    eur: number;
-    baseCurrencyAmount: string | null;
-    shares: string;
-    pricePerShare: string;
-    commission: string | null;
-  }[];
-  notes: {
-    xtbColumnPriority: string;
-    commissionDoubleCount: string;
-    closeTradeImport?: string;
-  };
-};
-
 export default function Dashboard() {
   const [, setLocation] = useLocation();
   const { currency, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
@@ -181,19 +147,6 @@ export default function Dashboard() {
       if (!res.ok) throw new Error("Failed to fetch holdings");
       return res.json();
     },
-  });
-
-  const { data: cashLedgerDiag, isLoading: cashLedgerDiagLoading, isError: cashLedgerDiagError } = useQuery({
-    queryKey: ["/api/cash-ledger-diagnostics", portfolioParam],
-    queryFn: async (): Promise<CashLedgerDiagnostics> => {
-      const res = await fetch(
-        `/api/cash-ledger-diagnostics?portfolio=${encodeURIComponent(portfolioParam)}`,
-        { credentials: "include" },
-      );
-      if (!res.ok) throw new Error("Failed to fetch cash ledger diagnostics");
-      return res.json();
-    },
-    staleTime: 2 * 60 * 1000,
   });
 
   const {
@@ -595,16 +548,6 @@ export default function Dashboard() {
     return "text-muted-foreground";
   };
 
-  const formatSignedEur = (n: number) => {
-    const a = Math.abs(n);
-    return (n >= 0 ? "+" : "−") + formatCurrency(a);
-  };
-
-  const formatTxLineDate = (iso: string) => {
-    const d = new Date(iso);
-    return Number.isNaN(d.getTime()) ? iso : d.toLocaleString("sk-SK", { dateStyle: "short" });
-  };
-
   if (holdingsLoading) {
     return (
       <div className="space-y-6">
@@ -968,153 +911,6 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
-
-      <Card data-testid="card-cash-ledger-flow" className="border-border/80">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">Bežíca hotovosť a kontrola nákupov (EUR)</CardTitle>
-          <CardDescription className="text-xs">
-            {cashLedgerDiag?.notes?.xtbColumnPriority}{" "}
-            {cashLedgerDiag?.notes?.commissionDoubleCount}
-            {cashLedgerDiag?.notes?.closeTradeImport
-              ? ` ${cashLedgerDiag.notes.closeTradeImport}`
-              : null}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {cashLedgerDiagLoading && (
-            <div className="space-y-2">
-              <Skeleton className="h-9 w-full" />
-              <Skeleton className="h-48 w-full" />
-            </div>
-          )}
-          {cashLedgerDiagError && (
-            <p className="text-sm text-destructive" data-testid="text-cash-ledger-diag-error">
-              Nepodarilo sa načítať denník hotovosti. Skúste neskôr.
-            </p>
-          )}
-          {cashLedgerDiag && !cashLedgerDiagLoading && (
-            <>
-              {cashLedgerDiag.firstRunningNegative != null && (
-                <p
-                  className="text-sm text-amber-600 dark:text-amber-500"
-                  data-testid="text-cash-first-negative"
-                >
-                  Prvý záporný bežíci zostatok: {formatTxLineDate(cashLedgerDiag.firstRunningNegative.atDate)} (
-                  {maskAmount(formatCurrency(cashLedgerDiag.firstRunningNegative.runningEur))}).
-                </p>
-              )}
-              {cashLedgerDiag.firstRunningNegative == null && cashLedgerDiag.flow.length > 0 && (
-                <p className="text-sm text-muted-foreground">
-                  V tomto rozsahu sa hotovosť v modelovom denníku nedostala do mínusu.
-                </p>
-              )}
-
-              <div>
-                <h3 className="text-sm font-medium mb-2">5 najväčších nákupov (EUR v systéme)</h3>
-                <p className="text-xs text-muted-foreground mb-2">
-                  Porovnajte s riadkami nákupov v exporte z XTB: stĺpec `base` / Value v EUR a ID transakcie.
-                </p>
-                <div className="rounded-md border overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Dátum</TableHead>
-                        <TableHead>Ticker</TableHead>
-                        <TableHead className="text-right">EUR (abs.)</TableHead>
-                        <TableHead className="text-right">base (DB)</TableHead>
-                        <TableHead className="text-right">comm. (DB)</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {cashLedgerDiag.topBuys.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={5} className="text-muted-foreground text-sm">
-                            Žiadne nákupy v tomto rozsahu.
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        cashLedgerDiag.topBuys.map((b) => (
-                          <TableRow key={b.id} data-testid={`row-cash-top-buy-${b.id}`}>
-                            <TableCell className="whitespace-nowrap text-sm tabular-nums">
-                              {formatTxLineDate(b.transactionDate)}
-                            </TableCell>
-                            <TableCell className="text-sm font-medium">{b.ticker || "—"}</TableCell>
-                            <TableCell className="text-right tabular-nums">
-                              {maskAmount(formatCurrency(b.eur))}
-                            </TableCell>
-                            <TableCell className="text-right text-xs text-muted-foreground tabular-nums max-w-[120px] truncate" title={b.baseCurrencyAmount ?? ""}>
-                              {b.baseCurrencyAmount != null && b.baseCurrencyAmount !== "" ? b.baseCurrencyAmount : "—"}
-                            </TableCell>
-                            <TableCell className="text-right text-xs text-muted-foreground tabular-nums max-w-[80px] truncate" title={b.commission ?? ""}>
-                              {b.commission != null && b.commission !== "" ? b.commission : "—"}
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="text-sm font-medium mb-2">
-                  Denník hotovosti (každá transakcia: zmena → bežíci zostatok)
-                </h3>
-                <ScrollArea className="h-[min(24rem,55vh)] rounded-md border">
-                  <div className="min-w-[640px] p-0">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="sticky top-0 z-[1] bg-card">Dátum</TableHead>
-                          <TableHead className="sticky top-0 z-[1] bg-card">Typ</TableHead>
-                          <TableHead className="sticky top-0 z-[1] bg-card">Ticker</TableHead>
-                          <TableHead className="text-right sticky top-0 z-[1] bg-card">Zmena (EUR)</TableHead>
-                          <TableHead className="text-right sticky top-0 z-[1] bg-card">Zostatok (EUR)</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {cashLedgerDiag.flow.map((row) => {
-                          const negRun = row.runningEur < 0;
-                          return (
-                            <TableRow
-                              key={row.id}
-                              className={negRun ? "bg-destructive/5" : undefined}
-                              data-testid={`row-cash-flow-${row.id}`}
-                            >
-                              <TableCell className="whitespace-nowrap text-xs tabular-nums">
-                                {formatTxLineDate(row.transactionDate)}
-                              </TableCell>
-                              <TableCell className="text-xs">{row.type}</TableCell>
-                              <TableCell className="text-xs max-w-[8rem] truncate" title={row.ticker || row.companyName || ""}>
-                                {row.ticker || "—"}
-                              </TableCell>
-                              <TableCell
-                                className={`text-right text-xs tabular-nums ${
-                                  row.effectEur < 0 ? "text-destructive" : row.effectEur > 0 ? "text-green-600" : ""
-                                }`}
-                              >
-                                {maskAmount(formatSignedEur(row.effectEur))}
-                              </TableCell>
-                              <TableCell
-                                className={`text-right text-xs font-medium tabular-nums ${
-                                  negRun ? "text-destructive" : ""
-                                }`}
-                              >
-                                {maskAmount(formatCurrency(row.runningEur))}
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                  <ScrollBar orientation="horizontal" />
-                </ScrollArea>
-              </div>
-            </>
-          )}
-        </CardContent>
-      </Card>
 
       <DesktopPortfolioChart 
         totalValue={metrics.totalValue}

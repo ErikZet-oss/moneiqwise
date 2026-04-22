@@ -2,7 +2,11 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip } from "recharts";
 import { format, subDays, subMonths, subYears, startOfYear, parseISO, isAfter, startOfDay, isSameDay, isWeekend, subHours, eachDayOfInterval, eachHourOfInterval, endOfDay } from "date-fns";
-import { sumCashFlowEurUpTo, sumCashFlowEurFromRows } from "@shared/cashFromTransactions";
+import type { AllExchangeRates } from "@shared/convertAmountBetween";
+import {
+  sumNetCashLedgerEurUpTo,
+  transactionNetCashDeltaEur,
+} from "@shared/netCashLedgerUpTo";
 import { sk } from "date-fns/locale";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
@@ -57,7 +61,7 @@ export function MobilePortfolioChart({
   quotesRefreshing = false,
 }: MobilePortfolioChartProps) {
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>("ALL");
-  const { currency, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
+  const { currency, convertPrice, getTickerCurrency, formatCurrency, exchangeRate } = useCurrency();
   const { getQueryParam, selectedPortfolio, selectedPortfolioId } = usePortfolio();
   const { showChart, showTooltip, hideAmounts, toggleHideAmounts } = useChartSettings();
   
@@ -108,6 +112,34 @@ export function MobilePortfolioChart({
       return data.quotes as Record<string, StockQuote>;
     },
   });
+
+  const { data: eurPerUnitByTxnId } = useQuery<Record<string, number | null>>({
+    queryKey: ["/api/txn-eur-per-unit", portfolioParam],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/txn-eur-per-unit?portfolio=${encodeURIComponent(portfolioParam)}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) throw new Error("Failed to fetch txn EUR map");
+      return res.json();
+    },
+    enabled: !!transactions && transactions.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const ledgerRates: AllExchangeRates = useMemo(
+    () => ({
+      eurToUsd: exchangeRate.eurToUsd,
+      usdToEur: exchangeRate.usdToEur,
+      eurToCzk: exchangeRate.eurToCzk,
+      czkToEur: exchangeRate.czkToEur,
+      eurToPln: exchangeRate.eurToPln,
+      plnToEur: exchangeRate.plnToEur,
+      eurToGbp: exchangeRate.eurToGbp,
+      gbpToEur: exchangeRate.gbpToEur,
+    }),
+    [exchangeRate],
+  );
 
   const { data: historicalData } = useQuery<HistoricalResponse>({
     queryKey: ["/api/stocks/history/batch", holdings?.map(h => h.ticker)],
@@ -243,11 +275,13 @@ export function MobilePortfolioChart({
       }
     });
 
-    const cashEur = sumCashFlowEurUpTo(
+    const cashEur = sumNetCashLedgerEurUpTo(
       transactions ?? [],
       endOfDay(targetDate),
+      eurPerUnitByTxnId ?? {},
+      ledgerRates,
     );
-    return totalValue + cashEur;
+    return totalValue + convertPrice(cashEur, "EUR");
   };
 
   const chartData = useMemo(() => {
@@ -301,7 +335,15 @@ export function MobilePortfolioChart({
     });
 
     return data;
-  }, [transactions, historicalPrices, quotes, selectedPeriod]);
+  }, [
+    transactions,
+    historicalPrices,
+    quotes,
+    selectedPeriod,
+    eurPerUnitByTxnId,
+    ledgerRates,
+    convertPrice,
+  ]);
 
   // P&L for the selected range. The chart line jumps whenever there's a BUY
   // or SELL inside the window, so to get an honest gain we subtract the net
@@ -320,34 +362,31 @@ export function MobilePortfolioChart({
     const firstValue = firstPoint.value;
     const lastValue = lastPoint.value;
 
-    let netInflow = 0;
+    let netInflowEur = 0;
     if (transactions) {
+      const map = eurPerUnitByTxnId ?? {};
       transactions.forEach((t) => {
         const d = format(parseISO(t.transactionDate as unknown as string), "yyyy-MM-dd");
         if (d > firstPoint.date && d <= lastPoint.date) {
-          if (t.type === "BUY" || t.type === "SELL") {
-            const shares = parseFloat(t.shares);
-            const price = parseFloat(t.pricePerShare);
-            const commission = parseFloat(t.commission || "0");
-            if (t.type === "BUY") {
-              netInflow += shares * price + commission;
-            } else {
-              netInflow -= shares * price - commission;
-            }
-            return;
-          }
-          if (t.type === "DEPOSIT" || t.type === "WITHDRAWAL") {
-            netInflow += sumCashFlowEurFromRows([t]);
-          }
+          netInflowEur += transactionNetCashDeltaEur(t, map[t.id] ?? null, ledgerRates);
         }
       });
     }
+    const netInflow = convertPrice(netInflowEur, "EUR");
 
     const change = lastValue - firstValue - netInflow;
     const baseline = firstValue + Math.max(netInflow, 0);
     const percent = baseline > 0 ? (change / baseline) * 100 : 0;
     return { amount: change, percent };
-  }, [chartData, transactions, totalValue, totalInvested]);
+  }, [
+    chartData,
+    transactions,
+    totalValue,
+    totalInvested,
+    eurPerUnitByTxnId,
+    ledgerRates,
+    convertPrice,
+  ]);
 
   const periodLabel: Record<TimePeriod, string> = {
     "1D": "1D",
