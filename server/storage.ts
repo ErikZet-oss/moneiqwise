@@ -643,20 +643,34 @@ export class DatabaseStorage implements IStorage {
     const map: Record<string, number> = Object.fromEntries(
       portfolioIds.map((id) => [id, 0]),
     );
+    const defaultPf = await this.getDefaultPortfolio(userId);
+    const defaultId = defaultPf?.id;
+    const mergeUnassignedToDefault =
+      defaultId != null && portfolioIds.includes(defaultId);
+
     const rows = await db
       .select()
       .from(transactions)
       .where(
         and(
           eq(transactions.userId, userId),
-          inArray(transactions.portfolioId, portfolioIds),
+          mergeUnassignedToDefault
+            ? or(
+                inArray(transactions.portfolioId, portfolioIds),
+                isNull(transactions.portfolioId),
+              )
+            : inArray(transactions.portfolioId, portfolioIds),
         ),
       );
     const byPid = new Map<string, Transaction[]>();
     for (const id of portfolioIds) byPid.set(id, []);
     for (const t of rows) {
       const pid = t.portfolioId;
-      if (pid && byPid.has(pid)) byPid.get(pid)!.push(t);
+      if (pid && byPid.has(pid)) {
+        byPid.get(pid)!.push(t);
+      } else if (mergeUnassignedToDefault && !pid && defaultId && byPid.has(defaultId)) {
+        byPid.get(defaultId)!.push(t);
+      }
     }
     for (const id of portfolioIds) {
       const list = byPid.get(id) ?? [];
@@ -678,13 +692,24 @@ export class DatabaseStorage implements IStorage {
     if (visibleIds.length === 0) {
       return { byPortfolioId: {} };
     }
+    const defaultPf = await this.getDefaultPortfolio(userId);
+    const defaultId = defaultPf?.id;
+    const unassignedHoldingTo =
+      defaultId && visibleIds.includes(defaultId) ? defaultId : visibleIds[0];
+    const unassignedTxTo =
+      defaultId && visibleIds.includes(defaultId) ? defaultId : visibleIds[0];
 
+    const holdingsWhere = and(
+      eq(holdings.userId, userId),
+      or(
+        isNull(holdings.portfolioId),
+        inArray(holdings.portfolioId, visibleIds),
+      ),
+    );
     const holdingsRows = await db
       .select()
       .from(holdings)
-      .where(
-        and(eq(holdings.userId, userId), inArray(holdings.portfolioId, visibleIds)),
-      );
+      .where(holdingsWhere);
 
     const txnPortfolioFilter = or(
       isNull(transactions.portfolioId),
@@ -699,14 +724,22 @@ export class DatabaseStorage implements IStorage {
     for (const id of visibleIds) holdingsByPid.set(id, []);
     for (const h of holdingsRows) {
       const pid = h.portfolioId;
-      if (pid && holdingsByPid.has(pid)) holdingsByPid.get(pid)!.push(h);
+      if (pid && holdingsByPid.has(pid)) {
+        holdingsByPid.get(pid)!.push(h);
+      } else if (!pid && unassignedHoldingTo && holdingsByPid.has(unassignedHoldingTo)) {
+        holdingsByPid.get(unassignedHoldingTo)!.push(h);
+      }
     }
 
     const txnsByPid = new Map<string, Transaction[]>();
     for (const id of visibleIds) txnsByPid.set(id, []);
     for (const t of txnRows) {
       const pid = t.portfolioId;
-      if (pid && txnsByPid.has(pid)) txnsByPid.get(pid)!.push(t);
+      if (pid && txnsByPid.has(pid)) {
+        txnsByPid.get(pid)!.push(t);
+      } else if (!pid && unassignedTxTo && txnsByPid.has(unassignedTxTo)) {
+        txnsByPid.get(unassignedTxTo)!.push(t);
+      }
     }
 
     const byPortfolioId: Record<
