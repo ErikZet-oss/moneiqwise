@@ -3923,19 +3923,37 @@ export async function registerRoutes(
             pricePerShare = tx.totalAmountEur.toString();
           }
 
+          const ptx = tx as {
+            originalCurrency?: string;
+            exchangeRateAtTransaction?: number;
+            baseCurrencyAmount?: number;
+            quantity?: number;
+            priceEur?: number;
+            totalAmountEur?: number;
+          };
           const origCur =
-            typeof (tx as { originalCurrency?: string }).originalCurrency ===
-              "string" &&
-            (tx as { originalCurrency: string }).originalCurrency.trim() !== ""
-              ? (tx as { originalCurrency: string }).originalCurrency
-                  .trim()
-                  .toUpperCase()
-              : null;
+            typeof ptx.originalCurrency === "string" &&
+            ptx.originalCurrency.trim() !== ""
+              ? ptx.originalCurrency.trim().toUpperCase()
+              : "EUR";
 
-          const exRate = (tx as { exchangeRateAtTransaction?: number })
-            .exchangeRateAtTransaction;
-          const baseAmt = (tx as { baseCurrencyAmount?: number })
-            .baseCurrencyAmount;
+          const exNum = ptx.exchangeRateAtTransaction;
+          const exRate =
+            typeof exNum === "number" && Number.isFinite(exNum) && exNum > 0
+              ? exNum
+              : 1;
+
+          let baseNum = ptx.baseCurrencyAmount;
+          if (typeof baseNum !== "number" || !Number.isFinite(baseNum)) {
+            if (tx.type === "BUY" || tx.type === "SELL") {
+              const q = Number(tx.quantity);
+              const p = Number((tx as { priceEur?: number }).priceEur);
+              baseNum = Number.isFinite(q) && Number.isFinite(p) ? q * p : 0;
+            } else {
+              const t = Number((tx as { totalAmountEur?: number }).totalAmountEur);
+              baseNum = Number.isFinite(t) ? t : 0;
+            }
+          }
 
           const payload: InsertTransaction = {
             userId,
@@ -3948,16 +3966,11 @@ export async function registerRoutes(
             commission: "0",
             externalId: extId || null,
             transactionDate: new Date(tx.date),
+            originalCurrency: origCur,
+            currency: origCur,
+            exchangeRateAtTransaction: exRate.toFixed(8),
+            baseCurrencyAmount: baseNum.toFixed(4),
             ...(txId ? { transactionId: txId } : {}),
-            ...(origCur
-              ? { originalCurrency: origCur, currency: origCur }
-              : {}),
-            ...(typeof exRate === "number" && Number.isFinite(exRate)
-              ? { exchangeRateAtTransaction: exRate.toFixed(8) }
-              : {}),
-            ...(typeof baseAmt === "number" && Number.isFinite(baseAmt)
-              ? { baseCurrencyAmount: baseAmt.toFixed(4) }
-              : {}),
           };
 
           const parseResult = insertTransactionSchema.safeParse(payload);

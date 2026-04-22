@@ -229,6 +229,128 @@ function parseAccountCurrencyFromXtBMeta(data: any[][]): string {
   return 'EUR';
 }
 
+function readIso3CurrencyFromCell(cell: unknown, fallback: string): string {
+  const s = String(cell ?? "")
+    .trim()
+    .toUpperCase();
+  if (/^[A-Z]{3}$/.test(s)) return s;
+  const t = s.split(/[\s/()]+/)[0];
+  if (t && /^[A-Z]{3}$/.test(t)) return t;
+  return fallback;
+}
+
+type FxColumnIndices = {
+  exRateCol: number;
+  rowCcyCol: number;
+  eurValueCol: number;
+};
+
+/** Stĺpce: kurz (k EUR), mena operácie, prípadná suma v EUR z výpisu XTB. */
+function detectFxColumns(headers: string[]): FxColumnIndices {
+  return {
+    exRateCol: getColumnIndex(headers, [
+      "exchange rate to eur",
+      "euro rate",
+      "exchange rate",
+      "exch. rate",
+      "exch rate",
+      "fx rate",
+      "forex rate",
+      "client exchange",
+      "client exchange rate",
+      "rate to eur",
+      "kurs wymiany",
+      "kurs wymiany eur",
+      "smenný kurz",
+      "smenny kurz",
+      "menový kurz k eur",
+      "menovy kurz k eur",
+      "kurz nbp eur",
+    ]),
+    rowCcyCol: getColumnIndex(headers, [
+      "instrument currency",
+      "trading currency",
+      "order currency",
+      "operation currency",
+      "op. currency",
+      "symbol currency",
+      "object currency",
+      "ccy",
+      "order ccy",
+      "currency of trade",
+      "currency of symbol",
+      "pôvodná mena",
+      "povodna mena",
+    ]),
+    eurValueCol: getColumnIndex(headers, [
+      "value in eur",
+      "value (eur",
+      "value (eur)",
+      "value eur",
+      "value (€",
+      "amount in eur",
+      "amount (eur",
+      "euro value",
+      "eurový ekvivalent",
+      "eurov ekvivalent",
+      "ekvivalent v eur",
+      "v eur",
+      "v hodnote eur",
+      "w eur",
+    ]),
+  };
+}
+
+/**
+ * Mena riadku, menový kurz z XTB a suma v EUR. `lineSign` +1 nákup/divi/vklad, -1 výber/daň.
+ */
+function buildForexForXtBLine(
+  accountCurrency: string,
+  row: any[],
+  fx: FxColumnIndices,
+  lineAmountAbs: number,
+  lineSign: 1 | -1,
+): { originalCurrency: string; exchangeRateAtTransaction: number; baseCurrencyAmount: number } {
+  const orig = readIso3CurrencyFromCell(
+    fx.rowCcyCol >= 0 ? row[fx.rowCcyCol] : null,
+    accountCurrency
+  );
+  let ex = 1;
+  if (fx.exRateCol >= 0) {
+    const v = parseAmount(row[fx.exRateCol]);
+    if (Number.isFinite(v) && v > 0) ex = v;
+  } else if (orig === "EUR") {
+    ex = 1;
+  }
+
+  let base: number;
+  if (fx.eurValueCol >= 0) {
+    const eurV = parseAmount(row[fx.eurValueCol]);
+    if (lineSign < 0) {
+      base = -Math.abs(eurV);
+    } else {
+      base = Math.abs(eurV);
+    }
+  } else if (orig === "EUR") {
+    base = lineSign * lineAmountAbs;
+  } else {
+    if (ex !== 1) {
+      base = lineSign * (lineAmountAbs * ex);
+    } else {
+      base = lineSign * lineAmountAbs;
+    }
+  }
+  if (!Number.isFinite(base) || (base === 0 && lineAmountAbs > 0)) {
+    base = lineSign * lineAmountAbs;
+  }
+  if (ex <= 0 || !Number.isFinite(ex)) ex = 1;
+  return {
+    originalCurrency: orig,
+    exchangeRateAtTransaction: ex,
+    baseCurrencyAmount: base,
+  };
+}
+
 /**
  * Množstvo z komentára „3 @ 126.50“ alebo „20/25 @ 1158“ / „1/6“ (čiastočný uzáver = prvé číslo =
  * celé kusy v riadku). Zlomok akcie len ak menovateľ ≤ 5 (1/2, 3/4 …), nie 1/6 ako ⅙ akcie.
@@ -451,7 +573,8 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
     'executed course',
     'execution price',
   ]);
-  
+  const fxCols = detectFxColumns(headers);
+
   if (typeCol === -1 || timeCol === -1 || amountCol === -1) {
     log.push({
       row: 0,
@@ -497,13 +620,9 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
         continue;
       }
 
-      const signedTotal = isDeposit ? absAmt : -absAmt;
-      let exchangeRateAtTransaction: number | undefined;
-      let baseCurrencyAmount: number | undefined;
-      if (accountCurrency === 'EUR') {
-        exchangeRateAtTransaction = 1;
-        baseCurrencyAmount = signedTotal;
-      }
+      const lineSign: 1 | -1 = isDeposit ? 1 : -1;
+      const forex = buildForexForXtBLine(accountCurrency, row, fxCols, absAmt, lineSign);
+      const signedTotal = lineSign * absAmt;
 
       transactions.push({
         date: time,
@@ -515,9 +634,9 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
         originalComment: comment,
         externalId: operationId,
         transactionId: operationId || undefined,
-        originalCurrency: accountCurrency,
-        exchangeRateAtTransaction,
-        baseCurrencyAmount,
+        originalCurrency: forex.originalCurrency,
+        exchangeRateAtTransaction: forex.exchangeRateAtTransaction,
+        baseCurrencyAmount: forex.baseCurrencyAmount,
       });
 
       log.push({
@@ -596,6 +715,8 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
         });
         continue;
       }
+
+      const buyFx = buildForexForXtBLine(accountCurrency, row, fxCols, totalAmount, 1);
       
       transactions.push({
         date: time,
@@ -606,6 +727,9 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
         totalAmountEur: totalAmount,
         originalComment: comment,
         externalId: operationId,
+        originalCurrency: buyFx.originalCurrency,
+        exchangeRateAtTransaction: buyFx.exchangeRateAtTransaction,
+        baseCurrencyAmount: buyFx.baseCurrencyAmount,
       });
       
       log.push({
@@ -649,6 +773,8 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
         });
         continue;
       }
+
+      const sellFx = buildForexForXtBLine(accountCurrency, row, fxCols, totalAmount, 1);
       
       transactions.push({
         date: time,
@@ -659,6 +785,9 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
         totalAmountEur: totalAmount,
         originalComment: comment,
         externalId: operationId,
+        originalCurrency: sellFx.originalCurrency,
+        exchangeRateAtTransaction: sellFx.exchangeRateAtTransaction,
+        baseCurrencyAmount: sellFx.baseCurrencyAmount,
       });
       
       log.push({
@@ -684,15 +813,21 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
         continue;
       }
       
+      const divAm = Math.abs(amount);
+      const divFx = buildForexForXtBLine(accountCurrency, row, fxCols, divAm, 1);
+
       transactions.push({
         date: time,
         ticker,
         type: 'DIVIDEND',
         quantity: 0,
         priceEur: 0,
-        totalAmountEur: Math.abs(amount),
+        totalAmountEur: divAm,
         originalComment: comment,
         externalId: operationId,
+        originalCurrency: divFx.originalCurrency,
+        exchangeRateAtTransaction: divFx.exchangeRateAtTransaction,
+        baseCurrencyAmount: divFx.baseCurrencyAmount,
       });
       
       log.push({
@@ -726,6 +861,9 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
           }
         }
         
+        const taxAm = Math.abs(amount);
+        const taxFx = buildForexForXtBLine(accountCurrency, row, fxCols, taxAm, -1);
+        
         transactions.push({
           date: time,
           ticker,
@@ -736,6 +874,9 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
           originalComment: comment,
           externalId: operationId,
           linkedDividendId,
+          originalCurrency: taxFx.originalCurrency,
+          exchangeRateAtTransaction: taxFx.exchangeRateAtTransaction,
+          baseCurrencyAmount: taxFx.baseCurrencyAmount,
         });
         
         const linkInfo = linkedDividendId ? ` (k dividende ${linkedDividendId})` : '';
