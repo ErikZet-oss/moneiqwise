@@ -1591,6 +1591,8 @@ export async function registerRoutes(
             "Suma nákupu: XTB stĺpec s prioritou Value in EUR, gross/net/settlement in EUR, až potom všeobecné Amount/Value (tie môžu byť nominál v cudzej mene).",
           commissionDoubleCount:
             "Ak je vyplnené `baseCurrencyAmount` v EUR, pevná hotovosť; commission sa k odtoku nepridáva. Pri importe môže byť commission=0, ak je poplatok v celkovej sume riadku.",
+          closeTradeImport:
+            "Riadky „Close trade“ / „Profit of position“ v histórii hotovosti sa importujú ako hotovostný tok (môže byť P/L/FX, ktoré nie je v Stock sale). Po novom importe skontrolujte súčty oproti XTB.",
         },
       });
     } catch (error) {
@@ -4141,35 +4143,46 @@ export async function registerRoutes(
           }
 
           const tickerUpper = effectiveTicker.toUpperCase();
-          let companyName = companyNameCache[tickerUpper];
-          if (!companyName) {
-            if (tickerUpper === CASH_FLOW_TICKER) {
-              companyName =
-                tx.type === "DEPOSIT"
-                  ? "Vklad"
-                  : tx.type === "WITHDRAWAL"
-                    ? "Výber"
-                    : CASH_FLOW_TICKER;
-            } else {
-              companyName = effectiveTicker;
-              try {
-                const searchResponse = await fetch(
-                  `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(effectiveTicker)}&quotesCount=1`,
-                );
-                if (searchResponse.ok) {
-                  const searchData = await searchResponse.json();
-                  if (searchData.quotes && searchData.quotes.length > 0) {
-                    companyName =
-                      searchData.quotes[0].shortname ||
-                      searchData.quotes[0].longname ||
-                      effectiveTicker;
+          const cashCustomName =
+            isCashFlow && typeof (tx as { companyName?: string }).companyName === "string"
+              ? (tx as { companyName?: string }).companyName!.trim()
+              : "";
+
+          let companyName: string;
+          if (tickerUpper === CASH_FLOW_TICKER && cashCustomName !== "") {
+            companyName = cashCustomName;
+          } else {
+            let resolved = companyNameCache[tickerUpper] ?? "";
+            if (!resolved) {
+              if (tickerUpper === CASH_FLOW_TICKER) {
+                resolved =
+                  tx.type === "DEPOSIT"
+                    ? "Vklad"
+                    : tx.type === "WITHDRAWAL"
+                      ? "Výber"
+                      : CASH_FLOW_TICKER;
+              } else {
+                resolved = effectiveTicker;
+                try {
+                  const searchResponse = await fetch(
+                    `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(effectiveTicker)}&quotesCount=1`,
+                  );
+                  if (searchResponse.ok) {
+                    const searchData = await searchResponse.json();
+                    if (searchData.quotes && searchData.quotes.length > 0) {
+                      resolved =
+                        searchData.quotes[0].shortname ||
+                        searchData.quotes[0].longname ||
+                        effectiveTicker;
+                    }
                   }
+                } catch {
+                  /* keep ticker */
                 }
-              } catch {
-                /* keep ticker */
               }
+              companyNameCache[tickerUpper] = resolved;
             }
-            companyNameCache[tickerUpper] = companyName;
+            companyName = resolved;
           }
 
           // Calculate shares and price based on transaction type

@@ -153,7 +153,11 @@ type CashLedgerDiagnostics = {
     pricePerShare: string;
     commission: string | null;
   }[];
-  notes: { xtbColumnPriority: string; commissionDoubleCount: string };
+  notes: {
+    xtbColumnPriority: string;
+    commissionDoubleCount: string;
+    closeTradeImport?: string;
+  };
 };
 
 export default function Dashboard() {
@@ -956,6 +960,9 @@ export default function Dashboard() {
           <CardDescription className="text-xs">
             {cashLedgerDiag?.notes?.xtbColumnPriority}{" "}
             {cashLedgerDiag?.notes?.commissionDoubleCount}
+            {cashLedgerDiag?.notes?.closeTradeImport
+              ? ` ${cashLedgerDiag.notes.closeTradeImport}`
+              : null}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

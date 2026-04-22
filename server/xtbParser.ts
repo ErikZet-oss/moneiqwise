@@ -24,6 +24,8 @@ export interface ParsedTransaction {
   exchangeRateAtTransaction?: number;
   /** Suma v EUR (základná mena) — pri EUR účte zhodné s |Amount|. */
   baseCurrencyAmount?: number;
+  /** Voliteľný názov v histórii (napr. „Close trade“ namiesto všeobecného Vklad/Výber). */
+  companyName?: string;
 }
 
 export interface ImportLogEntry {
@@ -730,19 +732,52 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
     }
 
     /**
-     * XTB: „Close trade“ / Profit of position — samostatný hotovostný riadok pri uzavretí (FX alebo P/L).
-     * Samotný predaj/nákup je už v „Stock sale“ / „Stock purchase“ s komentárom CLOSE BUY / OPEN BUY @ …
-     * Importovať aj toto by dvojnásobilo platby — explicitne preskočiť so zrozumiteľnou správou.
+     * XTB: „Close trade“ / „Profit of position“ — samostatná hotovosť (P/L, FX, uzavretie u brokera).
+     * Tieto riadky sme predtým preskakovali (strach z duplicity so Stock sale); v praxi XTB sem dáva
+     * reálny pohyb na účte, ktorý sa inak v súčte s vkladmi/predajmi nezrovná. Importujeme ako
+     * DEPOSIT/WITHDRAWAL (podľa znamienka sumy). Ak by ste videli zjavné zdvojenie s iným riadkom,
+     * dajte vedieť — závisí od formátu exportu.
      */
-    const isCloseTradeAccounting =
+    const isCloseTradeCash =
       typeStr.includes('close trade') ||
       typePlain.includes('close trade') ||
-      typeStr.includes('closed trade');
-    if (isCloseTradeAccounting) {
+      typeStr.includes('closed trade') ||
+      typeStr.includes('profit of position') ||
+      typePlain.includes('profit of position');
+    if (isCloseTradeCash) {
+      const absAmt = Math.abs(amount);
+      if (!(absAmt > 0)) {
+        log.push({
+          row: i + 1,
+          status: 'warning',
+          message: `[${operationId}] ${typeStr.trim()}: nulová alebo neplatná suma (preskočené)`,
+        });
+        continue;
+      }
+      const isCredited = amount > 0;
+      const lineSign: 1 | -1 = isCredited ? 1 : -1;
+      const forex = buildForexForXtBLine(accountCurrency, row, fxCols, absAmt, lineSign);
+      const base = Number.isFinite(forex.baseCurrencyAmount) ? forex.baseCurrencyAmount : lineSign * absAmt;
+      const totalEur = base;
+      transactions.push({
+        date: time,
+        ticker: CASH_FLOW_TICKER,
+        type: isCredited ? 'DEPOSIT' : 'WITHDRAWAL',
+        quantity: 0,
+        priceEur: 0,
+        totalAmountEur: totalEur,
+        originalComment: comment,
+        externalId: operationId,
+        transactionId: operationId || undefined,
+        originalCurrency: forex.originalCurrency,
+        exchangeRateAtTransaction: forex.exchangeRateAtTransaction,
+        baseCurrencyAmount: base,
+        companyName: 'Close trade (hotovosť z XTB)',
+      });
       log.push({
         row: i + 1,
-        status: 'skipped',
-        message: `[${operationId}] Preskočené: ${typeStr.trim()} — účtovný riadok uzavretia (obchod je v Stock sale / purchase)`,
+        status: 'success',
+        message: `[${operationId}] ${isCredited ? 'DEPOSIT' : 'WITHDRAWAL'} (close trade) ${totalEur >= 0 ? '+' : ''}${totalEur.toFixed(2)} EUR — hotovosť z uzavretia`,
       });
       continue;
     }
