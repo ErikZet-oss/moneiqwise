@@ -267,10 +267,10 @@ function getTickerCurrency(ticker: string): "EUR" | "USD" | "GBP" | "CZK" | "PLN
       upperTicker.endsWith(".MU")) {
     return "EUR";
   }
-  // Other European exchanges (EUR)
+  // Other European exchanges (EUR) — .FR = Euronext Fr (XTB); Yahoo = .PA
   if (upperTicker.endsWith(".PA") || upperTicker.endsWith(".AS") || 
       upperTicker.endsWith(".MI") || upperTicker.endsWith(".VI") || 
-      upperTicker.endsWith(".BR") || upperTicker.endsWith(".SW")) {
+      upperTicker.endsWith(".BR") || upperTicker.endsWith(".SW") || upperTicker.endsWith(".FR")) {
     return "EUR";
   }
   // Prague Stock Exchange (CZK)
@@ -292,6 +292,8 @@ function getTickerCurrency(ticker: string): "EUR" | "USD" | "GBP" | "CZK" | "PLN
 function toYahooTicker(ticker: string): string {
   // European exchanges mapping
   const exchangeMap: Record<string, string> = {
+    // Musí byť pred kratším ".F" — inak neplatí, MC.FR končí .FR, nie .F
+    ".FR": ".PA",      // Euronext Paris (XTB „.FR“) → Yahoo uvádja MC.PA, MC.FR 404
     ".DE": ".DE",      // XETRA Germany
     ".DEX": ".DE",     // XETRA alternate
     ".F": ".F",        // Frankfurt

@@ -19,6 +19,7 @@ export function getTickerCurrency(
   }
   if (
     u.endsWith(".PA") ||
+    u.endsWith(".FR") ||
     u.endsWith(".AS") ||
     u.endsWith(".MI") ||
     u.endsWith(".VI") ||

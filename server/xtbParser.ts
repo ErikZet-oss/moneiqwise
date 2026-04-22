@@ -61,6 +61,10 @@ function cleanTicker(ticker: string): string {
   if (cleaned.endsWith(".UK")) {
     cleaned = `${cleaned.slice(0, -3)}.L`;
   }
+  // XTB Francúzsko „.FR“ = Euronext Paríž; Yahoo má ten istý nástroj ako „.PA“, nie .FR
+  if (cleaned.endsWith(".FR")) {
+    cleaned = `${cleaned.slice(0, -3)}.PA`;
+  }
 
   const redundantSuffixes = [".US"];
   for (const suffix of redundantSuffixes) {
