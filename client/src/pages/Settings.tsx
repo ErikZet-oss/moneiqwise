@@ -142,6 +142,8 @@ export default function Settings() {
       queryClient.invalidateQueries({ queryKey: ["/api/overview"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dividends"] });
       queryClient.invalidateQueries({ queryKey: ["/api/realized-gains"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/pnl-breakdown"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/twr"] });
       queryClient.invalidateQueries({ queryKey: ["/api/options"] });
     },
     onError: (error: Error) => {
@@ -160,6 +162,8 @@ export default function Settings() {
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/realized-gains"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/pnl-breakdown"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/twr"] });
       toast({
         title: "Hotovo",
         description: data.message || "Realizované zisky boli prepočítané.",

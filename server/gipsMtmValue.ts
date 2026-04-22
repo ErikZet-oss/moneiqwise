@@ -1,0 +1,89 @@
+import type { Transaction } from "@shared/schema";
+import { getTickerCurrency } from "@shared/tickerCurrency";
+import { sumCashFlowEurUpTo } from "@shared/cashFromTransactions";
+import { endOfDay, parseISO } from "date-fns";
+import { convertAmountBetween, type AllExchangeRates } from "./convertAmountBetween";
+
+function priceOnOrBefore(
+  history: Record<string, number> | undefined,
+  targetIso: string,
+  maxBackDays = 14,
+): number | null {
+  if (!history) return null;
+  if (history[targetIso] != null) return history[targetIso];
+  const d = new Date(`${targetIso}T00:00:00Z`);
+  for (let i = 1; i <= maxBackDays; i++) {
+    d.setUTCDate(d.getUTCDate() - 1);
+    const key = d.toISOString().slice(0, 10);
+    if (history[key] != null) return history[key];
+  }
+  return null;
+}
+
+/**
+ * Hmotnosť akcií + kumulovaná hotovosť (vklady/ výbery) v EUR, potom v preferovanej mene.
+ * Rovnaká heuristika obchodov ako v computePortfolioPerformance.
+ */
+export function mtmValueAtEod(
+  sortedTx: Transaction[],
+  baseIso: string, // "YYYY-MM-DD" — EOD vrátane tohoto dňa
+  historicalByTicker: Record<string, Record<string, number>>,
+  currentPrices: Record<string, number>,
+  rates: AllExchangeRates,
+  userCcy: string,
+  todayIso: string,
+): number {
+  const state = new Map<string, { shares: number; totalCost: number; avgCost: number }>();
+  for (const t of sortedTx) {
+    const d = new Date(t.transactionDate as unknown as string).toISOString().slice(0, 10);
+    if (d > baseIso) break;
+    if (t.type !== "BUY" && t.type !== "SELL") continue;
+    if (
+      !t.ticker ||
+      t.ticker.toUpperCase() === "CASH" ||
+      t.ticker.toUpperCase() === "PORTFOLIO_CASH_FLOW"
+    ) {
+      continue;
+    }
+    const shares = parseFloat(t.shares);
+    const price = parseFloat(t.pricePerShare);
+    const commission = parseFloat(t.commission || "0");
+    const key = t.ticker.toUpperCase();
+    let st = state.get(key);
+    if (!st) {
+      st = { shares: 0, totalCost: 0, avgCost: 0 };
+      state.set(key, st);
+    }
+    if (t.type === "BUY") {
+      st.totalCost += shares * price + commission;
+      st.shares += shares;
+      st.avgCost = st.shares > 0 ? st.totalCost / st.shares : 0;
+    } else {
+      st.totalCost = Math.max(0, st.totalCost - shares * st.avgCost);
+      st.shares = Math.max(0, st.shares - shares);
+    }
+  }
+
+  const eod = endOfDay(parseISO(baseIso + "T12:00:00"));
+  const cashEur = sumCashFlowEurUpTo(sortedTx, eod);
+
+  let sum = 0;
+  const priceInCcy = (ticker: string, iso: string): number | null => {
+    const u = ticker.toUpperCase();
+    const hist = historicalByTicker[u];
+    let raw = priceOnOrBefore(hist, iso);
+    if (raw == null && iso >= todayIso && currentPrices[u] != null) {
+      raw = currentPrices[u];
+    }
+    if (raw == null) return null;
+    return convertAmountBetween(raw, getTickerCurrency(u), userCcy, rates);
+  };
+
+  state.forEach((h, ticker) => {
+    if (h.shares <= 0) return;
+    const price = priceInCcy(ticker, baseIso);
+    sum += price != null ? h.shares * price : h.shares * h.avgCost; // cost fallback
+  });
+  return sum + convertAmountBetween(cashEur, "EUR", userCcy, rates);
+}
+

@@ -17,8 +17,9 @@ import {
   type OptionTrade,
   type InsertOptionTrade,
 } from "@shared/schema";
+import { sumCashFlowEurFromTransactions } from "@shared/cashFromTransactions";
 import { db } from "./db";
-import { computeRealizedGainsFromTransactions } from "./realizedGainsCompute";
+import { computeRealizedGainsFromTransactionsAsync } from "./realizedGainsCompute";
 import { eq, and, desc, asc, sql, isNull, or, inArray, notInArray } from "drizzle-orm";
 
 export interface IStorage {
@@ -75,9 +76,17 @@ export interface IStorage {
   getOverviewBundle(userId: string): Promise<{
     byPortfolioId: Record<
       string,
-      { holdings: Holding[]; totalRealized: number; dividendNet: number }
+      { holdings: Holding[]; totalRealized: number; dividendNet: number; cashEur: number }
     >;
   }>;
+  /**
+   * Čistá hotovosť v EUR z vkladov a výberov (DEPOSIT/WITHDRAWAL) na portfólio.
+   * Odpoveď do GET /api/portfolios: cashBalance = cashEur, cashCurrency = EUR.
+   */
+  getComputedCashEurByPortfolioIds(
+    userId: string,
+    portfolioIds: string[],
+  ): Promise<Record<string, number>>;
   getHoldingByUserAndTicker(userId: string, ticker: string, portfolioId?: string | null): Promise<Holding | undefined>;
   getHoldingsForTickerAcrossPortfolios(userId: string, ticker: string): Promise<Holding[]>;
   getTransactionsForTickerAcrossPortfolios(userId: string, ticker: string): Promise<Transaction[]>;
@@ -631,10 +640,36 @@ export class DatabaseStorage implements IStorage {
     return Array.from(aggregatedMap.values());
   }
 
+  async getComputedCashEurByPortfolioIds(
+    userId: string,
+    portfolioIds: string[],
+  ): Promise<Record<string, number>> {
+    if (portfolioIds.length === 0) return {};
+    const map: Record<string, number> = Object.fromEntries(
+      portfolioIds.map((id) => [id, 0]),
+    );
+    const rows = await db
+      .select()
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.userId, userId),
+          inArray(transactions.portfolioId, portfolioIds),
+          inArray(transactions.type, ["DEPOSIT", "WITHDRAWAL"]),
+        ),
+      );
+    for (const t of rows) {
+      const pid = t.portfolioId;
+      if (!pid || map[pid] === undefined) continue;
+      map[pid] += sumCashFlowEurFromTransactions([t]);
+    }
+    return map;
+  }
+
   async getOverviewBundle(userId: string): Promise<{
     byPortfolioId: Record<
       string,
-      { holdings: Holding[]; totalRealized: number; dividendNet: number }
+      { holdings: Holding[]; totalRealized: number; dividendNet: number; cashEur: number }
     >;
   }> {
     const visibleIds = await this.getVisiblePortfolioIdsByUser(userId);
@@ -674,14 +709,15 @@ export class DatabaseStorage implements IStorage {
 
     const byPortfolioId: Record<
       string,
-      { holdings: Holding[]; totalRealized: number; dividendNet: number }
+      { holdings: Holding[]; totalRealized: number; dividendNet: number; cashEur: number }
     > = {};
 
     for (const id of visibleIds) {
       const list = txnsByPid.get(id) ?? [];
 
-      const totalRealized =
-        computeRealizedGainsFromTransactions(list).totalRealized;
+      const totalRealized = (
+        await computeRealizedGainsFromTransactionsAsync(list)
+      ).totalRealized;
 
       let dividendNet = 0;
       const dividendTransactions = list.filter((t) => t.type === "DIVIDEND");
@@ -699,10 +735,13 @@ export class DatabaseStorage implements IStorage {
         dividendNet += shares * pricePerShare;
       }
 
+      const cashEur = sumCashFlowEurFromTransactions(list);
+
       byPortfolioId[id] = {
         holdings: holdingsByPid.get(id) ?? [],
         totalRealized,
         dividendNet,
+        cashEur,
       };
     }
 

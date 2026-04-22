@@ -141,15 +141,15 @@ export default function Allocation() {
     if (isAllPortfolios) {
       return portfolios.reduce((sum, p) => {
         const n = parseFloat(p.cashBalance ?? "0");
-        return sum + (Number.isFinite(n) ? n : 0);
+        return sum + convertPrice(Number.isFinite(n) ? n : 0, "EUR");
       }, 0);
     }
     if (selectedPortfolio) {
       const n = parseFloat(selectedPortfolio.cashBalance ?? "0");
-      return Number.isFinite(n) ? n : 0;
+      return convertPrice(Number.isFinite(n) ? n : 0, "EUR");
     }
     return 0;
-  }, [isAllPortfolios, portfolios, selectedPortfolio]);
+  }, [isAllPortfolios, portfolios, selectedPortfolio, convertPrice]);
 
   const { byTicker, bySector, byCountry, totalMarket } = useMemo(() => {
     const sectorRows: Slice[] = [];
@@ -211,11 +211,13 @@ export default function Allocation() {
       countryRows.push({ name: pr.country, value: conv });
     }
 
-    if (cashTotal > 0.005) {
+    if (Math.abs(cashTotal) > 0.005) {
       sum += cashTotal;
-      tickerRows.push({ name: "Hotovosť", value: cashTotal });
-      sectorRows.push({ name: "Hotovosť", value: cashTotal });
-      countryRows.push({ name: "—", value: cashTotal });
+      if (cashTotal > 0.005) {
+        tickerRows.push({ name: "Hotovosť", value: cashTotal });
+        sectorRows.push({ name: "Hotovosť", value: cashTotal });
+        countryRows.push({ name: "—", value: cashTotal });
+      }
     }
 
     return {

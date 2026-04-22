@@ -14,9 +14,11 @@ import {
 } from "@shared/schema";
 import { parseXTBFile, type XTBImportResult } from "./xtbParser";
 import {
-  computeRealizedGainsFromTransactions,
+  computeRealizedGainsFromTransactionsAsync,
   transactionLotKey,
 } from "./realizedGainsCompute";
+import { computePnlBreakdown } from "./pnlBreakdown";
+import { computeGipsTwr } from "./twrGips";
 
 // Configure multer for file uploads
 const upload = multer({
@@ -1477,7 +1479,17 @@ export async function registerRoutes(
       const result = includeHidden
         ? allPortfolios
         : allPortfolios.filter((p) => !p.isHidden);
-      res.json(result);
+      const ids = result.map((p) => p.id);
+      const cashEurByPid = await storage.getComputedCashEurByPortfolioIds(userId, ids);
+      const withCash = result.map((p) => {
+        const e = cashEurByPid[p.id] ?? 0;
+        return {
+          ...p,
+          cashBalance: e.toFixed(2),
+          cashCurrency: "EUR",
+        };
+      });
+      res.json(withCash);
     } catch (error) {
       console.error("Error fetching portfolios:", error);
       res.status(500).json({ message: "Nepodarilo sa načítať portfóliá." });
@@ -1717,60 +1729,13 @@ export async function registerRoutes(
     }
   });
 
-  // Dedicated endpoint for updating the uninvested-cash balance on a
-  // portfolio. Kept separate from the generic PUT so the UI can wire a fast
-  // inline editor without having to round-trip the rest of the portfolio meta.
+  // Manuálna hotovosť sa už neukladá — v GET /api/portfolios je hotovosť prepočítaná
+  // z transakcií vklad/ výber (na úrovni EUR, cashCurrency = EUR).
   app.patch("/api/portfolios/:id/cash", isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const portfolioId = req.params.id;
-      const { cashBalance, cashCurrency } = req.body ?? {};
-
-      const existing = await storage.getPortfolioById(portfolioId, userId);
-      if (!existing) {
-        return res.status(404).json({ message: "Portfólio nenájdené." });
-      }
-
-      const parsedBalance =
-        cashBalance === null || cashBalance === undefined || cashBalance === ""
-          ? null
-          : Number(cashBalance);
-      if (parsedBalance !== null && !Number.isFinite(parsedBalance)) {
-        return res.status(400).json({
-          message: "Hotovosť musí byť platné číslo (záporná hodnota = margin / dlh u brokera).",
-        });
-      }
-
-      const update: Record<string, unknown> = {};
-      if (parsedBalance !== null) {
-        // Keep DB column as numeric(14,2); store as string to dodge float drift.
-        update.cashBalance = parsedBalance.toFixed(2);
-      }
-      if (typeof cashCurrency === "string" && cashCurrency.trim().length === 3) {
-        update.cashCurrency = cashCurrency.trim().toUpperCase();
-      }
-      if (Object.keys(update).length === 0) {
-        return res.status(400).json({
-          message: "Nebolo čo aktualizovať.",
-        });
-      }
-
-      const updated = await storage.updatePortfolio(portfolioId, userId, update);
-      res.json(updated);
-    } catch (error: any) {
-      console.error("Error updating portfolio cash:", error);
-      if (error?.message === "UPDATE_PORTFOLIO_NO_ROW") {
-        return res.status(404).json({ message: "Portfólio sa nepodarilo aktualizovať (nenájdené)." });
-      }
-      const code = error?.code as string | undefined;
-      if (code === "42703") {
-        return res.status(503).json({
-          message:
-            "Databáza nemá stĺpce pre hotovosť. Na serveri treba spustiť migráciu (cash_balance / cash_currency).",
-        });
-      }
-      res.status(500).json({ message: "Nepodarilo sa aktualizovať hotovosť." });
-    }
+    return res.status(400).json({
+      message:
+        "Hotovosť sa nemení manuálne. Pridaj vklady a výbery (DEPOSIT / WITHDRAWAL); celková hotovosť v EUR sa dopočíta z nich.",
+    });
   });
 
   app.delete("/api/portfolios/:id", isAuthenticated, async (req: any, res) => {
@@ -2731,7 +2696,9 @@ export async function registerRoutes(
       const portfolioId = req.query.portfolio as string | undefined;
       const userTransactions = await storage.getTransactionsByUser(userId, portfolioId);
 
-      const computed = computeRealizedGainsFromTransactions(userTransactions);
+      const computed = await computeRealizedGainsFromTransactionsAsync(
+        userTransactions,
+      );
 
       res.json({
         totalRealized: computed.totalRealized,
@@ -2744,6 +2711,78 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching realized gains:", error);
       res.status(500).json({ message: "Nepodarilo sa načítať realizované zisky." });
+    }
+  });
+
+  // Rozdelenie P&L: kapitálový (FIFO + cena), FX, dividendy (v preferovanej mene)
+  app.get("/api/pnl-breakdown", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const portfolioId = req.query.portfolio as string | undefined;
+      const userSettings = await storage.getUserSettings(userId);
+      const userCcy = (userSettings?.preferredCurrency || "EUR").toUpperCase();
+      const rates = await fetchAllExchangeRates();
+      const tx = await storage.getTransactionsByUser(userId, portfolioId);
+      const tickers = new Set<string>();
+      for (const t of tx) {
+        if (t.type === "BUY" || t.type === "SELL") {
+          const u = t.ticker.toUpperCase();
+          if (u && u !== "CASH" && u !== CASH_FLOW_TICKER) tickers.add(u);
+        }
+      }
+      const currentPriceByTicker: Record<string, number> = {};
+      for (const t of Array.from(tickers)) {
+        const q = await fetchStockQuote(t);
+        if (q && typeof q.price === "number" && Number.isFinite(q.price)) {
+          currentPriceByTicker[t] = q.price;
+        }
+      }
+      const out = await computePnlBreakdown(tx, userCcy, rates, currentPriceByTicker);
+      res.json(out);
+    } catch (error) {
+      console.error("Error computing PnL breakdown:", error);
+      res.status(500).json({ message: "Nepodarilo sa vypočítať rozdelenie zisku." });
+    }
+  });
+
+  // TWR (GIPS reťazenie) vs. S&P 500 v rovnakých dátumoch
+  app.get("/api/twr", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const portfolioId = (req.query.portfolio as string) || "all";
+      const userSettings = await storage.getUserSettings(userId);
+      const userCcy = (userSettings?.preferredCurrency || "EUR").toUpperCase();
+      const rates = await fetchAllExchangeRates();
+      const todayIso = new Date().toISOString().slice(0, 10);
+      const tx = await storage.getTransactionsByUser(
+        userId,
+        portfolioId === "all" ? null : portfolioId,
+      );
+      const tickers = new Set<string>();
+      for (const t of tx) {
+        const u = t.ticker?.toUpperCase() ?? "";
+        if (u && u !== "CASH" && u !== CASH_FLOW_TICKER) tickers.add(u);
+      }
+      const currentPrices: Record<string, number> = {};
+      for (const t of Array.from(tickers)) {
+        const q = await fetchStockQuote(t);
+        if (q && typeof q.price === "number" && Number.isFinite(q.price)) {
+          currentPrices[t] = q.price;
+        }
+      }
+      const out = await computeGipsTwr(
+        userId,
+        portfolioId,
+        userCcy,
+        rates,
+        todayIso,
+        fetchHistoricalPrices,
+        currentPrices,
+      );
+      res.json(out);
+    } catch (error) {
+      console.error("Error computing TWR:", error);
+      res.status(500).json({ message: "Nepodarilo sa vypočítať TWR." });
     }
   });
 

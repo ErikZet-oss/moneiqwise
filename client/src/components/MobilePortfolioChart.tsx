@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip } from "recharts";
-import { format, subDays, subMonths, subYears, startOfYear, parseISO, isAfter, startOfDay, isSameDay, isWeekend, subHours, eachDayOfInterval, eachHourOfInterval } from "date-fns";
+import { format, subDays, subMonths, subYears, startOfYear, parseISO, isAfter, startOfDay, isSameDay, isWeekend, subHours, eachDayOfInterval, eachHourOfInterval, endOfDay } from "date-fns";
+import { sumCashFlowEurUpTo, sumCashFlowEurFromRows } from "@shared/cashFromTransactions";
 import { sk } from "date-fns/locale";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
@@ -242,7 +243,11 @@ export function MobilePortfolioChart({
       }
     });
 
-    return totalValue;
+    const cashEur = sumCashFlowEurUpTo(
+      transactions ?? [],
+      endOfDay(targetDate),
+    );
+    return totalValue + cashEur;
   };
 
   const chartData = useMemo(() => {
@@ -286,7 +291,7 @@ export function MobilePortfolioChart({
       const isToday = isSameDay(day, now);
       const value = calculatePortfolioValueAtDate(day, isToday);
       
-      if (value > 0) {
+      if (value !== 0 && Number.isFinite(value)) {
         data.push({
           date: format(day, "yyyy-MM-dd"),
           displayDate: format(day, "d. MMM", { locale: sk }),
@@ -318,16 +323,21 @@ export function MobilePortfolioChart({
     let netInflow = 0;
     if (transactions) {
       transactions.forEach((t) => {
-        if (t.type !== "BUY" && t.type !== "SELL") return;
         const d = format(parseISO(t.transactionDate as unknown as string), "yyyy-MM-dd");
         if (d > firstPoint.date && d <= lastPoint.date) {
-          const shares = parseFloat(t.shares);
-          const price = parseFloat(t.pricePerShare);
-          const commission = parseFloat(t.commission || "0");
-          if (t.type === "BUY") {
-            netInflow += shares * price + commission;
-          } else {
-            netInflow -= shares * price - commission;
+          if (t.type === "BUY" || t.type === "SELL") {
+            const shares = parseFloat(t.shares);
+            const price = parseFloat(t.pricePerShare);
+            const commission = parseFloat(t.commission || "0");
+            if (t.type === "BUY") {
+              netInflow += shares * price + commission;
+            } else {
+              netInflow -= shares * price - commission;
+            }
+            return;
+          }
+          if (t.type === "DEPOSIT" || t.type === "WITHDRAWAL") {
+            netInflow += sumCashFlowEurFromRows([t]);
           }
         }
       });

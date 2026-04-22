@@ -32,6 +32,8 @@ interface OverviewBundle {
       holdings: Holding[];
       totalRealized: number;
       dividendNet: number;
+      /** Čistá hotovosť (EUR) z vkladov a výberov */
+      cashEur: number;
     }
   >;
 }
@@ -122,8 +124,7 @@ export default function Overview() {
     holdings: Holding[],
     realized: number,
     dividends: number,
-    portfolioCashBalance: string | undefined,
-    portfolioCashCurrency: string | undefined,
+    cashEur: number,
   ): PortfolioMetrics => {
     let stockValue = 0;
     let totalInvested = 0;
@@ -147,11 +148,10 @@ export default function Overview() {
       }
     });
 
-    const rawCash = parseFloat(portfolioCashBalance || "0");
-    const cashCcy = (portfolioCashCurrency || "EUR") as any;
-    const cashValue = Number.isFinite(rawCash)
-      ? convertPrice(rawCash, cashCcy)
-      : 0;
+    const cashValue = convertPrice(
+      Number.isFinite(cashEur) ? cashEur : 0,
+      "EUR",
+    );
 
     const totalValue = stockValue + cashValue;
 
@@ -248,9 +248,10 @@ export default function Overview() {
       const holdings = row?.holdings ?? [];
       const realized = row?.totalRealized ?? 0;
       const dividends = row?.dividendNet ?? 0;
+      const cashEur = row?.cashEur ?? 0;
       map.set(
         p.id,
-        computeMetrics(holdings, realized, dividends, p.cashBalance, p.cashCurrency),
+        computeMetrics(holdings, realized, dividends, cashEur),
       );
     }
     return map;
