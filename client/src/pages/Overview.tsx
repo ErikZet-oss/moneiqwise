@@ -43,6 +43,8 @@ interface PortfolioMetrics {
   stockValue: number;
   cashValue: number;
   totalInvested: number;
+  /** Súčet predajov mínus náklad (FIFO) v preferovanej mene — z backendu, nie `realizedGain` stĺpec v DB. */
+  realizedFifo: number;
   totalProfit: number;
   totalProfitPercent: number;
   dailyChange: number;
@@ -167,6 +169,10 @@ export default function Overview() {
       stockValue,
       cashValue,
       totalInvested,
+      realizedFifo: convertPrice(
+        Number.isFinite(realized) ? realized : 0,
+        "EUR",
+      ),
       totalProfit,
       totalProfitPercent,
       dailyChange,
@@ -575,6 +581,13 @@ export default function Overview() {
                           <span className="text-xs">
                             (<TrendIcon value={m.totalProfit} /> {formatPercent(m.totalProfitPercent)})
                           </span>
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2" data-testid={`overview-realized-fifo-${portfolio.id}`}>
+                        <span className="text-muted-foreground">Realizovaný (FIFO)</span>
+                        <span className={`font-medium ${getChangeTone(m.realizedFifo)}`}>
+                          {maskAmount(formatSignedCurrency(m.realizedFifo))}
                         </span>
                       </div>
 

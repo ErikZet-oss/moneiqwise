@@ -71,7 +71,10 @@ export function buySellLineEur(
   const fromBase = t.baseCurrencyAmount != null && String(t.baseCurrencyAmount).trim() !== ""
     ? parseFloat(String(t.baseCurrencyAmount))
     : NaN;
-  if (Number.isFinite(fromBase)) {
+  // 0 v DB sa často ukladá ako placeholder; bránilo by nulovým tržbám a FIFO by hlásilo zisk 0.
+  const hasMeaningfulBaseEur =
+    Number.isFinite(fromBase) && Math.abs(fromBase) >= 1e-6;
+  if (hasMeaningfulBaseEur) {
     // Smer rieši typ (BUY − / SELL +) v netLedger; uložená veľkosť býva kladná, výnimočne záporná
     return { eur: Math.abs(fromBase), source: "base" };
   }
