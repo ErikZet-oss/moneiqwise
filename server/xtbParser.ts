@@ -554,16 +554,62 @@ function isXtBExternalWireOrBankInOutType(typeStr: string): boolean {
 }
 
 /**
- * Používateľ chce transfer riadky úplne ignorovať:
- * v XTB to býva interný presun medzi portfóliami/peňaženkami.
+ * Stĺpec typu operácie: alias „type“ nesmie zodpovedať hlavičke „DateTime“ (podreťazec „type“).
  */
-function isXtBTransferLine(typeStr: string, typePlain: string): boolean {
-  return (
-    /\btransfer\b/i.test(typeStr) ||
-    typePlain.includes("prevod") ||
-    typePlain.includes("p2p") ||
-    typePlain.includes("przelew")
-  );
+function getXtBCashOperationTypeColumnIndex(headers: string[]): number {
+  const norm = (s: string) => stripDiacritics((s || "").toLowerCase().trim());
+  const hNorm = headers.map((x) => norm(String(x)));
+
+  const priority = [
+    "operation type",
+    "operation",
+    "transaction type",
+    "typ operacji",
+    "typ operace",
+    "druh operace",
+    "druh operácie",
+    "druh transakce",
+    "druh transakcie",
+  ];
+  for (const p of priority) {
+    const i = hNorm.findIndex((h) => h === p || (h.length > 0 && h.includes(p)));
+    if (i >= 0) return i;
+  }
+  for (let i = 0; i < hNorm.length; i++) {
+    const h = hNorm[i];
+    if (h === "type" || h === "typ" || h === "druh") return i;
+  }
+  for (let i = 0; i < hNorm.length; i++) {
+    const h = hNorm[i];
+    if (!h || h.includes("datetime")) continue;
+    if (/\btype\b/.test(h) && !/\bdate\b.*\btime\b/.test(h)) return i;
+  }
+  return getColumnIndex(headers, ["typ", "druh"]);
+}
+
+/**
+ * Presuny medzi účtami/portfóliami XTB — neimportovať. Komentár často obsahuje „transfer“, keď stĺpec typ je zavádzajúci.
+ * SEPA/Swift/IBAN ponechať (externý bankový pohyb).
+ */
+function isXtBIgnoredInternalPortfolioTransfer(typeStr: string, comment: string): boolean {
+  const low = stripDiacritics(`${typeStr} ${(comment || "").toLowerCase()}`.trim()).toLowerCase();
+  if (!low) return false;
+
+  if (/\b(sepa|swift|iban)\b/.test(low)) return false;
+  if (/\bincoming\b/.test(low) && /\b(payment|transfer|wire)\b/.test(low)) return false;
+
+  if (isXtBInternalPortTransferType(low)) return true;
+
+  if (
+    /\b(transfer|prevod|presun|przelew|převod)\b/.test(low) &&
+    /(portfolio|between your|between accounts|medzi (účt|uct|portf)|peňaženk|penazenk|wallet|vnutorn|internal|sub-?account|xtb)/i.test(
+      low,
+    )
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 function isFreeFundsInterestLine(
@@ -637,7 +683,7 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
   
   // Map columns (EN + SK názvy z XTB exportov)
   const idCol = getColumnIndex(headers, ['id', 'číslo', 'cislo', 'operation id']);
-  const typeCol = getColumnIndex(headers, ['type', 'typ', 'druh']);
+  const typeCol = getXtBCashOperationTypeColumnIndex(headers);
   const timeCol = getColumnIndex(headers, ['time', 'čas', 'dátum', 'datum', 'date']);
   const commentCol = getColumnIndex(headers, ['comment', 'komentár', 'komentar', 'poznámka', 'poznamka']);
   const symbolCol = getSymbolColumnIndex(headers);
@@ -717,12 +763,12 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
     
     const ticker = cleanTicker(symbolRaw);
 
-    // Explicitne ignoruj "transfer" riadky (interné presuny medzi portfóliami).
-    if (isXtBTransferLine(typeStr, typePlain)) {
+    // Interné presuny (medzi portfóliami / peňaženkami) — neimportovať.
+    if (isXtBIgnoredInternalPortfolioTransfer(typeStr, comment)) {
       log.push({
         row: i + 1,
         status: "skipped",
-        message: `[${operationId}] Preskočené (transfer): ${typeStr}`,
+        message: `[${operationId}] Preskočené (interný presun): ${typeStr}`,
       });
       continue;
     }
@@ -781,7 +827,8 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
     }
 
     // Interné prevody v rámci XTB (nie SEPA/Wire, tie sú vyššie ako vklad/výber)
-    if (isXtBInternalPortTransferType(typeStr) && !isDeposit && !isWithdrawal) {
+    const rowMeta = stripDiacritics(`${typeStr} ${(comment || "").toLowerCase()}`.trim()).toLowerCase();
+    if (isXtBInternalPortTransferType(rowMeta) && !isDeposit && !isWithdrawal) {
       log.push({
         row: i + 1,
         status: 'skipped',
