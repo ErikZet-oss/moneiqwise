@@ -29,6 +29,8 @@ export interface IStorage {
   // Portfolio operations
   getPortfoliosByUser(userId: string): Promise<Portfolio[]>;
   getVisiblePortfolioIdsByUser(userId: string): Promise<string[]>;
+  /** Všetky ID portfólií (vrátane skrytých) — pre históriu transakcií pri zobrazení „všetky“. */
+  getAllPortfolioIdsByUser(userId: string): Promise<string[]>;
   getPortfolioById(portfolioId: string, userId: string): Promise<Portfolio | undefined>;
   getDefaultPortfolio(userId: string): Promise<Portfolio | undefined>;
   createPortfolio(portfolio: InsertPortfolio): Promise<Portfolio>;
@@ -137,6 +139,14 @@ export class DatabaseStorage implements IStorage {
           or(isNull(portfolios.isHidden), eq(portfolios.isHidden, false))
         )
       );
+    return rows.map((r) => r.id);
+  }
+
+  async getAllPortfolioIdsByUser(userId: string): Promise<string[]> {
+    const rows = await db
+      .select({ id: portfolios.id })
+      .from(portfolios)
+      .where(eq(portfolios.userId, userId));
     return rows.map((r) => r.id);
   }
 
@@ -484,10 +494,11 @@ export class DatabaseStorage implements IStorage {
         .orderBy(desc(transactions.transactionDate));
     }
 
-    // Return all transactions for the user across visible portfolios (plus legacy rows with no portfolio)
-    const visibleIds = await this.getVisiblePortfolioIdsByUser(userId);
-    const portfolioFilter = visibleIds.length > 0
-      ? or(isNull(transactions.portfolioId), inArray(transactions.portfolioId, visibleIds))
+    // Všetky portfóliá (vrátane skrytých) — inak transakcie v skrytom cieli importu
+    // v režime „Všetky“ v UI zmiznú, hoci v DB existujú.
+    const allPfIds = await this.getAllPortfolioIdsByUser(userId);
+    const portfolioFilter = allPfIds.length > 0
+      ? or(isNull(transactions.portfolioId), inArray(transactions.portfolioId, allPfIds))
       : isNull(transactions.portfolioId);
 
     return await db
@@ -512,9 +523,9 @@ export class DatabaseStorage implements IStorage {
         .orderBy(desc(transactions.transactionDate));
     }
     
-    const visibleIds = await this.getVisiblePortfolioIdsByUser(userId);
-    const portfolioFilter = visibleIds.length > 0
-      ? or(isNull(transactions.portfolioId), inArray(transactions.portfolioId, visibleIds))
+    const allPfIds = await this.getAllPortfolioIdsByUser(userId);
+    const portfolioFilter = allPfIds.length > 0
+      ? or(isNull(transactions.portfolioId), inArray(transactions.portfolioId, allPfIds))
       : isNull(transactions.portfolioId);
 
     return await db
@@ -753,10 +764,10 @@ export class DatabaseStorage implements IStorage {
 
   async getTransactionsForTickerAcrossPortfolios(userId: string, ticker: string): Promise<Transaction[]> {
     const normalized = ticker.trim().toLowerCase();
-    const visibleIds = await this.getVisiblePortfolioIdsByUser(userId);
+    const allPfIds = await this.getAllPortfolioIdsByUser(userId);
     const portfolioFilter =
-      visibleIds.length > 0
-        ? or(isNull(transactions.portfolioId), inArray(transactions.portfolioId, visibleIds))
+      allPfIds.length > 0
+        ? or(isNull(transactions.portfolioId), inArray(transactions.portfolioId, allPfIds))
         : isNull(transactions.portfolioId);
 
     return await db
