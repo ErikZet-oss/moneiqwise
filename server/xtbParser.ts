@@ -310,6 +310,12 @@ function buildForexForXtBLine(
   fx: FxColumnIndices,
   lineAmountAbs: number,
   lineSign: 1 | -1,
+  /**
+   * Akies/SELL na EUR účte: stĺpec „Suma/Amount“ býva v EUR (mena účtu), zatiaľ čo
+   * „Operation currency / instrument“ môže byť USD. Nereálne: suma (EUR) × eur/USD.
+   * Neuvádzať pre dividendu/bank, kde je suma môže byť v mene výplaty inštrumentu.
+   */
+  useAccountAmountForEurWallet = false,
 ): { originalCurrency: string; exchangeRateAtTransaction: number; baseCurrencyAmount: number } {
   const orig = readIso3CurrencyFromCell(
     fx.rowCcyCol >= 0 ? row[fx.rowCcyCol] : null,
@@ -323,6 +329,7 @@ function buildForexForXtBLine(
     ex = 1;
   }
 
+  let outOrig = orig;
   let base: number;
   if (fx.eurValueCol >= 0) {
     const eurV = parseAmount(row[fx.eurValueCol]);
@@ -333,6 +340,10 @@ function buildForexForXtBLine(
     }
   } else if (orig === "EUR") {
     base = lineSign * lineAmountAbs;
+  } else if (useAccountAmountForEurWallet && accountCurrency === "EUR" && orig !== "EUR") {
+    base = lineSign * lineAmountAbs;
+    ex = 1;
+    outOrig = "EUR";
   } else {
     if (ex !== 1) {
       base = lineSign * (lineAmountAbs * ex);
@@ -345,7 +356,7 @@ function buildForexForXtBLine(
   }
   if (ex <= 0 || !Number.isFinite(ex)) ex = 1;
   return {
-    originalCurrency: orig,
+    originalCurrency: outOrig,
     exchangeRateAtTransaction: ex,
     baseCurrencyAmount: base,
   };
@@ -500,6 +511,23 @@ function getSymbolColumnIndex(headers: string[]): number {
   return getColumnIndex(headers, ["symbol", "ticker", "isin"]);
 }
 
+/** Iná ako bankový SEPA/Wire; predtým „transfer“ preskakovalo aj bežné bankové príjmy. */
+function isXtBInternalPortTransferType(typeStr: string): boolean {
+  return (
+    /internal|between (your )?account|p2p|peer|wallet.*wallet|sub-?account/i.test(typeStr) ||
+    /vnutorn|převod mezi|prevod (v rámci|v ramci|medzi|medzi (ú|u)čt)/i.test(typeStr)
+  );
+}
+
+/** Názov typu operácie: bankový SEPA/Wire/… (nie vždy je v texte "deposit", ale obsahuje „transfer“). */
+function isXtBExternalWireOrBankInOutType(typeStr: string): boolean {
+  if (isXtBInternalPortTransferType(typeStr)) return false;
+  return (
+    /\b(wire|sepa|swift|instant (payment|top-?up))\b/i.test(typeStr) ||
+    (typeStr.includes("bank") && typeStr.includes("transfer"))
+  );
+}
+
 // Parse CASH OPERATION HISTORY sheet
 function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransaction[] {
   const transactions: ParsedTransaction[] = [];
@@ -601,13 +629,20 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
     
     const ticker = cleanTicker(symbolRaw);
 
-    const isDeposit =
+    let isDeposit =
       typeStr.includes('deposit') ||
       typePlain.includes('vklad');
-    const isWithdrawal =
+    let isWithdrawal =
       typeStr.includes('withdrawal') ||
       typePlain.includes('vyber') ||
       typeStr.includes('výber');
+
+    if (!isDeposit && !isWithdrawal) {
+      if (isXtBExternalWireOrBankInOutType(typeStr) && amount !== 0) {
+        if (amount > 0) isDeposit = true;
+        else isWithdrawal = true;
+      }
+    }
 
     if (isDeposit || isWithdrawal) {
       const absAmt = Math.abs(amount);
@@ -647,16 +682,12 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
       continue;
     }
 
-    // Preskočiť interné prevody (nie vklad cez „deposit“)
-    if (
-      (typeStr.includes('transfer') || typePlain.includes('prevod')) &&
-      !typeStr.includes('deposit') &&
-      !typePlain.includes('vklad')
-    ) {
+    // Interné prevody v rámci XTB (nie SEPA/Wire, tie sú vyššie ako vklad/výber)
+    if (isXtBInternalPortTransferType(typeStr) && !isDeposit && !isWithdrawal) {
       log.push({
         row: i + 1,
         status: 'skipped',
-        message: `Preskočené: ${typeStr}`,
+        message: `Preskočené (interný prevod): ${typeStr}`,
       });
       continue;
     }
@@ -716,7 +747,14 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
         continue;
       }
 
-      const buyFx = buildForexForXtBLine(accountCurrency, row, fxCols, totalAmount, 1);
+      const buyFx = buildForexForXtBLine(
+        accountCurrency,
+        row,
+        fxCols,
+        totalAmount,
+        1,
+        accountCurrency === "EUR",
+      );
       
       transactions.push({
         date: time,
@@ -774,7 +812,14 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
         continue;
       }
 
-      const sellFx = buildForexForXtBLine(accountCurrency, row, fxCols, totalAmount, 1);
+      const sellFx = buildForexForXtBLine(
+        accountCurrency,
+        row,
+        fxCols,
+        totalAmount,
+        1,
+        accountCurrency === "EUR",
+      );
       
       transactions.push({
         date: time,

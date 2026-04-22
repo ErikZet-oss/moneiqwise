@@ -72,7 +72,8 @@ export function buySellLineEur(
     ? parseFloat(String(t.baseCurrencyAmount))
     : NaN;
   if (Number.isFinite(fromBase)) {
-    return { eur: fromBase, source: "base" };
+    // Smer rieši typ (BUY − / SELL +) v netLedger; uložená veľkosť býva kladná, výnimočne záporná
+    return { eur: Math.abs(fromBase), source: "base" };
   }
 
   const ccy = inferTradeCurrency(t);
