@@ -143,6 +143,7 @@ export default function Settings() {
       queryClient.invalidateQueries({ queryKey: ["/api/dividends"] });
       queryClient.invalidateQueries({ queryKey: ["/api/realized-gains"] });
       queryClient.invalidateQueries({ queryKey: ["/api/pnl-breakdown"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portfolio-history"] });
       queryClient.invalidateQueries({ queryKey: ["/api/twr"] });
       queryClient.invalidateQueries({ queryKey: ["/api/options"] });
     },
@@ -163,6 +164,7 @@ export default function Settings() {
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/realized-gains"] });
       queryClient.invalidateQueries({ queryKey: ["/api/pnl-breakdown"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portfolio-history"] });
       queryClient.invalidateQueries({ queryKey: ["/api/twr"] });
       toast({
         title: "Hotovo",

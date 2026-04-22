@@ -98,6 +98,7 @@ export default function History() {
     queryClient.invalidateQueries({ queryKey: ["/api/dividends"] });
     queryClient.invalidateQueries({ queryKey: ["/api/realized-gains"] });
     queryClient.invalidateQueries({ queryKey: ["/api/pnl-breakdown"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/portfolio-history"] });
     queryClient.invalidateQueries({ queryKey: ["/api/twr"] });
     queryClient.invalidateQueries({ queryKey: ["/api/portfolios"] });
   };

@@ -226,6 +226,7 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
       queryClient.invalidateQueries({ queryKey: ["/api/pnl-breakdown"] });
       queryClient.invalidateQueries({ queryKey: ["/api/twr"] });
       queryClient.invalidateQueries({ queryKey: ["/api/portfolio-performance"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/portfolio-history"] });
       queryClient.invalidateQueries({ queryKey: ["/api/tax-summary"] });
       queryClient.invalidateQueries({ queryKey: ["/api/assets"] });
       queryClient.invalidateQueries({ queryKey: ["/api/portfolios"] });

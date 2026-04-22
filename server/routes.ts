@@ -29,6 +29,10 @@ import {
 } from "./netLedgerCashEur";
 import { computeFifoRealizedGainsFromTransactions } from "@shared/fifoRealizedGains";
 import { computeGipsTwr } from "./twrGips";
+import {
+  computePortfolioHistorySeries,
+  type PortfolioHistoryRange,
+} from "./portfolioHistorySeries";
 import { buildOpenFifoLotRowList, loadTradeTransactionsForAssetLots } from "./assetFifoLots";
 import { buildTaxSummary } from "./taxSummary";
 import { db } from "./db";
@@ -2975,6 +2979,89 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error computing PnL breakdown:", error);
       res.status(500).json({ message: "Nepodarilo sa vypočítať rozdelenie zisku." });
+    }
+  });
+
+  /** Denné body: celková MTM + čisté vklady/výbery, kum. % (segment TWR) vs. S&amp;P 500. */
+  function parsePortfolioHistoryRange(q: string | undefined): PortfolioHistoryRange {
+    const u = (q || "1y").trim().toLowerCase();
+    if (u === "1m") return "1m";
+    if (u === "6m") return "6m";
+    if (u === "ytd") return "ytd";
+    if (u === "1y" || u === "12m") return "1y";
+    if (u === "all" || u === "max") return "all";
+    return "1y";
+  }
+
+  app.get("/api/portfolio-history", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const portfolioParam = (req.query.portfolio as string) || "all";
+      const userSettings = await storage.getUserSettings(userId);
+      const userCcy = (userSettings?.preferredCurrency || "EUR").toUpperCase();
+      const rates = await fetchAllExchangeRates();
+      const todayIso = new Date().toISOString().slice(0, 10);
+      const range = parsePortfolioHistoryRange(req.query.range as string | undefined);
+
+      const tx = await storage.getTransactionsByUser(
+        userId,
+        portfolioParam === "all" ? null : portfolioParam,
+      );
+      const sorted = [...tx].sort(
+        (a, b) =>
+          new Date(a.transactionDate as unknown as string).getTime() -
+          new Date(b.transactionDate as unknown as string).getTime(),
+      );
+
+      const tickers = new Set<string>();
+      for (const t of tx) {
+        const u = t.ticker?.toUpperCase() ?? "";
+        if (u && u !== "CASH" && u !== CASH_FLOW_TICKER) tickers.add(u);
+      }
+
+      const currentPrices: Record<string, number> = {};
+      for (const t of Array.from(tickers)) {
+        const q = await fetchStockQuote(t);
+        if (q && typeof q.price === "number" && Number.isFinite(q.price)) {
+          currentPrices[t] = q.price;
+        }
+      }
+
+      const historicalByTicker: Record<string, Record<string, number>> = {};
+      for (const t of Array.from(tickers)) {
+        try {
+          historicalByTicker[t] = (await fetchHistoricalPrices(t)) || {};
+        } catch {
+          historicalByTicker[t] = {};
+        }
+      }
+      let spHist: Record<string, number> = {};
+      try {
+        spHist = (await fetchHistoricalPrices("^GSPC")) || {};
+      } catch {
+        spHist = {};
+      }
+
+      const out = computePortfolioHistorySeries(
+        sorted,
+        spHist,
+        historicalByTicker,
+        currentPrices,
+        rates,
+        userCcy,
+        todayIso,
+        range,
+        150,
+      );
+      res.json({
+        ...out,
+        range,
+        portfolio: portfolioParam,
+        benchmark: "^GSPC",
+      });
+    } catch (error) {
+      console.error("Error computing portfolio history:", error);
+      res.status(500).json({ message: "Nepodarilo sa vypočítať históriu portfólia." });
     }
   });
 

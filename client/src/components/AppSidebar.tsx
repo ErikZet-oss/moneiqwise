@@ -1,4 +1,4 @@
-import { BarChart3, History, LogOut, User, TrendingUp, Settings, Briefcase, ChevronDown, Check, Target, Banknote, Upload, Sun, Moon, Layers, PieChart, Scale } from "lucide-react";
+import { BarChart3, History, LogOut, User, TrendingUp, Settings, Briefcase, ChevronDown, Check, Target, Banknote, Upload, Sun, Moon, Layers, PieChart, Scale, LineChart } from "lucide-react";
 import { useLocation } from "wouter";
 import {
   Sidebar,
@@ -43,6 +43,11 @@ const menuItems = [
     title: "Rozloženie",
     url: "/allocation",
     icon: PieChart,
+  },
+  {
+    title: "Grafy",
+    url: "/grafy",
+    icon: LineChart,
   },
   {
     title: "História",

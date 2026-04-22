@@ -20,6 +20,7 @@ import Options from "@/pages/Options";
 import Settings from "@/pages/Settings";
 import Import from "@/pages/Import";
 import Allocation from "@/pages/Allocation";
+import Grafy from "@/pages/Grafy";
 import AssetDetail from "@/pages/AssetDetail";
 import TaxSummaryPage from "@/pages/TaxSummaryPage";
 
@@ -61,6 +62,7 @@ function Router() {
       <Route path="/options" component={Options} />
       <Route path="/import" component={Import} />
       <Route path="/allocation" component={Allocation} />
+      <Route path="/grafy" component={Grafy} />
       <Route path="/settings" component={Settings} />
       <Route path="/asset/:ticker" component={AssetDetail} />
       <Route component={NotFound} />
