@@ -553,6 +553,24 @@ function isXtBExternalWireOrBankInOutType(typeStr: string): boolean {
   );
 }
 
+function isFreeFundsInterestLine(
+  typeStr: string,
+  typePlain: string,
+  comment: string,
+): boolean {
+  const c = stripDiacritics((comment || "").toLowerCase());
+  const hasInterest =
+    typeStr.includes("interest") || typePlain.includes("interest") || c.includes("interest");
+  const hasFreeFunds =
+    typeStr.includes("free-funds") ||
+    typeStr.includes("free funds") ||
+    typePlain.includes("free-funds") ||
+    typePlain.includes("free funds") ||
+    c.includes("free-funds") ||
+    c.includes("free funds");
+  return hasInterest && hasFreeFunds;
+}
+
 // Parse CASH OPERATION HISTORY sheet
 function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransaction[] {
   const transactions: ParsedTransaction[] = [];
@@ -782,6 +800,8 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
       continue;
     }
     
+    const isFreeFundsInterest = isFreeFundsInterestLine(typeStr, typePlain, comment);
+    const resolvedDividendTicker = isFreeFundsInterest ? "CASH_INTEREST" : ticker;
     // Determine transaction type
     
     // STOCK PURCHASE - BUY (vrátane „Stocks/ETF purchase“ z anglického exportu)
@@ -921,7 +941,7 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
       typePlain.includes('dividenda')
     ) {
       // DIVIDEND - positive amount
-      if (!ticker) {
+      if (!resolvedDividendTicker) {
         log.push({
           row: i + 1,
           status: 'warning',
@@ -935,7 +955,7 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
 
       transactions.push({
         date: time,
-        ticker,
+        ticker: resolvedDividendTicker,
         type: 'DIVIDEND',
         quantity: 0,
         priceEur: 0,
@@ -945,12 +965,13 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
         originalCurrency: divFx.originalCurrency,
         exchangeRateAtTransaction: divFx.exchangeRateAtTransaction,
         baseCurrencyAmount: divFx.baseCurrencyAmount,
+        companyName: isFreeFundsInterest ? "Úrok z voľných prostriedkov" : undefined,
       });
       
       log.push({
         row: i + 1,
         status: 'success',
-        message: `[${operationId}] DIVIDEND ${ticker}: +${Math.abs(amount).toFixed(2)} EUR`,
+        message: `[${operationId}] DIVIDEND ${resolvedDividendTicker}: +${Math.abs(amount).toFixed(2)} EUR`,
       });
     }
     // TAX
@@ -961,14 +982,14 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
       typePlain.includes('zrazkova')
     ) {
       // TAX - stored as negative
-      const taxTicker = ticker || 'TAX';
+      const taxTicker = ticker || (isFreeFundsInterest ? "CASH_INTEREST" : "");
       
-      if (ticker) {
+      if (taxTicker) {
         // Find the most recent DIVIDEND transaction for the same ticker to link
         let linkedDividendId: string | undefined;
         for (let j = transactions.length - 1; j >= 0; j--) {
           const prevTx = transactions[j];
-          if (prevTx.type === 'DIVIDEND' && prevTx.ticker === ticker) {
+          if (prevTx.type === 'DIVIDEND' && prevTx.ticker === taxTicker) {
             // Check if timestamps are close (within 1 minute)
             const timeDiff = Math.abs(time.getTime() - prevTx.date.getTime());
             if (timeDiff < 60000) { // 60 seconds
@@ -983,7 +1004,7 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
         
         transactions.push({
           date: time,
-          ticker,
+          ticker: taxTicker,
           type: 'TAX',
           quantity: 0,
           priceEur: 0,
@@ -994,13 +1015,14 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
           originalCurrency: taxFx.originalCurrency,
           exchangeRateAtTransaction: taxFx.exchangeRateAtTransaction,
           baseCurrencyAmount: taxFx.baseCurrencyAmount,
+          companyName: taxTicker === "CASH_INTEREST" ? "Daň z úroku voľných prostriedkov" : undefined,
         });
         
         const linkInfo = linkedDividendId ? ` (k dividende ${linkedDividendId})` : '';
         log.push({
           row: i + 1,
           status: 'success',
-          message: `[${operationId}] TAX ${ticker}: -${Math.abs(amount).toFixed(2)} EUR${linkInfo}`,
+          message: `[${operationId}] TAX ${taxTicker}: -${Math.abs(amount).toFixed(2)} EUR${linkInfo}`,
         });
       } else {
         log.push({
@@ -1017,12 +1039,36 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
         message: `[${operationId}] Poplatok: ${typeStr} ${amount.toFixed(2)} EUR`,
       });
     } else if (typeStr.includes('interest')) {
-      // Interest - skip
-      log.push({
-        row: i + 1,
-        status: 'skipped',
-        message: `[${operationId}] Úrok: ${comment}`,
-      });
+      if (isFreeFundsInterest) {
+        const intAm = Math.abs(amount);
+        const intFx = buildForexForXtBLine(accountCurrency, row, fxCols, intAm, 1);
+        transactions.push({
+          date: time,
+          ticker: "CASH_INTEREST",
+          type: "DIVIDEND",
+          quantity: 0,
+          priceEur: 0,
+          totalAmountEur: intAm,
+          originalComment: comment,
+          externalId: operationId,
+          originalCurrency: intFx.originalCurrency,
+          exchangeRateAtTransaction: intFx.exchangeRateAtTransaction,
+          baseCurrencyAmount: intFx.baseCurrencyAmount,
+          companyName: "Úrok z voľných prostriedkov",
+        });
+        log.push({
+          row: i + 1,
+          status: "success",
+          message: `[${operationId}] DIVIDEND CASH_INTEREST: +${intAm.toFixed(2)} EUR`,
+        });
+      } else {
+        // Other interest lines remain skipped.
+        log.push({
+          row: i + 1,
+          status: 'skipped',
+          message: `[${operationId}] Úrok: ${comment}`,
+        });
+      }
     } else {
       log.push({
         row: i + 1,

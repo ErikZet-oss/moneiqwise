@@ -4256,6 +4256,11 @@ export async function registerRoutes(
                     : tx.type === "WITHDRAWAL"
                       ? "Výber"
                       : CASH_FLOW_TICKER;
+              } else if (tickerUpper === "CASH_INTEREST") {
+                resolved =
+                  tx.type === "TAX"
+                    ? "Daň z úroku voľných prostriedkov"
+                    : "Úrok z voľných prostriedkov";
               } else {
                 resolved = effectiveTicker;
                 try {

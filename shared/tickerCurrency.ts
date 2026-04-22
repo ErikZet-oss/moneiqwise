@@ -6,6 +6,9 @@ export function getTickerCurrency(
   ticker: string,
 ): "EUR" | "USD" | "GBP" | "CZK" | "PLN" {
   const u = ticker.toUpperCase();
+  if (u === "CASH_INTEREST" || u === "PORTFOLIO_CASH_FLOW" || u === "CASH") {
+    return "EUR";
+  }
   if (
     u.endsWith(".DE") ||
     u.endsWith(".F") ||
