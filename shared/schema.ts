@@ -45,15 +45,22 @@ export const localAuthAccounts = pgTable("local_auth_accounts", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const localPasswordResets = pgTable("local_password_resets", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  email: varchar("email").notNull(),
-  tokenHash: text("token_hash").notNull().unique(),
-  expiresAt: timestamp("expires_at").notNull(),
-  usedAt: timestamp("used_at"),
-  createdAt: timestamp("created_at").defaultNow(),
-});
+export const localPasswordResets = pgTable(
+  "local_password_resets",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id),
+    email: varchar("email").notNull(),
+    /** Rovnaký význam ako PostgreSQL `…_key` pre UNIQUE (kvôli stabilnému názvu pri `db:push`). */
+    tokenHash: text("token_hash").notNull(),
+    expiresAt: timestamp("expires_at").notNull(),
+    usedAt: timestamp("used_at"),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("local_password_resets_token_hash_key").on(table.tokenHash),
+  ],
+);
 
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
