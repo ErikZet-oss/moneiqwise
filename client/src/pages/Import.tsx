@@ -284,13 +284,18 @@ export default function Import() {
       return response.json() as Promise<SaveResult>;
     },
     onSuccess: (data) => {
+      const list = portfolios ?? [];
+      const portName =
+        selectedPortfolio === "default"
+          ? (list.find((p) => p.isDefault) ?? list[0])?.name ?? "predvolené"
+          : list.find((p) => p.id === selectedPortfolio)?.name ?? "zvolené";
       const warn =
         data.errors?.length ?
           ` ${data.errors.slice(0, 2).join(" · ")}${data.errors.length > 2 ? "…" : ""}`
           : "";
       toast({
         title: "Import dokončený",
-        description: `${data.message}${warn}`,
+        description: `Cieľové portfólio: „${portName}“. V histórii ho vyber v bočnom paneli, ak transakcie nevidíš. ${data.message}${warn}`,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/holdings"] });

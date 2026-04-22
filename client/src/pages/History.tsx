@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -47,7 +47,7 @@ interface EditFormData {
 export default function History() {
   const { toast } = useToast();
   const { formatCurrency } = useCurrency();
-  const { getQueryParam, portfolios } = usePortfolio();
+  const { getQueryParam, portfolios, isAllPortfolios, selectedPortfolio } = usePortfolio();
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [tickerFilter, setTickerFilter] = useState<string>("all");
   const [idFilter, setIdFilter] = useState<string>("");
@@ -72,6 +72,11 @@ export default function History() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const portfolioParam = getQueryParam();
+
+  /** Pri zmene portfólia v bočnom paneli zrušiť filter „Akcia“, aby neostal napr. len AAPL v inom portfóliu. */
+  useEffect(() => {
+    setTickerFilter("all");
+  }, [portfolioParam]);
 
   const { data: transactions, isLoading } = useQuery<Transaction[]>({
     queryKey: ["/api/transactions", portfolioParam],
@@ -312,6 +317,9 @@ export default function History() {
     ? Array.from(new Set(transactions.map(t => t.ticker))).sort()
     : [];
 
+  const tickerFilterLabel = (ticker: string) =>
+    ticker === CASH_FLOW_TICKER ? "Hotovosť (vklady/výbery)" : ticker;
+
   const filteredTransactions = transactions?.filter((t) => {
     if (typeFilter !== "all" && t.type !== typeFilter) return false;
     if (tickerFilter !== "all" && t.ticker !== tickerFilter) return false;
@@ -357,7 +365,13 @@ export default function History() {
             <div>
               <CardTitle>História transakcií</CardTitle>
               <CardDescription>
-                Kompletný zoznam všetkých nákupov, predajov a dividend.
+                <span className="text-foreground font-medium block sm:inline">
+                  {isAllPortfolios
+                    ? "Rozsah: všetky viditeľné portfóliá."
+                    : `Rozsah: portfólio „${selectedPortfolio?.name ?? "—"}”.`}
+                </span>{" "}
+                Vklady z importu XTB patria do portfólia zvoleného na stránke Import — v bočnom paneli
+                vyber to isté portfólio alebo „Všetky“, a filtre Typ a Akcia nastav na „Všetky“.
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -566,7 +580,7 @@ export default function History() {
                   <SelectItem value="all">Všetky</SelectItem>
                   {uniqueTickers.map((ticker) => (
                     <SelectItem key={ticker} value={ticker}>
-                      {ticker}
+                      {tickerFilterLabel(ticker)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -594,7 +608,10 @@ export default function History() {
             <div className="text-center py-8 text-muted-foreground" data-testid="text-no-transactions">
               <p>Žiadne transakcie na zobrazenie.</p>
               {transactions && transactions.length > 0 && (
-                <p className="text-sm mt-2">Skúste zmeniť filtre.</p>
+                <p className="text-sm mt-2 max-w-md mx-auto">
+                  Skúste zmeniť filtre (Typ / Akcia) alebo v bočnom paneli iné portfólio — transakcie sa
+                  filtrujú podľa neho.
+                </p>
               )}
             </div>
           ) : (
