@@ -17,7 +17,8 @@ import {
   type OptionTrade,
   type InsertOptionTrade,
 } from "@shared/schema";
-import { sumCashFlowEurFromTransactions } from "@shared/cashFromTransactions";
+import type { AllExchangeRates } from "./convertAmountBetween";
+import { netLedgerCashEur } from "./netLedgerCashEur";
 import { db } from "./db";
 import { computeRealizedGainsFromTransactionsAsync } from "./realizedGainsCompute";
 import { eq, and, desc, asc, sql, isNull, or, inArray, notInArray } from "drizzle-orm";
@@ -73,19 +74,23 @@ export interface IStorage {
   // Holdings operations
   getHoldingsByUser(userId: string, portfolioId?: string | null): Promise<Holding[]>;
   /** Single fetch for Overview page: holdings + totals per visible portfolio (no N× round-trips). */
-  getOverviewBundle(userId: string): Promise<{
+  getOverviewBundle(
+    userId: string,
+    rates: AllExchangeRates,
+  ): Promise<{
     byPortfolioId: Record<
       string,
       { holdings: Holding[]; totalRealized: number; dividendNet: number; cashEur: number }
     >;
   }>;
   /**
-   * Čistá hotovosť v EUR z vkladov a výberov (DEPOSIT/WITHDRAWAL) na portfólio.
-   * Odpoveď do GET /api/portfolios: cashBalance = cashEur, cashCurrency = EUR.
+   * Disponibilná hotovosť (EUR) na portfólio: vklady/výbery, nákupy, predaje,
+   * dividendy, dane (nie len súčet vkladov, aby nebol dvojpripočet k trh. hodnote).
    */
   getComputedCashEurByPortfolioIds(
     userId: string,
     portfolioIds: string[],
+    rates: AllExchangeRates,
   ): Promise<Record<string, number>>;
   getHoldingByUserAndTicker(userId: string, ticker: string, portfolioId?: string | null): Promise<Holding | undefined>;
   getHoldingsForTickerAcrossPortfolios(userId: string, ticker: string): Promise<Holding[]>;
@@ -643,6 +648,7 @@ export class DatabaseStorage implements IStorage {
   async getComputedCashEurByPortfolioIds(
     userId: string,
     portfolioIds: string[],
+    rates: AllExchangeRates,
   ): Promise<Record<string, number>> {
     if (portfolioIds.length === 0) return {};
     const map: Record<string, number> = Object.fromEntries(
@@ -655,18 +661,25 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(transactions.userId, userId),
           inArray(transactions.portfolioId, portfolioIds),
-          inArray(transactions.type, ["DEPOSIT", "WITHDRAWAL"]),
         ),
       );
+    const byPid = new Map<string, Transaction[]>();
+    for (const id of portfolioIds) byPid.set(id, []);
     for (const t of rows) {
       const pid = t.portfolioId;
-      if (!pid || map[pid] === undefined) continue;
-      map[pid] += sumCashFlowEurFromTransactions([t]);
+      if (pid && byPid.has(pid)) byPid.get(pid)!.push(t);
+    }
+    for (const id of portfolioIds) {
+      const list = byPid.get(id) ?? [];
+      map[id] = await netLedgerCashEur(list, rates);
     }
     return map;
   }
 
-  async getOverviewBundle(userId: string): Promise<{
+  async getOverviewBundle(
+    userId: string,
+    rates: AllExchangeRates,
+  ): Promise<{
     byPortfolioId: Record<
       string,
       { holdings: Holding[]; totalRealized: number; dividendNet: number; cashEur: number }
@@ -735,7 +748,7 @@ export class DatabaseStorage implements IStorage {
         dividendNet += shares * pricePerShare;
       }
 
-      const cashEur = sumCashFlowEurFromTransactions(list);
+      const cashEur = await netLedgerCashEur(list, rates);
 
       byPortfolioId[id] = {
         holdings: holdingsByPid.get(id) ?? [],

@@ -21,6 +21,7 @@ import Settings from "@/pages/Settings";
 import Import from "@/pages/Import";
 import Allocation from "@/pages/Allocation";
 import AssetDetail from "@/pages/AssetDetail";
+import TaxSummaryPage from "@/pages/TaxSummaryPage";
 
 function RedirectToHistory() {
   const [, setLocation] = useLocation();
@@ -56,6 +57,7 @@ function Router() {
       <Route path="/history" component={History} />
       <Route path="/profit" component={Profit} />
       <Route path="/dividends" component={Dividends} />
+      <Route path="/tax" component={TaxSummaryPage} />
       <Route path="/options" component={Options} />
       <Route path="/import" component={Import} />
       <Route path="/allocation" component={Allocation} />

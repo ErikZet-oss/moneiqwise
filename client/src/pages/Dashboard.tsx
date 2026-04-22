@@ -316,7 +316,7 @@ export default function Dashboard() {
     return { buyPremiumValue, buyTotalCost, sellCommission, openCount };
   };
 
-  // Hotovosť = súčet v EUR z vkladov a výberov (GET /api/portfolios ju už má v EUR, prepíname do zobrazovacej meny).
+  // Hotovosť = disponibilné EUR (vklady/výbery mínus nákupy + predaje + dividendy/dane; GET /api/portfolios).
   const cashValue = useMemo(() => {
     if (isAllPortfolios) {
       return portfolios.reduce((sum, p) => {
@@ -651,10 +651,11 @@ export default function Dashboard() {
                   <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                 </TooltipTrigger>
                 <TooltipContent className="max-w-[280px]">
-                  <p className="font-semibold mb-1">Súčet vkladov a výberov</p>
+                  <p className="font-semibold mb-1">Disponibilná hotovosť (EUR)</p>
                   <p className="text-xs">
-                    V EUR (základ) z transakcií vklad a výber. Môže byť záporné (výber prevýšil vklady, alebo broker hlási margin / dlh).
-                    Započítava sa do „Celkovej hodnoty“; karta zisku a výkonnosti stále reflektuje obchodovanie s titulmi.
+                    Očakávané dispo: vklady a výbery mínus nákupy, plus predaje, dividendy a dane (prepočet v EUR). Nie je
+                    to len súčet vkladov — po nákupe akcií sa časť vkladu presunie do trhovej hodnoty titulov, nie do tejto
+                    hotovosti. Môže byť záporné (výber, margin). Pripočítava sa k trhovej hodnote k „Celkovej hodnote“.
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -667,7 +668,7 @@ export default function Dashboard() {
             <p className="text-xs text-muted-foreground truncate">
               {isAllPortfolios
                 ? `Súčet z ${portfolios.length} ${portfolios.length === 1 ? "portfólia" : "portfólií"}`
-                : "V EUR z vkladov a výberov (DEPOSIT / WITHDRAWAL)"}
+                : "Disponibilné EUR (vklady – nákupy + predaje + …)"}
             </p>
           </CardContent>
         </Card>
@@ -942,14 +943,15 @@ export default function Dashboard() {
                         : portfolios.length >= 2 && portfolios.length <= 4
                           ? `${portfolios.length} portfóliá`
                           : `${portfolios.length} portfólií`
-                      : "V EUR z vkladov a výberov"}
+                      : "Disponibilné EUR"}
                   </div>
                 </div>
               </TooltipTrigger>
               <TooltipContent className="max-w-[260px]">
-                <p className="font-semibold mb-1">Súčet vkladov a výberov</p>
+                <p className="font-semibold mb-1">Disponibilná hotovosť</p>
                 <p className="text-xs">
-                  V EUR (základ) z vkladov a výberov. Započítava sa do celkovej hodnoty; neovplyvňuje karty so ziskom. Pri „Všetky portfóliá“ je súčet.
+                  Vklady – nákupy + predaje + dividendy/dane (v EUR). Započítava sa k trhovej hodnote do celkovej sumy. Pri
+                  „Všetky portfóliá“ je súčet.
                 </p>
               </TooltipContent>
             </Tooltip>

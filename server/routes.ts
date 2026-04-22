@@ -24,6 +24,7 @@ import { buildEurPerUnitByTxnIdForTransactions } from "./eurAtTransactionDate";
 import { computeFifoRealizedGainsFromTransactions } from "@shared/fifoRealizedGains";
 import { computeGipsTwr } from "./twrGips";
 import { buildOpenFifoLotRowList, loadTradeTransactionsForAssetLots } from "./assetFifoLots";
+import { buildTaxSummary } from "./taxSummary";
 import { db } from "./db";
 import { and, desc, eq, isNull } from "drizzle-orm";
 
@@ -1502,7 +1503,8 @@ export async function registerRoutes(
         ? allPortfolios
         : allPortfolios.filter((p) => !p.isHidden);
       const ids = result.map((p) => p.id);
-      const cashEurByPid = await storage.getComputedCashEurByPortfolioIds(userId, ids);
+      const rates = await fetchAllExchangeRates();
+      const cashEurByPid = await storage.getComputedCashEurByPortfolioIds(userId, ids, rates);
       const withCash = result.map((p) => {
         const e = cashEurByPid[p.id] ?? 0;
         return {
@@ -1523,7 +1525,8 @@ export async function registerRoutes(
   app.get("/api/overview", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const bundle = await storage.getOverviewBundle(userId);
+      const rates = await fetchAllExchangeRates();
+      const bundle = await storage.getOverviewBundle(userId, rates);
       res.json(bundle);
     } catch (error) {
       console.error("Error fetching overview bundle:", error);
@@ -2793,6 +2796,79 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching realized gains:", error);
       res.status(500).json({ message: "Nepodarilo sa načítať realizované zisky." });
+    }
+  });
+
+  /**
+   * Daňový prehľad (marec / ročné zúčtovanie) – FIFO alokácia, &lt;365 dní zdaniteľné, dividendy, orient. 19/25 %.
+   * GET /api/tax-summary?year=2025&portfolio=all|&lt;id&gt;
+   */
+  app.get("/api/tax-summary", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const qy = req.query.year as string | undefined;
+      const y = qy != null && String(qy).trim() !== "" ? parseInt(String(qy), 10) : NaN;
+      const year = Number.isFinite(y) && y >= 2000 && y <= 2100 ? y : new Date().getUTCFullYear();
+      const portfolioParam = (req.query.portfolio as string | undefined) || "all";
+      const rates = await fetchAllExchangeRates();
+      const tx = await storage.getTransactionsByUser(
+        userId,
+        portfolioParam === "all" ? null : portfolioParam,
+      );
+      const out = await buildTaxSummary(year, tx, rates);
+      res.json({
+        ...out,
+        portfolio: portfolioParam,
+        generatedAt: Date.now(),
+        /** Rovnaké dáta v tvare vhodnom na CSV (jeden header + riadky). */
+        exportCsv: {
+          disposals: {
+            header: [
+              "sellTransactionId",
+              "ticker",
+              "acquiredAt",
+              "sellDate",
+              "shares",
+              "costEur",
+              "proceedsEur",
+              "gainEur",
+              "holdingAtLeast365Days",
+            ] as const,
+            rows: out.disposalPortions.map((p) => [
+              p.sellTransactionId,
+              p.ticker,
+              p.acquiredAt,
+              p.sellDate,
+              p.shares,
+              p.costEur,
+              p.proceedsEur,
+              p.gainEur,
+              p.holdingAtLeast365Days,
+            ]),
+          },
+          dividends: {
+            header: [
+              "transactionId",
+              "date",
+              "ticker",
+              "grossEur",
+              "withholdingEur",
+              "netEur",
+            ] as const,
+            rows: out.dividends.items.map((d) => [
+              d.transactionId,
+              d.date,
+              d.ticker,
+              d.grossEur,
+              d.withholdingEur,
+              d.netEur,
+            ]),
+          },
+        },
+      });
+    } catch (error) {
+      console.error("Error building tax summary:", error);
+      res.status(500).json({ message: "Nepodarilo sa vypočítať daňový prehľad." });
     }
   });
 
