@@ -46,12 +46,8 @@ interface PortfolioMetrics {
   stockValue: number;
   cashValue: number;
   totalInvested: number;
-  /** Realiz. zisk z akcii (FIFO) v menách UI. */
-  realizedFifo: number;
-  /** Netto z hot. riadkov XTB close trade (v menách UI). */
-  closeTradePnl: number;
-  /** FIFO + close trade — čo pripočítať k nereal. pri „celkovom zisku“. */
-  realizedCombined: number;
+  /** Realiz. zisk: FIFO akcií + XTB close trade (v menách UI), rovnako ako na Dashboarde. */
+  realizedGain: number;
   totalProfit: number;
   totalProfitPercent: number;
   dailyChange: number;
@@ -174,8 +170,8 @@ export default function Overview() {
       Number.isFinite(closeTradeNetEur) ? closeTradeNetEur : 0,
       "EUR",
     );
-    const realizedCombined = rFifo + rClose;
-    const totalProfit = unrealized + realizedCombined + dividends;
+    const realizedGain = rFifo + rClose;
+    const totalProfit = unrealized + realizedGain + dividends;
     const totalProfitPercent = totalInvested > 0 ? (totalProfit / totalInvested) * 100 : 0;
     const baseValue = stockValue - dailyChange;
     const dailyChangePercent = baseValue > 0 ? (dailyChange / baseValue) * 100 : 0;
@@ -186,9 +182,7 @@ export default function Overview() {
       stockValue,
       cashValue,
       totalInvested,
-      realizedFifo: rFifo,
-      closeTradePnl: rClose,
-      realizedCombined,
+      realizedGain,
       totalProfit,
       totalProfitPercent,
       dailyChange,
@@ -604,26 +598,12 @@ export default function Overview() {
 
                       <div
                         className="flex items-center justify-between gap-2"
-                        data-testid={`overview-realized-combined-${portfolio.id}`}
+                        data-testid={`overview-realized-gain-${portfolio.id}`}
                       >
-                        <span className="text-muted-foreground">Realizované (FIFO + close trade)</span>
-                        <span className={`font-medium ${getChangeTone(m.realizedCombined)}`}>
-                          {maskAmount(formatSignedCurrency(m.realizedCombined))}
+                        <span className="text-muted-foreground">Realizovaný zisk</span>
+                        <span className={`font-medium ${getChangeTone(m.realizedGain)}`}>
+                          {maskAmount(formatSignedCurrency(m.realizedGain))}
                         </span>
-                      </div>
-                      <div className="text-[10px] text-muted-foreground space-y-0.5 pl-0.5 border-l border-border/50 ml-0.5">
-                        <div className="flex justify-between gap-2" data-testid={`overview-realized-fifo-${portfolio.id}`}>
-                          <span>· akcie (FIFO)</span>
-                          <span className={`tabular-nums ${getChangeTone(m.realizedFifo)}`}>
-                            {maskAmount(formatSignedCurrency(m.realizedFifo))}
-                          </span>
-                        </div>
-                        <div className="flex justify-between gap-2" data-testid={`overview-close-trade-${portfolio.id}`}>
-                          <span>· uzatvorenie (XTB)</span>
-                          <span className={`tabular-nums ${getChangeTone(m.closeTradePnl)}`}>
-                            {maskAmount(formatSignedCurrency(m.closeTradePnl))}
-                          </span>
-                        </div>
                       </div>
 
                       <div className="flex items-center justify-between gap-2">

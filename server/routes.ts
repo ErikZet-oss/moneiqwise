@@ -14,6 +14,7 @@ import {
   transactions,
   type Transaction,
 } from "@shared/schema";
+import { sumCloseTradeCashFlowEurFromRows } from "@shared/cashFromTransactions";
 import { parseXTBFile, type XTBImportResult } from "./xtbParser";
 import {
   computeRealizedGainsFromTransactionsAsync,
@@ -2851,9 +2852,16 @@ export async function registerRoutes(
       const computed = await computeRealizedGainsFromTransactionsAsync(
         userTransactions,
       );
+      const closeTradeNetEur = sumCloseTradeCashFlowEurFromRows(userTransactions);
+      const realizedGainTotal = computed.totalRealized + closeTradeNetEur;
 
       res.json({
+        /** FIFO z akcií (BUY/SELL) v EUR. */
         totalRealized: computed.totalRealized,
+        /** Súčet hotov. riadkov XTB close trade; nie je v FIFO. */
+        closeTradeNetEur,
+        /** Celý „realizovaný zisk“ v UI: akcie (FIFO) + close trade. */
+        realizedGainTotal,
         realizedYTD: computed.realizedYTD,
         realizedThisMonth: computed.realizedThisMonth,
         realizedToday: computed.realizedToday,

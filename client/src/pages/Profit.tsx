@@ -35,6 +35,8 @@ interface HistoricalResponse {
 
 interface RealizedGainSummary {
   totalRealized: number;
+  closeTradeNetEur?: number;
+  realizedGainTotal?: number;
   realizedYTD: number;
   realizedThisMonth: number;
   realizedToday: number;
@@ -168,7 +170,9 @@ export default function Profit() {
   const { data: realizedGains } = useQuery<RealizedGainSummary>({
     queryKey: ["/api/realized-gains", portfolioParam],
     queryFn: async () => {
-      const res = await fetch(`/api/realized-gains?portfolio=${portfolioParam}`);
+      const res = await fetch(`/api/realized-gains?portfolio=${portfolioParam}`, {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed to fetch realized gains");
       return res.json();
     },
@@ -703,11 +707,13 @@ export default function Profit() {
             Realizovaný zisk/strata
           </CardTitle>
           <CardDescription>
-            Zisk alebo strata z predaných akcií (uzavretých pozícií)
+            Predaje akcií (FIFO) a príp. hotov. efekt z XTB „close trade“ — súčet v poli Celkovo
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {realizedGains && realizedGains.transactionCount > 0 ? (
+          {realizedGains &&
+          (realizedGains.transactionCount > 0 ||
+            Math.abs(realizedGains.closeTradeNetEur ?? 0) > 1e-9) ? (
             <div className="space-y-6">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="p-4 rounded-lg bg-muted/50">
@@ -730,8 +736,13 @@ export default function Profit() {
                 </div>
                 <div className="p-4 rounded-lg bg-muted/50">
                   <div className="text-sm text-muted-foreground mb-1">Celkovo</div>
-                  <div className={`text-lg font-bold ${realizedGains.totalRealized >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-total">
-                    {formatCurrency(realizedGains.totalRealized)}
+                  <div
+                    className={`text-lg font-bold ${(realizedGains.realizedGainTotal ?? realizedGains.totalRealized) >= 0 ? "text-green-500" : "text-red-500"}`}
+                    data-testid="text-realized-total"
+                  >
+                    {formatCurrency(
+                      realizedGains.realizedGainTotal ?? realizedGains.totalRealized,
+                    )}
                   </div>
                 </div>
               </div>

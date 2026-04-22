@@ -21,6 +21,8 @@ import { formatShareQuantity } from "@/lib/utils";
 
 interface RealizedGainSummary {
   totalRealized: number;
+  closeTradeNetEur?: number;
+  realizedGainTotal?: number;
   realizedYTD: number;
   realizedThisMonth: number;
   realizedToday: number;
@@ -237,7 +239,9 @@ export default function Dashboard() {
   const { data: realizedGains } = useQuery<RealizedGainSummary>({
     queryKey: ["/api/realized-gains", portfolioParam],
     queryFn: async () => {
-      const res = await fetch(`/api/realized-gains?portfolio=${portfolioParam}`);
+      const res = await fetch(`/api/realized-gains?portfolio=${portfolioParam}`, {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed to fetch realized gains");
       return res.json();
     },
@@ -382,7 +386,8 @@ export default function Dashboard() {
     const hasHoldings = holdings && holdings.length > 0 && quotes;
     const hasOptions = isAllPortfolios && optionStats;
     
-    const stockRealizedGain = realizedGains?.totalRealized || 0;
+    const stockRealizedGain =
+      realizedGains?.realizedGainTotal ?? realizedGains?.totalRealized ?? 0;
     const dividendGain = dividends?.totalNet || 0;
     
     if (!hasHoldings && !hasOptions) {
@@ -900,7 +905,7 @@ export default function Dashboard() {
                 <TooltipContent className="max-w-[300px]">
                   <p className="font-semibold mb-1">Uzavreté obchody</p>
                   <ul className="text-xs space-y-1 list-disc pl-3">
-                    <li><span className="font-medium">Realizované:</span> Zisk/strata z predaných akcií (predajná cena - nákupná cena - poplatky)</li>
+                    <li><span className="font-medium">Realizovaný zisk:</span> Zisk/strata z predaných akcií (FIFO) a prípadne z hotovostných riadkov XTB „close trade“ (netto v EUR)</li>
                     <li><span className="font-medium">Dividendy:</span> Čisté dividendy po zrážkovej dani</li>
                     <li><span className="font-medium">Opcie:</span> Zisk/strata z uzavretých opčných obchodov</li>
                   </ul>
@@ -912,11 +917,21 @@ export default function Dashboard() {
             <div className="flex items-center justify-between gap-1" data-testid="text-dashboard-realized">
               <span className="text-xs text-muted-foreground flex items-center gap-0.5">
                 <Wallet className="h-3 w-3" />
-                Realizované
+                Realizovaný zisk
               </span>
-              {realizedGains && realizedGains.transactionCount > 0 ? (
-                <span className={`text-sm font-semibold truncate ${getChangeColor(realizedGains.totalRealized)}`}>
-                  {maskAmount(formatCurrency(realizedGains.totalRealized))}
+              {realizedGains &&
+              (realizedGains.transactionCount > 0 ||
+                Math.abs(realizedGains.closeTradeNetEur ?? 0) > 1e-9) ? (
+                <span
+                  className={`text-sm font-semibold truncate ${getChangeColor(
+                    realizedGains.realizedGainTotal ?? realizedGains.totalRealized,
+                  )}`}
+                >
+                  {maskAmount(
+                    formatCurrency(
+                      realizedGains.realizedGainTotal ?? realizedGains.totalRealized,
+                    ),
+                  )}
                 </span>
               ) : (
                 <span className="text-sm text-muted-foreground">—</span>
@@ -1178,7 +1193,9 @@ export default function Dashboard() {
           </TooltipTrigger>
           <TooltipContent className="max-w-[280px]">
             <p className="font-semibold mb-1">Realizovaný zisk</p>
-            <p className="text-xs">Zisk alebo strata z uzavretých pozícií (akcie + opcie). Počíta sa ako rozdiel predajnej a nákupnej ceny mínus poplatky.</p>
+            <p className="text-xs">
+              Akcie: zisk/strata z predajov (FIFO) a z hot. riadkov XTB close trade. Plus realizácia opcií, ak sú v celku vyššie.
+            </p>
           </TooltipContent>
         </Tooltip>
         <Tooltip>
