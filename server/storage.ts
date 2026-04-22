@@ -21,6 +21,7 @@ import type { AllExchangeRates } from "./convertAmountBetween";
 import { netLedgerCashEur } from "./netLedgerCashEur";
 import { db } from "./db";
 import { computeRealizedGainsFromTransactionsAsync } from "./realizedGainsCompute";
+import { sumCloseTradeCashFlowEurFromRows } from "@shared/cashFromTransactions";
 import { eq, and, desc, asc, sql, isNull, or, inArray, notInArray } from "drizzle-orm";
 
 export interface IStorage {
@@ -80,7 +81,14 @@ export interface IStorage {
   ): Promise<{
     byPortfolioId: Record<
       string,
-      { holdings: Holding[]; totalRealized: number; dividendNet: number; cashEur: number }
+      {
+        holdings: Holding[];
+        totalRealized: number;
+        /** Súčet hotovostných riadkov XTB „close trade“ (DEPOSIT/WITHDRAWAL) v EUR — mimo FIFO. */
+        closeTradeNetEur: number;
+        dividendNet: number;
+        cashEur: number;
+      }
     >;
   }>;
   /**
@@ -720,7 +728,13 @@ export class DatabaseStorage implements IStorage {
   ): Promise<{
     byPortfolioId: Record<
       string,
-      { holdings: Holding[]; totalRealized: number; dividendNet: number; cashEur: number }
+      {
+        holdings: Holding[];
+        totalRealized: number;
+        closeTradeNetEur: number;
+        dividendNet: number;
+        cashEur: number;
+      }
     >;
   }> {
     const visibleIds = await this.getVisiblePortfolioIdsByUser(userId);
@@ -779,7 +793,13 @@ export class DatabaseStorage implements IStorage {
 
     const byPortfolioId: Record<
       string,
-      { holdings: Holding[]; totalRealized: number; dividendNet: number; cashEur: number }
+      {
+        holdings: Holding[];
+        totalRealized: number;
+        closeTradeNetEur: number;
+        dividendNet: number;
+        cashEur: number;
+      }
     > = {};
 
     for (const id of visibleIds) {
@@ -788,6 +808,7 @@ export class DatabaseStorage implements IStorage {
       const totalRealized = (
         await computeRealizedGainsFromTransactionsAsync(list)
       ).totalRealized;
+      const closeTradeNetEur = sumCloseTradeCashFlowEurFromRows(list);
 
       let dividendNet = 0;
       const dividendTransactions = list.filter((t) => t.type === "DIVIDEND");
@@ -810,6 +831,7 @@ export class DatabaseStorage implements IStorage {
       byPortfolioId[id] = {
         holdings: holdingsByPid.get(id) ?? [],
         totalRealized,
+        closeTradeNetEur,
         dividendNet,
         cashEur,
       };

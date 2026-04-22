@@ -30,7 +30,10 @@ interface OverviewBundle {
     string,
     {
       holdings: Holding[];
+      /** Realiz. zisk z akcii (FIFO) v EUR. */
       totalRealized: number;
+      /** Hotov. efekt z XTB „close trade“ (vklad/výber), nie je v FIFO. */
+      closeTradeNetEur: number;
       dividendNet: number;
       /** Čistá hotovosť (EUR) z vkladov a výberov */
       cashEur: number;
@@ -43,8 +46,12 @@ interface PortfolioMetrics {
   stockValue: number;
   cashValue: number;
   totalInvested: number;
-  /** Súčet predajov mínus náklad (FIFO) v preferovanej mene — z backendu, nie `realizedGain` stĺpec v DB. */
+  /** Realiz. zisk z akcii (FIFO) v menách UI. */
   realizedFifo: number;
+  /** Netto z hot. riadkov XTB close trade (v menách UI). */
+  closeTradePnl: number;
+  /** FIFO + close trade — čo pripočítať k nereal. pri „celkovom zisku“. */
+  realizedCombined: number;
   totalProfit: number;
   totalProfitPercent: number;
   dailyChange: number;
@@ -124,7 +131,8 @@ export default function Overview() {
 
   const computeMetrics = (
     holdings: Holding[],
-    realized: number,
+    totalRealizedFifoEur: number,
+    closeTradeNetEur: number,
     dividends: number,
     cashEur: number,
   ): PortfolioMetrics => {
@@ -158,7 +166,16 @@ export default function Overview() {
     const totalValue = stockValue + cashValue;
 
     const unrealized = stockValue - totalInvested;
-    const totalProfit = unrealized + realized + dividends;
+    const rFifo = convertPrice(
+      Number.isFinite(totalRealizedFifoEur) ? totalRealizedFifoEur : 0,
+      "EUR",
+    );
+    const rClose = convertPrice(
+      Number.isFinite(closeTradeNetEur) ? closeTradeNetEur : 0,
+      "EUR",
+    );
+    const realizedCombined = rFifo + rClose;
+    const totalProfit = unrealized + realizedCombined + dividends;
     const totalProfitPercent = totalInvested > 0 ? (totalProfit / totalInvested) * 100 : 0;
     const baseValue = stockValue - dailyChange;
     const dailyChangePercent = baseValue > 0 ? (dailyChange / baseValue) * 100 : 0;
@@ -169,10 +186,9 @@ export default function Overview() {
       stockValue,
       cashValue,
       totalInvested,
-      realizedFifo: convertPrice(
-        Number.isFinite(realized) ? realized : 0,
-        "EUR",
-      ),
+      realizedFifo: rFifo,
+      closeTradePnl: rClose,
+      realizedCombined,
       totalProfit,
       totalProfitPercent,
       dailyChange,
@@ -252,12 +268,13 @@ export default function Overview() {
     for (const p of portfolios) {
       const row = overview.byPortfolioId[p.id];
       const holdings = row?.holdings ?? [];
-      const realized = row?.totalRealized ?? 0;
+      const totalRealizedFifoEur = row?.totalRealized ?? 0;
+      const closeTradeNetEur = row?.closeTradeNetEur ?? 0;
       const dividends = row?.dividendNet ?? 0;
       const cashEur = row?.cashEur ?? 0;
       map.set(
         p.id,
-        computeMetrics(holdings, realized, dividends, cashEur),
+        computeMetrics(holdings, totalRealizedFifoEur, closeTradeNetEur, dividends, cashEur),
       );
     }
     return map;
@@ -494,7 +511,8 @@ export default function Overview() {
               (m?.totalInvested ?? 0) > 0 ||
               (m?.passiveIncome ?? 0) > 0 ||
               (m?.cashValue ?? 0) !== 0 ||
-              (bundleRow?.totalRealized ?? 0) !== 0;
+              (bundleRow?.totalRealized ?? 0) !== 0 ||
+              (bundleRow?.closeTradeNetEur ?? 0) !== 0;
 
             return (
               <Card
@@ -584,11 +602,28 @@ export default function Overview() {
                         </span>
                       </div>
 
-                      <div className="flex items-center justify-between gap-2" data-testid={`overview-realized-fifo-${portfolio.id}`}>
-                        <span className="text-muted-foreground">Realizovaný (FIFO)</span>
-                        <span className={`font-medium ${getChangeTone(m.realizedFifo)}`}>
-                          {maskAmount(formatSignedCurrency(m.realizedFifo))}
+                      <div
+                        className="flex items-center justify-between gap-2"
+                        data-testid={`overview-realized-combined-${portfolio.id}`}
+                      >
+                        <span className="text-muted-foreground">Realizované (FIFO + close trade)</span>
+                        <span className={`font-medium ${getChangeTone(m.realizedCombined)}`}>
+                          {maskAmount(formatSignedCurrency(m.realizedCombined))}
                         </span>
+                      </div>
+                      <div className="text-[10px] text-muted-foreground space-y-0.5 pl-0.5 border-l border-border/50 ml-0.5">
+                        <div className="flex justify-between gap-2" data-testid={`overview-realized-fifo-${portfolio.id}`}>
+                          <span>· akcie (FIFO)</span>
+                          <span className={`tabular-nums ${getChangeTone(m.realizedFifo)}`}>
+                            {maskAmount(formatSignedCurrency(m.realizedFifo))}
+                          </span>
+                        </div>
+                        <div className="flex justify-between gap-2" data-testid={`overview-close-trade-${portfolio.id}`}>
+                          <span>· uzatvorenie (XTB)</span>
+                          <span className={`tabular-nums ${getChangeTone(m.closeTradePnl)}`}>
+                            {maskAmount(formatSignedCurrency(m.closeTradePnl))}
+                          </span>
+                        </div>
                       </div>
 
                       <div className="flex items-center justify-between gap-2">

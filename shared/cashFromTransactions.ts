@@ -25,6 +25,25 @@ export function sumCashFlowEurFromRows(rows: CashLineLike[]): number {
   return s;
 }
 
+type CashWithName = CashLineLike & { companyName?: string | null };
+
+/**
+ * Súčet v EUR (základ) z vkladov / výberov označených ako XTB *close trade*
+ * (import ukladá `companyName` s podreťazcom "close trade").
+ * Toto **nie** súčasť FIFO z akcií (BUY/SELL) — doplňuje hotovosť, ktorú broker
+ * môže účtovať oddelene od riadku typu predaj.
+ */
+export function sumCloseTradeCashFlowEurFromRows(rows: CashWithName[]): number {
+  const only = rows.filter(
+    (t) =>
+      (t.type === "DEPOSIT" || t.type === "WITHDRAWAL") &&
+      String(t.companyName ?? "")
+        .toLowerCase()
+        .includes("close trade"),
+  );
+  return sumCashFlowEurFromRows(only);
+}
+
 /** Rovnaká logika ako `sumCashFlowEurFromRows` pre plné `Transaction` polia. */
 export function sumCashFlowEurFromTransactions(transactions: Transaction[]): number {
   return sumCashFlowEurFromRows(transactions);
