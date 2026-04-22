@@ -13,6 +13,11 @@ import {
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+import { users } from "./usersTable";
+import { localPasswordResets } from "./localPasswordResetsTable";
+
+export { users } from "./usersTable";
+export { localPasswordResets } from "./localPasswordResetsTable";
 
 // Session storage table - required for Replit Auth
 export const sessions = pgTable(
@@ -25,17 +30,6 @@ export const sessions = pgTable(
   (table) => [index("IDX_session_expire").on(table.expire)]
 );
 
-// User storage table - required for Replit Auth
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  email: varchar("email").unique(),
-  firstName: varchar("first_name"),
-  lastName: varchar("last_name"),
-  profileImageUrl: varchar("profile_image_url"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
 export const localAuthAccounts = pgTable("local_auth_accounts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id).unique(),
@@ -44,23 +38,6 @@ export const localAuthAccounts = pgTable("local_auth_accounts", {
   passwordSalt: text("password_salt").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
-
-export const localPasswordResets = pgTable(
-  "local_password_resets",
-  {
-    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-    userId: varchar("user_id").notNull().references(() => users.id),
-    email: varchar("email").notNull(),
-    /** Rovnaký význam ako PostgreSQL `…_key` pre UNIQUE (kvôli stabilnému názvu pri `db:push`). */
-    tokenHash: text("token_hash").notNull(),
-    expiresAt: timestamp("expires_at").notNull(),
-    usedAt: timestamp("used_at"),
-    createdAt: timestamp("created_at").defaultNow(),
-  },
-  (table) => [
-    uniqueIndex("local_password_resets_token_hash_key").on(table.tokenHash),
-  ],
-);
 
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
