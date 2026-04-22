@@ -1,9 +1,16 @@
 import type { Transaction } from "@shared/schema";
-import { getTickerCurrency } from "@shared/tickerCurrency";
 import { sumCashFlowEurFromRows } from "@shared/cashFromTransactions";
-import { buySellLineEur } from "@shared/transactionEur";
+import { buySellLineEur, inferTradeCurrency } from "@shared/transactionEur";
 import { buildEurPerUnitByTxnIdForTransactions } from "./eurAtTransactionDate";
 import { convertAmountBetween, type AllExchangeRates } from "./convertAmountBetween";
+
+function eurBaseFromRow(t: Pick<Transaction, "baseCurrencyAmount">): number | null {
+  if (t.baseCurrencyAmount == null) return null;
+  const s = String(t.baseCurrencyAmount).trim();
+  if (s === "") return null;
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : null;
+}
 
 /**
  * Očakávané dispo hotovosť (EUR) z účtovania tokov: vklady/výbery,
@@ -34,18 +41,30 @@ export async function netLedgerCashEur(
       continue;
     }
     if (t.type === "DIVIDEND") {
+      // U importu (XTB) je hotovosť v EUR v baseCurrencyAmount; pôvodne sa tu mena brala
+      // z tickera (USD) — suma pri USD titule sa omylom brala ako USD, nie ako EUR z výpisu.
+      const eurB = eurBaseFromRow(t);
+      if (eurB !== null) {
+        s += eurB;
+        continue;
+      }
       const sh = parseFloat(t.shares);
       const p = parseFloat(t.pricePerShare);
       const tax = parseFloat(t.commission || "0");
-      const ccy = getTickerCurrency(t.ticker);
+      const ccy = inferTradeCurrency(t);
       const net = sh * p - tax;
       if (Number.isFinite(net)) s += convertAmountBetween(net, ccy, "EUR", rates);
       continue;
     }
     if (t.type === "TAX") {
+      const eurB = eurBaseFromRow(t);
+      if (eurB !== null) {
+        s += eurB;
+        continue;
+      }
       const sh = parseFloat(t.shares);
       const p = parseFloat(t.pricePerShare);
-      const ccy = getTickerCurrency(t.ticker);
+      const ccy = inferTradeCurrency(t);
       const v = sh * p;
       if (Number.isFinite(v)) s += convertAmountBetween(v, ccy, "EUR", rates);
     }
