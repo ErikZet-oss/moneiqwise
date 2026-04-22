@@ -7,6 +7,10 @@
 ALTER TABLE transactions
   ALTER COLUMN type TYPE varchar(12);
 
+-- Ticker pre hotovosť: PORTFOLIO_CASH_FLOW (20 znakov); staré schémy mali často varchar(10).
+ALTER TABLE transactions
+  ALTER COLUMN ticker TYPE varchar(32);
+
 ALTER TABLE transactions
   ADD COLUMN IF NOT EXISTS transaction_id varchar(64);
 ALTER TABLE transactions

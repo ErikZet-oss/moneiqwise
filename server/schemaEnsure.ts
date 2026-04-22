@@ -29,6 +29,19 @@ export async function ensureTransactionImportColumns(): Promise<void> {
     );
   }
 
+  // Sentinel pre vklady/výbery: PORTFOLIO_CASH_FLOW = 20 znakov; staré DB mali často varchar(10).
+  try {
+    await pool.query(`
+      ALTER TABLE transactions
+      ALTER COLUMN ticker TYPE varchar(32)
+    `);
+  } catch (err) {
+    console.warn(
+      "schemaEnsure: could not widen transactions.ticker to varchar(32) (ok if already up to date):",
+      err,
+    );
+  }
+
   await pool.query(`
     ALTER TABLE transactions
     ADD COLUMN IF NOT EXISTS transaction_id varchar(64)
