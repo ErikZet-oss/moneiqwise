@@ -1007,6 +1007,10 @@ function invalidatePerformanceCache(userId: string): void {
   }
 }
 
+function isNonHoldingTransactionType(t: string): boolean {
+  return t === "DIVIDEND" || t === "TAX" || t === "DEPOSIT" || t === "WITHDRAWAL";
+}
+
 type SupportedCcy = "EUR" | "USD" | "CZK" | "PLN" | "GBP";
 
 function convertAmountBetween(
@@ -1948,22 +1952,26 @@ export async function registerRoutes(
     }
   });
 
-  // Create a new transaction (BUY, SELL, or DIVIDEND)
+  // Create a new transaction (BUY, SELL, DIVIDEND, DEPOSIT, WITHDRAWAL, …)
   app.post("/api/transactions", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      
+      const { id: clientId, ...bodyRest } = req.body;
+
       // Ensure user has a default portfolio
       const defaultPortfolio = await storage.ensureDefaultPortfolio(userId);
       const portfolioId = req.body.portfolioId || defaultPortfolio.id;
+
+      const bodyType = String(req.body.type || "").toUpperCase();
       
-      // For DIVIDEND transactions, shares is not required - set to "1" as placeholder
-      const shares = req.body.type === "DIVIDEND" && (!req.body.shares || req.body.shares === "") 
-        ? "1" 
-        : req.body.shares;
+      // For DIVIDEND, DEPOSIT, WITHDRAWAL: shares = "1" as placeholder
+      const shares =
+        (bodyType === "DIVIDEND" || bodyType === "DEPOSIT" || bodyType === "WITHDRAWAL") &&
+        (!req.body.shares || req.body.shares === "")
+          ? "1"
+          : req.body.shares;
       
-      // Remove empty id to let database generate UUID
-      const { id: _ignoredId, ...bodyWithoutId } = req.body;
+      const bodyWithoutId = bodyRest;
       
       const transactionData = {
         ...bodyWithoutId,
@@ -1972,6 +1980,71 @@ export async function registerRoutes(
         portfolioId,
         transactionDate: new Date(req.body.transactionDate),
       };
+
+      // Vklad / výber: vždy interný ticker, neovplyvňujú podiely
+      if (bodyType === "DEPOSIT" || bodyType === "WITHDRAWAL") {
+        const amt = Math.abs(parseFloat(String(req.body.pricePerShare || "0")));
+        if (!Number.isFinite(amt) || !(amt > 0)) {
+          return res.status(400).json({ message: "Zadajte nenulovú sumu (kladne číslo)." });
+        }
+        const signed = bodyType === "WITHDRAWAL" ? -amt : amt;
+        const nameIn =
+          typeof req.body.companyName === "string" && req.body.companyName.trim() !== ""
+            ? req.body.companyName.trim()
+            : bodyType === "DEPOSIT"
+              ? "Vklad"
+              : "Výber";
+        const orig =
+          typeof req.body.originalCurrency === "string" && req.body.originalCurrency.length === 3
+            ? req.body.originalCurrency.trim().toUpperCase()
+            : "EUR";
+        const exRate =
+          orig === "EUR"
+            ? 1
+            : parseFloat(String(req.body.exchangeRateAtTransaction ?? "1"));
+        const exOk = Number.isFinite(exRate) && exRate > 0 ? exRate : 1;
+        const baseAmt = orig === "EUR" ? signed : parseFloat(String(req.body.baseCurrencyAmount ?? signed));
+        const baseOk = Number.isFinite(baseAmt) ? baseAmt : signed;
+
+        const tIdIn =
+          typeof req.body.transactionId === "string"
+            ? req.body.transactionId.trim() || null
+            : null;
+
+        const row: Record<string, unknown> = {
+          type: bodyType,
+          userId,
+          portfolioId,
+          ticker: CASH_FLOW_TICKER,
+          companyName: nameIn,
+          shares: "1",
+          pricePerShare: signed.toFixed(4),
+          commission: "0",
+          currency: orig,
+          originalCurrency: orig,
+          transactionDate: new Date(req.body.transactionDate),
+          externalId: req.body.externalId || null,
+          transactionId: tIdIn,
+          exchangeRateAtTransaction: orig === "EUR" ? "1" : exOk.toFixed(8),
+          baseCurrencyAmount: (orig === "EUR" ? signed : baseOk).toFixed(4),
+          realizedGain: "0",
+          costBasis: "0",
+        };
+        if (clientId && String(clientId).trim() !== "") {
+          row.id = String(clientId).trim();
+        }
+
+        const cashParsed = insertTransactionSchema.safeParse(row);
+        if (!cashParsed.success) {
+          return res.status(400).json({
+            message: "Invalid transaction data",
+            errors: cashParsed.error.issues,
+          });
+        }
+        const transaction = await storage.createTransaction(cashParsed.data);
+        invalidatePerformanceCache(userId);
+        return res.json(transaction);
+      }
 
       // Validate the transaction data
       const parsed = insertTransactionSchema.safeParse(transactionData);
@@ -2367,7 +2440,22 @@ export async function registerRoutes(
     try {
       const userId = req.user.claims.sub;
       const transactionId = req.params.id;
-      const { type, ticker, companyName, shares, pricePerShare, commission, transactionDate, portfolioId } = req.body;
+      const {
+        type: typeRaw,
+        ticker,
+        companyName,
+        shares: sharesIn,
+        pricePerShare: priceIn,
+        commission,
+        transactionDate,
+        portfolioId,
+        transactionId: extBrokerId,
+        originalCurrency: origCur,
+        exchangeRateAtTransaction: exIn,
+        baseCurrencyAmount: baseIn,
+      } = req.body;
+
+      const type = String(typeRaw || "").toUpperCase();
 
       // Get the transaction to verify it exists and belongs to the user
       const existingTransaction = await storage.getTransactionById(transactionId, userId);
@@ -2378,19 +2466,52 @@ export async function registerRoutes(
 
       const oldTicker = existingTransaction.ticker;
       const oldPortfolioId = existingTransaction.portfolioId;
-      const newTicker = ticker.toUpperCase();
+
+      let newTicker = String(ticker || "").toUpperCase();
       const newPortfolioId = portfolioId || oldPortfolioId;
+
+      let sharesNum = parseFloat(String(sharesIn));
+      let priceNum = parseFloat(String(priceIn));
+      if (type === "DEPOSIT" || type === "WITHDRAWAL") {
+        newTicker = CASH_FLOW_TICKER;
+        sharesNum = 1;
+        const a = Math.abs(priceNum);
+        if (!Number.isFinite(a) || !(a > 0)) {
+          return res.status(400).json({ message: "Neplatná suma pre vklad/výber." });
+        }
+        priceNum = type === "WITHDRAWAL" ? -a : a;
+      }
+
+      const tIdUpd =
+        extBrokerId === undefined
+          ? undefined
+          : typeof extBrokerId === "string" && extBrokerId.trim() !== ""
+            ? extBrokerId.trim()
+            : null;
 
       // Update the transaction
       await storage.updateTransaction(transactionId, userId, {
-        type: type.toUpperCase(),
+        type,
         ticker: newTicker,
         companyName,
-        shares: parseFloat(shares).toFixed(8),
-        pricePerShare: parseFloat(pricePerShare).toFixed(4),
+        shares: sharesNum.toFixed(8),
+        pricePerShare: priceNum.toFixed(4),
         commission: parseFloat(commission || 0).toFixed(4),
         transactionDate: new Date(transactionDate),
         portfolioId: newPortfolioId,
+        ...(tIdUpd !== undefined ? { transactionId: tIdUpd } : {}),
+        ...(origCur && String(origCur).length === 3
+          ? {
+              originalCurrency: String(origCur).toUpperCase(),
+              currency: String(origCur).toUpperCase(),
+            }
+          : {}),
+        ...(exIn !== undefined && exIn !== null && String(exIn) !== ""
+          ? { exchangeRateAtTransaction: parseFloat(String(exIn)).toFixed(8) }
+          : {}),
+        ...(baseIn !== undefined && baseIn !== null && String(baseIn) !== ""
+          ? { baseCurrencyAmount: parseFloat(String(baseIn)).toFixed(4) }
+          : {}),
       });
 
       // Recalculate holdings for old ticker in old portfolio
@@ -2401,7 +2522,7 @@ export async function registerRoutes(
         let totalShares = 0;
         let totalInvested = 0;
         for (const txn of oldTickerTransactions) {
-          if (txn.type === "DIVIDEND") continue;
+          if (isNonHoldingTransactionType(txn.type)) continue;
           const s = parseFloat(txn.shares);
           const p = parseFloat(txn.pricePerShare);
           const c = parseFloat(txn.commission || "0");
@@ -2427,7 +2548,7 @@ export async function registerRoutes(
         let totalShares = 0;
         let totalInvested = 0;
         for (const txn of newTickerTransactions) {
-          if (txn.type === "DIVIDEND") continue;
+          if (isNonHoldingTransactionType(txn.type)) continue;
           const s = parseFloat(txn.shares);
           const p = parseFloat(txn.pricePerShare);
           const c = parseFloat(txn.commission || "0");
@@ -2481,7 +2602,7 @@ export async function registerRoutes(
         let totalInvested = 0;
 
         for (const txn of remainingTransactions) {
-          if (txn.type === "DIVIDEND") continue;
+          if (isNonHoldingTransactionType(txn.type)) continue;
           const shares = parseFloat(txn.shares);
           const price = parseFloat(txn.pricePerShare);
           const commission = parseFloat(txn.commission || "0");

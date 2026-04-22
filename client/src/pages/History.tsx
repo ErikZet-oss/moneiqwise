@@ -20,7 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { CompanyLogo } from "@/components/CompanyLogo";
-import type { Transaction } from "@shared/schema";
+import { CASH_FLOW_TICKER, type Transaction } from "@shared/schema";
 import { AddTransactionForm } from "@/components/AddTransactionForm";
 import { formatShareQuantity } from "@/lib/utils";
 
@@ -40,6 +40,8 @@ interface EditFormData {
   pricePerShare: string;
   commission: string;
   transactionDate: string;
+  transactionId: string;
+  originalCurrency: string;
 }
 
 export default function History() {
@@ -64,6 +66,8 @@ export default function History() {
     pricePerShare: "",
     commission: "",
     transactionDate: "",
+    transactionId: "",
+    originalCurrency: "EUR",
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -128,8 +132,46 @@ export default function History() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: EditFormData }) => {
-      return await apiRequest("PUT", `/api/transactions/${id}`, data);
+    mutationFn: async ({
+      id,
+      data,
+      portfolioId: pfId,
+    }: {
+      id: string;
+      data: EditFormData;
+      portfolioId: string | null;
+    }) => {
+      if (data.type === "DEPOSIT" || data.type === "WITHDRAWAL") {
+        const ccy = (data.originalCurrency || "EUR").toUpperCase().slice(0, 3) || "EUR";
+        const a = Math.abs(parseFloat((data.pricePerShare || "0").replace(",", ".")) || 0);
+        const signed = data.type === "WITHDRAWAL" ? -a : a;
+        return await apiRequest("PUT", `/api/transactions/${id}`, {
+          type: data.type,
+          portfolioId: pfId ?? undefined,
+          ticker: CASH_FLOW_TICKER,
+          companyName: data.companyName,
+          shares: "1",
+          pricePerShare: a,
+          commission: 0,
+          transactionDate: data.transactionDate,
+          originalCurrency: ccy,
+          currency: ccy,
+          exchangeRateAtTransaction: 1,
+          baseCurrencyAmount: signed,
+          transactionId: data.transactionId?.trim() || null,
+        });
+      }
+      return await apiRequest("PUT", `/api/transactions/${id}`, {
+        type: data.type,
+        portfolioId: pfId ?? undefined,
+        ticker: data.ticker,
+        companyName: data.companyName,
+        shares: data.shares,
+        pricePerShare: data.pricePerShare,
+        commission: data.commission,
+        transactionDate: data.transactionDate,
+        transactionId: data.transactionId?.trim() || null,
+      });
     },
     onSuccess: () => {
       toast({
@@ -219,14 +261,18 @@ export default function History() {
   const handleEditClick = (transaction: Transaction) => {
     setEditingTransaction(transaction);
     const date = new Date(transaction.transactionDate);
+    const price = parseFloat(transaction.pricePerShare);
+    const isWithdrawal = transaction.type === "WITHDRAWAL";
     setEditForm({
       type: transaction.type,
       ticker: transaction.ticker,
       companyName: transaction.companyName,
       shares: transaction.shares,
-      pricePerShare: transaction.pricePerShare,
+      pricePerShare: isWithdrawal && price < 0 ? String(Math.abs(price)) : transaction.pricePerShare,
       commission: transaction.commission || "0",
       transactionDate: format(date, "yyyy-MM-dd'T'HH:mm"),
+      transactionId: transaction.transactionId || "",
+      originalCurrency: transaction.originalCurrency || "EUR",
     });
     setEditDialogOpen(true);
   };
@@ -236,6 +282,7 @@ export default function History() {
     updateMutation.mutate({
       id: editingTransaction.id,
       data: editForm,
+      portfolioId: editingTransaction.portfolioId,
     });
   };
 
@@ -503,6 +550,8 @@ export default function History() {
                   <SelectItem value="BUY">Nákupy</SelectItem>
                   <SelectItem value="SELL">Predaje</SelectItem>
                   <SelectItem value="DIVIDEND">Dividendy</SelectItem>
+                  <SelectItem value="DEPOSIT">Vklady</SelectItem>
+                  <SelectItem value="WITHDRAWAL">Výbery</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -557,12 +606,31 @@ export default function History() {
                   const price = parseFloat(transaction.pricePerShare);
                   const commission = parseFloat(transaction.commission || "0");
                   const grossAmount = shares * price;
-                  const total = transaction.type === "DIVIDEND" 
+                  const isCash = transaction.type === "DEPOSIT" || transaction.type === "WITHDRAWAL";
+                  const total = transaction.type === "DIVIDEND"
                     ? grossAmount - commission
-                    : transaction.type === "BUY" 
-                    ? grossAmount + commission 
+                    : isCash
+                    ? grossAmount
+                    : transaction.type === "BUY"
+                    ? grossAmount + commission
                     : grossAmount - commission;
                   const isSelected = selectedIds.has(transaction.id);
+                  const tickerLabel =
+                    transaction.ticker === CASH_FLOW_TICKER || isCash
+                      ? "Hotovosť"
+                      : transaction.ticker;
+                  const typeLabel =
+                    transaction.type === "BUY"
+                      ? "Nákup"
+                      : transaction.type === "SELL"
+                        ? "Predaj"
+                        : transaction.type === "DIVIDEND"
+                          ? "Div"
+                          : transaction.type === "DEPOSIT"
+                            ? "Vklad"
+                            : transaction.type === "WITHDRAWAL"
+                              ? "Výber"
+                              : transaction.type;
 
                   return (
                     <div 
@@ -584,18 +652,22 @@ export default function History() {
                               <CompanyLogo ticker={transaction.ticker} companyName={transaction.companyName} size="xs" />
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="font-semibold text-xs">{transaction.ticker}</span>
+                                  <span className="font-semibold text-xs">{tickerLabel}</span>
                                   <Badge 
-                                    variant={transaction.type === "SELL" ? "destructive" : "default"}
+                                    variant={transaction.type === "SELL" || transaction.type === "WITHDRAWAL" ? "destructive" : "default"}
                                     className={`text-[10px] px-1.5 py-0 h-4 ${
                                       transaction.type === "BUY" 
                                         ? "bg-green-500/20 text-green-600 border-green-500/30" 
                                         : transaction.type === "DIVIDEND"
                                         ? "bg-blue-500/20 text-blue-600 border-blue-500/30"
+                                        : transaction.type === "DEPOSIT"
+                                        ? "bg-emerald-500/20 text-emerald-700 border-emerald-500/30"
+                                        : transaction.type === "WITHDRAWAL"
+                                        ? "bg-amber-500/20 text-amber-800 border-amber-500/30"
                                         : ""
                                     }`}
                                   >
-                                    {transaction.type === "BUY" ? "Nákup" : transaction.type === "SELL" ? "Predaj" : "Div"}
+                                    {typeLabel}
                                   </Badge>
                                 </div>
                                 <p className="text-[9px] text-muted-foreground truncate">{transaction.companyName}</p>
@@ -609,6 +681,10 @@ export default function History() {
                                 </div>
                               ) : transaction.type === "DIVIDEND" ? (
                                 <div className="text-[10px] text-blue-500">+{formatCurrency(total)}</div>
+                              ) : isCash ? (
+                                <div className={`text-[10px] ${parseFloat(String(transaction.pricePerShare)) >= 0 ? "text-emerald-600" : "text-amber-800"}`}>
+                                  {formatCurrency(grossAmount)}
+                                </div>
                               ) : (
                                 <div className="text-[10px] text-muted-foreground">{formatShareQuantity(shares)} ks</div>
                               )}
@@ -618,7 +694,7 @@ export default function History() {
                             <div className="flex items-center gap-2 text-[9px] text-muted-foreground">
                               <span>{formatDate(transaction.transactionDate)}</span>
                               <span>•</span>
-                              <span>{formatCurrency(price)}/ks</span>
+                              <span>{isCash ? formatCurrency(Math.abs(price)) : `${formatCurrency(price)}/ks`}</span>
                               {commission > 0 && (
                                 <>
                                   <span>•</span>
@@ -698,12 +774,31 @@ export default function History() {
                   const price = parseFloat(transaction.pricePerShare);
                   const commission = parseFloat(transaction.commission || "0");
                   const grossAmount = shares * price;
-                  const total = transaction.type === "DIVIDEND" 
-                    ? grossAmount - commission  // Net dividend (gross - tax)
-                    : transaction.type === "BUY" 
-                    ? grossAmount + commission 
+                  const isCash = transaction.type === "DEPOSIT" || transaction.type === "WITHDRAWAL";
+                  const total = transaction.type === "DIVIDEND"
+                    ? grossAmount - commission
+                    : isCash
+                    ? grossAmount
+                    : transaction.type === "BUY"
+                    ? grossAmount + commission
                     : grossAmount - commission;
                   const isSelected = selectedIds.has(transaction.id);
+                  const tickerLabel =
+                    transaction.ticker === CASH_FLOW_TICKER || isCash
+                      ? "Hotovosť"
+                      : transaction.ticker;
+                  const typeLabel =
+                    transaction.type === "BUY"
+                      ? "Nákup"
+                      : transaction.type === "SELL"
+                        ? "Predaj"
+                        : transaction.type === "DIVIDEND"
+                          ? "Dividenda"
+                          : transaction.type === "DEPOSIT"
+                            ? "Vklad"
+                            : transaction.type === "WITHDRAWAL"
+                              ? "Výber"
+                              : transaction.type;
 
                   return (
                     <TableRow 
@@ -727,29 +822,35 @@ export default function History() {
                       </TableCell>
                       <TableCell>
                         <Badge 
-                          variant={transaction.type === "SELL" ? "destructive" : "default"}
+                          variant={transaction.type === "SELL" || transaction.type === "WITHDRAWAL" ? "destructive" : "default"}
                           className={
                             transaction.type === "BUY" 
                               ? "bg-green-500/20 text-green-600 border-green-500/30" 
                               : transaction.type === "DIVIDEND"
                               ? "bg-blue-500/20 text-blue-600 border-blue-500/30"
+                              : transaction.type === "DEPOSIT"
+                              ? "bg-emerald-500/20 text-emerald-700 border-emerald-500/30"
+                              : transaction.type === "WITHDRAWAL"
+                              ? "bg-amber-500/20 text-amber-800 border-amber-500/30"
                               : ""
                           }
                         >
-                          {transaction.type === "BUY" ? "Nákup" : transaction.type === "SELL" ? "Predaj" : "Dividenda"}
+                          {typeLabel}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <CompanyLogo ticker={transaction.ticker} companyName={transaction.companyName} size="sm" />
                           <div className="flex flex-col">
-                            <span className="font-medium">{transaction.ticker}</span>
+                            <span className="font-medium">{tickerLabel}</span>
                             <span className="text-xs text-muted-foreground">{transaction.companyName}</span>
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell className="text-right">{formatShareQuantity(shares)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(price)}</TableCell>
+                      <TableCell className="text-right">{isCash ? "1" : formatShareQuantity(shares)}</TableCell>
+                      <TableCell className="text-right">
+                        {isCash ? formatCurrency(Math.abs(price)) : formatCurrency(price)}
+                      </TableCell>
                       <TableCell className="text-right text-muted-foreground">
                         {commission > 0 ? formatCurrency(commission) : "-"}
                       </TableCell>
@@ -765,6 +866,10 @@ export default function History() {
                         ) : transaction.type === "DIVIDEND" ? (
                           <span className="font-medium text-blue-500">
                             +{formatCurrency(total)}
+                          </span>
+                        ) : isCash ? (
+                          <span className={`font-medium ${parseFloat(String(transaction.pricePerShare)) >= 0 ? "text-emerald-600" : "text-amber-800"}`}>
+                            {formatCurrency(grossAmount)}
                           </span>
                         ) : (
                           <span className="text-muted-foreground">-</span>
@@ -823,7 +928,22 @@ export default function History() {
                 <Label htmlFor="edit-type">Typ</Label>
                 <Select 
                   value={editForm.type} 
-                  onValueChange={(value) => setEditForm({ ...editForm, type: value })}
+                  onValueChange={(value) =>
+                    setEditForm((f) => ({
+                      ...f,
+                      type: value,
+                      ticker:
+                        value === "DEPOSIT" || value === "WITHDRAWAL"
+                          ? CASH_FLOW_TICKER
+                          : f.ticker === CASH_FLOW_TICKER
+                            ? ""
+                            : f.ticker,
+                      shares:
+                        value === "DEPOSIT" || value === "WITHDRAWAL"
+                          ? "1"
+                          : f.shares,
+                    }))
+                  }
                 >
                   <SelectTrigger id="edit-type" data-testid="select-edit-type">
                     <SelectValue />
@@ -832,6 +952,8 @@ export default function History() {
                     <SelectItem value="BUY">Nákup</SelectItem>
                     <SelectItem value="SELL">Predaj</SelectItem>
                     <SelectItem value="DIVIDEND">Dividenda</SelectItem>
+                    <SelectItem value="DEPOSIT">Vklad</SelectItem>
+                    <SelectItem value="WITHDRAWAL">Výber</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -844,12 +966,13 @@ export default function History() {
                   onChange={(e) => setEditForm({ ...editForm, ticker: e.target.value.toUpperCase() })}
                   placeholder="napr. VWCE.DE, MO, AAPL"
                   data-testid="input-edit-ticker"
+                  readOnly={editForm.type === "DEPOSIT" || editForm.type === "WITHDRAWAL"}
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit-company">Názov spoločnosti</Label>
+              <Label htmlFor="edit-company">Názov / poznámka</Label>
               <Input
                 id="edit-company"
                 value={editForm.companyName}
@@ -860,6 +983,7 @@ export default function History() {
             </div>
 
             <div className="grid grid-cols-2 gap-4">
+              {editForm.type !== "DEPOSIT" && editForm.type !== "WITHDRAWAL" && (
               <div className="space-y-2">
                 <Label htmlFor="edit-shares">
                   {editForm.type === "DIVIDEND" ? "Počet akcií" : "Počet kusov"}
@@ -873,10 +997,21 @@ export default function History() {
                   data-testid="input-edit-shares"
                 />
               </div>
+              )}
               
-              <div className="space-y-2">
+              <div
+                className={
+                  editForm.type === "DEPOSIT" || editForm.type === "WITHDRAWAL"
+                    ? "space-y-2 col-span-2 sm:max-w-md"
+                    : "space-y-2"
+                }
+              >
                 <Label htmlFor="edit-price">
-                  {editForm.type === "DIVIDEND" ? "Dividenda/akciu" : "Cena za kus"}
+                  {editForm.type === "DEPOSIT" || editForm.type === "WITHDRAWAL"
+                    ? "Suma (kladne)"
+                    : editForm.type === "DIVIDEND"
+                    ? "Dividenda/akciu"
+                    : "Cena za kus"}
                 </Label>
                 <Input
                   id="edit-price"
@@ -889,22 +1024,56 @@ export default function History() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-commission">
-                  {editForm.type === "DIVIDEND" ? "Zrážková daň" : "Poplatky"}
-                </Label>
-                <Input
-                  id="edit-commission"
-                  type="number"
-                  step="0.01"
-                  value={editForm.commission}
-                  onChange={(e) => setEditForm({ ...editForm, commission: e.target.value })}
-                  data-testid="input-edit-commission"
-                />
+            {(editForm.type === "DEPOSIT" || editForm.type === "WITHDRAWAL") && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-ccy">Menový kód (ISO)</Label>
+                  <Input
+                    id="edit-ccy"
+                    maxLength={3}
+                    className="uppercase"
+                    value={editForm.originalCurrency}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, originalCurrency: e.target.value.toUpperCase() })
+                    }
+                    data-testid="input-edit-ccy"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-tx-id">ID od brokera (voliteľné)</Label>
+                  <Input
+                    id="edit-tx-id"
+                    value={editForm.transactionId}
+                    onChange={(e) => setEditForm({ ...editForm, transactionId: e.target.value })}
+                    data-testid="input-edit-tx-id"
+                  />
+                </div>
               </div>
-              
-              <div className="space-y-2">
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+              {editForm.type !== "DEPOSIT" && editForm.type !== "WITHDRAWAL" && (
+                <div className="space-y-2">
+                  <Label htmlFor="edit-commission">
+                    {editForm.type === "DIVIDEND" ? "Zrážková daň" : "Poplatky"}
+                  </Label>
+                  <Input
+                    id="edit-commission"
+                    type="number"
+                    step="0.01"
+                    value={editForm.commission}
+                    onChange={(e) => setEditForm({ ...editForm, commission: e.target.value })}
+                    data-testid="input-edit-commission"
+                  />
+                </div>
+              )}
+              <div
+                className={
+                  editForm.type === "DEPOSIT" || editForm.type === "WITHDRAWAL"
+                    ? "space-y-2 col-span-2"
+                    : "space-y-2"
+                }
+              >
                 <Label htmlFor="edit-date">Dátum</Label>
                 <Input
                   id="edit-date"
@@ -916,15 +1085,17 @@ export default function History() {
               </div>
             </div>
 
-            <div className="p-3 rounded-lg bg-muted/50 text-sm">
-              <p className="font-medium mb-1">Tipy pre správne tickery:</p>
-              <ul className="text-xs text-muted-foreground space-y-1">
-                <li>US akcie: MO, AAPL, MSFT (bez prípony)</li>
-                <li>Frankfurt: VWCE.DE, IS3N.DE</li>
-                <li>Amsterdam: IMAE.AS (nie .NL alebo .AMS)</li>
-                <li>Paríž: UST.PA (nie .FR alebo .PAR)</li>
-              </ul>
-            </div>
+            {editForm.type !== "DEPOSIT" && editForm.type !== "WITHDRAWAL" && (
+              <div className="p-3 rounded-lg bg-muted/50 text-sm">
+                <p className="font-medium mb-1">Tipy pre správne tickery:</p>
+                <ul className="text-xs text-muted-foreground space-y-1">
+                  <li>US akcie: MO, AAPL, MSFT (bez prípony)</li>
+                  <li>Frankfurt: VWCE.DE, IS3N.DE</li>
+                  <li>Amsterdam: IMAE.AS (nie .NL alebo .AMS)</li>
+                  <li>Paríž: UST.PA (nie .FR alebo .PAR)</li>
+                </ul>
+              </div>
+            )}
           </div>
 
           <DialogFooter>

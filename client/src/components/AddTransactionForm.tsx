@@ -14,7 +14,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useToast } from "@/hooks/use-toast";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Check, ChevronsUpDown, Loader2, TrendingUp, TrendingDown, Coins, Briefcase } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2, TrendingUp, TrendingDown, Coins, Briefcase, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
+import { CASH_FLOW_TICKER } from "@shared/schema";
 import { cn } from "@/lib/utils";
 
 function useDebounce<T>(value: T, delay: number): T {
@@ -49,26 +50,64 @@ interface StockQuote {
   low52: number;
 }
 
-type TransactionType = "BUY" | "SELL" | "DIVIDEND";
+type TransactionType = "BUY" | "SELL" | "DIVIDEND" | "DEPOSIT" | "WITHDRAWAL";
 
-const transactionSchema = z.object({
-  id: z.string().optional(),
-  type: z.enum(["BUY", "SELL", "DIVIDEND"]),
-  ticker: z.string().min(1, "Vyberte akciu"),
-  companyName: z.string().min(1, "Názov spoločnosti je povinný"),
-  shares: z.string().optional(),
-  pricePerShare: z.string().min(1, "Zadajte cenu/sumu").refine((val) => parseFloat(val) > 0, "Suma musí byť väčšia ako 0"),
-  commission: z.string().default("0"),
-  transactionDate: z.string().min(1, "Vyberte dátum transakcie"),
-}).refine((data) => {
-  if (data.type !== "DIVIDEND") {
-    return data.shares && data.shares.length > 0 && parseFloat(data.shares) > 0;
-  }
-  return true;
-}, {
-  message: "Zadajte počet kusov",
-  path: ["shares"],
-});
+const transactionSchema = z
+  .object({
+    id: z.string().optional(),
+    type: z.enum(["BUY", "SELL", "DIVIDEND", "DEPOSIT", "WITHDRAWAL"]),
+    ticker: z.string().optional().default(""),
+    companyName: z.string().optional().default(""),
+    shares: z.string().optional(),
+    pricePerShare: z.string().min(1, "Zadajte cenu/sumu"),
+    commission: z.string().default("0"),
+    transactionDate: z.string().min(1, "Vyberte dátum transakcie"),
+    cashNote: z.string().optional().default(""),
+    cashCurrency: z.string().default("EUR"),
+    externalRefId: z.string().optional().default(""),
+  })
+  .refine(
+    (data) => {
+      if (data.type === "DEPOSIT" || data.type === "WITHDRAWAL") {
+        return parseFloat((data.pricePerShare || "0").replace(",", ".")) > 0;
+      }
+      if (data.type === "BUY" || data.type === "SELL" || data.type === "DIVIDEND") {
+        return parseFloat((data.pricePerShare || "0").replace(",", ".")) > 0;
+      }
+      return true;
+    },
+    { message: "Hodnota musí byť väčšia ako 0", path: ["pricePerShare"] },
+  )
+  .refine(
+    (data) => {
+      if (data.type === "BUY" || data.type === "SELL" || data.type === "DIVIDEND") {
+        if (!data.ticker?.trim()) return false;
+        if (!data.companyName?.trim()) return false;
+        return true;
+      }
+      return true;
+    },
+    { message: "Vyberte spoločnosť", path: ["ticker"] },
+  )
+  .refine(
+    (data) => {
+      if (data.type === "BUY" || data.type === "SELL") {
+        return data.shares && data.shares.length > 0 && parseFloat((data.shares || "0").replace(",", ".")) > 0;
+      }
+      return true;
+    },
+    { message: "Zadajte počet kusov", path: ["shares"] },
+  )
+  .refine(
+    (data) => {
+      if (data.type === "DIVIDEND" && !data.shares) return false;
+      if (data.type === "DIVIDEND" && data.shares) {
+        return parseFloat((data.shares || "0").replace(",", ".")) > 0;
+      }
+      return true;
+    },
+    { message: "Zadajte počet akcií (pre výpočet pomeru)", path: ["shares"] },
+  );
 
 type TransactionForm = z.infer<typeof transactionSchema>;
 
@@ -114,6 +153,9 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
       pricePerShare: "",
       commission: "0",
       transactionDate: new Date().toISOString().slice(0, 16),
+      cashNote: "",
+      cashCurrency: "EUR",
+      externalRefId: "",
     },
   });
 
@@ -129,14 +171,40 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
 
   const mutation = useMutation({
     mutationFn: async (data: TransactionForm) => {
-      const response = await apiRequest("POST", "/api/transactions", { ...data, portfolioId: selectedPortfolioId });
-      return response;
+      if (data.type === "DEPOSIT" || data.type === "WITHDRAWAL") {
+        const raw = (data.pricePerShare || "0").replace(",", ".");
+        const amt = parseFloat(raw);
+        const ccy = (data.cashCurrency || "EUR").toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3) || "EUR";
+        const label =
+          (data.cashNote || data.companyName || "").trim() ||
+          (data.type === "DEPOSIT" ? "Vklad" : "Výber");
+        const signed = data.type === "WITHDRAWAL" ? -Math.abs(amt) : Math.abs(amt);
+        const body: Record<string, unknown> = {
+          type: data.type,
+          ticker: CASH_FLOW_TICKER,
+          companyName: label,
+          shares: "1",
+          pricePerShare: Math.abs(amt).toString(),
+          commission: "0",
+          transactionDate: data.transactionDate,
+          portfolioId: selectedPortfolioId,
+          originalCurrency: ccy,
+          exchangeRateAtTransaction: ccy === "EUR" ? 1 : 1,
+          baseCurrencyAmount: signed.toFixed(4),
+        };
+        if (data.id?.trim()) body.id = data.id.trim();
+        if (data.externalRefId?.trim()) body.transactionId = data.externalRefId.trim();
+        return await apiRequest("POST", "/api/transactions", body);
+      }
+      return await apiRequest("POST", "/api/transactions", { ...data, portfolioId: selectedPortfolioId });
     },
     onSuccess: () => {
       const messages: Record<TransactionType, string> = {
         BUY: "Nákup zaznamenaný",
         SELL: "Predaj zaznamenaný",
         DIVIDEND: "Dividenda zaznamenaná",
+        DEPOSIT: "Vklad zaznamenaný",
+        WITHDRAWAL: "Výber zaznamenaný",
       };
       toast({
         title: messages[transactionType],
@@ -157,6 +225,9 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
         pricePerShare: "",
         commission: "0",
         transactionDate: new Date().toISOString().slice(0, 16),
+        cashNote: "",
+        cashCurrency: "EUR",
+        externalRefId: "",
       });
       setSelectedStock(null);
       setSelectedQuote(null);
@@ -226,6 +297,22 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
       setSelectedQuote(null);
       form.setValue("pricePerShare", "");
     }
+    if (type === "DEPOSIT" || type === "WITHDRAWAL") {
+      setSelectedStock(null);
+      setSelectedQuote(null);
+      setInputValue("");
+      form.setValue("ticker", CASH_FLOW_TICKER);
+      form.setValue("companyName", type === "DEPOSIT" ? "Vklad" : "Výber");
+      form.setValue("shares", "1");
+      form.setValue("commission", "0");
+      form.setValue("pricePerShare", "");
+    } else {
+      if (form.getValues("ticker") === CASH_FLOW_TICKER) {
+        form.setValue("ticker", "");
+        form.setValue("companyName", "");
+        form.setValue("shares", "");
+      }
+    }
   };
 
   const getDescription = () => {
@@ -236,6 +323,10 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
         return "Zaznamenajte predaj akcie z portfólia.";
       case "DIVIDEND":
         return "Zaznamenajte prijatú dividendu.";
+      case "DEPOSIT":
+        return "Vloženie peňazí na obchodný účet (neprepája sa s konkrétnou akciou).";
+      case "WITHDRAWAL":
+        return "Výber peňazí z obchodného účtu.";
     }
   };
 
@@ -248,12 +339,19 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
         return "Zaznamenať predaj";
       case "DIVIDEND":
         return "Zaznamenať dividendu";
+      case "DEPOSIT":
+        return "Zaznamenať vklad";
+      case "WITHDRAWAL":
+        return "Zaznamenať výber";
     }
   };
 
   const getTotalLabel = () => {
     if (transactionType === "DIVIDEND") {
       return "Čistá dividenda (po dani):";
+    }
+    if (transactionType === "DEPOSIT" || transactionType === "WITHDRAWAL") {
+      return transactionType === "DEPOSIT" ? "Vklad:" : "Výber:";
     }
     return "Celková suma:";
   };
@@ -263,11 +361,17 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
     const price = parseFloat(form.watch("pricePerShare") || "0");
     const commission = parseFloat(form.watch("commission") || "0");
 
+    if (transactionType === "DEPOSIT" || transactionType === "WITHDRAWAL") {
+      const p = Math.abs(parseFloat((form.watch("pricePerShare") || "0").toString().replace(",", ".")) || 0);
+      return transactionType === "WITHDRAWAL" ? -p : p;
+    }
     if (transactionType === "DIVIDEND") {
       return shares * price - commission;
     }
     return shares * price + commission;
   };
+
+  const isCashFlow = transactionType === "DEPOSIT" || transactionType === "WITHDRAWAL";
 
   const inner = (
     <Card className={embed ? "border-0 shadow-none" : undefined}>
@@ -280,12 +384,12 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <div className="p-4 rounded-lg bg-muted">
               <Label className="text-base font-medium mb-3 block">Typ transakcie</Label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
                   variant={transactionType === "BUY" ? "default" : "outline"}
                   className={cn(
-                    "flex items-center gap-2",
+                    "flex items-center gap-2 min-w-0",
                     transactionType === "BUY" && "bg-green-600 hover:bg-green-700"
                   )}
                   onClick={() => handleTypeChange("BUY")}
@@ -320,6 +424,32 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
                   <Coins className="h-4 w-4" />
                   Dividenda
                 </Button>
+                <Button
+                  type="button"
+                  variant={transactionType === "DEPOSIT" ? "default" : "outline"}
+                  className={cn(
+                    "flex items-center gap-2",
+                    transactionType === "DEPOSIT" && "bg-emerald-700 hover:bg-emerald-800"
+                  )}
+                  onClick={() => handleTypeChange("DEPOSIT")}
+                  data-testid="button-type-deposit"
+                >
+                  <ArrowDownToLine className="h-4 w-4" />
+                  Vklad
+                </Button>
+                <Button
+                  type="button"
+                  variant={transactionType === "WITHDRAWAL" ? "default" : "outline"}
+                  className={cn(
+                    "flex items-center gap-2",
+                    transactionType === "WITHDRAWAL" && "bg-amber-700 hover:bg-amber-800"
+                  )}
+                  onClick={() => handleTypeChange("WITHDRAWAL")}
+                  data-testid="button-type-withdrawal"
+                >
+                  <ArrowUpFromLine className="h-4 w-4" />
+                  Výber
+                </Button>
               </div>
             </div>
 
@@ -343,6 +473,56 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
               </Select>
             </div>
 
+            {isCashFlow && (
+              <div className="space-y-4 p-4 rounded-lg border border-dashed bg-muted/40">
+                <p className="text-sm text-muted-foreground">
+                  Suma v uvádzacej mene. Pri výbere zadajte kladné číslo — výber sa v účtovníctve ukladá so zápornou hodnotou.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="cashCurrency"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Menový kód (ISO)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="EUR" maxLength={3} className="uppercase" {...field} data-testid="input-cash-currency" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="externalRefId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>ID od brokera (voliteľné)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="napr. z výpisu XTB" {...field} data-testid="input-cash-external-id" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <FormField
+                  control={form.control}
+                  name="cashNote"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Poznámka / pomenovanie</FormLabel>
+                      <FormControl>
+                        <Input placeholder="napr. SEPA vklad, PayPal, výber do banky…" {...field} data-testid="input-cash-note" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+
+            {!isCashFlow && (
             <FormField
               control={form.control}
               name="ticker"
@@ -446,8 +626,9 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
                 </FormItem>
               )}
             />
+            )}
 
-            {selectedStock && selectedQuote && transactionType !== "DIVIDEND" && (
+            {selectedStock && selectedQuote && transactionType !== "DIVIDEND" && !isCashFlow && (
               <div className="p-4 rounded-lg bg-muted text-sm">
                 <div className="flex justify-between">
                   <span>Aktuálna cena:</span>
@@ -464,7 +645,7 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
               </div>
             )}
 
-            {selectedStock && !selectedQuote && (
+            {selectedStock && !selectedQuote && !isCashFlow && (
               <FormField
                 control={form.control}
                 name="companyName"
@@ -508,8 +689,16 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
               )}
             />
 
-            <div className={transactionType === "DIVIDEND" ? "" : "grid grid-cols-2 gap-4"}>
-              {transactionType !== "DIVIDEND" && (
+            <div
+              className={
+                isCashFlow
+                  ? "grid grid-cols-1 gap-4"
+                  : transactionType === "DIVIDEND"
+                    ? ""
+                    : "grid grid-cols-2 gap-4"
+              }
+            >
+              {transactionType !== "DIVIDEND" && !isCashFlow && (
                 <FormField
                   control={form.control}
                   name="shares"
@@ -531,10 +720,21 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      {transactionType === "DIVIDEND" ? "Celková suma dividendy (€)" : "Cena za akciu (€)"}
+                      {isCashFlow
+                        ? `Suma (kladne číslo) — ${(form.watch("cashCurrency") || "EUR").toUpperCase().slice(0, 3) || "EUR"}`
+                        : transactionType === "DIVIDEND"
+                          ? "Celková suma dividendy (€)"
+                          : "Cena za akciu (€)"}
                     </FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.01" placeholder="0.00" {...field} data-testid="input-price" />
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min={isCashFlow ? 0.01 : undefined}
+                        placeholder="0.00"
+                        {...field}
+                        data-testid="input-price"
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -542,6 +742,7 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
               />
             </div>
 
+            {!isCashFlow && (
             <FormField
               control={form.control}
               name="commission"
@@ -555,14 +756,20 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
                 </FormItem>
               )}
             />
+            )}
 
-            {((transactionType !== "DIVIDEND" && form.watch("shares") && form.watch("pricePerShare")) ||
+            {((isCashFlow && form.watch("pricePerShare")) ||
+              (transactionType !== "DIVIDEND" && !isCashFlow && form.watch("shares") && form.watch("pricePerShare")) ||
               (transactionType === "DIVIDEND" && form.watch("pricePerShare"))) && (
               <div className="p-4 rounded-lg bg-muted">
                 <div className="flex justify-between text-sm">
                   <span>{transactionType === "DIVIDEND" ? "Čistá dividenda (po dani):" : getTotalLabel()}</span>
                   <span
-                    className={cn("font-medium", transactionType === "DIVIDEND" && "text-blue-500")}
+                    className={cn(
+                      "font-medium",
+                      transactionType === "DIVIDEND" && "text-blue-500",
+                      isCashFlow && transactionType === "WITHDRAWAL" && "text-amber-700"
+                    )}
                   >
                     {formatCurrency(
                       transactionType === "DIVIDEND"
@@ -586,7 +793,9 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
                 "w-full",
                 transactionType === "BUY" && "bg-green-600 hover:bg-green-700",
                 transactionType === "SELL" && "bg-red-600 hover:bg-red-700",
-                transactionType === "DIVIDEND" && "bg-blue-600 hover:bg-blue-700"
+                transactionType === "DIVIDEND" && "bg-blue-600 hover:bg-blue-700",
+                transactionType === "DEPOSIT" && "bg-emerald-700 hover:bg-emerald-800",
+                transactionType === "WITHDRAWAL" && "bg-amber-700 hover:bg-amber-800"
               )}
               disabled={mutation.isPending || loadingPrice}
               data-testid="button-submit-transaction"
