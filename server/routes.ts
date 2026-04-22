@@ -1446,8 +1446,10 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  const { ensurePortfolioSortOrderColumn } = await import("./schemaEnsure");
+  const { ensurePortfolioSortOrderColumn, ensureTransactionImportColumns } =
+    await import("./schemaEnsure");
   await ensurePortfolioSortOrderColumn();
+  await ensureTransactionImportColumns();
 
   // Setup auth middleware
   await setupAuth(app);
