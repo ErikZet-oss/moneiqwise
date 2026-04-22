@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { CASH_FLOW_TICKER } from '@shared/schema';
 
 /** Odstráni kombinujúce znaky (diakritiku); nepoužívame \p{M} kvôli kompatibilite s runtime/TS. */
 function stripDiacritics(s: string): string {
@@ -8,13 +9,21 @@ function stripDiacritics(s: string): string {
 export interface ParsedTransaction {
   date: Date;
   ticker: string;
-  type: 'BUY' | 'SELL' | 'DIVIDEND' | 'TAX';
+  type: 'BUY' | 'SELL' | 'DIVIDEND' | 'TAX' | 'DEPOSIT' | 'WITHDRAWAL';
   quantity: number;
   priceEur: number;
   totalAmountEur: number;
   originalComment?: string;
   externalId?: string; // XTB transaction/position ID
   linkedDividendId?: string; // For TAX entries - links to parent DIVIDEND externalId
+  /** Preferovaný kľúč pre deduplikáciu importu (pre hotovostné operácie = XTB ID). */
+  transactionId?: string;
+  /** Mena účtu / sumy na riadku (z metadát exportu, predvolene EUR). */
+  originalCurrency?: string;
+  /** Kurz pôvodnej meny do EUR; pri EUR účte 1. */
+  exchangeRateAtTransaction?: number;
+  /** Suma v EUR (základná mena) — pri EUR účte zhodné s |Amount|. */
+  baseCurrencyAmount?: number;
 }
 
 export interface ImportLogEntry {
@@ -199,6 +208,27 @@ function findHeaderRow(data: any[][], headerKeywords: string[]): { headerIndex: 
   return { headerIndex: -1, headers: [] };
 }
 
+/** Z horných riadkov XTB exportu ( bunka „Currency“ + riadok pod ňou ) — ISO 4217, inak EUR. */
+function parseAccountCurrencyFromXtBMeta(data: any[][]): string {
+  for (let i = 0; i < Math.min(20, data.length - 1); i++) {
+    const row = data[i];
+    if (!row) continue;
+    for (let c = 0; c < row.length; c++) {
+      const cell = String(row[c] ?? '')
+        .trim()
+        .toLowerCase();
+      if (cell === 'currency') {
+        const below = data[i + 1]?.[c];
+        const code = String(below ?? '')
+          .trim()
+          .toUpperCase();
+        if (/^[A-Z]{3}$/.test(code)) return code;
+      }
+    }
+  }
+  return 'EUR';
+}
+
 /**
  * Množstvo z komentára „3 @ 126.50“ alebo „20/25 @ 1158“ / „1/6“ (čiastočný uzáver = prvé číslo =
  * celé kusy v riadku). Zlomok akcie len ak menovateľ ≤ 5 (1/2, 3/4 …), nie 1/6 ako ⅙ akcie.
@@ -351,7 +381,8 @@ function getSymbolColumnIndex(headers: string[]): number {
 // Parse CASH OPERATION HISTORY sheet
 function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransaction[] {
   const transactions: ParsedTransaction[] = [];
-  
+  const accountCurrency = parseAccountCurrencyFromXtBMeta(data);
+
   // Hlavička: EN (type, time, amount) alebo SK (typ, čas, suma, …)
   const { headerIndex, headers } = findHeaderRow(data, [
     'type',
@@ -439,13 +470,62 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
     if (!time) continue;
     
     const ticker = cleanTicker(symbolRaw);
-    
-    // Skip irrelevant types (SK/EN, s/bez diakritiky)
-    const skipTypes = ['deposit', 'withdrawal', 'vklad', 'výber', 'transfer', 'prevod'];
-    if (
-      skipTypes.some((skip) => typeStr.includes(skip)) ||
+
+    const isDeposit =
+      typeStr.includes('deposit') ||
+      typePlain.includes('vklad');
+    const isWithdrawal =
+      typeStr.includes('withdrawal') ||
       typePlain.includes('vyber') ||
-      typePlain.includes('vklad')
+      typeStr.includes('výber');
+
+    if (isDeposit || isWithdrawal) {
+      const absAmt = Math.abs(amount);
+      if (!(absAmt > 0)) {
+        log.push({
+          row: i + 1,
+          status: 'warning',
+          message: `[${operationId}] ${isDeposit ? 'Vklad' : 'Výber'}: nulová alebo neplatná suma`,
+        });
+        continue;
+      }
+
+      const signedTotal = isDeposit ? absAmt : -absAmt;
+      let exchangeRateAtTransaction: number | undefined;
+      let baseCurrencyAmount: number | undefined;
+      if (accountCurrency === 'EUR') {
+        exchangeRateAtTransaction = 1;
+        baseCurrencyAmount = signedTotal;
+      }
+
+      transactions.push({
+        date: time,
+        ticker: CASH_FLOW_TICKER,
+        type: isDeposit ? 'DEPOSIT' : 'WITHDRAWAL',
+        quantity: 0,
+        priceEur: 0,
+        totalAmountEur: signedTotal,
+        originalComment: comment,
+        externalId: operationId,
+        transactionId: operationId || undefined,
+        originalCurrency: accountCurrency,
+        exchangeRateAtTransaction,
+        baseCurrencyAmount,
+      });
+
+      log.push({
+        row: i + 1,
+        status: 'success',
+        message: `[${operationId}] ${isDeposit ? 'DEPOSIT' : 'WITHDRAWAL'} ${signedTotal >= 0 ? '+' : ''}${signedTotal.toFixed(2)} ${accountCurrency}`,
+      });
+      continue;
+    }
+
+    // Preskočiť interné prevody (nie vklad cez „deposit“)
+    if (
+      (typeStr.includes('transfer') || typePlain.includes('prevod')) &&
+      !typeStr.includes('deposit') &&
+      !typePlain.includes('vklad')
     ) {
       log.push({
         row: i + 1,

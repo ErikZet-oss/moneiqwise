@@ -32,12 +32,16 @@ import { formatShareQuantity } from "@/lib/utils";
 interface ParsedTransaction {
   date: string;
   ticker: string;
-  type: 'BUY' | 'SELL' | 'DIVIDEND' | 'TAX';
+  type: 'BUY' | 'SELL' | 'DIVIDEND' | 'TAX' | 'DEPOSIT' | 'WITHDRAWAL';
   quantity: number;
   priceEur: number;
   totalAmountEur: number;
   originalComment?: string;
   externalId?: string;
+  transactionId?: string;
+  originalCurrency?: string;
+  exchangeRateAtTransaction?: number;
+  baseCurrencyAmount?: number;
 }
 
 interface ImportLogEntry {
@@ -349,6 +353,10 @@ export default function Import() {
         return 'outline';
       case 'TAX':
         return 'destructive';
+      case 'DEPOSIT':
+        return 'default';
+      case 'WITHDRAWAL':
+        return 'secondary';
       default:
         return 'outline';
     }
@@ -364,6 +372,10 @@ export default function Import() {
         return 'Dividenda';
       case 'TAX':
         return 'Daň';
+      case 'DEPOSIT':
+        return 'Vklad';
+      case 'WITHDRAWAL':
+        return 'Výber';
       default:
         return type;
     }
@@ -502,7 +514,7 @@ export default function Import() {
                         </TableHeader>
                         <TableBody>
                           {parseResult.transactions.map((tx, index) => (
-                            <TableRow key={index} data-testid={`row-transaction-${index}`} className={tx.type === 'TAX' ? 'bg-red-500/5' : ''}>
+                            <TableRow key={index} data-testid={`row-transaction-${index}`} className={tx.type === 'TAX' || tx.type === 'WITHDRAWAL' ? 'bg-red-500/5' : ''}>
                               <TableCell className="font-mono text-xs text-muted-foreground">
                                 {tx.externalId || '-'}
                               </TableCell>

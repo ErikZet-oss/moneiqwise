@@ -5,7 +5,13 @@ import fs from "fs";
 import path from "path";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
-import { insertTransactionSchema, insertPortfolioSchema, insertOptionTradeSchema } from "@shared/schema";
+import {
+  insertTransactionSchema,
+  insertPortfolioSchema,
+  insertOptionTradeSchema,
+  CASH_FLOW_TICKER,
+  type InsertTransaction,
+} from "@shared/schema";
 import { parseXTBFile, type XTBImportResult } from "./xtbParser";
 import {
   computeRealizedGainsFromTransactions,
@@ -3646,7 +3652,12 @@ export async function registerRoutes(
       const existingExternalIds = new Set(
         existingInPortfolio
           .map((t) => t.externalId)
-          .filter((id): id is string => typeof id === "string" && id.trim() !== "")
+          .filter((id): id is string => typeof id === "string" && id.trim() !== ""),
+      );
+      const existingTransactionIds = new Set(
+        existingInPortfolio
+          .map((t) => t.transactionId)
+          .filter((id): id is string => typeof id === "string" && id.trim() !== ""),
       );
 
       // Cache company names to avoid repeated API calls
@@ -3667,75 +3678,129 @@ export async function registerRoutes(
           if (tx.type === 'TAX' && (!tx.ticker || tx.ticker === 'TAX')) {
             continue;
           }
-          
-          if (!tx.ticker) {
-            errors.push(`Riadok ${i + 1} (ID: ${tx.externalId || 'N/A'}): Chýba ticker`);
+
+          const isCashFlow = tx.type === "DEPOSIT" || tx.type === "WITHDRAWAL";
+          const rawTicker =
+            typeof tx.ticker === "string" ? tx.ticker.trim() : "";
+          const effectiveTicker = rawTicker
+            ? rawTicker
+            : isCashFlow
+              ? CASH_FLOW_TICKER
+              : "";
+
+          if (!effectiveTicker) {
+            errors.push(
+              `Riadok ${i + 1} (ID: ${tx.externalId || "N/A"}): Chýba ticker`,
+            );
             continue;
           }
 
           const extId =
             typeof tx.externalId === "string" ? tx.externalId.trim() : "";
+          const txIdRaw =
+            typeof tx.transactionId === "string"
+              ? tx.transactionId.trim()
+              : "";
+          const txId = txIdRaw || extId;
+          if (txId && existingTransactionIds.has(txId)) {
+            skippedDuplicates++;
+            continue;
+          }
           if (extId && existingExternalIds.has(extId)) {
             skippedDuplicates++;
             continue;
           }
 
-          // Fetch company name for ticker (use cache)
-          let companyName = companyNameCache[tx.ticker];
+          const tickerUpper = effectiveTicker.toUpperCase();
+          let companyName = companyNameCache[tickerUpper];
           if (!companyName) {
-            companyName = tx.ticker;
-            try {
-              const searchResponse = await fetch(
-                `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(tx.ticker)}&quotesCount=1`
-              );
-              if (searchResponse.ok) {
-                const searchData = await searchResponse.json();
-                if (searchData.quotes && searchData.quotes.length > 0) {
-                  companyName = searchData.quotes[0].shortname || searchData.quotes[0].longname || tx.ticker;
+            if (tickerUpper === CASH_FLOW_TICKER) {
+              companyName =
+                tx.type === "DEPOSIT"
+                  ? "Vklad"
+                  : tx.type === "WITHDRAWAL"
+                    ? "Výber"
+                    : CASH_FLOW_TICKER;
+            } else {
+              companyName = effectiveTicker;
+              try {
+                const searchResponse = await fetch(
+                  `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(effectiveTicker)}&quotesCount=1`,
+                );
+                if (searchResponse.ok) {
+                  const searchData = await searchResponse.json();
+                  if (searchData.quotes && searchData.quotes.length > 0) {
+                    companyName =
+                      searchData.quotes[0].shortname ||
+                      searchData.quotes[0].longname ||
+                      effectiveTicker;
+                  }
                 }
+              } catch {
+                /* keep ticker */
               }
-            } catch {
-              // Keep ticker as company name if search fails
             }
-            companyNameCache[tx.ticker] = companyName;
+            companyNameCache[tickerUpper] = companyName;
           }
 
           // Calculate shares and price based on transaction type
           let shares: string;
           let pricePerShare: string;
-          
-          if (tx.type === 'BUY' || tx.type === 'SELL') {
-            // For trades: use quantity and calculated price
+
+          if (tx.type === "BUY" || tx.type === "SELL") {
             shares = tx.quantity.toString();
             pricePerShare = tx.priceEur.toString();
           } else {
-            // For DIVIDEND/TAX: use shares=1 and pricePerShare=totalAmount
-            // TAX amounts are already negative from parser
+            // DIVIDEND / TAX / DEPOSIT / WITHDRAWAL: shares=1, pricePerShare = hotovostná suma (môže byť záporná)
             shares = "1";
             pricePerShare = tx.totalAmountEur.toString();
           }
 
-          const transactionData = {
+          const origCur =
+            typeof (tx as { originalCurrency?: string }).originalCurrency ===
+              "string" &&
+            (tx as { originalCurrency: string }).originalCurrency.trim() !== ""
+              ? (tx as { originalCurrency: string }).originalCurrency
+                  .trim()
+                  .toUpperCase()
+              : null;
+
+          const exRate = (tx as { exchangeRateAtTransaction?: number })
+            .exchangeRateAtTransaction;
+          const baseAmt = (tx as { baseCurrencyAmount?: number })
+            .baseCurrencyAmount;
+
+          const payload: InsertTransaction = {
             userId,
             portfolioId: targetPortfolioId,
             type: tx.type,
-            ticker: tx.ticker.toUpperCase(),
+            ticker: tickerUpper,
             companyName,
             shares,
             pricePerShare,
             commission: "0",
-            externalId: tx.externalId || null,
+            externalId: extId || null,
             transactionDate: new Date(tx.date),
+            ...(txId ? { transactionId: txId } : {}),
+            ...(origCur
+              ? { originalCurrency: origCur, currency: origCur }
+              : {}),
+            ...(typeof exRate === "number" && Number.isFinite(exRate)
+              ? { exchangeRateAtTransaction: exRate.toFixed(8) }
+              : {}),
+            ...(typeof baseAmt === "number" && Number.isFinite(baseAmt)
+              ? { baseCurrencyAmount: baseAmt.toFixed(4) }
+              : {}),
           };
 
-          const parseResult = insertTransactionSchema.safeParse(transactionData);
+          const parseResult = insertTransactionSchema.safeParse(payload);
           if (!parseResult.success) {
             const issue = parseResult.error.issues[0];
             const detail = issue
               ? `${issue.path.join(".")}: ${issue.message}`
               : parseResult.error.message;
             errors.push(
-              `${tx.ticker} (${tx.type}) [ID: ${tx.externalId || "N/A"}]: ${detail}`
+              `${tickerUpper} (${tx.type}) [ID: ${tx.externalId || "N/A"}]: ${detail}`,
             );
             continue;
           }
@@ -3743,15 +3808,15 @@ export async function registerRoutes(
           const transaction = await storage.createTransaction(parseResult.data);
           imported.push(transaction);
           if (extId) existingExternalIds.add(extId);
+          if (txId) existingTransactionIds.add(txId);
 
           if (tx.type === "BUY" || tx.type === "SELL") {
-            tickersNeedingHoldingsSync.set(
-              tx.ticker.toUpperCase(),
-              companyName,
-            );
+            tickersNeedingHoldingsSync.set(tickerUpper, companyName);
           }
         } catch (err: any) {
-          errors.push(`${tx.ticker} [ID: ${tx.externalId || 'N/A'}]: ${err.message}`);
+          errors.push(
+            `${(typeof tx.ticker === "string" && tx.ticker.trim()) || "?"} [ID: ${tx.externalId || "N/A"}]: ${err.message}`,
+          );
         }
       }
 

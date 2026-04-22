@@ -106,25 +106,72 @@ export const insertPortfolioSchema = createInsertSchema(portfolios).omit({
 export type InsertPortfolio = z.infer<typeof insertPortfolioSchema>;
 export type Portfolio = typeof portfolios.$inferSelect;
 
-// Transactions table for tracking buys, sells and dividends
-export const transactions = pgTable("transactions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  portfolioId: varchar("portfolio_id").references(() => portfolios.id),
-  type: varchar("type", { length: 10 }).notNull(), // 'BUY', 'SELL', or 'DIVIDEND'
-  /** Yahoo / XTB často používajú burzové prípony (napr. SXR8.DE, RR.L); ISIN má 12 znakov. */
-  ticker: varchar("ticker", { length: 32 }).notNull(),
-  companyName: text("company_name").notNull(),
-  shares: numeric("shares", { precision: 18, scale: 8 }).notNull(),
-  pricePerShare: numeric("price_per_share", { precision: 18, scale: 4 }).notNull(),
-  commission: numeric("commission", { precision: 18, scale: 4 }).default("0"),
-  currency: varchar("currency", { length: 3 }).default("EUR"), // Currency of the transaction (EUR, USD, GBP, etc.)
-  realizedGain: numeric("realized_gain", { precision: 18, scale: 4 }).default("0"), // For SELL: (sellPrice - avgCost) * shares - commission
-  costBasis: numeric("cost_basis", { precision: 18, scale: 4 }).default("0"), // Average cost at time of sale
-  externalId: varchar("external_id", { length: 50 }), // XTB position/operation ID for reference
-  transactionDate: timestamp("transaction_date").notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
-});
+/** Všetky podporované hodnoty `transactions.type` (vrátane hotovostných tokov). */
+export const TRANSACTION_TYPES = [
+  "BUY",
+  "SELL",
+  "DIVIDEND",
+  "TAX",
+  "DEPOSIT",
+  "WITHDRAWAL",
+] as const;
+export type TransactionKind = (typeof TRANSACTION_TYPES)[number];
+
+/**
+ * Sentinelský ticker pre riadky DEPOSIT / WITHDRAWAL (nie je burzový symbol).
+ * UI a import môžu zobraziť „Vklad“ / „Výber“ z `companyName` alebo `type`.
+ */
+export const CASH_FLOW_TICKER = "PORTFOLIO_CASH_FLOW" as const;
+
+// Transactions table for tracking buys, sells, dividends, taxes, and cash flows
+export const transactions = pgTable(
+  "transactions",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id),
+    portfolioId: varchar("portfolio_id").references(() => portfolios.id),
+    type: varchar("type", { length: 12 }).notNull(),
+    /** Yahoo / XTB; pre DEPOSIT/WITHDRAWAL použite {@link CASH_FLOW_TICKER}. */
+    ticker: varchar("ticker", { length: 32 }).notNull(),
+    companyName: text("company_name").notNull(),
+    shares: numeric("shares", { precision: 18, scale: 8 }).notNull(),
+    pricePerShare: numeric("price_per_share", { precision: 18, scale: 4 }).notNull(),
+    commission: numeric("commission", { precision: 18, scale: 4 }).default("0"),
+    /** Legacy: meny obchodu; pre nové multi-menové riadky preferujte `originalCurrency`. */
+    currency: varchar("currency", { length: 3 }).default("EUR"),
+    realizedGain: numeric("realized_gain", { precision: 18, scale: 4 }).default("0"),
+    costBasis: numeric("cost_basis", { precision: 18, scale: 4 }).default("0"),
+    /** XTB / broker operation id (legacy deduplikácia importu). */
+    externalId: varchar("external_id", { length: 50 }),
+    /**
+     * Unikátny kľúč z brokera pre deduplikáciu importu (odporúčané pre nové integrácie).
+     * Pri importe rovnakého `transaction_id` v tom istom portfóliu riadok preskoč / aktualizuj.
+     */
+    transactionId: varchar("transaction_id", { length: 64 }),
+    /** Menová suma v pôvodnej mene (napr. USD pri vklade v dolároch). */
+    originalCurrency: varchar("original_currency", { length: 3 }),
+    /**
+     * Kurz z `originalCurrency` do základnej meny používateľa (EUR) platný pri `transactionDate`.
+     * Napr. pri USD vklade: koľko EUR = 1 USD.
+     */
+    exchangeRateAtTransaction: numeric("exchange_rate_at_transaction", {
+      precision: 18,
+      scale: 8,
+    }),
+    /** Suma prepočítaná do EUR (alebo inej `user_settings.preferred_currency`) v čase transakcie. */
+    baseCurrencyAmount: numeric("base_currency_amount", { precision: 18, scale: 4 }),
+    transactionDate: timestamp("transaction_date").notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    index("transactions_transaction_id_lookup_idx").on(table.transactionId),
+    uniqueIndex("transactions_user_portfolio_transaction_id_uidx").on(
+      table.userId,
+      table.portfolioId,
+      table.transactionId,
+    ),
+  ],
+);
 
 export const insertTransactionSchema = createInsertSchema(transactions).omit({
   createdAt: true,
