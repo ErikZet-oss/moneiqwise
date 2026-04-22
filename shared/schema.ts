@@ -4,6 +4,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   timestamp,
   varchar,
   text,
@@ -211,6 +212,22 @@ export type OptionDirection = typeof OPTION_DIRECTIONS[number];
 
 export const OPTION_STATUSES = ["OPEN", "CLOSED", "EXPIRED", "ASSIGNED"] as const;
 export type OptionStatus = typeof OPTION_STATUSES[number];
+
+/**
+ * ECB historické kurzy (cache Frankfurter): EUR za 1 jednotku cudzej meny v daný deň.
+ */
+export const exchangeRatesEcb = pgTable(
+  "exchange_rates",
+  {
+    isoDate: varchar("iso_date", { length: 10 }).notNull(),
+    currency: varchar("currency", { length: 3 }).notNull(),
+    eurPerUnit: numeric("eur_per_unit", { precision: 20, scale: 12 }).notNull(),
+    fetchedAt: timestamp("fetched_at").defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.isoDate, t.currency] })],
+);
+
+export type ExchangeRateEcbRow = typeof exchangeRatesEcb.$inferSelect;
 
 // Options trades table
 export const optionTrades = pgTable("option_trades", {

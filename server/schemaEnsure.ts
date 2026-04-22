@@ -69,3 +69,18 @@ export async function ensureTransactionImportColumns(): Promise<void> {
     ON transactions (user_id, portfolio_id, transaction_id)
   `);
 }
+
+/**
+ * Tabuľka `exchange_rates` (cache Frankfurter) – staršie nasadenia ju nemajú.
+ */
+export async function ensureExchangeRatesTable(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS exchange_rates (
+      iso_date varchar(10) NOT NULL,
+      currency varchar(3) NOT NULL,
+      eur_per_unit numeric(20, 12) NOT NULL,
+      fetched_at timestamptz DEFAULT now(),
+      PRIMARY KEY (iso_date, currency)
+    )
+  `);
+}

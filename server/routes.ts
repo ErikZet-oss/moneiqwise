@@ -11,6 +11,8 @@ import {
   insertOptionTradeSchema,
   CASH_FLOW_TICKER,
   type InsertTransaction,
+  transactions,
+  type Transaction,
 } from "@shared/schema";
 import { parseXTBFile, type XTBImportResult } from "./xtbParser";
 import {
@@ -18,7 +20,12 @@ import {
   transactionLotKey,
 } from "./realizedGainsCompute";
 import { computePnlBreakdown } from "./pnlBreakdown";
+import { buildEurPerUnitByTxnIdForTransactions } from "./eurAtTransactionDate";
+import { computeFifoRealizedGainsFromTransactions } from "@shared/fifoRealizedGains";
 import { computeGipsTwr } from "./twrGips";
+import { buildOpenFifoLotRowList, loadTradeTransactionsForAssetLots } from "./assetFifoLots";
+import { db } from "./db";
+import { and, desc, eq, isNull } from "drizzle-orm";
 
 // Configure multer for file uploads
 const upload = multer({
@@ -1117,8 +1124,9 @@ async function computePortfolioPerformance(
   // free after the first request.
   const tickerSet = new Set<string>();
   for (const t of sorted) {
-    if (t.ticker && t.ticker.toUpperCase() !== "CASH") {
-      tickerSet.add(t.ticker.toUpperCase());
+    const u = t.ticker?.toUpperCase() ?? "";
+    if (u && u !== "CASH" && u !== CASH_FLOW_TICKER) {
+      tickerSet.add(u);
     }
   }
   const tickers = Array.from(tickerSet);
@@ -1143,6 +1151,15 @@ async function computePortfolioPerformance(
 
   const rates = await fetchAllExchangeRates();
   const todayIso = now.toISOString().slice(0, 10);
+
+  const eurM = await buildEurPerUnitByTxnIdForTransactions(sorted);
+  const fifoPerformance = computeFifoRealizedGainsFromTransactions(
+    sorted,
+    eurM,
+    now,
+  );
+  const eurToUserCcy = (amountEur: number) =>
+    convertAmountBetween(amountEur, "EUR", userCurrency, rates);
 
   const priceInUserCcy = (ticker: string, iso: string): number | null => {
     const upper = ticker.toUpperCase();
@@ -1264,13 +1281,10 @@ async function computePortfolioPerformance(
         const gross = shares * price;
         const netProceeds = gross - commission;
         const costBasis = shares * entry.avgCost;
-        const realized = netProceeds - costBasis;
         entry.totalCost = Math.max(0, entry.totalCost - costBasis);
         entry.shares = Math.max(0, entry.shares - shares);
         y.netInflow -= netProceeds;
         m.netInflow -= netProceeds;
-        y.realized += realized;
-        m.realized += realized;
       }
     } else if (t.type === "DIVIDEND") {
       const shares = parseFloat(t.shares || "0");
@@ -1300,6 +1314,9 @@ async function computePortfolioPerformance(
       count: 0,
       months: {} as Record<number, { netInflow: number; realized: number; dividends: number; count: number }>,
     };
+    const yearRealizedGain = eurToUserCcy(
+      fifoPerformance.realizedEurByCalendarYear[yr] ?? 0,
+    );
     const yearProfit = yearEndVal - yearStartVal - agg.netInflow;
     const yearBaseline = yearStartVal + Math.max(agg.netInflow, 0);
     const yearPct = yearBaseline > 0 ? (yearProfit / yearBaseline) * 100 : 0;
@@ -1316,6 +1333,10 @@ async function computePortfolioPerformance(
       const mStart = valueAt(addDays(monthStartIso, -1));
       const mEnd = valueAt(boundedMonthEnd);
       const mAgg = agg.months[m] ?? { netInflow: 0, realized: 0, dividends: 0, count: 0 };
+      const mKey = `${yr}-${String(m + 1).padStart(2, "0")}`;
+      const mRealizedGain = eurToUserCcy(
+        fifoPerformance.realizedEurByYearMonth[mKey] ?? 0,
+      );
       const mProfit = mEnd - mStart - mAgg.netInflow;
       const mBaseline = mStart + Math.max(mAgg.netInflow, 0);
       const mPct = mBaseline > 0 ? (mProfit / mBaseline) * 100 : 0;
@@ -1329,7 +1350,7 @@ async function computePortfolioPerformance(
         netInflow: mAgg.netInflow,
         profit: mProfit,
         percentReturn: mPct,
-        realizedGain: mAgg.realized,
+        realizedGain: mRealizedGain,
         dividends: mAgg.dividends,
         transactionCount: mAgg.count,
       });
@@ -1345,7 +1366,7 @@ async function computePortfolioPerformance(
       netInflow: agg.netInflow,
       profit: yearProfit,
       percentReturn: yearPct,
-      realizedGain: agg.realized,
+      realizedGain: yearRealizedGain,
       dividends: agg.dividends,
       transactionCount: agg.count,
       months: monthsOut,
@@ -1357,7 +1378,7 @@ async function computePortfolioPerformance(
   const openingValue = valueAt(addDays(firstIso, -1));
   const nowValue = valueAt(todayIso);
   const allNetInflow = years.reduce((s, y) => s + y.netInflow, 0);
-  const allRealized = years.reduce((s, y) => s + y.realizedGain, 0);
+  const allRealized = eurToUserCcy(fifoPerformance.summary.totalRealized);
   const allDividends = years.reduce((s, y) => s + y.dividends, 0);
   const allCount = years.reduce((s, y) => s + y.transactionCount, 0);
   const allProfit = nowValue - openingValue - allNetInflow;
@@ -1448,10 +1469,11 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  const { ensurePortfolioSortOrderColumn, ensureTransactionImportColumns } =
+  const { ensurePortfolioSortOrderColumn, ensureTransactionImportColumns, ensureExchangeRatesTable } =
     await import("./schemaEnsure");
   await ensurePortfolioSortOrderColumn();
   await ensureTransactionImportColumns();
+  await ensureExchangeRatesTable();
 
   // Setup auth middleware
   await setupAuth(app);
@@ -1936,6 +1958,66 @@ export async function registerRoutes(
       res.status(500).json({ message: "Nepodarilo sa načítať detail aktíva." });
     }
   });
+
+  /** Otvorené FIFO loty v jednom portfóli (alebo unassigned) pre daný ticker. */
+  app.get(
+    "/api/portfolios/:portfolioId/asset-lots",
+    isAuthenticated,
+    async (req: any, res) => {
+      try {
+        const userId = req.user.claims.sub;
+        const rawPid = String(req.params.portfolioId ?? "");
+        const tickerQ = (req.query.ticker as string | undefined)?.trim();
+        if (!tickerQ) {
+          return res.status(400).json({ message: "Chýba query parameter ticker." });
+        }
+        const upper = tickerQ.toUpperCase();
+        const userSettings = await storage.getUserSettings(userId);
+        const userCcy = (userSettings?.preferredCurrency || "EUR").toUpperCase();
+        if (upper === "CASH" || upper === CASH_FLOW_TICKER) {
+          return res.json({ currency: userCcy, lots: [] });
+        }
+
+        const rates = await fetchAllExchangeRates();
+        const now = new Date();
+        let allTx: Transaction[] = [];
+
+        if (rawPid === "unassigned") {
+          allTx = await db
+            .select()
+            .from(transactions)
+            .where(
+              and(
+                eq(transactions.userId, userId),
+                isNull(transactions.portfolioId),
+              ),
+            )
+            .orderBy(desc(transactions.transactionDate));
+        } else {
+          const p = await storage.getPortfolioById(rawPid, userId);
+          if (!p) {
+            return res.status(404).json({ message: "Portfólio sa nenašlo." });
+          }
+          allTx = await storage.getTransactionsByUser(userId, rawPid);
+        }
+
+        const { eurM, forFifo } = await loadTradeTransactionsForAssetLots(allTx, upper);
+        let pNow: number | null = null;
+        const q = await fetchStockQuote(upper);
+        if (q && typeof (q as { price?: number }).price === "number" && Number.isFinite((q as { price: number }).price)) {
+          pNow = (q as { price: number }).price;
+        }
+
+        const lots = buildOpenFifoLotRowList(forFifo, eurM, now, rates, userCcy, pNow);
+        return res.json({ currency: userCcy, lots });
+      } catch (error) {
+        console.error("Error building asset lots:", error);
+        res
+          .status(500)
+          .json({ message: "Nepodarilo sa načítať otvorené loty (FIFO)." });
+      }
+    },
+  );
 
   // Get user transactions
   app.get("/api/transactions", isAuthenticated, async (req: any, res) => {

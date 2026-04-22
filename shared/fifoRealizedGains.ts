@@ -9,11 +9,17 @@ import { buySellLineEur, eurPerUnitOfTradeCurrency } from "./transactionEur";
  * `costPerShareEur` = celkové EUR za akciu pri nákupe; konštantné až do úplného zatvorenia.
  */
 export interface OpenFifoLot {
+  /** ISO dátum nákupu (deň D), pre daň / časový test. */
+  acquiredAt: string;
   remainingShares: number;
   costPerShareEur: number;
   priceLocal: number;
   eurPerUnit: number;
   ccy: TradeCurrency;
+}
+
+function txnIsoDate(txn: Transaction): string {
+  return new Date(txn.transactionDate as unknown as string).toISOString().slice(0, 10);
 }
 
 /**
@@ -26,6 +32,10 @@ export function computeFifoRealizedGainsFromTransactions(
 ): {
   summary: RealizedGainsComputedSummary;
   openLots: Record<string, OpenFifoLot[]>;
+  /** Realizovaný zisk (FIFO) v EUR podľa kalendárneho roku predaja. */
+  realizedEurByCalendarYear: Record<number, number>;
+  /** Kľúč YYYY-MM (UTC) → realizovaný zisk v EUR. */
+  realizedEurByYearMonth: Record<string, number>;
 } {
   const sorted = [...userTransactions].sort(
     (a, b) =>
@@ -45,6 +55,8 @@ export function computeFifoRealizedGainsFromTransactions(
   let transactionCount = 0;
 
   const lots: Record<string, OpenFifoLot[]> = {};
+  const realizedEurByCalendarYear: Record<number, number> = {};
+  const realizedEurByYearMonth: Record<string, number> = {};
 
   const getKey = (txn: Transaction) => transactionLotKey(txn);
 
@@ -59,6 +71,7 @@ export function computeFifoRealizedGainsFromTransactions(
       const cps = lineEur / sh;
       if (!lots[key]) lots[key] = [];
       lots[key].push({
+        acquiredAt: txnIsoDate(txn),
         remainingShares: sh,
         costPerShareEur: cps,
         priceLocal: epu.priceLocal,
@@ -88,6 +101,12 @@ export function computeFifoRealizedGainsFromTransactions(
       totalRealized += gain;
 
       const txnDate = new Date(txn.transactionDate as unknown as string);
+      const y = txnDate.getUTCFullYear();
+      const m = txnDate.getUTCMonth() + 1;
+      const ym = `${y}-${String(m).padStart(2, "0")}`;
+      realizedEurByCalendarYear[y] = (realizedEurByCalendarYear[y] ?? 0) + gain;
+      realizedEurByYearMonth[ym] = (realizedEurByYearMonth[ym] ?? 0) + gain;
+
       if (txnDate >= startOfYear) realizedYTD += gain;
       if (txnDate >= startOfMonth) realizedThisMonth += gain;
       if (txnDate >= todayStart) realizedToday += gain;
@@ -123,5 +142,7 @@ export function computeFifoRealizedGainsFromTransactions(
       transactionCount,
     },
     openLots: lots,
+    realizedEurByCalendarYear,
+    realizedEurByYearMonth,
   };
 }

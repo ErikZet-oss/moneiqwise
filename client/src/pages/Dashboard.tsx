@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Wallet, Banknote, Newspaper, ExternalLink, HelpCircle, Loader2, RefreshCw } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Wallet, Banknote, Newspaper, ExternalLink, HelpCircle, Loader2, RefreshCw, Shield } from "lucide-react";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
@@ -54,8 +54,12 @@ interface PnlBreakdown {
   realizedCapitalGain: number;
   unrealizedPriceGain: number;
   unrealizedFxGain: number;
+  unrealizedCrossComponent?: number;
   residualUnrealized: number;
   dividendNet: number;
+  projectedDividendNext12m?: number;
+  /** Kladný nerealiz. zisk z lotov &gt; 365 dní (orient. oslobodenie) */
+  unrealizedTaxExempt?: number;
   method: { realized: string; costEur: string };
 }
 
@@ -722,14 +726,45 @@ export default function Dashboard() {
                       +{maskAmount(formatCurrency(pnlBreakdown.dividendNet))}
                     </span>
                   </div>
+                  {pnlBreakdown.projectedDividendNext12m != null && pnlBreakdown.projectedDividendNext12m > 0 && (
+                    <div className="flex justify-between gap-1">
+                      <span
+                        className="truncate"
+                        title="Odhad: čisté dividendy z posledných 12 mesiacov ako bežiaca ročná miera"
+                      >
+                        Očakávané (12 m):
+                      </span>
+                      <span className="text-blue-500/90">
+                        +{maskAmount(formatCurrency(pnlBreakdown.projectedDividendNext12m))}
+                      </span>
+                    </div>
+                  )}
+                  {pnlBreakdown.unrealizedTaxExempt != null && pnlBreakdown.unrealizedTaxExempt > 0 && (
+                    <div className="flex justify-between gap-1 items-center">
+                      <span className="inline-flex items-center gap-0.5 truncate" title="Kladný nerealiz. zisk z lotov so držbou ≥ 365 dní (orient. podľa SK čas. testu)">
+                        <Shield className="h-3 w-3 shrink-0 text-emerald-600" />
+                        Oslobodený zisk (≥365 d):
+                      </span>
+                      <span className="text-emerald-600 font-medium">
+                        {maskAmount(formatCurrency(pnlBreakdown.unrealizedTaxExempt))}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex justify-between gap-1">
-                    <span className="truncate" title="Nerealizované: zmena kurzu pri fixnej cene v titule">
+                    <span className="truncate" title="Nerealizované: vplyv kurzu na pôvodnú nákupnú cenu v titule (čistý FX)">
                       FX (kurzy):
                     </span>
                     <span className={getChangeColor(pnlBreakdown.unrealizedFxGain)}>
                       {maskAmount(formatCurrency(pnlBreakdown.unrealizedFxGain))}
                     </span>
                   </div>
+                  {pnlBreakdown.unrealizedCrossComponent != null &&
+                    Math.abs(pnlBreakdown.unrealizedCrossComponent) > 1e-6 && (
+                    <p className="text-[9px] text-muted-foreground leading-tight pl-0.5">
+                      Interakcia ΔP·ΔFX (súčasť kapitálu v súčte hore):{" "}
+                      {maskAmount(formatCurrency(pnlBreakdown.unrealizedCrossComponent))}
+                    </p>
+                  )}
                   {metrics.optionsIncluded && (
                     <p className="text-[9px] text-amber-600/90 pt-0.5">
                       Opcie zahrnuté v sume hore, nie v tomto rozpise (len akcie).

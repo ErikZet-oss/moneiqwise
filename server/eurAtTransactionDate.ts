@@ -1,6 +1,9 @@
 import type { Transaction } from "@shared/schema";
+import { exchangeRatesEcb } from "@shared/schema";
+import { and, eq } from "drizzle-orm";
+import { db } from "./db";
 import { inferTradeCurrency } from "@shared/transactionEur";
-import { buySellLineEur, grossAndCommission } from "@shared/transactionEur";
+import { buySellLineEur } from "@shared/transactionEur";
 
 const frankCache = new Map<string, { eurPerUnit: number; t: number }>();
 const FRANK_TTL = 6 * 60 * 60 * 1000;
@@ -9,6 +12,8 @@ const FRANK_TTL = 6 * 60 * 60 * 1000;
  * Vráti EUR **za 1 jednotku** cudzej meny (USD atď.) v dátume ECB (Frankfurter).
  * Base = EUR, API: GET /{date} → `rates.USD` = 1 EUR = `rates.USD` USD, teda
  * 1 USD = 1/rates.USD EUR.
+ *
+ * Postup: pamäť → `exchange_rates` (DB) → API → uloženie do DB.
  */
 export async function eurPerOneUnit(
   ccy: string,
@@ -20,6 +25,12 @@ export async function eurPerOneUnit(
   const hit = frankCache.get(key);
   if (hit && Date.now() - hit.t < FRANK_TTL) return hit.eurPerUnit;
 
+  const fromDb = await eurPerOneUnitFromDb(c, isoDate);
+  if (fromDb != null) {
+    frankCache.set(key, { eurPerUnit: fromDb, t: Date.now() });
+    return fromDb;
+  }
+
   try {
     const res = await fetch(`https://api.frankfurter.app/${isoDate}`);
     if (!res.ok) return null;
@@ -27,10 +38,48 @@ export async function eurPerOneUnit(
     const r = j.rates;
     if (!r || typeof r[c] !== "number" || r[c] <= 0) return null;
     const eur = 1 / r[c];
+    await persistEcbRate(isoDate, c, eur);
     frankCache.set(key, { eurPerUnit: eur, t: Date.now() });
     return eur;
   } catch {
     return null;
+  }
+}
+
+async function eurPerOneUnitFromDb(ccy: string, isoDate: string): Promise<number | null> {
+  const c = ccy.toUpperCase();
+  const [row] = await db
+    .select()
+    .from(exchangeRatesEcb)
+    .where(
+      and(eq(exchangeRatesEcb.isoDate, isoDate), eq(exchangeRatesEcb.currency, c)),
+    )
+    .limit(1);
+  if (!row) return null;
+  const n = parseFloat(String(row.eurPerUnit));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+async function persistEcbRate(
+  isoDate: string,
+  currency: string,
+  eurPerUnit: number,
+): Promise<void> {
+  try {
+    await db
+      .insert(exchangeRatesEcb)
+      .values({
+        isoDate,
+        currency: currency.toUpperCase(),
+        eurPerUnit: String(eurPerUnit),
+        fetchedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [exchangeRatesEcb.isoDate, exchangeRatesEcb.currency],
+        set: { eurPerUnit: String(eurPerUnit), fetchedAt: new Date() },
+      });
+  } catch (err) {
+    console.warn("eurAtTransactionDate: could not cache ECB rate in DB:", err);
   }
 }
 
