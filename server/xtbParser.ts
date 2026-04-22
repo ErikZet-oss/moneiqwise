@@ -597,6 +597,17 @@ function isXtBIgnoredInternalPortfolioTransfer(typeStr: string, comment: string)
   return false;
 }
 
+/**
+ * Presun hotovosti medzi číslami účtov XTB (napr. „Transfer from 2108575 to 2114611“).
+ * Bez tohto riadku je hotovosť v jednom portfóliu v aplikácii príliš vysoká o súčet odchodov.
+ */
+function isXtBInterWalletCashTransfer(typeStr: string, comment: string): boolean {
+  const low = stripDiacritics(`${typeStr} ${comment || ""}`.toLowerCase());
+  if (!/\btransfer\b/.test(low)) return false;
+  if (/\b(sepa|swift|iban)\b/.test(low)) return false;
+  return /from\s+\d+\s+to\s+\d+/.test(low);
+}
+
 function isFreeFundsInterestLine(
   typeStr: string,
   typePlain: string,
@@ -766,8 +777,14 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
       typePlain.includes('vyber') ||
       typeStr.includes('výber');
 
+    const interWalletCashTransfer = isXtBInterWalletCashTransfer(typeStr, comment);
+
     if (!isDeposit && !isWithdrawal) {
       if (isXtBExternalWireOrBankInOutType(typeStr) && amount !== 0) {
+        if (amount > 0) isDeposit = true;
+        else isWithdrawal = true;
+      }
+      if (!isDeposit && !isWithdrawal && interWalletCashTransfer && amount !== 0) {
         if (amount > 0) isDeposit = true;
         else isWithdrawal = true;
       }
@@ -801,12 +818,13 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
         originalCurrency: forex.originalCurrency,
         exchangeRateAtTransaction: forex.exchangeRateAtTransaction,
         baseCurrencyAmount: forex.baseCurrencyAmount,
+        companyName: interWalletCashTransfer ? "Presun medzi účtami XTB" : undefined,
       });
 
       log.push({
         row: i + 1,
         status: 'success',
-        message: `[${operationId}] ${isDeposit ? 'DEPOSIT' : 'WITHDRAWAL'} ${signedTotal >= 0 ? '+' : ''}${signedTotal.toFixed(2)} ${accountCurrency}`,
+        message: `[${operationId}] ${isDeposit ? 'DEPOSIT' : 'WITHDRAWAL'}${interWalletCashTransfer ? " (presun účtov)" : ""} ${signedTotal >= 0 ? '+' : ''}${signedTotal.toFixed(2)} ${accountCurrency}`,
       });
       continue;
     }
