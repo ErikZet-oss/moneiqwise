@@ -3820,16 +3820,34 @@ export async function registerRoutes(
         }
       }
 
+      const syncErrors: string[] = [];
       for (const [tickerU, cn] of Array.from(
         tickersNeedingHoldingsSync.entries(),
       )) {
-        await syncHoldingFromTradeTransactions(
-          userId,
-          targetPortfolioId,
-          tickerU,
-          cn,
-        );
+        try {
+          await syncHoldingFromTradeTransactions(
+            userId,
+            targetPortfolioId,
+            tickerU,
+            cn,
+          );
+        } catch (syncErr: unknown) {
+          const msg =
+            syncErr instanceof Error
+              ? syncErr.message
+              : typeof syncErr === "string"
+                ? syncErr
+                : "Neznáma chyba";
+          console.error(
+            "Error syncing holding after XTB import",
+            { userId, ticker: tickerU },
+            syncErr,
+          );
+          syncErrors.push(`${tickerU}: ${msg}`);
+        }
       }
+
+      const allErrors = [...errors, ...syncErrors];
 
       if (imported.length > 0) {
         invalidatePerformanceCache(userId);
@@ -3839,16 +3857,33 @@ export async function registerRoutes(
         skippedDuplicates > 0
           ? ` Preskočených ${skippedDuplicates} už importovaných riadkov (rovnaké XTB ID v tomto portfóliu).`
           : "";
+      const syncWarn =
+        syncErrors.length > 0
+          ? ` Upozornenie: ${syncErrors.length} chýb pri prepočte podielov.`
+          : "";
 
       res.json({
         imported: imported.length,
         skippedDuplicates,
-        errors: errors.length > 0 ? errors : undefined,
-        message: `Importovaných ${imported.length} transakcií.${dupMsg}`,
+        errors: allErrors.length > 0 ? allErrors : undefined,
+        message: `Importovaných ${imported.length} transakcií.${dupMsg}${syncWarn}`,
       });
     } catch (error) {
+      const detail =
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+            ? error
+            : "Neznáma chyba";
+      const safeDetail =
+        detail.length > 1200 ? `${detail.slice(0, 1200)}…` : detail;
       console.error("Error saving XTB transactions:", error);
-      res.status(500).json({ message: "Nepodarilo sa uložiť transakcie." });
+      const columnHint = /column|does not exist|42703|42P01/i.test(safeDetail)
+        ? " Skontroluj, či na serveri s databázou beží `npm run db:push` (schéma musí zodpovedať kódu)."
+        : "";
+      res.status(500).json({
+        message: `Nepodarilo sa uložiť transakcie. ${safeDetail}${columnHint}`.trim(),
+      });
     }
   });
 
