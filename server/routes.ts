@@ -2952,16 +2952,23 @@ export async function registerRoutes(
           if (isMarketDataTicker(u)) tickers.add(u);
         }
       }
-      const currentPriceByTicker: Record<string, number> = {};
-      for (const t of Array.from(tickers)) {
-        try {
-          const q = await fetchStockQuote(t);
-          if (q && typeof q.price === "number" && Number.isFinite(q.price)) {
-            currentPriceByTicker[t] = q.price;
+      const tickerArr = Array.from(tickers);
+      const quotePairs = await Promise.all(
+        tickerArr.map(async (t) => {
+          try {
+            const q = await fetchStockQuote(t);
+            if (q && typeof q.price === "number" && Number.isFinite(q.price)) {
+              return [t, q.price] as const;
+            }
+          } catch {
+            /* quote unavailable */
           }
-        } catch {
-          /* quote unavailable */
-        }
+          return [t, undefined] as const;
+        }),
+      );
+      const currentPriceByTicker: Record<string, number> = {};
+      for (const [t, p] of quotePairs) {
+        if (p !== undefined) currentPriceByTicker[t] = p;
       }
       const out = await computePnlBreakdown(tx, userCcy, rates, currentPriceByTicker);
       res.json(out);
@@ -3008,31 +3015,43 @@ export async function registerRoutes(
         if (isMarketDataTicker(u)) tickers.add(u);
       }
 
+      const tickerArr = Array.from(tickers);
+      const [quotePairs, histPairs, spHist] = await Promise.all([
+        Promise.all(
+          tickerArr.map(async (t) => {
+            try {
+              const q = await fetchStockQuote(t);
+              if (q && typeof q.price === "number" && Number.isFinite(q.price)) {
+                return [t, q.price] as const;
+              }
+            } catch {
+              /* quote unavailable */
+            }
+            return [t, undefined] as const;
+          }),
+        ),
+        Promise.all(
+          tickerArr.map(async (t) => {
+            try {
+              return [t, (await fetchHistoricalPrices(t)) || {}] as const;
+            } catch {
+              return [t, {}] as const;
+            }
+          }),
+        ),
+        fetchHistoricalPrices("^GSPC")
+          .then((h) => h || {})
+          .catch(() => ({})),
+      ]);
+
       const currentPrices: Record<string, number> = {};
-      for (const t of Array.from(tickers)) {
-        try {
-          const q = await fetchStockQuote(t);
-          if (q && typeof q.price === "number" && Number.isFinite(q.price)) {
-            currentPrices[t] = q.price;
-          }
-        } catch {
-          /* quote unavailable */
-        }
+      for (const [t, p] of quotePairs) {
+        if (p !== undefined) currentPrices[t] = p;
       }
 
       const historicalByTicker: Record<string, Record<string, number>> = {};
-      for (const t of Array.from(tickers)) {
-        try {
-          historicalByTicker[t] = (await fetchHistoricalPrices(t)) || {};
-        } catch {
-          historicalByTicker[t] = {};
-        }
-      }
-      let spHist: Record<string, number> = {};
-      try {
-        spHist = (await fetchHistoricalPrices("^GSPC")) || {};
-      } catch {
-        spHist = {};
+      for (const [t, h] of histPairs) {
+        historicalByTicker[t] = h;
       }
 
       const out = computePortfolioHistorySeries(
@@ -3076,16 +3095,23 @@ export async function registerRoutes(
         const u = t.ticker?.toUpperCase() ?? "";
         if (isMarketDataTicker(u)) tickers.add(u);
       }
-      const currentPrices: Record<string, number> = {};
-      for (const t of Array.from(tickers)) {
-        try {
-          const q = await fetchStockQuote(t);
-          if (q && typeof q.price === "number" && Number.isFinite(q.price)) {
-            currentPrices[t] = q.price;
+      const tickerArr = Array.from(tickers);
+      const twrQuotePairs = await Promise.all(
+        tickerArr.map(async (t) => {
+          try {
+            const q = await fetchStockQuote(t);
+            if (q && typeof q.price === "number" && Number.isFinite(q.price)) {
+              return [t, q.price] as const;
+            }
+          } catch {
+            /* quote unavailable */
           }
-        } catch {
-          /* quote unavailable */
-        }
+          return [t, undefined] as const;
+        }),
+      );
+      const currentPrices: Record<string, number> = {};
+      for (const [t, p] of twrQuotePairs) {
+        if (p !== undefined) currentPrices[t] = p;
       }
       const out = await computeGipsTwr(
         userId,

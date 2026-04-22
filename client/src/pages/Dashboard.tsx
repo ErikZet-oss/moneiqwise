@@ -132,7 +132,7 @@ export default function Dashboard() {
   const [, setLocation] = useLocation();
   const { currency, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
   const { getQueryParam, selectedPortfolio, isAllPortfolios, portfolios } = usePortfolio();
-  const { hideAmounts, showNews } = useChartSettings();
+  const { hideAmounts, showNews, showDailyMovers } = useChartSettings();
   const [sortField, setSortField] = useState<SortField>("ticker");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   
@@ -169,6 +169,63 @@ export default function Dashboard() {
   });
   
   const quotes = quotesData;
+
+  const moversTickers = useMemo(() => {
+    if (!holdings || holdings.length === 0) return [];
+    const set = new Set<string>();
+    for (const h of holdings) {
+      if (h.ticker) set.add(h.ticker);
+    }
+    return Array.from(set).sort();
+  }, [holdings]);
+
+  const tickerDisplayNames = useMemo(() => {
+    const map = new Map<string, string>();
+    if (!holdings) return map;
+    for (const h of holdings) {
+      if (!map.has(h.ticker)) {
+        map.set(h.ticker, (h.companyName || h.ticker).trim() || h.ticker);
+      }
+    }
+    return map;
+  }, [holdings]);
+
+  const dailyMovers = useMemo(() => {
+    if (!quotesData || moversTickers.length === 0) {
+      return {
+        gainers: [] as { ticker: string; name: string; pct: number }[],
+        losers: [] as { ticker: string; name: string; pct: number }[],
+      };
+    }
+    const rows = moversTickers
+      .map((t) => {
+        const q = quotesData[t];
+        const raw = q?.changePercent;
+        const pct = typeof raw === "number" ? raw : parseFloat(String(raw ?? ""));
+        return {
+          ticker: t,
+          name: tickerDisplayNames.get(t) ?? t,
+          pct: Number.isFinite(pct) ? pct : NaN,
+        };
+      })
+      .filter((r) => Number.isFinite(r.pct));
+
+    const gainers = [...rows]
+      .filter((r) => r.pct > 0)
+      .sort((a, b) => b.pct - a.pct)
+      .slice(0, 5);
+    const losers = [...rows]
+      .filter((r) => r.pct < 0)
+      .sort((a, b) => a.pct - b.pct)
+      .slice(0, 5);
+
+    return { gainers, losers };
+  }, [quotesData, moversTickers, tickerDisplayNames]);
+
+  const formatSignedDayPct = (value: number) => {
+    const sign = value > 0 ? "+" : "";
+    return `${sign}${Math.abs(value).toFixed(2)}%`;
+  };
 
   const refreshDashboardQuotes = useCallback(async () => {
     if (!holdings || holdings.length === 0) return;
@@ -589,6 +646,108 @@ export default function Dashboard() {
         quotesRefreshing={quotesFetching}
       />
 
+      {showDailyMovers && portfolios.length > 0 && moversTickers.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card data-testid="dashboard-daily-gainers">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-green-500" />
+                Najsilnejšie dnes (%)
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                {isAllPortfolios
+                  ? "Z držaných akcií vo všetkých portfóliách — denná zmena podľa kotácie."
+                  : `Z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ — denná zmena podľa kotácie.`}
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-2 pt-0">
+              {quotesFetching && !quotesData ? (
+                <>
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <Skeleton key={i} className="h-10 w-full" />
+                  ))}
+                </>
+              ) : dailyMovers.gainers.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">
+                  Žiadna z držaných akcií dnes nebola v pluse.
+                </p>
+              ) : (
+                dailyMovers.gainers.map((row, idx) => (
+                  <div
+                    key={row.ticker}
+                    className="flex items-center justify-between gap-2 py-1.5 border-b border-border/60 last:border-0"
+                    data-testid={`dashboard-gainer-${idx}`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="text-xs text-muted-foreground tabular-nums w-5 shrink-0">
+                        {idx + 1}.
+                      </span>
+                      <CompanyLogo ticker={row.ticker} companyName={row.name} size="xs" />
+                      <div className="min-w-0">
+                        <div className="font-medium text-sm truncate">{row.ticker}</div>
+                        <div className="text-xs text-muted-foreground truncate">{row.name}</div>
+                      </div>
+                    </div>
+                    <span className="text-sm font-semibold tabular-nums text-green-500 shrink-0">
+                      {formatSignedDayPct(row.pct)}
+                    </span>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card data-testid="dashboard-daily-losers">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <TrendingDown className="h-4 w-4 text-red-500" />
+                Najslabšie dnes (%)
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                {isAllPortfolios
+                  ? "Z držaných akcií vo všetkých portfóliách — denná zmena podľa kotácie."
+                  : `Z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ — denná zmena podľa kotácie.`}
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-2 pt-0">
+              {quotesFetching && !quotesData ? (
+                <>
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <Skeleton key={i} className="h-10 w-full" />
+                  ))}
+                </>
+              ) : dailyMovers.losers.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">
+                  Žiadna z držaných akcií dnes nebola v mínuse.
+                </p>
+              ) : (
+                dailyMovers.losers.map((row, idx) => (
+                  <div
+                    key={row.ticker}
+                    className="flex items-center justify-between gap-2 py-1.5 border-b border-border/60 last:border-0"
+                    data-testid={`dashboard-loser-${idx}`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="text-xs text-muted-foreground tabular-nums w-5 shrink-0">
+                        {idx + 1}.
+                      </span>
+                      <CompanyLogo ticker={row.ticker} companyName={row.name} size="xs" />
+                      <div className="min-w-0">
+                        <div className="font-medium text-sm truncate">{row.ticker}</div>
+                        <div className="text-xs text-muted-foreground truncate">{row.name}</div>
+                      </div>
+                    </div>
+                    <span className="text-sm font-semibold tabular-nums text-red-500 shrink-0">
+                      {formatSignedDayPct(row.pct)}
+                    </span>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       <div className="hidden md:grid gap-3 md:grid-cols-4 xl:grid-cols-5">
         <Card data-testid="card-total-value">
           <CardHeader className="flex flex-row items-center justify-between gap-1 pb-1 p-6 pb-2">
@@ -709,19 +868,28 @@ export default function Dashboard() {
               {pnlBreakdown ? (
                 <>
                   <div className="flex justify-between gap-1">
-                    <span className="truncate" title="FIFO, kurz v deň transakcie">Kapitálový (cena):</span>
+                    <span className="truncate" title="Realizovaný kapitálový zisk/strata (FIFO, kurz v deň transakcie)">
+                      Realizovaný:
+                    </span>
+                    <span className={getChangeColor(pnlBreakdown.realizedCapitalGain)}>
+                      {maskAmount(formatCurrency(pnlBreakdown.realizedCapitalGain))}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-1">
+                    <span
+                      className="truncate"
+                      title="Nerealizovaný z otvorených pozícií (zmena ceny oproti nákladu v EUR; zahŕňa zostatkovú zložku)"
+                    >
+                      Nerealizovaný:
+                    </span>
                     <span
                       className={getChangeColor(
-                        pnlBreakdown.realizedCapitalGain +
-                          pnlBreakdown.unrealizedPriceGain +
-                          pnlBreakdown.residualUnrealized,
+                        pnlBreakdown.unrealizedPriceGain + pnlBreakdown.residualUnrealized,
                       )}
                     >
                       {maskAmount(
                         formatCurrency(
-                          pnlBreakdown.realizedCapitalGain +
-                            pnlBreakdown.unrealizedPriceGain +
-                            pnlBreakdown.residualUnrealized,
+                          pnlBreakdown.unrealizedPriceGain + pnlBreakdown.residualUnrealized,
                         ),
                       )}
                     </span>

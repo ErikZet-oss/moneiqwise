@@ -35,6 +35,8 @@ export type CashLedgerBreakdownEur = {
 export async function computeCashLedgerBreakdownEur(
   list: Transaction[],
   rates: AllExchangeRates,
+  /** Ak je zadané (napr. z jedného buildEur pre viac portfólií), preskočí sa druhé Frankfurter volanie. */
+  prebuiltEurPerTxn?: Map<string, number | null>,
 ): Promise<CashLedgerBreakdownEur> {
   const empty: CashLedgerBreakdownEur = {
     currency: "EUR",
@@ -49,7 +51,8 @@ export async function computeCashLedgerBreakdownEur(
   };
   if (list.length === 0) return empty;
 
-  const eurM = await buildEurPerUnitByTxnIdForTransactions(list);
+  const eurM =
+    prebuiltEurPerTxn ?? (await buildEurPerUnitByTxnIdForTransactions(list));
   const counts: Record<string, number> = {};
   const bump = (k: string) => {
     counts[k] = (counts[k] ?? 0) + 1;
@@ -148,7 +151,8 @@ export async function computeCashLedgerBreakdownEur(
 export async function netLedgerCashEur(
   list: Transaction[],
   rates: AllExchangeRates,
+  prebuiltEurPerTxn?: Map<string, number | null>,
 ): Promise<number> {
-  const b = await computeCashLedgerBreakdownEur(list, rates);
+  const b = await computeCashLedgerBreakdownEur(list, rates, prebuiltEurPerTxn);
   return b.netCashEur;
 }

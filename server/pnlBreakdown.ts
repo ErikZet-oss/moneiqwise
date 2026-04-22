@@ -134,9 +134,12 @@ export async function computePnlBreakdown(
   userCcy: string,
   rates: AllExchangeRates,
   currentPriceByTicker: Record<string, number>,
+  prebuiltEurPerTxn?: Map<string, number | null>,
 ): Promise<PnlBreakdownResult> {
   const now = new Date();
-  const m = await buildEurPerUnitByTxnIdForTransactions(userTransactions);
+  const m =
+    prebuiltEurPerTxn ??
+    (await buildEurPerUnitByTxnIdForTransactions(userTransactions));
   const { summary, openLots } = computeFifoRealizedGainsFromTransactions(
     userTransactions,
     m,

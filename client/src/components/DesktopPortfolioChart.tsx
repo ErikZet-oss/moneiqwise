@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import type { AllExchangeRates } from "@shared/convertAmountBetween";
 import {
   sumNetCashLedgerEurUpTo,
@@ -45,11 +45,32 @@ export function DesktopPortfolioChart({
   totalInvested
 }: DesktopPortfolioChartProps) {
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>("ALL");
+  const [chartDataIdle, setChartDataIdle] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const run = () => {
+      if (!cancelled) setChartDataIdle(true);
+    };
+    if (typeof requestIdleCallback !== "undefined") {
+      const ricId = requestIdleCallback(run, { timeout: 600 });
+      return () => {
+        cancelled = true;
+        cancelIdleCallback(ricId);
+      };
+    }
+    const t = window.setTimeout(run, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, []);
+
   const { currency, convertPrice, getTickerCurrency, formatCurrency, exchangeRate } = useCurrency();
   const { getQueryParam } = usePortfolio();
   const { showChart, showTooltip } = useChartSettings();
   
   const portfolioParam = getQueryParam();
+  const chartQueriesEnabled = showChart && chartDataIdle;
 
   const { data: transactions } = useQuery<Transaction[]>({
     queryKey: ["/api/transactions", portfolioParam],
@@ -58,6 +79,7 @@ export function DesktopPortfolioChart({
       if (!res.ok) throw new Error("Failed to fetch transactions");
       return res.json();
     },
+    enabled: chartQueriesEnabled,
   });
 
   const { data: holdings } = useQuery<Holding[]>({
@@ -67,6 +89,7 @@ export function DesktopPortfolioChart({
       if (!res.ok) throw new Error("Failed to fetch holdings");
       return res.json();
     },
+    enabled: chartQueriesEnabled,
   });
 
   const { data: eurPerUnitByTxnId } = useQuery<Record<string, number | null>>({
@@ -79,7 +102,7 @@ export function DesktopPortfolioChart({
       if (!res.ok) throw new Error("Failed to fetch txn EUR map");
       return res.json();
     },
-    enabled: !!transactions && transactions.length > 0,
+    enabled: chartQueriesEnabled && !!transactions && transactions.length > 0,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -99,7 +122,7 @@ export function DesktopPortfolioChart({
 
   const { data: quotes } = useQuery<Record<string, StockQuote>>({
     queryKey: ["/api/quotes", holdings?.map(h => h.ticker)],
-    enabled: !!holdings && holdings.length > 0,
+    enabled: chartQueriesEnabled && !!holdings && holdings.length > 0,
     queryFn: async () => {
       if (!holdings || holdings.length === 0) return {};
       
@@ -120,7 +143,7 @@ export function DesktopPortfolioChart({
 
   const { data: historicalData } = useQuery<HistoricalResponse>({
     queryKey: ["/api/stocks/history/batch", holdings?.map(h => h.ticker)],
-    enabled: !!holdings && holdings.length > 0,
+    enabled: chartQueriesEnabled && !!holdings && holdings.length > 0,
     staleTime: 1000 * 60 * 30,
     queryFn: async () => {
       if (!holdings || holdings.length === 0) return { prices: {}, errors: {}, fetchedCount: 0, totalRequested: 0 };

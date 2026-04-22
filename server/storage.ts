@@ -20,7 +20,8 @@ import {
 import type { AllExchangeRates } from "./convertAmountBetween";
 import { netLedgerCashEur } from "./netLedgerCashEur";
 import { db } from "./db";
-import { computeRealizedGainsFromTransactionsAsync } from "./realizedGainsCompute";
+import { buildEurPerUnitByTxnIdForTransactions } from "./eurAtTransactionDate";
+import { computeFifoRealizedGainsFromTransactions } from "@shared/fifoRealizedGains";
 import { sumCloseTradeCashFlowEurFromRows } from "@shared/cashFromTransactions";
 import { eq, and, desc, asc, sql, isNull, or, inArray, notInArray } from "drizzle-orm";
 
@@ -688,9 +689,17 @@ export class DatabaseStorage implements IStorage {
         byPid.get(defaultId)!.push(t);
       }
     }
-    for (const id of portfolioIds) {
-      const list = byPid.get(id) ?? [];
-      map[id] = await netLedgerCashEur(list, rates);
+    const allFlat = portfolioIds.flatMap((id) => byPid.get(id) ?? []);
+    const eurM = await buildEurPerUnitByTxnIdForTransactions(allFlat);
+    const cashPairs = await Promise.all(
+      portfolioIds.map(async (id) => {
+        const list = byPid.get(id) ?? [];
+        const cash = await netLedgerCashEur(list, rates, eurM);
+        return [id, cash] as const;
+      }),
+    );
+    for (const [id, cash] of cashPairs) {
+      map[id] = cash;
     }
     return map;
   }
@@ -791,51 +800,53 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    const byPortfolioId: Record<
-      string,
-      {
-        holdings: Holding[];
-        totalRealized: number;
-        closeTradeNetEur: number;
-        dividendNet: number;
-        cashEur: number;
-      }
-    > = {};
+    const allTxFlat = visibleIds.flatMap((id) => txnsByPid.get(id) ?? []);
+    const eurM = await buildEurPerUnitByTxnIdForTransactions(allTxFlat);
+    const now = new Date();
 
-    for (const id of visibleIds) {
-      const list = txnsByPid.get(id) ?? [];
+    const entries = await Promise.all(
+      visibleIds.map(async (id) => {
+        const list = txnsByPid.get(id) ?? [];
 
-      const totalRealized = (
-        await computeRealizedGainsFromTransactionsAsync(list)
-      ).totalRealized;
-      const closeTradeNetEur = sumCloseTradeCashFlowEurFromRows(list);
+        const totalRealized = computeFifoRealizedGainsFromTransactions(
+          list,
+          eurM,
+          now,
+        ).summary.totalRealized;
+        const closeTradeNetEur = sumCloseTradeCashFlowEurFromRows(list);
 
-      let dividendNet = 0;
-      const dividendTransactions = list.filter((t) => t.type === "DIVIDEND");
-      const taxTransactions = list.filter((t) => t.type === "TAX");
-      for (const txn of dividendTransactions) {
-        const shares = parseFloat(txn.shares);
-        const dividendPerShare = parseFloat(txn.pricePerShare);
-        const tax = parseFloat(txn.commission || "0");
-        const gross = shares * dividendPerShare;
-        dividendNet += gross - tax;
-      }
-      for (const txn of taxTransactions) {
-        const shares = parseFloat(txn.shares);
-        const pricePerShare = parseFloat(txn.pricePerShare);
-        dividendNet += shares * pricePerShare;
-      }
+        let dividendNet = 0;
+        const dividendTransactions = list.filter((t) => t.type === "DIVIDEND");
+        const taxTransactions = list.filter((t) => t.type === "TAX");
+        for (const txn of dividendTransactions) {
+          const shares = parseFloat(txn.shares);
+          const dividendPerShare = parseFloat(txn.pricePerShare);
+          const tax = parseFloat(txn.commission || "0");
+          const gross = shares * dividendPerShare;
+          dividendNet += gross - tax;
+        }
+        for (const txn of taxTransactions) {
+          const shares = parseFloat(txn.shares);
+          const pricePerShare = parseFloat(txn.pricePerShare);
+          dividendNet += shares * pricePerShare;
+        }
 
-      const cashEur = await netLedgerCashEur(list, rates);
+        const cashEur = await netLedgerCashEur(list, rates, eurM);
 
-      byPortfolioId[id] = {
-        holdings: holdingsByPid.get(id) ?? [],
-        totalRealized,
-        closeTradeNetEur,
-        dividendNet,
-        cashEur,
-      };
-    }
+        return [
+          id,
+          {
+            holdings: holdingsByPid.get(id) ?? [],
+            totalRealized,
+            closeTradeNetEur,
+            dividendNet,
+            cashEur,
+          },
+        ] as const;
+      }),
+    );
+
+    const byPortfolioId = Object.fromEntries(entries);
 
     return { byPortfolioId };
   }

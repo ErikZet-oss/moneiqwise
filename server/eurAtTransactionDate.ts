@@ -1,5 +1,6 @@
 import type { Transaction } from "@shared/schema";
 import { exchangeRatesEcb } from "@shared/schema";
+import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db } from "./db";
 import { inferTradeCurrency } from "@shared/transactionEur";
@@ -105,10 +106,36 @@ function needsFrankfurtFallback(t: Transaction): boolean {
   return true;
 }
 
+/** Súbežné requesty so rovnakou množinou transakcií zdieľajú jedno výpočtové volanie. */
+const inflightEurBuild = new Map<string, Promise<Map<string, number | null>>>();
+
+function eurBuildCacheKey(txns: Transaction[]): string {
+  if (txns.length === 0) return "__empty__";
+  const ids = txns.map((t) => t.id).sort();
+  return createHash("sha256").update(ids.join("\x1e")).digest("hex");
+}
+
 /**
  * Pre transakcie bez uloženého kurzu dopĺňa eur/1 jednotku danej meny z Frankfurter.
+ * Paralelizuje dotazy na kurzy; identické množiny transakcií v jednom momente zlučuje (dedup).
  */
 export async function buildEurPerUnitByTxnIdForTransactions(
+  txns: Transaction[],
+): Promise<Map<string, number | null>> {
+  const key = eurBuildCacheKey(txns);
+  if (key === "__empty__") return new Map();
+
+  let p = inflightEurBuild.get(key);
+  if (!p) {
+    p = buildEurPerUnitByTxnIdForTransactionsInternal(txns).finally(() => {
+      inflightEurBuild.delete(key);
+    });
+    inflightEurBuild.set(key, p);
+  }
+  return p;
+}
+
+async function buildEurPerUnitByTxnIdForTransactionsInternal(
   txns: Transaction[],
 ): Promise<Map<string, number | null>> {
   const m = new Map<string, number | null>();
@@ -121,10 +148,14 @@ export async function buildEurPerUnitByTxnIdForTransactions(
     const k = `${iso}::${ccy}`;
     if (!unique.has(k)) unique.set(k, { iso, ccy });
   }
-  const resolved = new Map<string, number | null>();
-  for (const [k, v] of Array.from(unique.entries())) {
-    resolved.set(k, await eurPerOneUnit(v.ccy, v.iso));
-  }
+  const uniqueEntries = Array.from(unique.entries());
+  const resolvedPairs = await Promise.all(
+    uniqueEntries.map(async ([k, v]) => {
+      const rate = await eurPerOneUnit(v.ccy, v.iso);
+      return [k, rate] as const;
+    }),
+  );
+  const resolved = new Map<string, number | null>(resolvedPairs);
   for (const t of txns) {
     if (!needsFrankfurtFallback(t)) continue;
     const ccy = inferTradeCurrency(t);

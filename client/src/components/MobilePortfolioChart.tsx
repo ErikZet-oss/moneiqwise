@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip } from "recharts";
 import { format, subDays, subMonths, subYears, startOfYear, parseISO, isAfter, startOfDay, isSameDay, isWeekend, subHours, eachDayOfInterval, eachHourOfInterval, endOfDay } from "date-fns";
@@ -61,6 +61,27 @@ export function MobilePortfolioChart({
   quotesRefreshing = false,
 }: MobilePortfolioChartProps) {
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>("ALL");
+  /** Odloží ťažké dotazy (história, eur map) až po idle — rýchlejší prvý render dashboardu. */
+  const [chartDataIdle, setChartDataIdle] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const run = () => {
+      if (!cancelled) setChartDataIdle(true);
+    };
+    if (typeof requestIdleCallback !== "undefined") {
+      const ricId = requestIdleCallback(run, { timeout: 600 });
+      return () => {
+        cancelled = true;
+        cancelIdleCallback(ricId);
+      };
+    }
+    const t = window.setTimeout(run, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, []);
+
   const { currency, convertPrice, getTickerCurrency, formatCurrency, exchangeRate } = useCurrency();
   const { getQueryParam, selectedPortfolio, selectedPortfolioId } = usePortfolio();
   const { showChart, showTooltip, hideAmounts, toggleHideAmounts } = useChartSettings();
@@ -68,6 +89,7 @@ export function MobilePortfolioChart({
   const maskAmount = (amount: string) => hideAmounts ? "••••••" : amount;
   
   const portfolioParam = getQueryParam();
+  const chartQueriesEnabled = showChart && chartDataIdle;
 
   const { data: transactions } = useQuery<Transaction[]>({
     queryKey: ["/api/transactions", portfolioParam],
@@ -76,6 +98,7 @@ export function MobilePortfolioChart({
       if (!res.ok) throw new Error("Failed to fetch transactions");
       return res.json();
     },
+    enabled: chartQueriesEnabled,
   });
 
   const { data: holdings } = useQuery<Holding[]>({
@@ -85,11 +108,12 @@ export function MobilePortfolioChart({
       if (!res.ok) throw new Error("Failed to fetch holdings");
       return res.json();
     },
+    enabled: chartQueriesEnabled,
   });
 
   const { data: quotes } = useQuery<Record<string, StockQuote>>({
     queryKey: ["/api/quotes", holdings?.map(h => h.ticker)],
-    enabled: !!holdings && holdings.length > 0,
+    enabled: chartQueriesEnabled && !!holdings && holdings.length > 0,
     queryFn: async () => {
       if (!holdings || holdings.length === 0) return {};
       
@@ -123,7 +147,7 @@ export function MobilePortfolioChart({
       if (!res.ok) throw new Error("Failed to fetch txn EUR map");
       return res.json();
     },
-    enabled: !!transactions && transactions.length > 0,
+    enabled: chartQueriesEnabled && !!transactions && transactions.length > 0,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -143,7 +167,7 @@ export function MobilePortfolioChart({
 
   const { data: historicalData } = useQuery<HistoricalResponse>({
     queryKey: ["/api/stocks/history/batch", holdings?.map(h => h.ticker)],
-    enabled: !!holdings && holdings.length > 0,
+    enabled: chartQueriesEnabled && !!holdings && holdings.length > 0,
     staleTime: 1000 * 60 * 30,
     queryFn: async () => {
       if (!holdings || holdings.length === 0) return { prices: {}, errors: {}, fetchedCount: 0, totalRequested: 0 };
