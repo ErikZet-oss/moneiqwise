@@ -21,6 +21,7 @@ import {
 } from "./realizedGainsCompute";
 import { computePnlBreakdown } from "./pnlBreakdown";
 import { buildEurPerUnitByTxnIdForTransactions } from "./eurAtTransactionDate";
+import { computeCashLedgerBreakdownEur } from "./netLedgerCashEur";
 import { computeFifoRealizedGainsFromTransactions } from "@shared/fifoRealizedGains";
 import { computeGipsTwr } from "./twrGips";
 import { buildOpenFifoLotRowList, loadTradeTransactionsForAssetLots } from "./assetFifoLots";
@@ -1533,6 +1534,28 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching overview bundle:", error);
       res.status(500).json({ message: "Nepodarilo sa načítať prehľad." });
+    }
+  });
+
+  /**
+   * Diagnostika: čiastkové súčty denníka hotovosti (súlad s `cashBalance` / prehľadom).
+   * `portfolio=all` | ID; pri predvolenom portfóliu sa zahrnú aj transakcie s `portfolio_id` NULL.
+   */
+  app.get("/api/cash-ledger-breakdown", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const portfolio = (req.query.portfolio as string | undefined) ?? "all";
+      const rates = await fetchAllExchangeRates();
+      const list = await storage.getTransactionsForCashBreakdown(userId, portfolio);
+      const breakdown = await computeCashLedgerBreakdownEur(list, rates);
+      res.json({
+        portfolio,
+        transactionCount: list.length,
+        ...breakdown,
+      });
+    } catch (error) {
+      console.error("Error computing cash ledger breakdown:", error);
+      res.status(500).json({ message: "Nepodarilo sa načítať rozpad hotovosti." });
     }
   });
 

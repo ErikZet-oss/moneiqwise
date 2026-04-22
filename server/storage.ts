@@ -92,6 +92,14 @@ export interface IStorage {
     portfolioIds: string[],
     rates: AllExchangeRates,
   ): Promise<Record<string, number>>;
+  /**
+   * Rovnaká množina transakcií ako pri výpočte hotovosti pre zvolené portfólio:
+   * pri predvolenom portfóliu vrátane riadkov s `portfolio_id` NULL.
+   */
+  getTransactionsForCashBreakdown(
+    userId: string,
+    portfolioParam: string,
+  ): Promise<Transaction[]>;
   getHoldingByUserAndTicker(userId: string, ticker: string, portfolioId?: string | null): Promise<Holding | undefined>;
   getHoldingsForTickerAcrossPortfolios(userId: string, ticker: string): Promise<Holding[]>;
   getTransactionsForTickerAcrossPortfolios(userId: string, ticker: string): Promise<Transaction[]>;
@@ -677,6 +685,33 @@ export class DatabaseStorage implements IStorage {
       map[id] = await netLedgerCashEur(list, rates);
     }
     return map;
+  }
+
+  async getTransactionsForCashBreakdown(
+    userId: string,
+    portfolioParam: string,
+  ): Promise<Transaction[]> {
+    const p = (portfolioParam || "all").trim();
+    if (p === "all" || p === "") {
+      return this.getTransactionsByUser(userId, "all");
+    }
+    const defaultPf = await this.getDefaultPortfolio(userId);
+    if (defaultPf && p === defaultPf.id) {
+      return await db
+        .select()
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.userId, userId),
+            or(
+              eq(transactions.portfolioId, p),
+              isNull(transactions.portfolioId),
+            ),
+          ),
+        )
+        .orderBy(desc(transactions.transactionDate));
+    }
+    return this.getTransactionsByUser(userId, p);
   }
 
   async getOverviewBundle(

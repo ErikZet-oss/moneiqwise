@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -21,7 +21,8 @@ import {
   Info,
   FileSpreadsheet,
   ArrowRight,
-  Wrench
+  Wrench,
+  ListTree,
 } from "lucide-react";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -126,9 +127,49 @@ export default function Import() {
   const [isSaving, setIsSaving] = useState(false);
   const [migrateTarget, setMigrateTarget] = useState<string>("default");
   const [recalcHoldingsTarget, setRecalcHoldingsTarget] = useState<string>("default");
+  const [cashBreakdownTarget, setCashBreakdownTarget] = useState<string>("all");
 
   const { data: portfolios } = useQuery<Portfolio[]>({
     queryKey: ["/api/portfolios"],
+  });
+
+  const defaultPortfolioId = useMemo(
+    () => portfolios?.find((p) => p.isDefault)?.id ?? portfolios?.[0]?.id,
+    [portfolios],
+  );
+  const resolvedCashBreakdownPortfolio = useMemo(() => {
+    if (cashBreakdownTarget === "default") {
+      return defaultPortfolioId ?? "all";
+    }
+    return cashBreakdownTarget;
+  }, [cashBreakdownTarget, defaultPortfolioId]);
+
+  const { data: cashBreakdown, isLoading: cashBreakdownLoading } = useQuery({
+    queryKey: ["/api/cash-ledger-breakdown", resolvedCashBreakdownPortfolio],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/cash-ledger-breakdown?portfolio=${encodeURIComponent(resolvedCashBreakdownPortfolio)}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) {
+        const t = await res.text();
+        throw new Error(t || "Nepodarilo sa načítať rozpad hotovosti.");
+      }
+      return res.json() as Promise<{
+        portfolio: string;
+        transactionCount: number;
+        netCashEur: number;
+        depositsEur: number;
+        withdrawalsEur: number;
+        buysEur: number;
+        sellsEur: number;
+        dividendsEur: number;
+        taxEur: number;
+        counts: Record<string, number>;
+      }>;
+    },
+    enabled: !!portfolios && portfolios.length > 0,
+    staleTime: 30_000,
   });
 
   const migrateMutation = useMutation({
@@ -168,6 +209,7 @@ export default function Import() {
             : `Presunuté: ${data.transactionsMoved} transakcií, ${data.holdingsMoved} nových holdingov, ${data.holdingsMerged} zlúčených, ${data.optionTradesMoved} opcií.`,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"], refetchType: "all" });
+      queryClient.invalidateQueries({ queryKey: ["/api/cash-ledger-breakdown"] });
       queryClient.invalidateQueries({ queryKey: ["/api/holdings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/overview"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dividends"] });
@@ -217,6 +259,7 @@ export default function Import() {
       });
       queryClient.invalidateQueries({ queryKey: ["/api/holdings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/overview"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/cash-ledger-breakdown"] });
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"], refetchType: "all" });
     },
     onError: (error: Error) => {
@@ -300,6 +343,7 @@ export default function Import() {
         description: `Cieľové portfólio: „${portName}“. V histórii ho vyber v bočnom paneli, ak transakcie nevidíš. ${data.message}${warn}`,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"], refetchType: "all" });
+      queryClient.invalidateQueries({ queryKey: ["/api/cash-ledger-breakdown"] });
       queryClient.invalidateQueries({ queryKey: ["/api/holdings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/overview"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dividends"] });
@@ -775,6 +819,139 @@ export default function Import() {
                 </Button>
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ListTree className="h-5 w-5" />
+              Rozpad hotovosti (kontrola denníka)
+            </CardTitle>
+            <CardDescription>
+              Rovnaká logika ako zobrazená hotovosť v aplikácii (EUR). Pri voľbe
+              „Predvolené portfólio“ sa berú aj nepriradené transakcie (bez portfólia).
+              Vzorec: vklady + výbery − nákupy + predaje + dividendy + dane = čistá
+              hotovosť.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col sm:flex-row gap-4 mb-4">
+              <div className="flex-1 max-w-md">
+                <label className="text-sm font-medium mb-2 block">Rozsah</label>
+                <Select
+                  value={cashBreakdownTarget}
+                  onValueChange={setCashBreakdownTarget}
+                  data-testid="select-cash-breakdown-portfolio"
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Všetky portfóliá</SelectItem>
+                    <SelectItem value="default">
+                      Predvolené portfólio (+ nepriradené)
+                    </SelectItem>
+                    {portfolios?.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {cashBreakdownLoading && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Načítavam…
+              </div>
+            )}
+            {cashBreakdown && !cashBreakdownLoading && (
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Transakcií v denníku: {cashBreakdown.transactionCount}
+                </p>
+                <div className="rounded-md border">
+                  <Table>
+                    <TableBody>
+                      <TableRow>
+                        <TableCell>Vklady (DEPOSIT)</TableCell>
+                        <TableCell className="text-right font-mono">
+                          {formatCurrency(cashBreakdown.depositsEur)}
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Výbery (WITHDRAWAL)</TableCell>
+                        <TableCell className="text-right font-mono">
+                          {formatCurrency(cashBreakdown.withdrawalsEur)}
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Nákupy (BUY) — odtok</TableCell>
+                        <TableCell className="text-right font-mono">
+                          −{formatCurrency(cashBreakdown.buysEur)}
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Predaje (SELL) — prítok</TableCell>
+                        <TableCell className="text-right font-mono">
+                          +{formatCurrency(cashBreakdown.sellsEur)}
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Dividendy</TableCell>
+                        <TableCell className="text-right font-mono">
+                          {formatCurrency(cashBreakdown.dividendsEur)}
+                        </TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Dane (TAX)</TableCell>
+                        <TableCell className="text-right font-mono">
+                          {formatCurrency(cashBreakdown.taxEur)}
+                        </TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <p className="font-medium">
+                    Čistá hotovosť: {formatCurrency(cashBreakdown.netCashEur)}
+                  </p>
+                  {(() => {
+                    const check =
+                      cashBreakdown.depositsEur +
+                      cashBreakdown.withdrawalsEur -
+                      cashBreakdown.buysEur +
+                      cashBreakdown.sellsEur +
+                      cashBreakdown.dividendsEur +
+                      cashBreakdown.taxEur;
+                    const drift = Math.abs(check - cashBreakdown.netCashEur);
+                    if (drift > 0.02) {
+                      return (
+                        <p className="text-xs text-destructive">
+                          Interná kontrola nesedí o {formatCurrency(drift)} — ohláste
+                          vývojárovi.
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
+                  {cashBreakdown.counts &&
+                    Object.keys(cashBreakdown.counts).length > 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Počty transakcií:{" "}
+                        {Object.entries(cashBreakdown.counts)
+                          .map(([k, v]) => `${k}: ${v}`)
+                          .join(" · ")}
+                        {cashBreakdown.counts.unknown
+                          ? " · (neznámy typ sa do hotovosti nezapočíta)"
+                          : ""}
+                      </p>
+                    )}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
