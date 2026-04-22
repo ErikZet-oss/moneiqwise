@@ -116,6 +116,15 @@ function responseForDbUniqueViolation(err: unknown): { status: number; message: 
   };
 }
 
+/** Burzové symboly pre fetch kurzov/histórie (nie CASH, cash-flow bucket, úrok z hotovosti). */
+function isMarketDataTicker(u: string): boolean {
+  if (!u) return false;
+  if (u === "CASH") return false;
+  if (u === CASH_FLOW_TICKER) return false;
+  if (u === "CASH_INTEREST") return false;
+  return true;
+}
+
 // -----------------------------------------------------------------------------
 // Persistent disk cache
 // -----------------------------------------------------------------------------
@@ -1138,7 +1147,7 @@ async function computePortfolioPerformance(
   const tickerSet = new Set<string>();
   for (const t of sorted) {
     const u = t.ticker?.toUpperCase() ?? "";
-    if (u && u !== "CASH" && u !== CASH_FLOW_TICKER) {
+    if (isMarketDataTicker(u)) {
       tickerSet.add(u);
     }
   }
@@ -2964,14 +2973,18 @@ export async function registerRoutes(
       for (const t of tx) {
         if (t.type === "BUY" || t.type === "SELL") {
           const u = t.ticker.toUpperCase();
-          if (u && u !== "CASH" && u !== CASH_FLOW_TICKER) tickers.add(u);
+          if (isMarketDataTicker(u)) tickers.add(u);
         }
       }
       const currentPriceByTicker: Record<string, number> = {};
       for (const t of Array.from(tickers)) {
-        const q = await fetchStockQuote(t);
-        if (q && typeof q.price === "number" && Number.isFinite(q.price)) {
-          currentPriceByTicker[t] = q.price;
+        try {
+          const q = await fetchStockQuote(t);
+          if (q && typeof q.price === "number" && Number.isFinite(q.price)) {
+            currentPriceByTicker[t] = q.price;
+          }
+        } catch {
+          /* quote unavailable */
         }
       }
       const out = await computePnlBreakdown(tx, userCcy, rates, currentPriceByTicker);
@@ -3016,14 +3029,18 @@ export async function registerRoutes(
       const tickers = new Set<string>();
       for (const t of tx) {
         const u = t.ticker?.toUpperCase() ?? "";
-        if (u && u !== "CASH" && u !== CASH_FLOW_TICKER) tickers.add(u);
+        if (isMarketDataTicker(u)) tickers.add(u);
       }
 
       const currentPrices: Record<string, number> = {};
       for (const t of Array.from(tickers)) {
-        const q = await fetchStockQuote(t);
-        if (q && typeof q.price === "number" && Number.isFinite(q.price)) {
-          currentPrices[t] = q.price;
+        try {
+          const q = await fetchStockQuote(t);
+          if (q && typeof q.price === "number" && Number.isFinite(q.price)) {
+            currentPrices[t] = q.price;
+          }
+        } catch {
+          /* quote unavailable */
         }
       }
 
@@ -3081,13 +3098,17 @@ export async function registerRoutes(
       const tickers = new Set<string>();
       for (const t of tx) {
         const u = t.ticker?.toUpperCase() ?? "";
-        if (u && u !== "CASH" && u !== CASH_FLOW_TICKER) tickers.add(u);
+        if (isMarketDataTicker(u)) tickers.add(u);
       }
       const currentPrices: Record<string, number> = {};
       for (const t of Array.from(tickers)) {
-        const q = await fetchStockQuote(t);
-        if (q && typeof q.price === "number" && Number.isFinite(q.price)) {
-          currentPrices[t] = q.price;
+        try {
+          const q = await fetchStockQuote(t);
+          if (q && typeof q.price === "number" && Number.isFinite(q.price)) {
+            currentPrices[t] = q.price;
+          }
+        } catch {
+          /* quote unavailable */
         }
       }
       const out = await computeGipsTwr(

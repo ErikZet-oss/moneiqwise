@@ -83,6 +83,8 @@ function cleanTicker(ticker: string): string {
     "BF.A": "BF-A",
     "UST.FR": "UST.MI",
     "ASML.NL": "ASML",
+    /** XTB „.NL“ (Amsterdam); Yahoo kotuje napr. IMAE ako IMAE.AS */
+    "IMAE.NL": "IMAE.AS",
     // Rolls-Royce: XTB/Yahoo LSE aj pri „RR“ mapovať na Xetra pre jednotné kotácie
     RR: "RRU.DE",
     "RR.L": "RRU.DE",

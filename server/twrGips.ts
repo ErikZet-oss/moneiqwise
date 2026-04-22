@@ -68,7 +68,12 @@ export async function computeGipsTwr(
   const tickerSet = new Set<string>();
   for (const t of sorted) {
     const u = t.ticker?.toUpperCase() ?? "";
-    if (u && u !== "CASH" && u !== "PORTFOLIO_CASH_FLOW") {
+    if (
+      u &&
+      u !== "CASH" &&
+      u !== "PORTFOLIO_CASH_FLOW" &&
+      u !== "CASH_INTEREST"
+    ) {
       tickerSet.add(u);
     }
   }
