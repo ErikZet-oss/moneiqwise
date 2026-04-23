@@ -209,21 +209,37 @@ export default function Dashboard() {
   }, [holdings]);
 
   const dailyMovers = useMemo(() => {
-    if (!quotesData || moversTickers.length === 0) {
+    type MoverRow = { ticker: string; name: string; pct: number; dayValueEur: number | null };
+    if (!quotesData || !holdings || moversTickers.length === 0) {
       return {
-        gainers: [] as { ticker: string; name: string; pct: number }[],
-        losers: [] as { ticker: string; name: string; pct: number }[],
+        gainers: [] as MoverRow[],
+        losers: [] as MoverRow[],
       };
     }
+    const sharesByTicker = new Map<string, number>();
+    for (const h of holdings) {
+      const sh = parseFloat(h.shares);
+      if (!Number.isFinite(sh) || sh <= 0) continue;
+      sharesByTicker.set(h.ticker, (sharesByTicker.get(h.ticker) ?? 0) + sh);
+    }
+
     const rows = moversTickers
       .map((t) => {
         const q = quotesData[t];
         const raw = q?.changePercent;
         const pct = typeof raw === "number" ? raw : parseFloat(String(raw ?? ""));
+        const shares = sharesByTicker.get(t) ?? 0;
+        const chRaw = q?.change;
+        const ch = typeof chRaw === "number" ? chRaw : parseFloat(String(chRaw ?? ""));
+        let dayValueEur: number | null = null;
+        if (shares > 0 && Number.isFinite(ch)) {
+          dayValueEur = shares * convertPrice(ch, getTickerCurrency(t));
+        }
         return {
           ticker: t,
           name: tickerDisplayNames.get(t) ?? t,
           pct: Number.isFinite(pct) ? pct : NaN,
+          dayValueEur,
         };
       })
       .filter((r) => Number.isFinite(r.pct));
@@ -238,7 +254,7 @@ export default function Dashboard() {
       .slice(0, 5);
 
     return { gainers, losers };
-  }, [quotesData, moversTickers, tickerDisplayNames]);
+  }, [quotesData, moversTickers, tickerDisplayNames, holdings, convertPrice, getTickerCurrency]);
 
   const formatSignedDayPct = (value: number) => {
     const sign = value > 0 ? "+" : "";
@@ -1318,9 +1334,20 @@ export default function Dashboard() {
                         <div className="text-xs text-muted-foreground truncate">{row.name}</div>
                       </div>
                     </div>
-                    <span className="text-sm font-semibold tabular-nums text-green-500 shrink-0">
-                      {formatSignedDayPct(row.pct)}
-                    </span>
+                    <div className="flex flex-col items-end gap-0.5 shrink-0">
+                      <span className="text-sm font-semibold tabular-nums text-green-500">
+                        {formatSignedDayPct(row.pct)}
+                      </span>
+                      {row.dayValueEur != null && Number.isFinite(row.dayValueEur) && (
+                        <span
+                          className={`text-[10px] tabular-nums ${getChangeColor(row.dayValueEur)}`}
+                          data-testid={`dashboard-gainer-value-${idx}`}
+                        >
+                          {row.dayValueEur >= 0 ? "+" : ""}
+                          {maskAmount(formatCurrency(row.dayValueEur))}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 ))
               )}
@@ -1368,9 +1395,20 @@ export default function Dashboard() {
                         <div className="text-xs text-muted-foreground truncate">{row.name}</div>
                       </div>
                     </div>
-                    <span className="text-sm font-semibold tabular-nums text-red-500 shrink-0">
-                      {formatSignedDayPct(row.pct)}
-                    </span>
+                    <div className="flex flex-col items-end gap-0.5 shrink-0">
+                      <span className="text-sm font-semibold tabular-nums text-red-500">
+                        {formatSignedDayPct(row.pct)}
+                      </span>
+                      {row.dayValueEur != null && Number.isFinite(row.dayValueEur) && (
+                        <span
+                          className={`text-[10px] tabular-nums ${getChangeColor(row.dayValueEur)}`}
+                          data-testid={`dashboard-loser-value-${idx}`}
+                        >
+                          {row.dayValueEur >= 0 ? "+" : ""}
+                          {maskAmount(formatCurrency(row.dayValueEur))}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 ))
               )}
