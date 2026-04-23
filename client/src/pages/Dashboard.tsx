@@ -782,19 +782,47 @@ export default function Dashboard() {
               {pnlBreakdown ? (
                 <>
                   <div className="flex justify-between gap-1">
-                    <span className="truncate" title="Realizovaný kapitálový zisk/strata (FIFO, kurz v deň transakcie)">
+                    <span
+                      className="truncate"
+                      title="Akcie: ako v „Uzavreté“ (FIFO + XTB close trade). Opcie: realizovaný zisk z uzavretých opcií, ak sú v celku."
+                    >
                       Realizovaný:
                     </span>
-                    <span className={getChangeColor(pnlBreakdown.realizedCapitalGain)}>
-                      {maskAmount(formatCurrency(pnlBreakdown.realizedCapitalGain))}
+                    <span
+                      className={getChangeColor(
+                        metrics.stockRealizedGain + metrics.optionsRealizedGain,
+                      )}
+                    >
+                      {maskAmount(
+                        formatCurrency(
+                          metrics.stockRealizedGain + metrics.optionsRealizedGain,
+                        ),
+                      )}
                     </span>
                   </div>
                   <div className="flex justify-between gap-1">
                     <span
                       className="truncate"
-                      title="Nerealizovaný z otvorených pozícií (zmena ceny oproti nákladu v EUR; zahŕňa zostatkovú zložku)"
+                      title="Presne: Celkový profit vyššie mínus realizovaný mínus dividendy (mark-to-market pozícií vrátane otvorených opcií v celkovej hodnote)."
                     >
                       Nerealizovaný:
+                    </span>
+                    <span className={getChangeColor(metrics.unrealizedGain)}>
+                      {maskAmount(formatCurrency(metrics.unrealizedGain))}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-1">
+                    <span className="truncate">Dividendy (čisté):</span>
+                    <span className="text-blue-500">
+                      +{maskAmount(formatCurrency(metrics.dividendGain))}
+                    </span>
+                  </div>
+                  <p className="text-[9px] text-muted-foreground pt-1 border-t border-border/50 mt-1">
+                    Rozklad podľa FIFO / kurzov (orientačný; nemusí sa rovnať riadku „Nerealizovaný“ vyššie):
+                  </p>
+                  <div className="flex justify-between gap-1">
+                    <span className="truncate" title="Z API P&amp;L: kapitál + zostatok z otvorených lotov">
+                      … Δ cena + zostatok:
                     </span>
                     <span
                       className={getChangeColor(
@@ -809,11 +837,20 @@ export default function Dashboard() {
                     </span>
                   </div>
                   <div className="flex justify-between gap-1">
-                    <span className="truncate">Dividendy (čisté):</span>
-                    <span className="text-blue-500">
-                      +{maskAmount(formatCurrency(pnlBreakdown.dividendNet))}
+                    <span className="truncate" title="Z API P&amp;L: čistý FX na otvorených lotoch">
+                      … FX (kurzy):
+                    </span>
+                    <span className={getChangeColor(pnlBreakdown.unrealizedFxGain)}>
+                      {maskAmount(formatCurrency(pnlBreakdown.unrealizedFxGain))}
                     </span>
                   </div>
+                  {pnlBreakdown.unrealizedCrossComponent != null &&
+                    Math.abs(pnlBreakdown.unrealizedCrossComponent) > 1e-6 && (
+                    <p className="text-[9px] text-muted-foreground leading-tight pl-0.5">
+                      … Interakcia ΔP·ΔFX:{" "}
+                      {maskAmount(formatCurrency(pnlBreakdown.unrealizedCrossComponent))}
+                    </p>
+                  )}
                   {pnlBreakdown.projectedDividendNext12m != null && pnlBreakdown.projectedDividendNext12m > 0 && (
                     <div className="flex justify-between gap-1">
                       <span
@@ -826,26 +863,6 @@ export default function Dashboard() {
                         +{maskAmount(formatCurrency(pnlBreakdown.projectedDividendNext12m))}
                       </span>
                     </div>
-                  )}
-                  <div className="flex justify-between gap-1">
-                    <span className="truncate" title="Nerealizované: vplyv kurzu na pôvodnú nákupnú cenu v titule (čistý FX)">
-                      FX (kurzy):
-                    </span>
-                    <span className={getChangeColor(pnlBreakdown.unrealizedFxGain)}>
-                      {maskAmount(formatCurrency(pnlBreakdown.unrealizedFxGain))}
-                    </span>
-                  </div>
-                  {pnlBreakdown.unrealizedCrossComponent != null &&
-                    Math.abs(pnlBreakdown.unrealizedCrossComponent) > 1e-6 && (
-                    <p className="text-[9px] text-muted-foreground leading-tight pl-0.5">
-                      Interakcia ΔP·ΔFX (súčasť kapitálu v súčte hore):{" "}
-                      {maskAmount(formatCurrency(pnlBreakdown.unrealizedCrossComponent))}
-                    </p>
-                  )}
-                  {metrics.optionsIncluded && (
-                    <p className="text-[9px] text-amber-600/90 pt-0.5">
-                      Opcie zahrnuté v sume hore, nie v tomto rozpise (len akcie).
-                    </p>
                   )}
                 </>
               ) : (

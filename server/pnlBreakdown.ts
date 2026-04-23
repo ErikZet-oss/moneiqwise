@@ -1,4 +1,5 @@
 import { CASH_FLOW_TICKER, type Transaction } from "@shared/schema";
+import { sumCloseTradeCashFlowEurFromRows } from "@shared/cashFromTransactions";
 import { computeFifoRealizedGainsFromTransactions, type OpenFifoLot } from "@shared/fifoRealizedGains";
 import { getTickerCurrency } from "@shared/tickerCurrency";
 import { buildEurPerUnitByTxnIdForTransactions } from "./eurAtTransactionDate";
@@ -39,6 +40,7 @@ function dividendNetEur(tx: Transaction[], rates: AllExchangeRates): number {
 
 export interface PnlBreakdownResult {
   currency: string;
+  /** FIFO akcie (EUR) + XTB „close trade“ hotovosť — rovnaká logika ako GET /api/realized-gains → realizedGainTotal, v mene UI. */
   realizedCapitalGain: number;
   unrealizedPriceGain: number;
   unrealizedFxGain: number;
@@ -165,9 +167,11 @@ export async function computePnlBreakdown(
   );
   const divEur = dividendNetEur(userTransactions, rates);
   const last12mDiv = dividendNetEurLast12m(userTransactions, rates, now);
+  const closeTradeNetEur = sumCloseTradeCashFlowEurFromRows(userTransactions);
+  const realizedStockAndCloseEur = summary.totalRealized + closeTradeNetEur;
   return {
     currency: userCcy,
-    realizedCapitalGain: toUser(summary.totalRealized, userCcy, rates),
+    realizedCapitalGain: toUser(realizedStockAndCloseEur, userCcy, rates),
     unrealizedPriceGain: toUser(cap, userCcy, rates),
     unrealizedFxGain: toUser(fx, userCcy, rates),
     unrealizedCrossComponent: toUser(cross, userCcy, rates),
