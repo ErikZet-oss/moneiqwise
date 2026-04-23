@@ -57,6 +57,7 @@ const COUNTRY_OPTIONS = [
   "USA",
   "Európa",
   "Ázia",
+  "Južná Amerika",
 ] as const;
 
 interface StockQuote {
@@ -214,19 +215,23 @@ export default function Allocation() {
   }, [equityTickers, userMetadataData]);
 
   const saveMetadataMutation = useMutation({
-    mutationFn: async ({ ticker, row }: { ticker: string; row: EditorRow }) => {
-      await apiRequest("PUT", `/api/stocks/metadata/${encodeURIComponent(ticker)}`, {
-        sector: row.sector.trim() || null,
-        country: row.country.trim() || null,
-        assetType: row.assetType || null,
-      });
+    mutationFn: async (rows: Record<string, EditorRow>) => {
+      await Promise.all(
+        Object.entries(rows).map(async ([ticker, row]) => {
+          await apiRequest("PUT", `/api/stocks/metadata/${encodeURIComponent(ticker)}`, {
+            sector: row.sector.trim() || null,
+            country: row.country.trim() || null,
+            assetType: row.assetType || null,
+          });
+        }),
+      );
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/stocks/metadata"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stocks/asset-profiles/batch"] });
       toast({
         title: "Uložené",
-        description: "Metadáta aktíva boli uložené.",
+        description: "Metadáta aktív boli uložené.",
       });
     },
     onError: (err: Error) => {
@@ -488,12 +493,20 @@ export default function Allocation() {
             <p className="text-sm text-muted-foreground">Žiadne otvorené tickery na úpravu.</p>
           ) : (
             <div className="space-y-2">
+              <div className="flex justify-end">
+                <Button
+                  disabled={saveMetadataMutation.isPending}
+                  onClick={() => saveMetadataMutation.mutate(editorRows)}
+                >
+                  Uložiť všetko
+                </Button>
+              </div>
               {equityTickers.map((ticker) => {
                 const row = editorRows[ticker] ?? { sector: "", country: "", assetType: "" };
                 return (
                   <div
                     key={ticker}
-                    className="grid gap-2 rounded-md border p-3 sm:grid-cols-[120px_1fr_1fr_170px_110px] sm:items-center"
+                    className="grid gap-2 rounded-md border p-3 sm:grid-cols-[120px_1fr_1fr_170px] sm:items-center"
                   >
                     <div className="font-medium">{ticker}</div>
                     <Select
@@ -559,12 +572,6 @@ export default function Allocation() {
                         ))}
                       </SelectContent>
                     </Select>
-                    <Button
-                      disabled={saveMetadataMutation.isPending}
-                      onClick={() => saveMetadataMutation.mutate({ ticker, row })}
-                    >
-                      Uložiť
-                    </Button>
                   </div>
                 );
               })}
