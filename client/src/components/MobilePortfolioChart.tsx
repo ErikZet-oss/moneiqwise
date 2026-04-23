@@ -14,7 +14,7 @@ import { useChartSettings } from "@/hooks/useChartSettings";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { BrokerLogo } from "@/components/BrokerLogo";
-import { ArrowRightLeft, Eye, EyeOff, HelpCircle, Loader2, RefreshCw } from "lucide-react";
+import { ArrowRightLeft, Eye, EyeOff, HelpCircle, Loader2, Moon, RefreshCw } from "lucide-react";
 import type { Transaction, Holding } from "@shared/schema";
 
 interface StockQuote {
@@ -479,6 +479,30 @@ export function MobilePortfolioChart({
 
   const periods: TimePeriod[] = ["1D", "1W", "1M", "YTD", "1Y", "ALL"];
 
+  const usSessionState = (() => {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Bratislava",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      weekday: "short",
+    }).formatToParts(new Date());
+
+    const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+    const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+    const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
+    const isWeekend = weekday.startsWith("Sat") || weekday.startsWith("Sun");
+    if (isWeekend) return "CLOSED" as const;
+
+    const minutes = hour * 60 + minute;
+    if (minutes >= 10 * 60 && minutes < 15 * 60 + 30) return "PRE_MARKET" as const;
+    if (minutes >= 15 * 60 + 30 && minutes < 22 * 60) return "LIVE" as const;
+    return "CLOSED" as const;
+  })();
+
+  const displayedDailyChange = usSessionState === "PRE_MARKET" ? 0 : dailyChange;
+  const displayedDailyChangePercent = usSessionState === "PRE_MARKET" ? 0 : dailyChangePercent;
+
   const formatLargeNumber = (num: number) => {
     const formatted = formatCurrency(num);
     return formatted;
@@ -596,15 +620,29 @@ export function MobilePortfolioChart({
             <p className="text-xs text-muted-foreground">Zmena hodnoty portfólia za posledný obchodný deň.</p>
           </PopoverContent>
         </Popover>
-        <span className={`text-xs font-medium ${dailyChange >= 0 ? "text-green-500" : "text-red-500"}`}>
-          {dailyChange >= 0 ? "+" : ""}{maskAmount(formatCurrency(dailyChange))}
+        <span className={`text-xs font-medium ${displayedDailyChange >= 0 ? "text-green-500" : "text-red-500"}`}>
+          {displayedDailyChange >= 0 ? "+" : ""}{maskAmount(formatCurrency(displayedDailyChange))}
         </span>
         <span className={`text-[10px] px-1 py-0.5 rounded font-medium ${
-          dailyChange >= 0 ? "bg-green-500/20 text-green-500" : "bg-red-500/20 text-red-500"
+          displayedDailyChange >= 0 ? "bg-green-500/20 text-green-500" : "bg-red-500/20 text-red-500"
         }`}>
-          {dailyChange >= 0 ? "+" : ""}{dailyChangePercent.toFixed(2)}%
+          {displayedDailyChange >= 0 ? "+" : ""}{displayedDailyChangePercent.toFixed(2)}%
         </span>
       </div>
+      {usSessionState === "PRE_MARKET" && (
+        <div className="flex items-center gap-1.5 -mt-3 mb-3 text-[10px] text-muted-foreground">
+          <Moon className="h-3 w-3" />
+          <span>
+            Pre-market:{" "}
+            {preOpenPreview.available
+              ? `${preOpenPreview.amount >= 0 ? "+" : ""}${maskAmount(formatCurrency(preOpenPreview.amount))}`
+              : "bez dát"}
+          </span>
+        </div>
+      )}
+      {usSessionState === "CLOSED" && (
+        <div className="-mt-3 mb-3 text-[10px] text-muted-foreground">Trh uzatvorený</div>
+      )}
 
       <div className="flex items-center gap-2 mb-4">
         <span className="text-[10px] text-muted-foreground">

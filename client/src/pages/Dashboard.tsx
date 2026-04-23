@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Wallet, Banknote, Newspaper, ExternalLink, HelpCircle, Loader2, RefreshCw } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Wallet, Banknote, Newspaper, ExternalLink, HelpCircle, Loader2, RefreshCw, Moon } from "lucide-react";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
@@ -563,6 +563,30 @@ export default function Dashboard() {
     return { available: true, amount, percent };
   }, [holdings, quotes, convertPrice, getTickerCurrency]);
 
+  const usSessionState = (() => {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Bratislava",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      weekday: "short",
+    }).formatToParts(new Date());
+
+    const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+    const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+    const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
+    const isWeekend = weekday.startsWith("Sat") || weekday.startsWith("Sun");
+    if (isWeekend) return "CLOSED" as const;
+
+    const minutes = hour * 60 + minute;
+    if (minutes >= 10 * 60 && minutes < 15 * 60 + 30) return "PRE_MARKET" as const;
+    if (minutes >= 15 * 60 + 30 && minutes < 22 * 60) return "LIVE" as const;
+    return "CLOSED" as const;
+  })();
+
+  const displayedDailyChange = usSessionState === "PRE_MARKET" ? 0 : metrics.dailyChange;
+  const displayedDailyChangePercent = usSessionState === "PRE_MARKET" ? 0 : metrics.dailyChangePercent;
+
   const moversAsOfDate = useMemo(() => {
     if (!quotesData) return null;
     const anyMarketOpen = Object.values(quotesData).some((q) => q.isMarketOpen === true);
@@ -961,12 +985,24 @@ export default function Dashboard() {
             {getChangeIcon(metrics.dailyChange)}
           </CardHeader>
           <CardContent className="p-4 pt-3">
-            <div className={`text-2xl font-semibold leading-tight tracking-tight truncate ${getChangeColor(metrics.dailyChange)}`} data-testid="text-daily-change">
-              {maskAmount(formatCurrency(metrics.dailyChange))}
+            <div className={`text-2xl font-semibold leading-tight tracking-tight truncate ${getChangeColor(displayedDailyChange)}`} data-testid="text-daily-change">
+              {maskAmount(formatCurrency(displayedDailyChange))}
             </div>
-            <p className={`text-xs mt-1 ${getChangeColor(metrics.dailyChangePercent)}`}>
-              {formatPercent(metrics.dailyChangePercent)}
+            <p className={`text-xs mt-1 ${getChangeColor(displayedDailyChangePercent)}`}>
+              {formatPercent(displayedDailyChangePercent)}
             </p>
+            {usSessionState === "PRE_MARKET" && (
+              <p className="text-[11px] text-muted-foreground mt-1 inline-flex items-center gap-1">
+                <Moon className="h-3 w-3" />
+                Pre-market:{" "}
+                {preOpenPreview.available
+                  ? `${preOpenPreview.amount >= 0 ? "+" : ""}${maskAmount(formatCurrency(preOpenPreview.amount))}`
+                  : "bez dát"}
+              </p>
+            )}
+            {usSessionState === "CLOSED" && (
+              <p className="text-[11px] text-muted-foreground mt-1">Trh uzatvorený</p>
+            )}
             {dataUpdatedAt && (
               <p className="text-xs text-muted-foreground mt-0.5" data-testid="text-last-updated">
                 {formatLastUpdated(dataUpdatedAt)}

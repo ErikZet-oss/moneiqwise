@@ -370,6 +370,7 @@ function getTickerCurrency(ticker: string): "EUR" | "USD" | "GBP" | "CZK" | "PLN
 function toYahooTicker(ticker: string): string {
   // European exchanges mapping
   const exchangeMap: Record<string, string> = {
+    ".US": "",         // US suffix from broker feed -> plain Yahoo ticker (AAPL.US -> AAPL)
     // Musí byť pred kratším ".F" — inak neplatí, MC.FR končí .FR, nie .F
     ".FR": ".PA",      // Euronext Paris (XTB „.FR“) → Yahoo uvádja MC.PA, MC.FR 404
     ".DE": ".DE",      // XETRA Germany
@@ -400,6 +401,40 @@ function toYahooTicker(ticker: string): string {
   }
   
   return ticker;
+}
+
+async function fetchYahooExtendedSessionPrice(
+  yahooTicker: string,
+  regularPrice: number,
+): Promise<number | null> {
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooTicker)}?interval=1m&range=1d&includePrePost=true`;
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      },
+    });
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const result = data?.chart?.result?.[0];
+    const meta = result?.meta;
+    const pre = Number(meta?.preMarketPrice);
+    if (Number.isFinite(pre) && pre > 0) return pre;
+    const post = Number(meta?.postMarketPrice);
+    if (Number.isFinite(post) && post > 0) return post;
+
+    const closes: unknown[] = result?.indicators?.quote?.[0]?.close ?? [];
+    for (let i = closes.length - 1; i >= 0; i--) {
+      const v = Number(closes[i]);
+      if (Number.isFinite(v) && v > 0 && Math.abs(v - regularPrice) > 1e-9) {
+        return v;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 function quoteDateFromEpoch(
@@ -618,7 +653,10 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
             : Number.isFinite(postMarketPriceRaw) && postMarketPriceRaw > 0
               ? postMarketPriceRaw
               : null;
-        const preMarketPrice = preOrPostMarketPrice;
+        let preMarketPrice = preOrPostMarketPrice;
+        if (preMarketPrice == null) {
+          preMarketPrice = await fetchYahooExtendedSessionPrice(yahooTicker, regularMarketPrice);
+        }
         const preMarketChange = preMarketPrice != null ? preMarketPrice - regularMarketPrice : null;
         const preMarketChangePercent =
           preMarketPrice != null && regularMarketPrice > 0
@@ -680,7 +718,10 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
             : Number.isFinite(postMarketPriceRaw) && postMarketPriceRaw > 0
               ? postMarketPriceRaw
               : null;
-        const preMarketPrice = preOrPostMarketPrice;
+        let preMarketPrice = preOrPostMarketPrice;
+        if (preMarketPrice == null) {
+          preMarketPrice = await fetchYahooExtendedSessionPrice(yahooTicker, currentPrice);
+        }
         const preMarketChange = preMarketPrice != null ? preMarketPrice - currentPrice : null;
         const preMarketChangePercent =
           preMarketPrice != null && currentPrice > 0
