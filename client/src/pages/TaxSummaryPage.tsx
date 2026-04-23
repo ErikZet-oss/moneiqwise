@@ -78,6 +78,16 @@ export type TaxSummaryApiResponse = {
   generatedAt: number;
 };
 
+/** API / persist cache môže vrátiť numeric ako string alebo NaN — aby Daňový asistent nespadol a zobrazil EUR. */
+function finiteEur(n: unknown): number {
+  if (typeof n === "number" && Number.isFinite(n)) return n;
+  if (typeof n === "string" && n.trim() !== "") {
+    const x = parseFloat(n);
+    if (Number.isFinite(x)) return x;
+  }
+  return 0;
+}
+
 function escapeCsvField(value: string | number | boolean): string {
   const s = value === true ? "true" : value === false ? "false" : String(value);
   if (s.includes('"') || s.includes(",") || s.includes("\n") || s.includes("\r")) {
@@ -99,17 +109,17 @@ function buildAccountantBundleCsv(data: TaxSummaryApiResponse): string {
     "# moneiqwise;danove-podklady;utf-8",
     `# rok;${data.year};portfolio;${data.portfolio};generovane-utc;${new Date(data.generatedAt).toISOString()}`,
     "# suhrn",
-    `realizovany-zisk-celkom-eur;${data.realized.totalRealizedGainEur.toFixed(4)}`,
-    `zdanitelny-kratkodoby-zaklad-eur;${data.realized.netShortTermTaxableEur.toFixed(4)}`,
-    `odhad-dane-celkom-eur;${data.skEstimate.estimatedTotalTaxEur.toFixed(4)}`,
+    `realizovany-zisk-celkom-eur;${finiteEur(data.realized?.totalRealizedGainEur).toFixed(4)}`,
+    `zdanitelny-kratkodoby-zaklad-eur;${finiteEur(data.realized?.netShortTermTaxableEur).toFixed(4)}`,
+    `odhad-dane-celkom-eur;${finiteEur(data.skEstimate?.estimatedTotalTaxEur).toFixed(4)}`,
   ];
   const disposals = tableToCsvRows({
-    header: [...data.exportCsv.disposals.header] as string[],
-    rows: data.exportCsv.disposals.rows as (string | number | boolean)[][],
+    header: [...(data.exportCsv?.disposals?.header ?? [])] as string[],
+    rows: (data.exportCsv?.disposals?.rows ?? []) as (string | number | boolean)[][],
   });
   const dividends = tableToCsvRows({
-    header: [...data.exportCsv.dividends.header] as string[],
-    rows: data.exportCsv.dividends.rows as (string | number | boolean)[][],
+    header: [...(data.exportCsv?.dividends?.header ?? [])] as string[],
+    rows: (data.exportCsv?.dividends?.rows ?? []) as (string | number | boolean)[][],
   });
   return (
     "\uFEFF" +
@@ -143,6 +153,8 @@ export default function TaxSummaryPage() {
       }
       return res.json();
     },
+    staleTime: 60 * 1000,
+    refetchOnMount: true,
   });
 
   const d = query.data;
@@ -238,7 +250,7 @@ export default function TaxSummaryPage() {
             <Card
               className={
                 "border-2 " +
-                (d.realized.longTermGainsEur > 0
+                (finiteEur(d.realized?.longTermGainsEur) > 0
                   ? "border-emerald-500/60 bg-emerald-500/5"
                   : "border-border")
               }
@@ -253,11 +265,12 @@ export default function TaxSummaryPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
-                  {formatCurrency(d.forForms.taxExempt.realizedGainsEur)}
+                  {formatCurrency(finiteEur(d.forForms?.taxExempt?.realizedGainsEur))}
                 </p>
-                {d.forForms.taxExempt.realizedLossesEur > 0.01 && (
+                {finiteEur(d.forForms?.taxExempt?.realizedLossesEur) > 0.01 && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    Realiz. straty (dlh.): {formatCurrency(-d.forForms.taxExempt.realizedLossesEur)}
+                    Realiz. straty (dlh.):{" "}
+                    {formatCurrency(-finiteEur(d.forForms?.taxExempt?.realizedLossesEur))}
                   </p>
                 )}
               </CardContent>
@@ -266,7 +279,7 @@ export default function TaxSummaryPage() {
             <Card
               className={
                 "border-2 " +
-                (d.realized.netShortTermTaxableEur > 0
+                (finiteEur(d.realized?.netShortTermTaxableEur) > 0
                   ? "border-orange-500/50 bg-orange-500/5"
                   : "border-border")
               }
@@ -281,10 +294,11 @@ export default function TaxSummaryPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-bold tabular-nums">
-                  {formatCurrency(d.realized.netShortTermTaxableEur)}
+                  {formatCurrency(finiteEur(d.realized?.netShortTermTaxableEur))}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  +{formatCurrency(d.realized.taxableGainsEur)} / −{formatCurrency(d.realized.taxableLossesEur)} (zisk / strata)
+                  +{formatCurrency(finiteEur(d.realized?.taxableGainsEur))} / −
+                  {formatCurrency(finiteEur(d.realized?.taxableLossesEur))} (zisk / strata)
                 </p>
               </CardContent>
             </Card>
@@ -292,7 +306,7 @@ export default function TaxSummaryPage() {
             <Card
               className={
                 "border-2 " +
-                (d.skEstimate.estimatedTotalTaxEur > 0
+                (finiteEur(d.skEstimate?.estimatedTotalTaxEur) > 0
                   ? "border-destructive/50 bg-destructive/5"
                   : "border-border")
               }
@@ -301,7 +315,7 @@ export default function TaxSummaryPage() {
                 <div
                   className={
                     "flex items-center gap-2 " +
-                    (d.skEstimate.estimatedTotalTaxEur > 0
+                    (finiteEur(d.skEstimate?.estimatedTotalTaxEur) > 0
                       ? "text-destructive"
                       : "text-muted-foreground")
                   }
@@ -316,13 +330,13 @@ export default function TaxSummaryPage() {
                 <p
                   className={
                     "text-2xl font-bold tabular-nums " +
-                    (d.skEstimate.estimatedTotalTaxEur > 0 ? "text-destructive" : "")
+                    (finiteEur(d.skEstimate?.estimatedTotalTaxEur) > 0 ? "text-destructive" : "")
                   }
                 >
-                  {formatCurrency(d.skEstimate.estimatedTotalTaxEur)}
+                  {formatCurrency(finiteEur(d.skEstimate?.estimatedTotalTaxEur))}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Jednoducho 19 %: {formatCurrency(d.skEstimate.estimatedTaxEur19Simple)}
+                  Jednoducho 19 %: {formatCurrency(finiteEur(d.skEstimate?.estimatedTaxEur19Simple))}
                 </p>
               </CardContent>
             </Card>
@@ -351,7 +365,7 @@ export default function TaxSummaryPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {d.dividends.items.length === 0 ? (
+              {(d.dividends?.items ?? []).length === 0 ? (
                 <p className="text-sm text-muted-foreground">V tomto roku žiadne dividendy v dátach.</p>
               ) : (
                 <>
@@ -359,19 +373,19 @@ export default function TaxSummaryPage() {
                     <div>
                       <div className="text-muted-foreground">Hrubý súčet</div>
                       <div className="font-semibold tabular-nums">
-                        {formatCurrency(d.dividends.grossEur)}
+                        {formatCurrency(finiteEur(d.dividends?.grossEur))}
                       </div>
                     </div>
                     <div>
                       <div className="text-muted-foreground">Zrážky (súčet, orient.)</div>
                       <div className="font-semibold tabular-nums">
-                        {formatCurrency(d.dividends.withholdingEur)}
+                        {formatCurrency(finiteEur(d.dividends?.withholdingEur))}
                       </div>
                     </div>
                     <div>
                       <div className="text-muted-foreground">Čisté</div>
                       <div className="font-semibold tabular-nums text-green-600">
-                        {formatCurrency(d.dividends.netEur)}
+                        {formatCurrency(finiteEur(d.dividends?.netEur))}
                       </div>
                     </div>
                   </div>
@@ -386,18 +400,18 @@ export default function TaxSummaryPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {d.dividends.items.map((r) => (
+                      {(d.dividends?.items ?? []).map((r) => (
                         <TableRow key={r.transactionId}>
                           <TableCell className="font-mono text-sm">{r.date}</TableCell>
                           <TableCell className="font-mono">{r.ticker}</TableCell>
                           <TableCell className="text-right tabular-nums">
-                            {formatCurrency(r.grossEur)}
+                            {formatCurrency(finiteEur(r.grossEur))}
                           </TableCell>
                           <TableCell className="text-right tabular-nums text-muted-foreground">
-                            {formatCurrency(r.withholdingEur)}
+                            {formatCurrency(finiteEur(r.withholdingEur))}
                           </TableCell>
                           <TableCell className="text-right tabular-nums">
-                            {formatCurrency(r.netEur)}
+                            {formatCurrency(finiteEur(r.netEur))}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -409,7 +423,7 @@ export default function TaxSummaryPage() {
           </Card>
 
           <p className="text-xs text-muted-foreground border-t border-border/60 pt-4 leading-relaxed max-w-3xl">
-            {d.disclaimer}
+            {d.disclaimer ?? ""}
           </p>
         </>
       )}

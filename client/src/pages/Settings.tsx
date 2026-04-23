@@ -686,7 +686,7 @@ export default function Settings() {
                 Najsilnejšie a najslabšie dnes
               </div>
               <div className="text-xs text-muted-foreground">
-                Na stránke Prehľad: rebríček denných percentuálnych zmien podľa aktuálne vybraného portfólia (alebo všetkých naraz pri „Všetky“).
+                Iba na hlavnom Prehľade (prvá položka menu): rebríček denných % zmien podľa vybraného portfólia. Na stránke „Všetky portfóliá“ sa nezobrazuje.
               </div>
             </div>
             <Switch

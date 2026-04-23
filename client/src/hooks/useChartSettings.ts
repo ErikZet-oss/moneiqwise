@@ -5,7 +5,7 @@ interface ChartSettings {
   showTooltip: boolean;
   hideAmounts: boolean;
   showNews: boolean;
-  /** Najsilnejšie / najslabšie dnes na stránke Prehľad */
+  /** Najsilnejšie / najslabšie dnes na hlavnom Prehľade (Dashboard `/`), nie na „Všetky portfóliá“. */
   showDailyMovers: boolean;
 }
 

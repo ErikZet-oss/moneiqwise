@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Wallet, Banknote, Newspaper, ExternalLink, HelpCircle, Loader2, RefreshCw, Shield } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Wallet, Banknote, Newspaper, ExternalLink, HelpCircle, Loader2, RefreshCw } from "lucide-react";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
@@ -60,17 +60,7 @@ interface PnlBreakdown {
   residualUnrealized: number;
   dividendNet: number;
   projectedDividendNext12m?: number;
-  /** Kladný nerealiz. zisk z lotov &gt; 365 dní (orient. oslobodenie) */
-  unrealizedTaxExempt?: number;
   method: { realized: string; costEur: string };
-}
-
-interface TwrResponse {
-  timeWeightedReturn: number;
-  sp500TimeWeightedReturn: number;
-  linkedPeriods: number;
-  note: string;
-  method: string;
 }
 
 interface OptionTrade {
@@ -139,6 +129,27 @@ export default function Dashboard() {
   const maskAmount = (amount: string) => hideAmounts ? "••••••" : amount;
   
   const portfolioParam = getQueryParam();
+
+  /** Drží ťažké dotazy (P&L, poplatky, …) až po idle — menej paralelných requestov pri prvom načítaní, menej „stránka nereaguje“. */
+  const [dashboardSecondaryReady, setDashboardSecondaryReady] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    const run = () => {
+      if (!cancelled) setDashboardSecondaryReady(true);
+    };
+    if (typeof requestIdleCallback !== "undefined") {
+      const id = requestIdleCallback(run, { timeout: 1500 });
+      return () => {
+        cancelled = true;
+        cancelIdleCallback(id);
+      };
+    }
+    const t = window.setTimeout(run, 500);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, []);
   
   const { data: holdings, isLoading: holdingsLoading } = useQuery<Holding[]>({
     queryKey: ["/api/holdings", portfolioParam],
@@ -255,6 +266,7 @@ export default function Dashboard() {
       if (!res.ok) throw new Error("Failed to fetch realized gains");
       return res.json();
     },
+    enabled: dashboardSecondaryReady,
   });
 
   const { data: dividends } = useQuery<DividendSummary>({
@@ -264,6 +276,7 @@ export default function Dashboard() {
       if (!res.ok) throw new Error("Failed to fetch dividends");
       return res.json();
     },
+    enabled: dashboardSecondaryReady,
   });
 
   const { data: optionStats } = useQuery<OptionStats>({
@@ -273,7 +286,7 @@ export default function Dashboard() {
       if (!res.ok) throw new Error("Failed to fetch options stats");
       return res.json();
     },
-    enabled: isAllPortfolios,
+    enabled: dashboardSecondaryReady && isAllPortfolios,
   });
 
   const { data: optionTrades } = useQuery<OptionTrade[]>({
@@ -283,7 +296,7 @@ export default function Dashboard() {
       if (!res.ok) throw new Error("Failed to fetch options");
       return res.json();
     },
-    enabled: isAllPortfolios,
+    enabled: dashboardSecondaryReady && isAllPortfolios,
   });
 
   const { data: pnlBreakdown } = useQuery<PnlBreakdown>({
@@ -297,19 +310,7 @@ export default function Dashboard() {
       return res.json();
     },
     staleTime: 2 * 60 * 1000,
-  });
-
-  const { data: twrData } = useQuery<TwrResponse>({
-    queryKey: ["/api/twr", portfolioParam],
-    queryFn: async () => {
-      const res = await fetch(
-        `/api/twr?portfolio=${encodeURIComponent(portfolioParam)}`,
-        { credentials: "include" },
-      );
-      if (!res.ok) throw new Error("twr");
-      return res.json();
-    },
-    staleTime: 5 * 60 * 1000,
+    enabled: dashboardSecondaryReady,
   });
 
   const { data: fees } = useQuery<{ stockFees: number; optionFees: number; totalFees: number }>({
@@ -319,6 +320,7 @@ export default function Dashboard() {
       if (!res.ok) throw new Error("Failed to fetch fees");
       return res.json();
     },
+    enabled: dashboardSecondaryReady,
   });
 
   const { data: news, isLoading: newsLoading } = useQuery<NewsArticle[]>({
@@ -328,7 +330,7 @@ export default function Dashboard() {
       if (!res.ok) throw new Error("Failed to fetch news");
       return res.json();
     },
-    enabled: showNews && !!holdings && holdings.length > 0,
+    enabled: dashboardSecondaryReady && showNews && !!holdings && holdings.length > 0,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -496,7 +498,21 @@ export default function Dashboard() {
     };
   };
 
-  const metrics = calculatePortfolioMetrics();
+  const metrics = useMemo(
+    () => calculatePortfolioMetrics(),
+    [
+      holdings,
+      quotes,
+      isAllPortfolios,
+      optionStats,
+      optionTrades,
+      realizedGains,
+      dividends,
+      cashValue,
+      convertPrice,
+      getTickerCurrency,
+    ],
+  );
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -645,108 +661,6 @@ export default function Dashboard() {
         onRefreshQuotes={refreshDashboardQuotes}
         quotesRefreshing={quotesFetching}
       />
-
-      {showDailyMovers && portfolios.length > 0 && moversTickers.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Card data-testid="dashboard-daily-gainers">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <TrendingUp className="h-4 w-4 text-green-500" />
-                Najsilnejšie dnes (%)
-              </CardTitle>
-              <p className="text-xs text-muted-foreground">
-                {isAllPortfolios
-                  ? "Z držaných akcií vo všetkých portfóliách — denná zmena podľa kotácie."
-                  : `Z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ — denná zmena podľa kotácie.`}
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-2 pt-0">
-              {quotesFetching && !quotesData ? (
-                <>
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <Skeleton key={i} className="h-10 w-full" />
-                  ))}
-                </>
-              ) : dailyMovers.gainers.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-2">
-                  Žiadna z držaných akcií dnes nebola v pluse.
-                </p>
-              ) : (
-                dailyMovers.gainers.map((row, idx) => (
-                  <div
-                    key={row.ticker}
-                    className="flex items-center justify-between gap-2 py-1.5 border-b border-border/60 last:border-0"
-                    data-testid={`dashboard-gainer-${idx}`}
-                  >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <span className="text-xs text-muted-foreground tabular-nums w-5 shrink-0">
-                        {idx + 1}.
-                      </span>
-                      <CompanyLogo ticker={row.ticker} companyName={row.name} size="xs" />
-                      <div className="min-w-0">
-                        <div className="font-medium text-sm truncate">{row.ticker}</div>
-                        <div className="text-xs text-muted-foreground truncate">{row.name}</div>
-                      </div>
-                    </div>
-                    <span className="text-sm font-semibold tabular-nums text-green-500 shrink-0">
-                      {formatSignedDayPct(row.pct)}
-                    </span>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          <Card data-testid="dashboard-daily-losers">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <TrendingDown className="h-4 w-4 text-red-500" />
-                Najslabšie dnes (%)
-              </CardTitle>
-              <p className="text-xs text-muted-foreground">
-                {isAllPortfolios
-                  ? "Z držaných akcií vo všetkých portfóliách — denná zmena podľa kotácie."
-                  : `Z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ — denná zmena podľa kotácie.`}
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-2 pt-0">
-              {quotesFetching && !quotesData ? (
-                <>
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <Skeleton key={i} className="h-10 w-full" />
-                  ))}
-                </>
-              ) : dailyMovers.losers.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-2">
-                  Žiadna z držaných akcií dnes nebola v mínuse.
-                </p>
-              ) : (
-                dailyMovers.losers.map((row, idx) => (
-                  <div
-                    key={row.ticker}
-                    className="flex items-center justify-between gap-2 py-1.5 border-b border-border/60 last:border-0"
-                    data-testid={`dashboard-loser-${idx}`}
-                  >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <span className="text-xs text-muted-foreground tabular-nums w-5 shrink-0">
-                        {idx + 1}.
-                      </span>
-                      <CompanyLogo ticker={row.ticker} companyName={row.name} size="xs" />
-                      <div className="min-w-0">
-                        <div className="font-medium text-sm truncate">{row.ticker}</div>
-                        <div className="text-xs text-muted-foreground truncate">{row.name}</div>
-                      </div>
-                    </div>
-                    <span className="text-sm font-semibold tabular-nums text-red-500 shrink-0">
-                      {formatSignedDayPct(row.pct)}
-                    </span>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
 
       <div className="hidden md:grid gap-3 md:grid-cols-4 xl:grid-cols-5">
         <Card data-testid="card-total-value">
@@ -913,17 +827,6 @@ export default function Dashboard() {
                       </span>
                     </div>
                   )}
-                  {pnlBreakdown.unrealizedTaxExempt != null && pnlBreakdown.unrealizedTaxExempt > 0 && (
-                    <div className="flex justify-between gap-1 items-center">
-                      <span className="inline-flex items-center gap-0.5 truncate" title="Kladný nerealiz. zisk z lotov so držbou ≥ 365 dní (orient. podľa SK čas. testu)">
-                        <Shield className="h-3 w-3 shrink-0 text-emerald-600" />
-                        Oslobodený zisk (≥365 d):
-                      </span>
-                      <span className="text-emerald-600 font-medium">
-                        {maskAmount(formatCurrency(pnlBreakdown.unrealizedTaxExempt))}
-                      </span>
-                    </div>
-                  )}
                   <div className="flex justify-between gap-1">
                     <span className="truncate" title="Nerealizované: vplyv kurzu na pôvodnú nákupnú cenu v titule (čistý FX)">
                       FX (kurzy):
@@ -964,13 +867,6 @@ export default function Dashboard() {
                 </>
               )}
             </div>
-            {twrData && twrData.linkedPeriods > 0 && (
-              <p className="text-[9px] text-muted-foreground border-t border-border/60 pt-1.5 mt-1.5 leading-tight">
-                TWR (GIPS) vs. vklady: {formatPercent(twrData.timeWeightedReturn * 100)} · S&amp;P 500 (rovnaké
-                obdobia): {formatPercent(twrData.sp500TimeWeightedReturn * 100)} · {twrData.linkedPeriods}{" "}
-                segmentov
-              </p>
-            )}
           </CardContent>
         </Card>
 
@@ -1257,6 +1153,108 @@ export default function Dashboard() {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {showDailyMovers && portfolios.length > 0 && moversTickers.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card data-testid="dashboard-daily-gainers">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-green-500" />
+                Najsilnejšie dnes (%)
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                {isAllPortfolios
+                  ? "Z držaných akcií vo všetkých portfóliách — denná zmena podľa kotácie."
+                  : `Z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ — denná zmena podľa kotácie.`}
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-2 pt-0">
+              {quotesFetching && !quotesData ? (
+                <>
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <Skeleton key={i} className="h-10 w-full" />
+                  ))}
+                </>
+              ) : dailyMovers.gainers.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">
+                  Žiadna z držaných akcií dnes nebola v pluse.
+                </p>
+              ) : (
+                dailyMovers.gainers.map((row, idx) => (
+                  <div
+                    key={row.ticker}
+                    className="flex items-center justify-between gap-2 py-1.5 border-b border-border/60 last:border-0"
+                    data-testid={`dashboard-gainer-${idx}`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="text-xs text-muted-foreground tabular-nums w-5 shrink-0">
+                        {idx + 1}.
+                      </span>
+                      <CompanyLogo ticker={row.ticker} companyName={row.name} size="xs" />
+                      <div className="min-w-0">
+                        <div className="font-medium text-sm truncate">{row.ticker}</div>
+                        <div className="text-xs text-muted-foreground truncate">{row.name}</div>
+                      </div>
+                    </div>
+                    <span className="text-sm font-semibold tabular-nums text-green-500 shrink-0">
+                      {formatSignedDayPct(row.pct)}
+                    </span>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          <Card data-testid="dashboard-daily-losers">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <TrendingDown className="h-4 w-4 text-red-500" />
+                Najslabšie dnes (%)
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                {isAllPortfolios
+                  ? "Z držaných akcií vo všetkých portfóliách — denná zmena podľa kotácie."
+                  : `Z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ — denná zmena podľa kotácie.`}
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-2 pt-0">
+              {quotesFetching && !quotesData ? (
+                <>
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <Skeleton key={i} className="h-10 w-full" />
+                  ))}
+                </>
+              ) : dailyMovers.losers.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">
+                  Žiadna z držaných akcií dnes nebola v mínuse.
+                </p>
+              ) : (
+                dailyMovers.losers.map((row, idx) => (
+                  <div
+                    key={row.ticker}
+                    className="flex items-center justify-between gap-2 py-1.5 border-b border-border/60 last:border-0"
+                    data-testid={`dashboard-loser-${idx}`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="text-xs text-muted-foreground tabular-nums w-5 shrink-0">
+                        {idx + 1}.
+                      </span>
+                      <CompanyLogo ticker={row.ticker} companyName={row.name} size="xs" />
+                      <div className="min-w-0">
+                        <div className="font-medium text-sm truncate">{row.ticker}</div>
+                        <div className="text-xs text-muted-foreground truncate">{row.name}</div>
+                      </div>
+                    </div>
+                    <span className="text-sm font-semibold tabular-nums text-red-500 shrink-0">
+                      {formatSignedDayPct(row.pct)}
+                    </span>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       <Card>

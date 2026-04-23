@@ -67,6 +67,18 @@ function isPortfolioListQueryKeySerialized(keyStr: string): boolean {
   return keyStr.includes("/api/portfolios");
 }
 
+/** Veľké alebo často sa meniace odpovede — persist spôsoboval dlhé JSON.stringify a „stránka nereaguje“. */
+function shouldSkipPersistQueryKey(keyStr: string): boolean {
+  if (keyStr.includes("/api/auth/user")) return true;
+  if (isPortfolioListQueryKeySerialized(keyStr)) return true;
+  if (keyStr.includes("/api/quotes")) return true;
+  if (keyStr.includes("quotes-overview")) return true;
+  if (keyStr.includes("/api/news")) return true;
+  if (keyStr.includes("/api/portfolio-history")) return true;
+  if (keyStr.includes("/api/tax-summary")) return true;
+  return false;
+}
+
 function loadCachedData(): Record<string, unknown> | null {
   try {
     const cached = localStorage.getItem(PORTFOLIO_QUERY_CACHE_KEY);
@@ -125,7 +137,7 @@ if (cachedData) {
     try {
       const queryKey = JSON.parse(key);
       if (isAuthUserQueryKey(queryKey)) return;
-      if (isPortfolioListQueryKeySerialized(key)) return;
+      if (shouldSkipPersistQueryKey(key)) return;
       queryClient.setQueryData(queryKey, value);
     } catch {
       // Ignore invalid cache entries
@@ -146,8 +158,7 @@ queryClient.getQueryCache().subscribe(() => {
     queries.forEach(query => {
       if (query.state.data !== undefined && query.state.status === 'success') {
         const key = JSON.stringify(query.queryKey);
-        if (key.includes("/api/auth/user")) return;
-        if (isPortfolioListQueryKeySerialized(key)) return;
+        if (shouldSkipPersistQueryKey(key)) return;
         // Only cache portfolio-related data
         if (key.includes('/api/')) {
           cacheData[key] = query.state.data;
