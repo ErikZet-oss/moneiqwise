@@ -85,6 +85,7 @@ interface StockQuote {
   price: number;
   change: number;
   changePercent: number;
+  quoteDate?: string | null;
   marketState?: string | null;
   isMarketOpen?: boolean | null;
   preMarketPrice?: number | null;
@@ -562,6 +563,23 @@ export default function Dashboard() {
     return { available: true, amount, percent };
   }, [holdings, quotes, convertPrice, getTickerCurrency]);
 
+  const moversAsOfDate = useMemo(() => {
+    if (!quotesData) return null;
+    const dates = Object.values(quotesData)
+      .map((q) => q.quoteDate)
+      .filter((d): d is string => typeof d === "string" && d.length > 0);
+    if (dates.length === 0) return null;
+    const latest = dates.sort().at(-1);
+    if (!latest) return null;
+    const parsed = new Date(`${latest}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return latest;
+    return parsed.toLocaleDateString("sk-SK", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  }, [quotesData]);
+
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDirection(sortDirection === "asc" ? "desc" : "asc");
@@ -667,6 +685,12 @@ export default function Dashboard() {
     if (value > 0) return "text-green-500";
     if (value < 0) return "text-red-500";
     return "text-muted-foreground";
+  };
+
+  const getMarketDotStyle = (isOpen: boolean | null | undefined) => {
+    if (isOpen === true) return { cls: "bg-green-500", title: "Trh otvorený" };
+    if (isOpen === false) return { cls: "bg-red-500", title: "Trh zatvorený" };
+    return { cls: "bg-muted-foreground/50", title: "Stav trhu nejednoznačný" };
   };
 
   if (holdingsLoading) {
@@ -1214,6 +1238,7 @@ export default function Dashboard() {
                 {isAllPortfolios
                   ? "Z držaných akcií vo všetkých portfóliách — denná zmena podľa kotácie."
                   : `Z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ — denná zmena podľa kotácie.`}
+                {moversAsOfDate ? ` (k dátumu ${moversAsOfDate})` : ""}
               </p>
             </CardHeader>
             <CardContent className="space-y-2 pt-0">
@@ -1263,6 +1288,7 @@ export default function Dashboard() {
                 {isAllPortfolios
                   ? "Z držaných akcií vo všetkých portfóliách — denná zmena podľa kotácie."
                   : `Z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ — denná zmena podľa kotácie.`}
+                {moversAsOfDate ? ` (k dátumu ${moversAsOfDate})` : ""}
               </p>
             </CardHeader>
             <CardContent className="space-y-2 pt-0">
@@ -1345,41 +1371,46 @@ export default function Dashboard() {
                         }
                       }}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <CompanyLogo ticker={holding.ticker} companyName={holding.companyName} size="xs" />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5">
-                              <a 
-                                href={`https://finance.yahoo.com/quote/${holding.ticker}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="font-semibold text-xs hover:text-primary"
-                                data-testid={`link-ticker-${holding.ticker}`}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <span
-                                  className={`inline-block h-1.5 w-1.5 rounded-full mr-1.5 align-middle ${
-                                    quotes?.[holding.ticker]?.isMarketOpen ? "bg-green-500" : "bg-red-500"
-                                  }`}
-                                  title={quotes?.[holding.ticker]?.isMarketOpen ? "Trh otvorený" : "Trh zatvorený"}
-                                />
-                                {holding.ticker}
-                              </a>
-                              <span className="text-[9px] text-muted-foreground">
-                                {formatShareQuantity(shares)} ks
-                              </span>
+                      {(() => {
+                        const marketDot = getMarketDotStyle(quotes?.[holding.ticker]?.isMarketOpen);
+                        return (
+                          <>
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <CompanyLogo ticker={holding.ticker} companyName={holding.companyName} size="xs" />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <a 
+                                      href={`https://finance.yahoo.com/quote/${holding.ticker}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="font-semibold text-xs hover:text-primary"
+                                      data-testid={`link-ticker-${holding.ticker}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <span
+                                        className={`inline-block h-1.5 w-1.5 rounded-full mr-1.5 align-middle ${marketDot.cls}`}
+                                        title={marketDot.title}
+                                      />
+                                      {holding.ticker}
+                                    </a>
+                                    <span className="text-[9px] text-muted-foreground">
+                                      {formatShareQuantity(shares)} ks
+                                    </span>
+                                  </div>
+                                  <p className="text-[9px] text-muted-foreground truncate">{holding.companyName}</p>
+                                </div>
+                              </div>
+                              <div className="text-right pl-2">
+                                <div className="text-xs font-semibold">{maskAmount(formatCurrency(currentValue))}</div>
+                                <div className={`text-[10px] ${getChangeColor(gainLoss)}`}>
+                                  {formatPercent(gainLossPercent)}
+                                </div>
+                              </div>
                             </div>
-                            <p className="text-[9px] text-muted-foreground truncate">{holding.companyName}</p>
-                          </div>
-                        </div>
-                        <div className="text-right pl-2">
-                          <div className="text-xs font-semibold">{maskAmount(formatCurrency(currentValue))}</div>
-                          <div className={`text-[10px] ${getChangeColor(gainLoss)}`}>
-                            {formatPercent(gainLossPercent)}
-                          </div>
-                        </div>
-                      </div>
+                          </>
+                        );
+                      })()}
                       <div className="flex items-center justify-between mt-1 text-[9px] text-muted-foreground">
                         <div className="flex items-center gap-3">
                           <span>Priem: <span className="text-foreground">{maskAmount(formatCurrency(avgCostDisplay))}</span></span>
@@ -1484,6 +1515,9 @@ export default function Dashboard() {
                       const gainLossPercent = investedDisplay > 0 ? (gainLoss / investedDisplay) * 100 : 0;
 
                       return (
+                        (() => {
+                          const marketDot = getMarketDotStyle(quotes?.[holding.ticker]?.isMarketOpen);
+                          return (
                         <TableRow
                           key={holding.id}
                           data-testid={`row-holding-${holding.ticker}`}
@@ -1502,10 +1536,8 @@ export default function Dashboard() {
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 <span
-                                  className={`inline-block h-2 w-2 rounded-full mr-2 align-middle ${
-                                    quotes?.[holding.ticker]?.isMarketOpen ? "bg-green-500" : "bg-red-500"
-                                  }`}
-                                  title={quotes?.[holding.ticker]?.isMarketOpen ? "Trh otvorený" : "Trh zatvorený"}
+                                  className={`inline-block h-2 w-2 rounded-full mr-2 align-middle ${marketDot.cls}`}
+                                  title={marketDot.title}
                                 />
                                 {holding.ticker}
                               </a>
@@ -1532,6 +1564,8 @@ export default function Dashboard() {
                             </div>
                           </TableCell>
                         </TableRow>
+                          );
+                        })()
                       );
                     })}
                   </TableBody>

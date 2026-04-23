@@ -573,20 +573,35 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
       if (regularMarketPrice != null) {
         const marketStateRaw = String(q?.marketState ?? "").toUpperCase();
         const marketState = marketStateRaw || null;
-        const isMarketOpen = marketStateRaw === "REGULAR";
+        const isMarketOpen =
+          marketStateRaw === "REGULAR"
+            ? true
+            : marketStateRaw === "CLOSED"
+              ? false
+              : null;
         const change = previousClose != null ? regularMarketPrice - previousClose : 0;
         const changePercent =
           previousClose != null && previousClose > 0 ? (change / previousClose) * 100 : 0;
 
         const preMarketPriceRaw = Number(q?.preMarketPrice);
-        const preMarketPrice =
+        const postMarketPriceRaw = Number(q?.postMarketPrice);
+        const preOrPostMarketPrice =
           Number.isFinite(preMarketPriceRaw) && preMarketPriceRaw > 0
             ? preMarketPriceRaw
-            : null;
+            : Number.isFinite(postMarketPriceRaw) && postMarketPriceRaw > 0
+              ? postMarketPriceRaw
+              : null;
+        const preMarketPrice = preOrPostMarketPrice;
         const preMarketChange = preMarketPrice != null ? preMarketPrice - regularMarketPrice : null;
         const preMarketChangePercent =
           preMarketPrice != null && regularMarketPrice > 0
             ? (preMarketChange! / regularMarketPrice) * 100
+            : null;
+
+        const regularMarketTimeRaw = Number(q?.regularMarketTime);
+        const quoteDate =
+          Number.isFinite(regularMarketTimeRaw) && regularMarketTimeRaw > 0
+            ? new Date(regularMarketTimeRaw * 1000).toISOString().split("T")[0]
             : null;
 
         return {
@@ -594,6 +609,7 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
           price: regularMarketPrice,
           change,
           changePercent,
+          quoteDate,
           marketState,
           isMarketOpen,
           preMarketPrice,
@@ -630,13 +646,24 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
       
       if (currentPrice > 0) {
         const preMarketPriceRaw = Number(meta?.preMarketPrice);
-        const preMarketPrice = Number.isFinite(preMarketPriceRaw) && preMarketPriceRaw > 0
-          ? preMarketPriceRaw
-          : null;
+        const postMarketPriceRaw = Number(meta?.postMarketPrice);
+        const preOrPostMarketPrice =
+          Number.isFinite(preMarketPriceRaw) && preMarketPriceRaw > 0
+            ? preMarketPriceRaw
+            : Number.isFinite(postMarketPriceRaw) && postMarketPriceRaw > 0
+              ? postMarketPriceRaw
+              : null;
+        const preMarketPrice = preOrPostMarketPrice;
         const preMarketChange = preMarketPrice != null ? preMarketPrice - currentPrice : null;
         const preMarketChangePercent =
           preMarketPrice != null && currentPrice > 0
             ? (preMarketChange! / currentPrice) * 100
+            : null;
+
+        const regularMarketTimeRaw = Number(meta?.regularMarketTime);
+        const quoteDate =
+          Number.isFinite(regularMarketTimeRaw) && regularMarketTimeRaw > 0
+            ? new Date(regularMarketTimeRaw * 1000).toISOString().split("T")[0]
             : null;
 
         return {
@@ -644,8 +671,14 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
           price: currentPrice,
           change,
           changePercent,
+          quoteDate,
           marketState: String(meta?.marketState ?? "").toUpperCase() || null,
-          isMarketOpen: String(meta?.marketState ?? "").toUpperCase() === "REGULAR",
+          isMarketOpen:
+            String(meta?.marketState ?? "").toUpperCase() === "REGULAR"
+              ? true
+              : String(meta?.marketState ?? "").toUpperCase() === "CLOSED"
+                ? false
+                : null,
           preMarketPrice,
           preMarketChange,
           preMarketChangePercent,
@@ -721,6 +754,10 @@ async function fetchFinnhubQuote(ticker: string): Promise<any> {
         price: data.c, // current price
         change: data.d || 0, // change
         changePercent: data.dp || 0, // change percent
+        quoteDate:
+          Number.isFinite(Number(data.t)) && Number(data.t) > 0
+            ? new Date(Number(data.t) * 1000).toISOString().split("T")[0]
+            : null,
         marketState: null,
         isMarketOpen: null,
         preMarketPrice: null,
@@ -777,6 +814,7 @@ async function fetchStockQuote(ticker: string, skipCache = false): Promise<any> 
           price: parseFloat(quote["05. price"]) || 0,
           change: parseFloat(quote["09. change"]) || 0,
           changePercent: parseFloat(quote["10. change percent"]?.replace("%", "")) || 0,
+          quoteDate: null,
           marketState: null,
           isMarketOpen: null,
           preMarketPrice: null,
@@ -2509,6 +2547,7 @@ export async function registerRoutes(
           price: 1.00,
           change: 0,
           changePercent: 0,
+          quoteDate: null,
           marketState: "CLOSED",
           isMarketOpen: false,
           preMarketPrice: null,
@@ -2560,6 +2599,7 @@ export async function registerRoutes(
                   price: 1.00,
                   change: 0,
                   changePercent: 0,
+                  quoteDate: null,
                   marketState: "CLOSED",
                   isMarketOpen: false,
                   preMarketPrice: null,
