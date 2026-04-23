@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -20,8 +20,6 @@ import {
   AlertTriangle,
   BarChart2,
 } from "lucide-react";
-
-const YEAR_CHOICES = [2024, 2025, 2026] as const;
 
 type CsvTable = {
   header: readonly string[];
@@ -75,6 +73,7 @@ export type TaxSummaryApiResponse = {
     dividends: CsvTable;
   };
   portfolio: string;
+  availableYears?: number[];
   generatedAt: number;
 };
 
@@ -139,8 +138,9 @@ export default function TaxSummaryPage() {
   const { formatCurrency } = useCurrency();
   const { portfolios } = usePortfolio();
 
-  const [year, setYear] = useState<number>(2025);
+  const [year, setYear] = useState<number>(new Date().getUTCFullYear());
   const [portfolio, setPortfolio] = useState<string>("all");
+  const [showAllTickers, setShowAllTickers] = useState(false);
 
   const query = useQuery<TaxSummaryApiResponse>({
     queryKey: ["/api/tax-summary", year, portfolio],
@@ -158,6 +158,22 @@ export default function TaxSummaryPage() {
   });
 
   const d = query.data;
+  const yearChoices = useMemo(() => {
+    const fromApi = (d?.availableYears ?? []).filter((y) => Number.isFinite(y));
+    if (fromApi.length > 0) return fromApi;
+    const now = new Date().getUTCFullYear();
+    return Array.from({ length: 8 }, (_, i) => now - i);
+  }, [d?.availableYears]);
+
+  useEffect(() => {
+    setShowAllTickers(false);
+  }, [year, portfolio]);
+
+  useEffect(() => {
+    if (!yearChoices.includes(year) && yearChoices.length > 0) {
+      setYear(yearChoices[0]!);
+    }
+  }, [yearChoices, year]);
 
   const onDownload = useCallback(() => {
     if (!d) return;
@@ -201,7 +217,7 @@ export default function TaxSummaryPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {YEAR_CHOICES.map((y) => (
+              {yearChoices.map((y) => (
                 <SelectItem key={y} value={String(y)}>
                   {y}
                 </SelectItem>
@@ -369,6 +385,16 @@ export default function TaxSummaryPage() {
                 <p className="text-sm text-muted-foreground">V tomto roku žiadne dividendy v dátach.</p>
               ) : (
                 <>
+                  {(() => {
+                    const items = d.dividends?.items ?? [];
+                    const firstTenTickers = Array.from(new Set(items.map((x) => x.ticker))).slice(0, 10);
+                    const visibleItems = showAllTickers
+                      ? items
+                      : items.filter((x) => firstTenTickers.includes(x.ticker));
+                    const hiddenTickerCount =
+                      Array.from(new Set(items.map((x) => x.ticker))).length - firstTenTickers.length;
+                    return (
+                      <>
                   <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
                     <div>
                       <div className="text-muted-foreground">Hrubý súčet</div>
@@ -389,6 +415,21 @@ export default function TaxSummaryPage() {
                       </div>
                     </div>
                   </div>
+                  {hiddenTickerCount > 0 && (
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <p className="text-xs text-muted-foreground">
+                        Zobrazených prvých {firstTenTickers.length} tickerov z{" "}
+                        {firstTenTickers.length + hiddenTickerCount}.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowAllTickers((v) => !v)}
+                      >
+                        {showAllTickers ? "Zobraziť menej" : "Zobraziť viac"}
+                      </Button>
+                    </div>
+                  )}
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -400,7 +441,7 @@ export default function TaxSummaryPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {(d.dividends?.items ?? []).map((r) => (
+                      {visibleItems.map((r) => (
                         <TableRow key={r.transactionId}>
                           <TableCell className="font-mono text-sm">{r.date}</TableCell>
                           <TableCell className="font-mono">{r.ticker}</TableCell>
@@ -417,6 +458,9 @@ export default function TaxSummaryPage() {
                       ))}
                     </TableBody>
                   </Table>
+                      </>
+                    );
+                  })()}
                 </>
               )}
             </CardContent>

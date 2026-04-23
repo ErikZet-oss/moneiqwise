@@ -3000,9 +3000,17 @@ export async function registerRoutes(
         portfolioParam === "all" ? null : portfolioParam,
       );
       const out = await buildTaxSummary(year, tx, rates);
+      const availableYears = Array.from(
+        new Set(
+          tx
+            .map((t) => new Date(t.transactionDate as unknown as string).getUTCFullYear())
+            .filter((yy) => Number.isFinite(yy) && yy >= 2000 && yy <= 2100),
+        ),
+      ).sort((a, b) => b - a);
       res.json({
         ...out,
         portfolio: portfolioParam,
+        availableYears,
         generatedAt: Date.now(),
         /** Rovnaké dáta v tvare vhodnom na CSV (jeden header + riadky). */
         exportCsv: {
