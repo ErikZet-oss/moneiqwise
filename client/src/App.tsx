@@ -24,6 +24,7 @@ import Grafy from "@/pages/Grafy";
 import AssetDetail from "@/pages/AssetDetail";
 import TaxSummaryPage from "@/pages/TaxSummaryPage";
 import FaqPage from "@/pages/FaqPage";
+import { MarketQuoteTicker } from "@/components/MarketQuoteTicker";
 
 function RedirectToHistory() {
   const [, setLocation] = useLocation();
@@ -87,16 +88,19 @@ function AuthenticatedLayout() {
   return (
     <PortfolioProvider>
       <SidebarProvider style={style as React.CSSProperties}>
-        <div className="flex h-screen w-full">
-          <AppSidebar />
-          <div className="flex flex-col flex-1 overflow-hidden">
-            <header className="flex items-center gap-2 p-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-              <SidebarTrigger data-testid="button-sidebar-toggle" />
-              <div className="flex-1" />
-            </header>
-            <main className="flex-1 overflow-auto p-6">
-              <Router />
-            </main>
+        <div className="flex h-screen w-full flex-col">
+          <MarketQuoteTicker />
+          <div className="flex min-h-0 flex-1 w-full">
+            <AppSidebar />
+            <div className="flex flex-col flex-1 overflow-hidden">
+              <header className="flex items-center gap-2 p-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+                <SidebarTrigger data-testid="button-sidebar-toggle" />
+                <div className="flex-1" />
+              </header>
+              <main className="flex-1 overflow-auto p-6">
+                <Router />
+              </main>
+            </div>
           </div>
         </div>
       </SidebarProvider>
