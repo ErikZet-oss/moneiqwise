@@ -1,4 +1,4 @@
-import { BarChart3, History, LogOut, User, TrendingUp, Settings, Briefcase, ChevronDown, Check, Target, Banknote, Upload, Sun, Moon, Layers, PieChart, Scale, LineChart } from "lucide-react";
+import { BarChart3, History, LogOut, User, TrendingUp, Settings, Briefcase, ChevronDown, Check, Target, Banknote, Upload, Sun, Moon, Layers, PieChart, Scale, LineChart, CircleHelp } from "lucide-react";
 import { useLocation } from "wouter";
 import {
   Sidebar,
@@ -78,6 +78,11 @@ const menuItems = [
     title: "Import XTB",
     url: "/import",
     icon: Upload,
+  },
+  {
+    title: "FAQ",
+    url: "/faq",
+    icon: CircleHelp,
   },
 ];
 

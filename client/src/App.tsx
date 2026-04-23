@@ -23,6 +23,7 @@ import Allocation from "@/pages/Allocation";
 import Grafy from "@/pages/Grafy";
 import AssetDetail from "@/pages/AssetDetail";
 import TaxSummaryPage from "@/pages/TaxSummaryPage";
+import FaqPage from "@/pages/FaqPage";
 
 function RedirectToHistory() {
   const [, setLocation] = useLocation();
@@ -64,6 +65,7 @@ function Router() {
       <Route path="/allocation" component={Allocation} />
       <Route path="/grafy" component={Grafy} />
       <Route path="/settings" component={Settings} />
+      <Route path="/faq" component={FaqPage} />
       <Route path="/asset/:ticker" component={AssetDetail} />
       <Route component={NotFound} />
     </Switch>
