@@ -527,6 +527,102 @@ async function fetchYahooAssetProfile(
   }
 }
 
+/** Yahoo: najbližší ex-dividend / výplatný dátum z quoteSummary (cache). */
+interface UpcomingDividendYahooParsed {
+  eventMs: number;
+  kind: "ex_dividend" | "payout";
+  lastDividendPerShare: number | null;
+}
+
+const upcomingDividendYahooCache = new Map<
+  string,
+  { t: number; v: UpcomingDividendYahooParsed | null }
+>();
+const UPCOMING_DIV_YAHOO_TTL_MS = 45 * 60 * 1000;
+
+function yahooRawTsToMs(raw: number): number {
+  if (!Number.isFinite(raw)) return NaN;
+  return raw > 1e12 ? raw : raw * 1000;
+}
+
+async function fetchYahooUpcomingDividendHint(
+  ticker: string,
+): Promise<UpcomingDividendYahooParsed | null> {
+  const key = ticker.toUpperCase();
+  const cached = upcomingDividendYahooCache.get(key);
+  if (cached && Date.now() - cached.t < UPCOMING_DIV_YAHOO_TTL_MS) {
+    return cached.v;
+  }
+
+  try {
+    const yahooTicker = toYahooTicker(key);
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(yahooTicker)}?modules=calendarEvents,defaultKeyStatistics`;
+
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      },
+    });
+
+    if (!response.ok) {
+      upcomingDividendYahooCache.set(key, { t: Date.now(), v: null });
+      return null;
+    }
+
+    const data = await response.json();
+    const cr = data?.quoteSummary;
+    if (cr?.error || !Array.isArray(cr?.result) || cr.result.length === 0) {
+      upcomingDividendYahooCache.set(key, { t: Date.now(), v: null });
+      return null;
+    }
+
+    const result = cr.result[0];
+    const ce = result?.calendarEvents;
+    const dks = result?.defaultKeyStatistics;
+
+    const exRaw = ce?.exDividendDate?.raw;
+    const payRaw = ce?.dividendDate?.raw;
+    const lastDivRaw = dks?.lastDividendValue?.raw;
+
+    const exMs = typeof exRaw === "number" ? yahooRawTsToMs(exRaw) : NaN;
+    const payMs = typeof payRaw === "number" ? yahooRawTsToMs(payRaw) : NaN;
+    const lastDividendPerShare =
+      typeof lastDivRaw === "number" && Number.isFinite(lastDivRaw)
+        ? lastDivRaw
+        : null;
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const t0 = todayStart.getTime();
+
+    let eventMs: number | undefined;
+    let kind: "ex_dividend" | "payout" | undefined;
+    if (Number.isFinite(exMs) && exMs >= t0) {
+      eventMs = exMs;
+      kind = "ex_dividend";
+    } else if (Number.isFinite(payMs) && payMs >= t0) {
+      eventMs = payMs;
+      kind = "payout";
+    }
+
+    if (eventMs == null || kind == null) {
+      upcomingDividendYahooCache.set(key, { t: Date.now(), v: null });
+      return null;
+    }
+
+    const v: UpcomingDividendYahooParsed = {
+      eventMs,
+      kind,
+      lastDividendPerShare,
+    };
+    upcomingDividendYahooCache.set(key, { t: Date.now(), v });
+    return v;
+  } catch {
+    upcomingDividendYahooCache.set(key, { t: Date.now(), v: null });
+    return null;
+  }
+}
+
 interface NewsArticle {
   ticker: string;
   title: string;
@@ -3303,6 +3399,90 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error computing PnL breakdown:", error);
       res.status(500).json({ message: "Nepodarilo sa vypočítať rozdelenie zisku." });
+    }
+  });
+
+  /** Najbližšia ohlásená dividenda v držaných tituloch (Yahoo kalendár). */
+  app.get("/api/dividends/upcoming", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const portfolioParam = (req.query.portfolio as string) || "all";
+      const pf = portfolioParam === "all" ? undefined : portfolioParam;
+      const userSettings = await storage.getUserSettings(userId);
+      const userCcy = (userSettings?.preferredCurrency || "EUR").toUpperCase();
+      const rates = await fetchAllExchangeRates();
+
+      const holdings = await storage.getHoldingsByUser(userId, pf);
+
+      const byTicker = new Map<string, { shares: number; companyName: string }>();
+      for (const h of holdings) {
+        const t = h.ticker.toUpperCase();
+        if (!isMarketDataTicker(t)) continue;
+        const sh = parseFloat(h.shares);
+        if (!Number.isFinite(sh) || sh <= 0) continue;
+        const prev = byTicker.get(t);
+        const name = (h.companyName || t).trim() || t;
+        byTicker.set(t, {
+          shares: (prev?.shares ?? 0) + sh,
+          companyName: prev?.companyName || name,
+        });
+      }
+
+      const tickers = Array.from(byTicker.keys());
+
+      type Best = {
+        ticker: string;
+        companyName: string;
+        date: string;
+        kind: "ex_dividend" | "payout";
+        estimatedGrossInUserCcy: number | null;
+        eventMs: number;
+      };
+      let best: Best | null = null;
+
+      const CONCURRENCY = 4;
+      for (let i = 0; i < tickers.length; i += CONCURRENCY) {
+        const chunk = tickers.slice(i, i + CONCURRENCY);
+        const results = await Promise.all(
+          chunk.map(async (ticker) => {
+            const hint = await fetchYahooUpcomingDividendHint(ticker);
+            return { ticker, hint };
+          }),
+        );
+        for (const { ticker, hint } of results) {
+          if (!hint) continue;
+          const row = byTicker.get(ticker)!;
+          let est: number | null = null;
+          if (
+            hint.lastDividendPerShare != null &&
+            Number.isFinite(hint.lastDividendPerShare)
+          ) {
+            const gross = row.shares * hint.lastDividendPerShare;
+            est = convertAmountBetween(
+              gross,
+              getTickerCurrency(ticker),
+              userCcy,
+              rates,
+            );
+          }
+          const cand: Best = {
+            ticker,
+            companyName: row.companyName,
+            date: new Date(hint.eventMs).toISOString().slice(0, 10),
+            kind: hint.kind,
+            estimatedGrossInUserCcy: est,
+            eventMs: hint.eventMs,
+          };
+          if (!best || cand.eventMs < best.eventMs) best = cand;
+        }
+      }
+
+      res.json({ next: best });
+    } catch (error) {
+      console.error("Error fetching upcoming dividend:", error);
+      res
+        .status(500)
+        .json({ message: "Nepodarilo sa načítať najbližšiu dividendu." });
     }
   });
 

@@ -1,9 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
+import { useSidebar } from "@/components/ui/sidebar";
+import { cn } from "@/lib/utils";
 
 const TICKER_ROWS: { yahoo: string; label: string; decimals: number }[] = [
   { yahoo: "EURUSD=X", label: "EUR/USD", decimals: 4 },
   { yahoo: "BTC-USD", label: "BTC/USD", decimals: 0 },
   { yahoo: "^GSPC", label: "S&P 500", decimals: 2 },
+  { yahoo: "^IXIC", label: "Nasdaq", decimals: 2 },
   { yahoo: "^VIX", label: "VIX", decimals: 2 },
   { yahoo: "^TNX", label: "TNX", decimals: 2 },
   { yahoo: "GC=F", label: "Gold", decimals: 2 },
@@ -42,6 +45,9 @@ function formatPct(pct: number) {
 }
 
 export function MarketQuoteTicker() {
+  const { isMobile, state } = useSidebar();
+  const padForSidebar = !isMobile && state === "expanded";
+
   const { data, isLoading } = useQuery({
     queryKey: ["/api/market-quote-ticker", TICKER_ROWS.map((r) => r.yahoo)],
     queryFn: fetchTickerQuotes,
@@ -51,7 +57,10 @@ export function MarketQuoteTicker() {
 
   return (
     <div
-      className="shrink-0 border-b border-border/50 bg-muted/50 text-muted-foreground"
+      className={cn(
+        "shrink-0 border-b border-border/50 bg-muted/50 text-muted-foreground transition-[padding-left] duration-200 ease-linear",
+        padForSidebar && "md:pl-[var(--sidebar-width)]"
+      )}
       data-testid="market-quote-ticker"
     >
       <div className="overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">

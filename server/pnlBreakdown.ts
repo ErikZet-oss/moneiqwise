@@ -52,6 +52,12 @@ export interface PnlBreakdownResult {
    * Odhad: čisté dividendy z posledných 12 mesiacov (v behu) ako proxy pre ďalších 12 ms.
    */
   projectedDividendNext12m: number;
+  /** Čisté dividendy (po dani z transakcií) už pripísané v aktuálnom kalendárnom roku — v zobrazovacej mene. */
+  dividendNetYtdCalendarYear: number;
+  /**
+   * Odhad celkových čistých dividend za aktuálny kalendárny rok: YTD + miera z TTM krát zostávajúca časť roka.
+   */
+  estimatedDividendCurrentYear: number;
   /**
    * Nerealizovaný kladný zisk z lotov s časovým testom ≥365 dní (orientačné oslobodenie) — v zobrazovacej mene.
    */
@@ -131,6 +137,32 @@ function dividendNetEurLast12m(tx: Transaction[], rates: AllExchangeRates, now: 
   );
 }
 
+function dividendNetEurYtdCalendarYear(tx: Transaction[], rates: AllExchangeRates, now: Date): number {
+  const y = now.getFullYear();
+  const start = new Date(y, 0, 1);
+  return dividendNetEur(
+    tx.filter((t) => {
+      const d = new Date(t.transactionDate as unknown as string);
+      return d >= start && d <= now;
+    }),
+    rates,
+  );
+}
+
+function estimatedDividendCurrentYearEur(
+  ytdNetEur: number,
+  ttmAnnualNetEur: number,
+  now: Date,
+): number {
+  const y = now.getFullYear();
+  const endOfYear = new Date(y, 11, 31, 23, 59, 59, 999);
+  const daysLeft = Math.max(
+    0,
+    Math.ceil((endOfYear.getTime() - now.getTime()) / 86400000),
+  );
+  return ytdNetEur + ttmAnnualNetEur * (daysLeft / 365);
+}
+
 export async function computePnlBreakdown(
   userTransactions: Transaction[],
   userCcy: string,
@@ -167,6 +199,8 @@ export async function computePnlBreakdown(
   );
   const divEur = dividendNetEur(userTransactions, rates);
   const last12mDiv = dividendNetEurLast12m(userTransactions, rates, now);
+  const ytdDivEur = dividendNetEurYtdCalendarYear(userTransactions, rates, now);
+  const estYearDivEur = estimatedDividendCurrentYearEur(ytdDivEur, last12mDiv, now);
   const closeTradeNetEur = sumCloseTradeCashFlowEurFromRows(userTransactions);
   const realizedStockAndCloseEur = summary.totalRealized + closeTradeNetEur;
   return {
@@ -178,6 +212,8 @@ export async function computePnlBreakdown(
     residualUnrealized: toUser(res, userCcy, rates),
     dividendNet: toUser(divEur, userCcy, rates),
     projectedDividendNext12m: toUser(last12mDiv, userCcy, rates),
+    dividendNetYtdCalendarYear: toUser(ytdDivEur, userCcy, rates),
+    estimatedDividendCurrentYear: toUser(estYearDivEur, userCcy, rates),
     unrealizedTaxExempt: toUser(taxExemptEur, userCcy, rates),
     method: {
       realized: "FIFO",
