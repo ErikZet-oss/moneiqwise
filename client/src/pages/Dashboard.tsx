@@ -85,6 +85,8 @@ interface StockQuote {
   price: number;
   change: number;
   changePercent: number;
+  marketState?: string | null;
+  isMarketOpen?: boolean | null;
   preMarketPrice?: number | null;
   preMarketChange?: number | null;
   preMarketChangePercent?: number | null;
@@ -1356,6 +1358,12 @@ export default function Dashboard() {
                                 data-testid={`link-ticker-${holding.ticker}`}
                                 onClick={(e) => e.stopPropagation()}
                               >
+                                <span
+                                  className={`inline-block h-1.5 w-1.5 rounded-full mr-1.5 align-middle ${
+                                    quotes?.[holding.ticker]?.isMarketOpen ? "bg-green-500" : "bg-red-500"
+                                  }`}
+                                  title={quotes?.[holding.ticker]?.isMarketOpen ? "Trh otvorený" : "Trh zatvorený"}
+                                />
                                 {holding.ticker}
                               </a>
                               <span className="text-[9px] text-muted-foreground">
@@ -1493,6 +1501,12 @@ export default function Dashboard() {
                                 data-testid={`link-ticker-${holding.ticker}`}
                                 onClick={(e) => e.stopPropagation()}
                               >
+                                <span
+                                  className={`inline-block h-2 w-2 rounded-full mr-2 align-middle ${
+                                    quotes?.[holding.ticker]?.isMarketOpen ? "bg-green-500" : "bg-red-500"
+                                  }`}
+                                  title={quotes?.[holding.ticker]?.isMarketOpen ? "Trh otvorený" : "Trh zatvorený"}
+                                />
                                 {holding.ticker}
                               </a>
                             </div>

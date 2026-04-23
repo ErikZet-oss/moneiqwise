@@ -547,20 +547,77 @@ async function fetchYahooCompanyName(ticker: string): Promise<string | null> {
 async function fetchYahooQuote(ticker: string): Promise<any> {
   try {
     const yahooTicker = toYahooTicker(ticker);
+    const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(yahooTicker)}`;
+
+    // Prefer v7/quote: it reliably carries pre/post-market fields.
+    const quoteResponse = await fetch(quoteUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+
+    if (quoteResponse.ok) {
+      const quoteData = await quoteResponse.json();
+      const q = quoteData?.quoteResponse?.result?.[0];
+      const regularMarketPriceRaw = Number(q?.regularMarketPrice);
+      const regularMarketPrice =
+        Number.isFinite(regularMarketPriceRaw) && regularMarketPriceRaw > 0
+          ? regularMarketPriceRaw
+          : null;
+      const previousCloseRaw = Number(q?.regularMarketPreviousClose);
+      const previousClose =
+        Number.isFinite(previousCloseRaw) && previousCloseRaw > 0
+          ? previousCloseRaw
+          : regularMarketPrice;
+
+      if (regularMarketPrice != null) {
+        const marketStateRaw = String(q?.marketState ?? "").toUpperCase();
+        const marketState = marketStateRaw || null;
+        const isMarketOpen = marketStateRaw === "REGULAR";
+        const change = previousClose != null ? regularMarketPrice - previousClose : 0;
+        const changePercent =
+          previousClose != null && previousClose > 0 ? (change / previousClose) * 100 : 0;
+
+        const preMarketPriceRaw = Number(q?.preMarketPrice);
+        const preMarketPrice =
+          Number.isFinite(preMarketPriceRaw) && preMarketPriceRaw > 0
+            ? preMarketPriceRaw
+            : null;
+        const preMarketChange = preMarketPrice != null ? preMarketPrice - regularMarketPrice : null;
+        const preMarketChangePercent =
+          preMarketPrice != null && regularMarketPrice > 0
+            ? (preMarketChange! / regularMarketPrice) * 100
+            : null;
+
+        return {
+          ticker,
+          price: regularMarketPrice,
+          change,
+          changePercent,
+          marketState,
+          isMarketOpen,
+          preMarketPrice,
+          preMarketChange,
+          preMarketChangePercent,
+          high52: Number(q?.fiftyTwoWeekHigh) || 0,
+          low52: Number(q?.fiftyTwoWeekLow) || 0,
+        };
+      }
+    }
+
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooTicker)}?interval=1d&range=1d`;
-    
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       }
     });
-    
+
     if (!response.ok) {
       throw new Error(`Yahoo Finance returned ${response.status}`);
     }
-    
+
     const data = await response.json();
-    
+
     if (data.chart?.result?.[0]) {
       const result = data.chart.result[0];
       const meta = result.meta;
@@ -587,6 +644,8 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
           price: currentPrice,
           change,
           changePercent,
+          marketState: String(meta?.marketState ?? "").toUpperCase() || null,
+          isMarketOpen: String(meta?.marketState ?? "").toUpperCase() === "REGULAR",
           preMarketPrice,
           preMarketChange,
           preMarketChangePercent,
@@ -662,6 +721,8 @@ async function fetchFinnhubQuote(ticker: string): Promise<any> {
         price: data.c, // current price
         change: data.d || 0, // change
         changePercent: data.dp || 0, // change percent
+        marketState: null,
+        isMarketOpen: null,
         preMarketPrice: null,
         preMarketChange: null,
         preMarketChangePercent: null,
@@ -681,7 +742,10 @@ async function fetchStockQuote(ticker: string, skipCache = false): Promise<any> 
   // Check cache first (unless user explicitly refreshes quotes)
   const cached = priceCache.get(ticker);
   if (!skipCache && cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return cached.data;
+    // Backward compatibility: older cache entries may miss preMarket fields.
+    if (cached.data && Object.prototype.hasOwnProperty.call(cached.data, "preMarketPrice")) {
+      return cached.data;
+    }
   }
 
   // Try Yahoo Finance first (works best for European stocks, no API key needed)
@@ -713,6 +777,8 @@ async function fetchStockQuote(ticker: string, skipCache = false): Promise<any> 
           price: parseFloat(quote["05. price"]) || 0,
           change: parseFloat(quote["09. change"]) || 0,
           changePercent: parseFloat(quote["10. change percent"]?.replace("%", "")) || 0,
+          marketState: null,
+          isMarketOpen: null,
           preMarketPrice: null,
           preMarketChange: null,
           preMarketChangePercent: null,
@@ -2443,6 +2509,11 @@ export async function registerRoutes(
           price: 1.00,
           change: 0,
           changePercent: 0,
+          marketState: "CLOSED",
+          isMarketOpen: false,
+          preMarketPrice: null,
+          preMarketChange: null,
+          preMarketChangePercent: null,
           high52: 1.00,
           low52: 1.00,
         });
@@ -2489,6 +2560,11 @@ export async function registerRoutes(
                   price: 1.00,
                   change: 0,
                   changePercent: 0,
+                  marketState: "CLOSED",
+                  isMarketOpen: false,
+                  preMarketPrice: null,
+                  preMarketChange: null,
+                  preMarketChangePercent: null,
                   high52: 1.00,
                   low52: 1.00,
                 }
