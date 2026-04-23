@@ -187,6 +187,40 @@ export const holdings = pgTable(
 export type Holding = typeof holdings.$inferSelect;
 export type InsertHolding = typeof holdings.$inferInsert;
 
+export const ASSET_CLASS_VALUES = [
+  "AKCIA",
+  "ETF",
+  "KRYPTO",
+  "DLHOPIS",
+  "KOMODITA",
+  "FOND",
+  "HOTOVOST",
+  "INE",
+] as const;
+export type AssetClassValue = (typeof ASSET_CLASS_VALUES)[number];
+
+export const userAssetMetadata = pgTable(
+  "user_asset_metadata",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id),
+    ticker: varchar("ticker", { length: 32 }).notNull(),
+    sector: varchar("sector", { length: 120 }),
+    country: varchar("country", { length: 120 }),
+    assetType: varchar("asset_type", { length: 20 }),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [uniqueIndex("user_asset_metadata_user_ticker_uidx").on(table.userId, table.ticker)],
+);
+
+export const upsertUserAssetMetadataSchema = createInsertSchema(userAssetMetadata).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export type UserAssetMetadata = typeof userAssetMetadata.$inferSelect;
+export type UpsertUserAssetMetadata = z.infer<typeof upsertUserAssetMetadataSchema>;
+
 // User settings for API keys and preferences
 export const userSettings = pgTable("user_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

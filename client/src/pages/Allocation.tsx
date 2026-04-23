@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   PieChart,
   Pie,
@@ -11,11 +11,32 @@ import { PieChartIcon } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
+import { useToast } from "@/hooks/use-toast";
 import type { Holding } from "@shared/schema";
 import { cn } from "@/lib/utils";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+
+type AssetType = "AKCIA" | "ETF" | "KRYPTO" | "DLHOPIS" | "KOMODITA" | "FOND" | "HOTOVOST" | "INE";
+type AssetProfile = { sector: string; country: string; assetType: AssetType };
+type UserMetadata = { sector: string | null; country: string | null; assetType: AssetType | null };
+type EditorRow = { sector: string; country: string; assetType: AssetType | "" };
+
+const ASSET_TYPE_LABELS: Record<AssetType, string> = {
+  AKCIA: "Akcia",
+  ETF: "ETF",
+  KRYPTO: "Krypto",
+  DLHOPIS: "Dlhopis",
+  KOMODITA: "Komodita",
+  FOND: "Fond",
+  HOTOVOST: "Hotovosť",
+  INE: "Iné",
+};
 
 interface StockQuote {
   ticker: string;
@@ -66,6 +87,7 @@ function useIsNarrowScreen() {
 
 export default function Allocation() {
   const { currency, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
+  const { toast } = useToast();
   const {
     portfolios,
     selectedPortfolio,
@@ -80,6 +102,7 @@ export default function Allocation() {
 
   const [displayMode, setDisplayMode] = useState<"percent" | "value">("percent");
   const chartReady = useChartReady();
+  const [editorRows, setEditorRows] = useState<Record<string, EditorRow>>({});
 
   const { data: holdings, isLoading: holdingsLoading } = useQuery<Holding[]>({
     queryKey: ["/api/holdings", portfolioParam],
@@ -130,12 +153,69 @@ export default function Allocation() {
       });
       if (!res.ok) throw new Error("Profiles failed");
       return res.json() as Promise<{
-        profiles: Record<string, { sector: string; country: string }>;
+        profiles: Record<string, AssetProfile>;
       }>;
     },
   });
 
+  const { data: userMetadataData, isLoading: metadataLoading } = useQuery({
+    queryKey: ["/api/stocks/metadata", equityTickers.join(",")],
+    enabled: equityTickers.length > 0,
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.set("tickers", equityTickers.join(","));
+      const res = await fetch(`/api/stocks/metadata?${params.toString()}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Metadata failed");
+      return res.json() as Promise<{ metadata: Record<string, UserMetadata> }>;
+    },
+  });
+
   const profiles = profilesData?.profiles ?? {};
+  const userMetadata = userMetadataData?.metadata ?? {};
+
+  useEffect(() => {
+    if (!equityTickers.length) {
+      setEditorRows({});
+      return;
+    }
+    const next: Record<string, EditorRow> = {};
+    for (const ticker of equityTickers) {
+      const m = userMetadata[ticker];
+      next[ticker] = {
+        sector: m?.sector ?? "",
+        country: m?.country ?? "",
+        assetType: m?.assetType ?? "",
+      };
+    }
+    setEditorRows(next);
+  }, [equityTickers, userMetadataData]);
+
+  const saveMetadataMutation = useMutation({
+    mutationFn: async ({ ticker, row }: { ticker: string; row: EditorRow }) => {
+      await apiRequest("PUT", `/api/stocks/metadata/${encodeURIComponent(ticker)}`, {
+        sector: row.sector.trim() || null,
+        country: row.country.trim() || null,
+        assetType: row.assetType || null,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/stocks/metadata"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stocks/asset-profiles/batch"] });
+      toast({
+        title: "Uložené",
+        description: "Metadáta aktíva boli uložené.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Chyba",
+        description: err.message || "Nepodarilo sa uložiť metadáta aktíva.",
+        variant: "destructive",
+      });
+    },
+  });
 
   const cashValueConv = useMemo(() => {
     if (isAllPortfolios) {
@@ -151,9 +231,10 @@ export default function Allocation() {
     return 0;
   }, [isAllPortfolios, portfolios, selectedPortfolio, convertPrice]);
 
-  const { byTicker, bySector, byCountry, totalMarket } = useMemo(() => {
+  const { byTicker, bySector, byCountry, byType, totalMarket } = useMemo(() => {
     const sectorRows: Slice[] = [];
     const countryRows: Slice[] = [];
+    const typeRows: Slice[] = [];
     const tickerRows: Slice[] = [];
     let sum = 0;
     let cashTotal = cashValueConv;
@@ -163,6 +244,7 @@ export default function Allocation() {
         byTicker: [] as Slice[],
         bySector: [] as Slice[],
         byCountry: [] as Slice[],
+        byType: [] as Slice[],
         totalMarket: 0,
       };
     }
@@ -174,12 +256,14 @@ export default function Allocation() {
               byTicker: [{ name: "Hotovosť", value: cashTotal }] as Slice[],
               bySector: [{ name: "Hotovosť", value: cashTotal }] as Slice[],
               byCountry: [{ name: "—", value: cashTotal }] as Slice[],
+              byType: [{ name: "Hotovosť", value: cashTotal }] as Slice[],
               totalMarket: cashTotal,
             }
           : {
               byTicker: [] as Slice[],
               bySector: [] as Slice[],
               byCountry: [] as Slice[],
+              byType: [] as Slice[],
               totalMarket: 0,
             };
       return onlyCash;
@@ -206,9 +290,10 @@ export default function Allocation() {
 
       tickerRows.push({ name: t, value: conv });
 
-      const pr = profiles[t] ?? { sector: "Neznáme", country: "Neznáme" };
+      const pr = profiles[t] ?? { sector: "Neznáme", country: "Neznáme", assetType: "AKCIA" as AssetType };
       sectorRows.push({ name: pr.sector, value: conv });
       countryRows.push({ name: pr.country, value: conv });
+      typeRows.push({ name: ASSET_TYPE_LABELS[pr.assetType] ?? "Iné", value: conv });
     }
 
     if (Math.abs(cashTotal) > 0.005) {
@@ -217,6 +302,7 @@ export default function Allocation() {
         tickerRows.push({ name: "Hotovosť", value: cashTotal });
         sectorRows.push({ name: "Hotovosť", value: cashTotal });
         countryRows.push({ name: "—", value: cashTotal });
+        typeRows.push({ name: "Hotovosť", value: cashTotal });
       }
     }
 
@@ -224,6 +310,7 @@ export default function Allocation() {
       byTicker: aggregateSlices(tickerRows),
       bySector: aggregateSlices(sectorRows),
       byCountry: aggregateSlices(countryRows),
+      byType: aggregateSlices(typeRows),
       totalMarket: sum,
     };
   }, [
@@ -275,8 +362,8 @@ export default function Allocation() {
             Rozloženie portfólia
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Podľa tickerov, sektorov a krajín (Yahoo Finance). Detail pozri v legende pod grafom –
-            na mobile ju môžeš posúvať.
+            Podľa tickerov, sektorov, krajín a typu aktíva. Sektor/krajina/typ vieš manuálne prepísať
+            nižšie pre presnejšie koláče.
           </p>
         </div>
         <ToggleGroup
@@ -297,8 +384,8 @@ export default function Allocation() {
       </div>
 
       {loading ? (
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {[1, 2, 3].map((i) => (
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
             <Card key={i}>
               <CardHeader>
                 <Skeleton className="h-5 w-40" />
@@ -317,7 +404,7 @@ export default function Allocation() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
           <AllocationPieCard
             title="Podľa akcií"
             description="Každý ticker + hotovosť"
@@ -352,8 +439,96 @@ export default function Allocation() {
             renderTooltip={renderTooltip}
             chartReady={chartReady}
           />
+          <AllocationPieCard
+            title="Podľa typu"
+            description="Akcia, ETF, krypto…"
+            data={byType}
+            total={totalMarket}
+            displayMode={displayMode}
+            mask={mask}
+            formatCurrency={formatCurrency}
+            renderTooltip={renderTooltip}
+            chartReady={chartReady}
+          />
         </div>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Manuálne metadáta aktív</CardTitle>
+          <CardDescription>
+            Prepíše sektor, krajinu a typ z Yahoo pre vybraný ticker (necháš prázdne = použije sa Yahoo).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {metadataLoading && equityTickers.length > 0 ? (
+            <Skeleton className="h-24 w-full" />
+          ) : equityTickers.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Žiadne otvorené tickery na úpravu.</p>
+          ) : (
+            <div className="space-y-2">
+              {equityTickers.map((ticker) => {
+                const row = editorRows[ticker] ?? { sector: "", country: "", assetType: "" };
+                return (
+                  <div
+                    key={ticker}
+                    className="grid gap-2 rounded-md border p-3 sm:grid-cols-[120px_1fr_1fr_170px_110px] sm:items-center"
+                  >
+                    <div className="font-medium">{ticker}</div>
+                    <Input
+                      value={row.sector}
+                      placeholder="Sektor"
+                      onChange={(e) =>
+                        setEditorRows((prev) => ({
+                          ...prev,
+                          [ticker]: { ...row, sector: e.target.value },
+                        }))
+                      }
+                    />
+                    <Input
+                      value={row.country}
+                      placeholder="Krajina"
+                      onChange={(e) =>
+                        setEditorRows((prev) => ({
+                          ...prev,
+                          [ticker]: { ...row, country: e.target.value },
+                        }))
+                      }
+                    />
+                    <Select
+                      value={row.assetType || "none"}
+                      onValueChange={(v) =>
+                        setEditorRows((prev) => ({
+                          ...prev,
+                          [ticker]: { ...row, assetType: v === "none" ? "" : (v as AssetType) },
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Typ" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Automaticky</SelectItem>
+                        {Object.entries(ASSET_TYPE_LABELS).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      disabled={saveMetadataMutation.isPending}
+                      onClick={() => saveMetadataMutation.mutate({ ticker, row })}
+                    >
+                      Uložiť
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import {
   users,
   transactions,
   holdings,
+  userAssetMetadata,
   userSettings,
   portfolios,
   optionTrades,
@@ -16,6 +17,8 @@ import {
   type InsertPortfolio,
   type OptionTrade,
   type InsertOptionTrade,
+  type UserAssetMetadata,
+  type AssetClassValue,
 } from "@shared/schema";
 import type { AllExchangeRates } from "./convertAmountBetween";
 import { netLedgerCashEur } from "./netLedgerCashEur";
@@ -114,6 +117,15 @@ export interface IStorage {
   getTransactionsForTickerAcrossPortfolios(userId: string, ticker: string): Promise<Transaction[]>;
   upsertHolding(userId: string, ticker: string, companyName: string, shares: string, averageCost: string, totalInvested: string, portfolioId?: string | null): Promise<Holding>;
   deleteHolding(userId: string, ticker: string, portfolioId?: string | null): Promise<void>;
+  getUserAssetMetadataMap(
+    userId: string,
+    tickers?: string[],
+  ): Promise<Record<string, { sector: string | null; country: string | null; assetType: AssetClassValue | null }>>;
+  upsertUserAssetMetadata(
+    userId: string,
+    ticker: string,
+    data: { sector?: string | null; country?: string | null; assetType?: AssetClassValue | null },
+  ): Promise<UserAssetMetadata | null>;
   
   // User settings operations
   getUserSettings(userId: string): Promise<UserSettings | undefined>;
@@ -966,6 +978,62 @@ export class DatabaseStorage implements IStorage {
           )
         );
     }
+  }
+
+  async getUserAssetMetadataMap(
+    userId: string,
+    tickers?: string[],
+  ): Promise<Record<string, { sector: string | null; country: string | null; assetType: AssetClassValue | null }>> {
+    const uniqueTickers = Array.from(new Set((tickers ?? []).map((t) => t.toUpperCase().trim()).filter(Boolean)));
+    const whereBase = eq(userAssetMetadata.userId, userId);
+    const rows = uniqueTickers.length > 0
+      ? await db
+          .select()
+          .from(userAssetMetadata)
+          .where(and(whereBase, inArray(userAssetMetadata.ticker, uniqueTickers)))
+      : await db.select().from(userAssetMetadata).where(whereBase);
+
+    const out: Record<string, { sector: string | null; country: string | null; assetType: AssetClassValue | null }> =
+      {};
+    for (const row of rows) {
+      out[row.ticker.toUpperCase()] = {
+        sector: row.sector ?? null,
+        country: row.country ?? null,
+        assetType: (row.assetType as AssetClassValue | null) ?? null,
+      };
+    }
+    return out;
+  }
+
+  async upsertUserAssetMetadata(
+    userId: string,
+    ticker: string,
+    data: { sector?: string | null; country?: string | null; assetType?: AssetClassValue | null },
+  ): Promise<UserAssetMetadata | null> {
+    const t = ticker.toUpperCase().trim();
+    const sector = data.sector?.trim() || null;
+    const country = data.country?.trim() || null;
+    const assetType = data.assetType ?? null;
+
+    if (!sector && !country && !assetType) {
+      await db
+        .delete(userAssetMetadata)
+        .where(and(eq(userAssetMetadata.userId, userId), eq(userAssetMetadata.ticker, t)));
+      return null;
+    }
+
+    const result = await db.execute(sql`
+      INSERT INTO user_asset_metadata (id, user_id, ticker, sector, country, asset_type, updated_at)
+      VALUES (gen_random_uuid(), ${userId}, ${t}, ${sector}, ${country}, ${assetType}, NOW())
+      ON CONFLICT (user_id, ticker)
+      DO UPDATE SET
+        sector = EXCLUDED.sector,
+        country = EXCLUDED.country,
+        asset_type = EXCLUDED.asset_type,
+        updated_at = NOW()
+      RETURNING *
+    `);
+    return (result.rows[0] as UserAssetMetadata) ?? null;
   }
 
   async getUserSettings(userId: string): Promise<UserSettings | undefined> {

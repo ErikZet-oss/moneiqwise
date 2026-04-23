@@ -9,7 +9,9 @@ import {
   insertTransactionSchema,
   insertPortfolioSchema,
   insertOptionTradeSchema,
+  ASSET_CLASS_VALUES,
   CASH_FLOW_TICKER,
+  type AssetClassValue,
   type InsertTransaction,
   transactions,
   type Transaction,
@@ -75,11 +77,30 @@ const EXCHANGE_RATE_CACHE_TTL = 60 * 60 * 1000; // 1 hour for exchange rates
 const NEWS_CACHE_TTL = 15 * 60 * 1000; // 15 minutes for news
 
 interface AssetProfileCacheEntry {
-  data: { sector: string; country: string };
+  data: { sector: string; country: string; assetType: AssetClassValue };
   timestamp: number;
 }
 const assetProfileCache = new Map<string, AssetProfileCacheEntry>();
 const ASSET_PROFILE_CACHE_TTL = 24 * 60 * 60 * 1000; // 24h — sektor/krajina sa mení zriedka
+
+const ASSET_CLASS_SET = new Set<string>(ASSET_CLASS_VALUES);
+
+function normalizeAssetType(v: unknown): AssetClassValue | null {
+  if (typeof v !== "string") return null;
+  const x = v.trim().toUpperCase();
+  return ASSET_CLASS_SET.has(x) ? (x as AssetClassValue) : null;
+}
+
+function mapYahooQuoteTypeToAssetClass(raw: unknown): AssetClassValue {
+  const t = typeof raw === "string" ? raw.toUpperCase() : "";
+  if (t.includes("ETF")) return "ETF";
+  if (t.includes("CRYPTO")) return "KRYPTO";
+  if (t.includes("BOND") || t.includes("FIXED_INCOME")) return "DLHOPIS";
+  if (t.includes("MUTUALFUND") || t.includes("FUND")) return "FOND";
+  if (t.includes("COMMODITY")) return "KOMODITA";
+  if (t.includes("CURRENCY") || t.includes("FOREX") || t.includes("CASH")) return "HOTOVOST";
+  return "AKCIA";
+}
 
 /** Mapuje Postgres 23505 na zrozumiteľnú odpoveď (najmä unikátne transaction_id v portfóliu). */
 function responseForDbUniqueViolation(err: unknown): { status: number; message: string } | null {
@@ -339,10 +360,12 @@ function toYahooTicker(ticker: string): string {
   return ticker;
 }
 
-async function fetchYahooAssetProfile(ticker: string): Promise<{ sector: string; country: string }> {
+async function fetchYahooAssetProfile(
+  ticker: string,
+): Promise<{ sector: string; country: string; assetType: AssetClassValue }> {
   const key = ticker.toUpperCase();
   if (key === "CASH") {
-    return { sector: "Hotovosť", country: "—" };
+    return { sector: "Hotovosť", country: "—", assetType: "HOTOVOST" };
   }
 
   const cached = assetProfileCache.get(key);
@@ -350,11 +373,11 @@ async function fetchYahooAssetProfile(ticker: string): Promise<{ sector: string;
     return cached.data;
   }
 
-  const fallback = { sector: "Neznáme", country: "Neznáme" };
+  const fallback = { sector: "Neznáme", country: "Neznáme", assetType: "AKCIA" as const };
 
   try {
     const yahooTicker = toYahooTicker(key);
-    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(yahooTicker)}?modules=assetProfile,summaryProfile`;
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(yahooTicker)}?modules=assetProfile,summaryProfile,price`;
 
     const response = await fetch(url, {
       headers: {
@@ -371,6 +394,7 @@ async function fetchYahooAssetProfile(ticker: string): Promise<{ sector: string;
     const result = data?.quoteSummary?.result?.[0];
     const ap = result?.assetProfile;
     const sp = result?.summaryProfile;
+    const price = result?.price;
 
     const sectorRaw =
       (typeof ap?.sector === "string" && ap.sector.trim()) ||
@@ -387,6 +411,7 @@ async function fetchYahooAssetProfile(ticker: string): Promise<{ sector: string;
     const row = {
       sector: sectorRaw || "Nezaradené",
       country: countryRaw || "Neznáme",
+      assetType: mapYahooQuoteTypeToAssetClass(price?.quoteType),
     };
 
     assetProfileCache.set(key, { data: row, timestamp: Date.now() });
@@ -2435,22 +2460,71 @@ export async function registerRoutes(
   });
 
   // Yahoo quoteSummary — sektor a krajina pre koláčové rozloženie portfólia
+  app.get("/api/stocks/metadata", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const tickersRaw = typeof req.query.tickers === "string" ? req.query.tickers : "";
+      const tickers = tickersRaw
+        .split(",")
+        .map((t: string) => t.trim().toUpperCase())
+        .filter(Boolean);
+      const metadata = await storage.getUserAssetMetadataMap(userId, tickers.length ? tickers : undefined);
+      res.json({ metadata });
+    } catch (error) {
+      console.error("Error fetching user asset metadata:", error);
+      res.status(500).json({ message: "Nepodarilo sa načítať metadáta aktív." });
+    }
+  });
+
+  app.put("/api/stocks/metadata/:ticker", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const ticker = String(req.params.ticker || "").trim().toUpperCase();
+      if (!ticker) return res.status(400).json({ message: "Ticker je povinný." });
+
+      const sector = typeof req.body?.sector === "string" ? req.body.sector.trim() : "";
+      const country = typeof req.body?.country === "string" ? req.body.country.trim() : "";
+      const assetType = normalizeAssetType(req.body?.assetType);
+      if (req.body?.assetType != null && !assetType) {
+        return res.status(400).json({ message: "Neplatný typ aktíva." });
+      }
+
+      const row = await storage.upsertUserAssetMetadata(userId, ticker, {
+        sector: sector || null,
+        country: country || null,
+        assetType,
+      });
+      res.json({ metadata: row });
+    } catch (error) {
+      console.error("Error upserting user asset metadata:", error);
+      res.status(500).json({ message: "Nepodarilo sa uložiť metadáta aktíva." });
+    }
+  });
+
   app.post("/api/stocks/asset-profiles/batch", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
       const { tickers } = req.body;
       if (!tickers || !Array.isArray(tickers)) {
         return res.status(400).json({ message: "Pole tickerov je povinné." });
       }
 
       const unique = Array.from(new Set<string>(tickers.map((t: string) => String(t).toUpperCase())));
-      const profiles: Record<string, { sector: string; country: string }> = {};
+      const profiles: Record<string, { sector: string; country: string; assetType: AssetClassValue }> = {};
+      const overrides = await storage.getUserAssetMetadataMap(userId, unique);
 
       const CONCURRENCY = 4;
       for (let i = 0; i < unique.length; i += CONCURRENCY) {
         const batch = unique.slice(i, i + CONCURRENCY);
         await Promise.all(
           batch.map(async (ticker) => {
-            profiles[ticker] = await fetchYahooAssetProfile(ticker);
+            const fetched = await fetchYahooAssetProfile(ticker);
+            const o = overrides[ticker];
+            profiles[ticker] = {
+              sector: o?.sector?.trim() ? o.sector : fetched.sector,
+              country: o?.country?.trim() ? o.country : fetched.country,
+              assetType: o?.assetType ?? fetched.assetType,
+            };
           })
         );
       }
