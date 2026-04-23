@@ -31,6 +31,7 @@ interface RealizedGainSummary {
 
 interface DividendSummary {
   totalNet: number;
+  totalTax?: number;
   netYTD: number;
   netThisMonth: number;
   netToday: number;
@@ -663,8 +664,8 @@ export default function Dashboard() {
       />
 
       <div className="hidden md:grid gap-3 md:grid-cols-4 xl:grid-cols-5">
-        <Card data-testid="card-total-value">
-          <CardHeader className="flex flex-row items-center justify-between gap-1 pb-1 p-6 pb-2">
+        <Card className="h-full border-border/70 bg-card/95 shadow-sm" data-testid="card-total-value">
+          <CardHeader className="flex min-h-[68px] flex-row items-center justify-between gap-2 border-b border-border/40 p-4 pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">
               Celková hodnota
               {metrics.optionsIncluded && (
@@ -701,26 +702,26 @@ export default function Dashboard() {
               </Button>
             )}
           </CardHeader>
-          <CardContent className="p-6 pt-0">
-            <div className="text-2xl font-bold truncate" data-testid="text-total-value">
+          <CardContent className="p-4 pt-3">
+            <div className="text-2xl font-semibold leading-tight tracking-tight truncate" data-testid="text-total-value">
               {maskAmount(formatCurrency(metrics.totalValue))}
             </div>
-            <p className="text-xs text-muted-foreground truncate">
+            <p className="text-xs text-muted-foreground truncate mt-1">
               Investované: {maskAmount(formatCurrency(metrics.totalInvested))}
               {metrics.optionsIncluded && metrics.openOptionsCount > 0 && (
                 <span className="ml-1">({metrics.openOptionsCount} otvorených opcií)</span>
               )}
             </p>
             {metrics.cashValue !== 0 && (
-              <p className="text-xs text-muted-foreground truncate">
+              <p className="text-xs text-muted-foreground truncate mt-0.5">
                 Z toho hotovosť / margin: {maskAmount(formatCurrency(metrics.cashValue))}
               </p>
             )}
           </CardContent>
         </Card>
 
-        <Card data-testid="card-cash">
-          <CardHeader className="flex flex-row items-center justify-between gap-1 pb-1 p-6 pb-2">
+        <Card className="h-full border-border/70 bg-card/95 shadow-sm" data-testid="card-cash">
+          <CardHeader className="flex min-h-[68px] flex-row items-center justify-between gap-2 border-b border-border/40 p-4 pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">
               <Banknote className="h-4 w-4" />
               Hotovosť / margin
@@ -739,11 +740,11 @@ export default function Dashboard() {
               </Tooltip>
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-6 pt-0">
-            <div className="text-2xl font-bold truncate" data-testid="text-cash-value">
+          <CardContent className="p-4 pt-3">
+            <div className="text-2xl font-semibold leading-tight tracking-tight truncate" data-testid="text-cash-value">
               {maskAmount(formatCurrency(metrics.cashValue))}
             </div>
-            <p className="text-xs text-muted-foreground truncate">
+            <p className="text-xs text-muted-foreground truncate mt-1">
               {isAllPortfolios
                 ? `Súčet z ${portfolios.length} ${portfolios.length === 1 ? "portfólia" : "portfólií"}`
                 : "Disponibilné EUR (vklady – nákupy + predaje + …)"}
@@ -751,8 +752,8 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card data-testid="card-total-profit">
-          <CardHeader className="flex flex-row items-center justify-between gap-1 pb-1 p-6 pb-2">
+        <Card className="h-full border-border/70 bg-card/95 shadow-sm" data-testid="card-total-profit">
+          <CardHeader className="flex min-h-[68px] flex-row items-center justify-between gap-2 border-b border-border/40 p-4 pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">
               Celkový profit
               <Tooltip>
@@ -769,16 +770,16 @@ export default function Dashboard() {
             </CardTitle>
             {getChangeIcon(metrics.totalProfit)}
           </CardHeader>
-          <CardContent className="p-6 pt-0">
+          <CardContent className="p-4 pt-3">
             <div className="flex items-baseline gap-2">
-              <span className={`text-2xl font-bold truncate ${getChangeColor(metrics.totalProfit)}`} data-testid="text-total-profit">
+              <span className={`text-2xl font-semibold leading-tight tracking-tight truncate ${getChangeColor(metrics.totalProfit)}`} data-testid="text-total-profit">
                 {maskAmount(formatCurrency(metrics.totalProfit))}
               </span>
               <span className={`text-sm font-medium ${getChangeColor(metrics.totalProfitPercent || 0)}`} data-testid="text-total-profit-percent">
                 {formatPercent(metrics.totalProfitPercent || 0)}
               </span>
             </div>
-            <div className="text-[10px] text-muted-foreground space-y-0.5 mt-1">
+            <div className="text-[10px] text-muted-foreground space-y-1 mt-1.5">
               {pnlBreakdown ? (
                 <>
                   <div className="flex justify-between gap-1">
@@ -811,46 +812,6 @@ export default function Dashboard() {
                       {maskAmount(formatCurrency(metrics.unrealizedGain))}
                     </span>
                   </div>
-                  <div className="flex justify-between gap-1">
-                    <span className="truncate">Dividendy (čisté):</span>
-                    <span className="text-blue-500">
-                      +{maskAmount(formatCurrency(metrics.dividendGain))}
-                    </span>
-                  </div>
-                  <p className="text-[9px] text-muted-foreground pt-1 border-t border-border/50 mt-1">
-                    Rozklad podľa FIFO / kurzov (orientačný; nemusí sa rovnať riadku „Nerealizovaný“ vyššie):
-                  </p>
-                  <div className="flex justify-between gap-1">
-                    <span className="truncate" title="Z API P&amp;L: kapitál + zostatok z otvorených lotov">
-                      … Δ cena + zostatok:
-                    </span>
-                    <span
-                      className={getChangeColor(
-                        pnlBreakdown.unrealizedPriceGain + pnlBreakdown.residualUnrealized,
-                      )}
-                    >
-                      {maskAmount(
-                        formatCurrency(
-                          pnlBreakdown.unrealizedPriceGain + pnlBreakdown.residualUnrealized,
-                        ),
-                      )}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-1">
-                    <span className="truncate" title="Z API P&amp;L: čistý FX na otvorených lotoch">
-                      … FX (kurzy):
-                    </span>
-                    <span className={getChangeColor(pnlBreakdown.unrealizedFxGain)}>
-                      {maskAmount(formatCurrency(pnlBreakdown.unrealizedFxGain))}
-                    </span>
-                  </div>
-                  {pnlBreakdown.unrealizedCrossComponent != null &&
-                    Math.abs(pnlBreakdown.unrealizedCrossComponent) > 1e-6 && (
-                    <p className="text-[9px] text-muted-foreground leading-tight pl-0.5">
-                      … Interakcia ΔP·ΔFX:{" "}
-                      {maskAmount(formatCurrency(pnlBreakdown.unrealizedCrossComponent))}
-                    </p>
-                  )}
                   {pnlBreakdown.projectedDividendNext12m != null && pnlBreakdown.projectedDividendNext12m > 0 && (
                     <div className="flex justify-between gap-1">
                       <span
@@ -877,18 +838,14 @@ export default function Dashboard() {
                       {maskAmount(formatCurrency(metrics.stockRealizedGain + metrics.optionsRealizedGain))}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Dividendy:</span>
-                    <span className="text-blue-500">+{maskAmount(formatCurrency(metrics.dividendGain))}</span>
-                  </div>
                 </>
               )}
             </div>
           </CardContent>
         </Card>
 
-        <Card data-testid="card-daily-change">
-          <CardHeader className="flex flex-row items-center justify-between gap-1 pb-1 p-6 pb-2">
+        <Card className="h-full border-border/70 bg-card/95 shadow-sm" data-testid="card-daily-change">
+          <CardHeader className="flex min-h-[68px] flex-row items-center justify-between gap-2 border-b border-border/40 p-4 pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">
               Denná zmena
               <Tooltip>
@@ -903,11 +860,11 @@ export default function Dashboard() {
             </CardTitle>
             {getChangeIcon(metrics.dailyChange)}
           </CardHeader>
-          <CardContent className="p-6 pt-0">
-            <div className={`text-2xl font-bold truncate ${getChangeColor(metrics.dailyChange)}`} data-testid="text-daily-change">
+          <CardContent className="p-4 pt-3">
+            <div className={`text-2xl font-semibold leading-tight tracking-tight truncate ${getChangeColor(metrics.dailyChange)}`} data-testid="text-daily-change">
               {maskAmount(formatCurrency(metrics.dailyChange))}
             </div>
-            <p className={`text-xs ${getChangeColor(metrics.dailyChangePercent)}`}>
+            <p className={`text-xs mt-1 ${getChangeColor(metrics.dailyChangePercent)}`}>
               {formatPercent(metrics.dailyChangePercent)}
             </p>
             {dataUpdatedAt && (
@@ -918,8 +875,8 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card data-testid="card-realized-dividends">
-          <CardHeader className="pb-1 p-6 pb-2">
+        <Card className="h-full border-border/70 bg-card/95 shadow-sm" data-testid="card-realized-dividends">
+          <CardHeader className="min-h-[68px] border-b border-border/40 p-4 pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">
               Uzavreté
               <Tooltip>
@@ -937,7 +894,7 @@ export default function Dashboard() {
               </Tooltip>
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 p-6 pt-0">
+          <CardContent className="space-y-2 p-4 pt-3">
             <div className="flex items-center justify-between gap-1" data-testid="text-dashboard-realized">
               <span className="text-xs text-muted-foreground flex items-center gap-0.5">
                 <Wallet className="h-3 w-3" />
@@ -972,6 +929,16 @@ export default function Dashboard() {
                 </span>
               ) : (
                 <span className="text-sm text-muted-foreground">—</span>
+              )}
+            </div>
+            <div className="flex items-center justify-between gap-1" data-testid="text-dashboard-dividends-tax">
+              <span className="text-[11px] text-muted-foreground">Daň</span>
+              {dividends && dividends.transactionCount > 0 ? (
+                <span className="text-[11px] text-muted-foreground truncate">
+                  -{maskAmount(formatCurrency(dividends.totalTax || 0))}
+                </span>
+              ) : (
+                <span className="text-[11px] text-muted-foreground">—</span>
               )}
             </div>
             {metrics.optionsIncluded && (
