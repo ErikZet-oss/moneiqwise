@@ -34,7 +34,7 @@ import {
 import { buildOpenFifoLotRowList, loadTradeTransactionsForAssetLots } from "./assetFifoLots";
 import { buildTaxSummary } from "./taxSummary";
 import { db } from "./db";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 
 // Configure multer for file uploads
 const upload = multer({
@@ -87,8 +87,50 @@ const ASSET_CLASS_SET = new Set<string>(ASSET_CLASS_VALUES);
 
 function normalizeAssetType(v: unknown): AssetClassValue | null {
   if (typeof v !== "string") return null;
-  const x = v.trim().toUpperCase();
+  const raw = v.trim();
+  if (!raw) return null;
+  const x = raw
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  const aliases: Record<string, AssetClassValue> = {
+    AKCIA: "AKCIA",
+    STOCK: "AKCIA",
+    ETF: "ETF",
+    KRYPTO: "KRYPTO",
+    CRYPTO: "KRYPTO",
+    DLHOPIS: "DLHOPIS",
+    BOND: "DLHOPIS",
+    KOMODITA: "KOMODITA",
+    COMMODITY: "KOMODITA",
+    FOND: "FOND",
+    FUND: "FOND",
+    HOTOVOST: "HOTOVOST",
+    CASH: "HOTOVOST",
+    INE: "INE",
+    OTHER: "INE",
+  };
+  const mapped = aliases[x] ?? null;
+  if (mapped) return mapped;
   return ASSET_CLASS_SET.has(x) ? (x as AssetClassValue) : null;
+}
+
+async function ensureUserAssetMetadataTable() {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS user_asset_metadata (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id varchar NOT NULL REFERENCES users(id),
+      ticker varchar(32) NOT NULL,
+      sector varchar(120),
+      country varchar(120),
+      asset_type varchar(20),
+      updated_at timestamp DEFAULT now()
+    );
+  `);
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS user_asset_metadata_user_ticker_uidx
+    ON user_asset_metadata (user_id, ticker);
+  `);
 }
 
 function mapYahooQuoteTypeToAssetClass(raw: unknown): AssetClassValue {
@@ -2462,6 +2504,7 @@ export async function registerRoutes(
   // Yahoo quoteSummary — sektor a krajina pre koláčové rozloženie portfólia
   app.get("/api/stocks/metadata", isAuthenticated, async (req: any, res) => {
     try {
+      await ensureUserAssetMetadataTable();
       const userId = req.user.claims.sub;
       const tickersRaw = typeof req.query.tickers === "string" ? req.query.tickers : "";
       const tickers = tickersRaw
@@ -2478,6 +2521,7 @@ export async function registerRoutes(
 
   app.put("/api/stocks/metadata/:ticker", isAuthenticated, async (req: any, res) => {
     try {
+      await ensureUserAssetMetadataTable();
       const userId = req.user.claims.sub;
       const ticker = String(req.params.ticker || "").trim().toUpperCase();
       if (!ticker) return res.status(400).json({ message: "Ticker je povinný." });
@@ -2497,12 +2541,14 @@ export async function registerRoutes(
       res.json({ metadata: row });
     } catch (error) {
       console.error("Error upserting user asset metadata:", error);
-      res.status(500).json({ message: "Nepodarilo sa uložiť metadáta aktíva." });
+      const msg = error instanceof Error && error.message ? error.message : "Nepodarilo sa uložiť metadáta aktíva.";
+      res.status(500).json({ message: msg });
     }
   });
 
   app.post("/api/stocks/asset-profiles/batch", isAuthenticated, async (req: any, res) => {
     try {
+      await ensureUserAssetMetadataTable();
       const userId = req.user.claims.sub;
       const { tickers } = req.body;
       if (!tickers || !Array.isArray(tickers)) {

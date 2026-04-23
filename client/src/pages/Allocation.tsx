@@ -12,7 +12,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
@@ -37,6 +36,28 @@ const ASSET_TYPE_LABELS: Record<AssetType, string> = {
   HOTOVOST: "Hotovosť",
   INE: "Iné",
 };
+
+const SECTOR_OPTIONS = [
+  "Technológie",
+  "Financie",
+  "Zdravotníctvo",
+  "Priemysel",
+  "Energetika",
+  "Nehnuteľnosti",
+  "Komunikácie",
+  "Spotrebný tovar - cyklický",
+  "Spotrebný tovar - defenzívny",
+  "Materiály",
+  "Utility",
+  "Hotovosť",
+  "Nezaradené",
+] as const;
+
+const COUNTRY_OPTIONS = [
+  "USA",
+  "Európa",
+  "Ázia",
+] as const;
 
 interface StockQuote {
   ticker: string;
@@ -475,26 +496,48 @@ export default function Allocation() {
                     className="grid gap-2 rounded-md border p-3 sm:grid-cols-[120px_1fr_1fr_170px_110px] sm:items-center"
                   >
                     <div className="font-medium">{ticker}</div>
-                    <Input
-                      value={row.sector}
-                      placeholder="Sektor"
-                      onChange={(e) =>
+                    <Select
+                      value={row.sector || "none"}
+                      onValueChange={(v) =>
                         setEditorRows((prev) => ({
                           ...prev,
-                          [ticker]: { ...row, sector: e.target.value },
+                          [ticker]: { ...row, sector: v === "none" ? "" : v },
                         }))
                       }
-                    />
-                    <Input
-                      value={row.country}
-                      placeholder="Krajina"
-                      onChange={(e) =>
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Sektor" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Automaticky</SelectItem>
+                        {SECTOR_OPTIONS.map((sector) => (
+                          <SelectItem key={sector} value={sector}>
+                            {sector}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={row.country || "none"}
+                      onValueChange={(v) =>
                         setEditorRows((prev) => ({
                           ...prev,
-                          [ticker]: { ...row, country: e.target.value },
+                          [ticker]: { ...row, country: v === "none" ? "" : v },
                         }))
                       }
-                    />
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Krajina" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Automaticky</SelectItem>
+                        {COUNTRY_OPTIONS.map((country) => (
+                          <SelectItem key={country} value={country}>
+                            {country}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <Select
                       value={row.assetType || "none"}
                       onValueChange={(v) =>
