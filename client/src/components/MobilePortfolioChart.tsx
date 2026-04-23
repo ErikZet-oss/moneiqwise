@@ -22,6 +22,7 @@ interface StockQuote {
   price: number;
   change: number;
   changePercent: number;
+  preMarketPrice?: number | null;
 }
 
 interface HistoricalPrices {
@@ -434,6 +435,48 @@ export function MobilePortfolioChart({
   const isPositive = periodChange.amount >= 0;
   const chartColor = isPositive ? "#22c55e" : "#ef4444";
 
+  const preOpenPreview = useMemo(() => {
+    if (!holdings || holdings.length === 0 || !quotes) {
+      return { available: false, amount: 0, percent: 0 };
+    }
+
+    let totalCurrent = 0;
+    let totalPreOpen = 0;
+    let hasPreOpenData = false;
+
+    for (const holding of holdings) {
+      const quote = quotes[holding.ticker];
+      if (!quote) continue;
+
+      const shares = parseFloat(holding.shares);
+      if (!Number.isFinite(shares) || shares <= 0) continue;
+
+      const tickerCurrency = getTickerCurrency(holding.ticker);
+      const regularPrice = convertPrice(quote.price, tickerCurrency);
+      const preOpenRaw = quote.preMarketPrice;
+      const preOpenPrice =
+        typeof preOpenRaw === "number" && Number.isFinite(preOpenRaw) && preOpenRaw > 0
+          ? convertPrice(preOpenRaw, tickerCurrency)
+          : null;
+
+      totalCurrent += shares * regularPrice;
+      if (preOpenPrice != null) {
+        totalPreOpen += shares * preOpenPrice;
+        hasPreOpenData = true;
+      } else {
+        totalPreOpen += shares * regularPrice;
+      }
+    }
+
+    if (!hasPreOpenData) {
+      return { available: false, amount: 0, percent: 0 };
+    }
+
+    const amount = totalPreOpen - totalCurrent;
+    const percent = totalCurrent > 0 ? (amount / totalCurrent) * 100 : 0;
+    return { available: true, amount, percent };
+  }, [holdings, quotes, convertPrice, getTickerCurrency]);
+
   const periods: TimePeriod[] = ["1D", "1W", "1M", "YTD", "1Y", "ALL"];
 
   const formatLargeNumber = (num: number) => {
@@ -561,6 +604,51 @@ export function MobilePortfolioChart({
         }`}>
           {dailyChange >= 0 ? "+" : ""}{dailyChangePercent.toFixed(2)}%
         </span>
+      </div>
+
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-[10px] text-muted-foreground">
+          Nerealizovaný zisk:
+        </span>
+        <span
+          className={`text-xs font-medium ${
+            unrealizedGain >= 0 ? "text-green-500" : "text-red-500"
+          }`}
+          data-testid="text-mobile-unrealized-gain"
+        >
+          {unrealizedGain >= 0 ? "+" : ""}
+          {maskAmount(formatCurrency(unrealizedGain))}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-[10px] text-muted-foreground">Pred open:</span>
+        {preOpenPreview.available ? (
+          <>
+            <span
+              className={`text-xs font-medium ${
+                preOpenPreview.amount >= 0 ? "text-green-500" : "text-red-500"
+              }`}
+              data-testid="text-mobile-pre-open-amount"
+            >
+              {preOpenPreview.amount >= 0 ? "+" : ""}
+              {maskAmount(formatCurrency(preOpenPreview.amount))}
+            </span>
+            <span
+              className={`text-[10px] px-1 py-0.5 rounded font-medium ${
+                preOpenPreview.amount >= 0
+                  ? "bg-green-500/20 text-green-500"
+                  : "bg-red-500/20 text-red-500"
+              }`}
+              data-testid="text-mobile-pre-open-percent"
+            >
+              {preOpenPreview.percent >= 0 ? "+" : ""}
+              {preOpenPreview.percent.toFixed(2)}%
+            </span>
+          </>
+        ) : (
+          <span className="text-xs text-muted-foreground">bez dát</span>
+        )}
       </div>
 
       {showChart && (

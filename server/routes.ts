@@ -572,11 +572,24 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
       const changePercent = previousClose > 0 ? (change / previousClose) * 100 : 0;
       
       if (currentPrice > 0) {
+        const preMarketPriceRaw = Number(meta?.preMarketPrice);
+        const preMarketPrice = Number.isFinite(preMarketPriceRaw) && preMarketPriceRaw > 0
+          ? preMarketPriceRaw
+          : null;
+        const preMarketChange = preMarketPrice != null ? preMarketPrice - currentPrice : null;
+        const preMarketChangePercent =
+          preMarketPrice != null && currentPrice > 0
+            ? (preMarketChange! / currentPrice) * 100
+            : null;
+
         return {
           ticker,
           price: currentPrice,
           change,
           changePercent,
+          preMarketPrice,
+          preMarketChange,
+          preMarketChangePercent,
           high52: meta.fiftyTwoWeekHigh || 0,
           low52: meta.fiftyTwoWeekLow || 0,
         };
@@ -649,6 +662,9 @@ async function fetchFinnhubQuote(ticker: string): Promise<any> {
         price: data.c, // current price
         change: data.d || 0, // change
         changePercent: data.dp || 0, // change percent
+        preMarketPrice: null,
+        preMarketChange: null,
+        preMarketChangePercent: null,
         high52: data.h || 0, // high of day (not 52w)
         low52: data.l || 0, // low of day (not 52w)
       };
@@ -697,6 +713,9 @@ async function fetchStockQuote(ticker: string, skipCache = false): Promise<any> 
           price: parseFloat(quote["05. price"]) || 0,
           change: parseFloat(quote["09. change"]) || 0,
           changePercent: parseFloat(quote["10. change percent"]?.replace("%", "")) || 0,
+          preMarketPrice: null,
+          preMarketChange: null,
+          preMarketChangePercent: null,
           high52: parseFloat(quote["52w High"]) || 0,
           low52: parseFloat(quote["52w Low"]) || 0,
         };
