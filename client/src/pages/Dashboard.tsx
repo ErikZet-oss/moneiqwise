@@ -565,14 +565,27 @@ export default function Dashboard() {
 
   const moversAsOfDate = useMemo(() => {
     if (!quotesData) return null;
+    const anyMarketOpen = Object.values(quotesData).some((q) => q.isMarketOpen === true);
     const dates = Object.values(quotesData)
       .map((q) => q.quoteDate)
       .filter((d): d is string => typeof d === "string" && d.length > 0);
     if (dates.length === 0) return null;
     const latest = dates.sort().at(-1);
     if (!latest) return null;
-    const parsed = new Date(`${latest}T00:00:00`);
+
+    let parsed = new Date(`${latest}T00:00:00`);
     if (Number.isNaN(parsed.getTime())) return latest;
+
+    // Ak nie je otvorený žiadny trh, "dnes" pri movers zväčša znamená posledný
+    // uzavretý obchodný deň (predošlá session), nie aktuálny kalendárny deň.
+    if (!anyMarketOpen) {
+      const adjusted = new Date(parsed);
+      do {
+        adjusted.setDate(adjusted.getDate() - 1);
+      } while (adjusted.getDay() === 0 || adjusted.getDay() === 6);
+      parsed = adjusted;
+    }
+
     return parsed.toLocaleDateString("sk-SK", {
       day: "2-digit",
       month: "2-digit",

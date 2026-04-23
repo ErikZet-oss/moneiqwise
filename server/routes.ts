@@ -603,7 +603,7 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
         const isMarketOpen =
           marketStateRaw === "REGULAR"
             ? true
-            : marketStateRaw === "CLOSED"
+            : marketStateRaw
               ? false
               : null;
         const change = previousClose != null ? regularMarketPrice - previousClose : 0;
@@ -703,7 +703,7 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
           isMarketOpen:
             String(meta?.marketState ?? "").toUpperCase() === "REGULAR"
               ? true
-              : String(meta?.marketState ?? "").toUpperCase() === "CLOSED"
+              : String(meta?.marketState ?? "").toUpperCase()
                 ? false
                 : null,
           preMarketPrice,

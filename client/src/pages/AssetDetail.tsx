@@ -454,43 +454,46 @@ export default function AssetDetail() {
                     return (
                       <div
                         key={`${row.portfolioId ?? "n"}-${row.acquiredAt}-${idx}-${row.remainingShares}-mobile`}
-                        className="rounded-lg border p-3 space-y-2"
+                        className="rounded-lg border p-2.5"
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <div className="text-xs text-muted-foreground">Portfólio</div>
-                            <div className="text-sm font-medium truncate">{row.portfolioName}</div>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <div className="text-xs text-muted-foreground">Dátum nákupu</div>
-                            <div className="text-sm">
+                        <div className="grid grid-cols-3 gap-2 text-[11px]">
+                          <div className="min-w-0 col-span-1">
+                            <div className="text-[10px] text-muted-foreground">Portfólio</div>
+                            <div className="font-medium truncate">{row.portfolioName}</div>
+                            <div className="text-[10px] text-muted-foreground mt-1">Nákup</div>
+                            <div>
                               {format(parseISO(row.acquiredAt + "T12:00:00Z"), "d. M. yyyy", {
                                 locale: sk,
                               })}
                             </div>
                           </div>
+
+                          <div className="col-span-1 text-right">
+                            <div className="text-[10px] text-muted-foreground">Kusy</div>
+                            <div className="font-mono">{formatShareQuantity(row.remainingShares)}</div>
+                            <div className="text-[10px] text-muted-foreground mt-1">Nákup / ks</div>
+                            <div>
+                              {mask(
+                                formatCurrency(
+                                  convertPrice(row.pricePerShareLocal, codeToCurrency(row.purchaseCurrency)),
+                                ),
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="col-span-1 text-right">
+                            <div className="text-[10px] text-muted-foreground">Aktuálny PnL</div>
+                            <div className={`font-medium ${pnlClass}`}>
+                              {!row.currentPriceAvailable ? "—" : mask(formatCurrency(row.currentPnl))}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground mt-1">Kurz EUR</div>
+                            <div className="font-mono text-[10px] text-muted-foreground">
+                              {row.eurPerUnitAtPurchase.toFixed(5)}
+                            </div>
+                          </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-                          <div className="text-muted-foreground">Kusy</div>
-                          <div className="text-right font-mono">{formatShareQuantity(row.remainingShares)}</div>
-                          <div className="text-muted-foreground">Nákup / ks</div>
-                          <div className="text-right">
-                            {mask(
-                              formatCurrency(
-                                convertPrice(row.pricePerShareLocal, codeToCurrency(row.purchaseCurrency)),
-                              ),
-                            )}
-                          </div>
-                          <div className="text-muted-foreground">Kurz nákupu</div>
-                          <div className="text-right font-mono text-xs text-muted-foreground">
-                            {row.eurPerUnitAtPurchase.toFixed(5)} EUR
-                          </div>
-                          <div className="text-muted-foreground">Aktuálny PnL</div>
-                          <div className={`text-right font-medium ${pnlClass}`}>
-                            {!row.currentPriceAvailable ? "—" : mask(formatCurrency(row.currentPnl))}
-                          </div>
-                        </div>
-                        <div className="pt-1 border-t border-border/60">
+
+                        <div className="pt-1.5 mt-1.5 border-t border-border/60">
                           {row.taxFree ? (
                             <div className="inline-flex items-center gap-1 flex-wrap">
                               <Badge
