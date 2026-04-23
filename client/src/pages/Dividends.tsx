@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -46,9 +47,17 @@ interface DividendSummary {
   transactionCount: number;
 }
 
+type ExpectedDividendItem = {
+  ticker: string;
+  companyName: string;
+  kind: "ex_dividend" | "payout";
+  estimatedGrossInUserCcy: number | null;
+};
+
 type DayBucket = {
   net: number;
   items: { ticker: string; companyName: string; net: number; kind: "DIVIDEND" | "TAX" }[];
+  expected?: ExpectedDividendItem[];
 };
 
 function transactionNetImpact(t: Transaction): number | null {
@@ -75,6 +84,7 @@ function dayKeyFromTransaction(d: Date | string): string {
 const WEEKDAYS_SK = ["Po", "Ut", "St", "Št", "Pi", "So", "Ne"];
 
 export default function Dividends() {
+  const [, setLocation] = useLocation();
   const { formatCurrency } = useCurrency();
   const { getQueryParam } = usePortfolio();
   const [viewMonth, setViewMonth] = useState(() => startOfMonth(new Date()));
@@ -97,6 +107,28 @@ export default function Dividends() {
       if (!res.ok) throw new Error("Failed to fetch transactions");
       return res.json();
     },
+  });
+
+  const { data: upcomingDividends } = useQuery<{
+    next: unknown;
+    all?: Array<{
+      ticker: string;
+      companyName: string;
+      date: string;
+      kind: "ex_dividend" | "payout";
+      estimatedGrossInUserCcy: number | null;
+    }>;
+  }>({
+    queryKey: ["/api/dividends/upcoming", portfolioParam],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/dividends/upcoming?portfolio=${encodeURIComponent(portfolioParam)}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) throw new Error("upcoming dividends");
+      return res.json();
+    },
+    staleTime: 45 * 60 * 1000,
   });
 
   const isLoading = dividendsLoading || transactionsLoading;
@@ -122,6 +154,29 @@ export default function Dividends() {
     }
     return map;
   }, [transactions]);
+
+  const calendarByDay = useMemo(() => {
+    const map = new Map<string, DayBucket>();
+    for (const [k, v] of Array.from(payoutsByDay.entries())) {
+      map.set(k, { net: v.net, items: [...v.items] });
+    }
+    for (const ev of upcomingDividends?.all ?? []) {
+      const key = ev.date;
+      let b = map.get(key);
+      if (!b) {
+        b = { net: 0, items: [], expected: [] };
+        map.set(key, b);
+      }
+      if (!b.expected) b.expected = [];
+      b.expected.push({
+        ticker: ev.ticker,
+        companyName: ev.companyName,
+        kind: ev.kind,
+        estimatedGrossInUserCcy: ev.estimatedGrossInUserCcy,
+      });
+    }
+    return map;
+  }, [payoutsByDay, upcomingDividends?.all]);
 
   const calendarDays = useMemo(() => {
     const monthStart = startOfMonth(viewMonth);
@@ -173,7 +228,8 @@ export default function Dividends() {
                 Kalendár výplat
               </CardTitle>
               <CardDescription>
-                Čistá suma za deň (zhodná so súhrnom) — hrubé dividendy mínus zrážky a samostatné daňové položky.
+                Skutočné výplaty z histórie (čistá suma za deň). Odhady z Yahoo (ex-dividend / výplata) sú oranžovo — orientačné,
+                nie záväzné; závisí od toho, či broker hlási dátum v kalendári.
               </CardDescription>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -213,9 +269,12 @@ export default function Dividends() {
             <div className="grid grid-cols-7 gap-px bg-border">
               {calendarDays.map((day) => {
                   const key = format(startOfDay(day), "yyyy-MM-dd");
-                  const bucket = payoutsByDay.get(key);
+                  const bucket = calendarByDay.get(key);
                   const inMonth = isSameMonth(day, viewMonth);
                   const today = isToday(day);
+                  const hasActual = bucket && bucket.items.length > 0;
+                  const hasExpected = bucket && bucket.expected && bucket.expected.length > 0;
+                  const showTooltip = hasActual || hasExpected;
 
                   const cellInner = (
                     <div
@@ -228,20 +287,31 @@ export default function Dividends() {
                       >
                         {format(day, "d")}
                       </span>
-                      {bucket && (
+                      {hasActual && (
                         <span
                           className={`mt-auto text-[11px] font-semibold leading-tight truncate ${
-                            bucket.net >= 0 ? "text-blue-600 dark:text-blue-400" : "text-red-600 dark:text-red-400"
+                            bucket!.net >= 0 ? "text-blue-600 dark:text-blue-400" : "text-red-600 dark:text-red-400"
                           }`}
                         >
-                          {bucket.net >= 0 ? "+" : ""}
-                          {formatCurrency(bucket.net)}
+                          {bucket!.net >= 0 ? "+" : ""}
+                          {formatCurrency(bucket!.net)}
+                        </span>
+                      )}
+                      {hasExpected && (
+                        <span
+                          className={`${hasActual ? "mt-0.5" : "mt-auto"} text-[10px] font-medium leading-tight text-amber-700 dark:text-amber-500 truncate`}
+                        >
+                          {bucket!.expected!.length === 1 &&
+                          bucket!.expected![0].estimatedGrossInUserCcy != null &&
+                          bucket!.expected![0].estimatedGrossInUserCcy! > 0
+                            ? `~ ${formatCurrency(bucket!.expected![0].estimatedGrossInUserCcy!)}`
+                            : `~ ${bucket!.expected!.length} očak.`}
                         </span>
                       )}
                     </div>
                   );
 
-                  if (bucket && bucket.items.length > 0) {
+                  if (showTooltip) {
                     return (
                       <Tooltip key={key}>
                         <TooltipTrigger asChild>
@@ -249,28 +319,62 @@ export default function Dividends() {
                             {cellInner}
                           </button>
                         </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-[280px] p-3">
+                        <TooltipContent side="top" className="max-w-[300px] p-3">
                           <p className="font-medium mb-2">{format(day, "d. MMMM yyyy", { locale: sk })}</p>
-                          <ul className="space-y-1.5 text-sm">
-                            {bucket.items.map((it, idx) => (
-                              <li key={`${it.ticker}-${idx}`} className="flex justify-between gap-4">
-                                <span className="text-muted-foreground truncate">
-                                  {it.kind === "TAX" ? "Daň" : it.ticker}
-                                  {it.kind === "DIVIDEND" ? ` · ${it.companyName}` : ""}
-                                </span>
-                                <span
-                                  className={`tabular-nums shrink-0 ${it.net >= 0 ? "text-blue-600" : "text-red-600"}`}
-                                >
-                                  {it.net >= 0 ? "+" : ""}
-                                  {formatCurrency(it.net)}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                          <p className="mt-2 pt-2 border-t text-sm font-medium">
-                            Spolu: {bucket.net >= 0 ? "+" : ""}
-                            {formatCurrency(bucket.net)}
-                          </p>
+                          {hasActual && (
+                            <>
+                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Skutočné</p>
+                              <ul className="space-y-1.5 text-sm mb-2">
+                                {bucket!.items.map((it, idx) => (
+                                  <li key={`${it.ticker}-${idx}`} className="flex justify-between gap-4">
+                                    <span className="text-muted-foreground truncate">
+                                      {it.kind === "TAX" ? "Daň" : it.ticker}
+                                      {it.kind === "DIVIDEND" ? ` · ${it.companyName}` : ""}
+                                    </span>
+                                    <span
+                                      className={`tabular-nums shrink-0 ${it.net >= 0 ? "text-blue-600" : "text-red-600"}`}
+                                    >
+                                      {it.net >= 0 ? "+" : ""}
+                                      {formatCurrency(it.net)}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                              <p className="mb-2 pt-2 border-t text-sm font-medium">
+                                Spolu: {bucket!.net >= 0 ? "+" : ""}
+                                {formatCurrency(bucket!.net)}
+                              </p>
+                            </>
+                          )}
+                          {hasExpected && (
+                            <>
+                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Odhad (Yahoo)</p>
+                              <ul className="space-y-2 text-sm">
+                                {bucket!.expected!.map((ex, idx) => (
+                                  <li key={`${ex.ticker}-${ex.kind}-${idx}`}>
+                                    <button
+                                      type="button"
+                                      className="flex w-full items-center gap-2 text-left rounded-sm hover:bg-muted/60 -mx-1 px-1 py-0.5"
+                                      onClick={() => setLocation(`/asset/${encodeURIComponent(ex.ticker)}`)}
+                                    >
+                                      <CompanyLogo ticker={ex.ticker} companyName={ex.companyName} size="xs" />
+                                      <span className="flex-1 min-w-0">
+                                        <span className="font-medium">{ex.ticker}</span>
+                                        <span className="text-muted-foreground text-xs block truncate">
+                                          {ex.kind === "ex_dividend" ? "Ex-dividend" : "Výplata"} · {ex.companyName}
+                                        </span>
+                                      </span>
+                                      {ex.estimatedGrossInUserCcy != null && ex.estimatedGrossInUserCcy > 0 && (
+                                        <span className="tabular-nums text-amber-700 dark:text-amber-500 shrink-0">
+                                          ~{formatCurrency(ex.estimatedGrossInUserCcy)}
+                                        </span>
+                                      )}
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            </>
+                          )}
                         </TooltipContent>
                       </Tooltip>
                     );
@@ -284,9 +388,11 @@ export default function Dividends() {
                 })}
             </div>
           </div>
-          {!hasDividends && (
+          {!hasDividends &&
+            (!upcomingDividends?.all || upcomingDividends.all.length === 0) && (
             <p className="mt-4 text-sm text-muted-foreground text-center">
-              Po pridaní dividend alebo daňových položiek sa v kalendári zobrazí dátum a suma výplaty.
+              Po pridaní dividend alebo daňových položiek sa v kalendári zobrazí skutočná výplata. Odhady vyžadujú aspoň jednu
+              držanú akciu s dátumom v kalendári Yahoo.
             </p>
           )}
         </CardContent>

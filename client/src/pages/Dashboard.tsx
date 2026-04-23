@@ -219,6 +219,42 @@ export default function Dashboard() {
     return map;
   }, [holdings]);
 
+  const { usSessionState, moversUsePremarket } = (() => {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Bratislava",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      weekday: "short",
+    }).formatToParts(new Date());
+
+    const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+    const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+    const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
+    const isWeekend = weekday.startsWith("Sat") || weekday.startsWith("Sun");
+    const minutesFromMidnight = hour * 60 + minute;
+
+    let state: "PRE_MARKET" | "LIVE" | "CLOSED";
+    if (isWeekend) state = "CLOSED";
+    else if (minutesFromMidnight >= 10 * 60 && minutesFromMidnight < 15 * 60 + 30) {
+      state = "PRE_MARKET";
+    } else if (minutesFromMidnight >= 15 * 60 + 30 && minutesFromMidnight < 22 * 60) {
+      state = "LIVE";
+    } else state = "CLOSED";
+
+    /**
+     * Od 23:00 SEČ do polnoci a od polnoci do 10:00 (prac. dni) — rebríčky z pre-marketu do otvorenia trhu,
+     * aby sa neukazovali „zamrznuté“ denné % z regular session. Počas LIVE (15:30–22:00) — klasická denná zmena.
+     */
+    const moversPremarket =
+      state === "PRE_MARKET" ||
+      (state === "CLOSED" &&
+        !isWeekend &&
+        (minutesFromMidnight < 10 * 60 || minutesFromMidnight >= 23 * 60));
+
+    return { usSessionState: state, moversUsePremarket: moversPremarket };
+  })();
+
   const dailyMovers = useMemo(() => {
     type MoverRow = { ticker: string; name: string; pct: number; dayValueEur: number | null };
     if (!quotesData || !holdings || moversTickers.length === 0) {
@@ -237,15 +273,28 @@ export default function Dashboard() {
     const rows = moversTickers
       .map((t) => {
         const q = quotesData[t];
-        const raw = q?.changePercent;
-        const pct = typeof raw === "number" ? raw : parseFloat(String(raw ?? ""));
         const shares = sharesByTicker.get(t) ?? 0;
-        const chRaw = q?.change;
-        const ch = typeof chRaw === "number" ? chRaw : parseFloat(String(chRaw ?? ""));
+        let pct: number;
         let dayValueEur: number | null = null;
-        if (shares > 0 && Number.isFinite(ch)) {
-          dayValueEur = shares * convertPrice(ch, getTickerCurrency(t));
+
+        if (moversUsePremarket) {
+          const rawPct = q?.preMarketChangePercent;
+          pct = typeof rawPct === "number" ? rawPct : parseFloat(String(rawPct ?? ""));
+          const chRaw = q?.preMarketChange;
+          const ch = typeof chRaw === "number" ? chRaw : parseFloat(String(chRaw ?? ""));
+          if (shares > 0 && Number.isFinite(ch)) {
+            dayValueEur = shares * convertPrice(ch, getTickerCurrency(t));
+          }
+        } else {
+          const raw = q?.changePercent;
+          pct = typeof raw === "number" ? raw : parseFloat(String(raw ?? ""));
+          const chRaw = q?.change;
+          const ch = typeof chRaw === "number" ? chRaw : parseFloat(String(chRaw ?? ""));
+          if (shares > 0 && Number.isFinite(ch)) {
+            dayValueEur = shares * convertPrice(ch, getTickerCurrency(t));
+          }
         }
+
         return {
           ticker: t,
           name: tickerDisplayNames.get(t) ?? t,
@@ -265,7 +314,15 @@ export default function Dashboard() {
       .slice(0, 5);
 
     return { gainers, losers };
-  }, [quotesData, moversTickers, tickerDisplayNames, holdings, convertPrice, getTickerCurrency]);
+  }, [
+    quotesData,
+    moversTickers,
+    tickerDisplayNames,
+    holdings,
+    convertPrice,
+    getTickerCurrency,
+    moversUsePremarket,
+  ]);
 
   const formatSignedDayPct = (value: number) => {
     const sign = value > 0 ? "+" : "";
@@ -349,6 +406,7 @@ export default function Dashboard() {
 
   const { data: upcomingDividendPayload, isLoading: upcomingDividendLoading } = useQuery<{
     next: UpcomingDividendNext | null;
+    all?: UpcomingDividendNext[];
   }>({
     queryKey: ["/api/dividends/upcoming", portfolioParam],
     queryFn: async () => {
@@ -363,7 +421,10 @@ export default function Dashboard() {
     enabled: dashboardSecondaryReady && !!holdings && holdings.length > 0,
   });
 
-  const upcomingDividend = upcomingDividendPayload?.next ?? null;
+  const upcomingDividend =
+    upcomingDividendPayload?.next ??
+    upcomingDividendPayload?.all?.[0] ??
+    null;
 
   const { data: fees } = useQuery<{ stockFees: number; optionFees: number; totalFees: number }>({
     queryKey: ["/api/fees", portfolioParam],
@@ -607,27 +668,6 @@ export default function Dashboard() {
     const percent = totalCurrent > 0 ? (amount / totalCurrent) * 100 : 0;
     return { available: true, amount, percent };
   }, [holdings, quotes, convertPrice, getTickerCurrency]);
-
-  const usSessionState = (() => {
-    const parts = new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Europe/Bratislava",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-      weekday: "short",
-    }).formatToParts(new Date());
-
-    const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
-    const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
-    const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
-    const isWeekend = weekday.startsWith("Sat") || weekday.startsWith("Sun");
-    if (isWeekend) return "CLOSED" as const;
-
-    const minutes = hour * 60 + minute;
-    if (minutes >= 10 * 60 && minutes < 15 * 60 + 30) return "PRE_MARKET" as const;
-    if (minutes >= 15 * 60 + 30 && minutes < 22 * 60) return "LIVE" as const;
-    return "CLOSED" as const;
-  })();
 
   const displayedDailyChange = usSessionState === "PRE_MARKET" ? 0 : metrics.dailyChange;
   const displayedDailyChangePercent = usSessionState === "PRE_MARKET" ? 0 : metrics.dailyChangePercent;
@@ -1044,62 +1084,76 @@ export default function Dashboard() {
               </Tooltip>
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-4 pt-3 space-y-2">
-            <div
-              className="text-2xl font-semibold leading-tight tracking-tight truncate text-blue-600 dark:text-blue-400"
-              data-testid="text-estimated-dividend-year"
-            >
-              {pnlBreakdown != null &&
-              pnlBreakdown.estimatedDividendCurrentYear != null &&
-              pnlBreakdown.estimatedDividendCurrentYear > 0
-                ? `+${maskAmount(formatCurrency(pnlBreakdown.estimatedDividendCurrentYear))}`
-                : pnlBreakdown != null
-                  ? maskAmount(formatCurrency(0))
-                  : "…"}
-            </div>
-            {pnlBreakdown != null &&
-              pnlBreakdown.dividendNetYtdCalendarYear != null &&
-              pnlBreakdown.dividendNetYtdCalendarYear > 0 && (
-                <p className="text-[11px] text-muted-foreground truncate">
-                  Už tento rok: {maskAmount(formatCurrency(pnlBreakdown.dividendNetYtdCalendarYear))}
-                </p>
-              )}
-            <div className="pt-1 border-t border-border/40">
-              <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">Najbližšia</p>
+          <CardContent className="p-4 pt-3 space-y-3">
+            <div data-testid="block-nearest-dividend">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2">
+                Najbližšia dividenda
+              </p>
               {upcomingDividendLoading ? (
-                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-14 w-full rounded-lg" />
               ) : upcomingDividend ? (
                 <button
                   type="button"
-                  className="w-full flex items-center gap-2 rounded-md text-left hover:bg-muted/50 -mx-1 px-1 py-0.5 transition-colors"
+                  className="w-full flex items-start gap-3 rounded-lg border border-border/50 bg-muted/20 p-2.5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   onClick={() => setLocation(`/asset/${encodeURIComponent(upcomingDividend.ticker)}`)}
+                  data-testid="button-nearest-dividend"
                 >
                   <CompanyLogo
                     ticker={upcomingDividend.ticker}
                     companyName={upcomingDividend.companyName}
-                    size="sm"
+                    size="md"
+                    className="shrink-0"
                   />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-medium truncate">{upcomingDividend.ticker}</div>
-                    <div className="text-[10px] text-muted-foreground truncate">
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <div className="text-sm font-semibold tracking-tight text-foreground truncate">
+                      {upcomingDividend.ticker}
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate">
                       {new Date(`${upcomingDividend.date}T12:00:00`).toLocaleDateString("sk-SK", {
                         day: "numeric",
                         month: "short",
                         year: "numeric",
                       })}
-                      {upcomingDividend.kind === "ex_dividend" ? " · ex-div" : " · výplata"}
+                      <span className="text-muted-foreground/80">
+                        {upcomingDividend.kind === "ex_dividend" ? " · ex-dividend" : " · výplata"}
+                      </span>
                     </div>
                     {upcomingDividend.estimatedGrossInUserCcy != null &&
                       upcomingDividend.estimatedGrossInUserCcy > 0 && (
-                        <div className="text-[10px] text-blue-500/90 tabular-nums">
-                          ~{maskAmount(formatCurrency(upcomingDividend.estimatedGrossInUserCcy))}
+                        <div className="text-xs font-medium tabular-nums text-blue-600 dark:text-blue-400 pt-0.5">
+                          Odhad hrubého: ~{maskAmount(formatCurrency(upcomingDividend.estimatedGrossInUserCcy))}
                         </div>
                       )}
                   </div>
                 </button>
               ) : (
-                <p className="text-[11px] text-muted-foreground">Žiadna ohlásená v kalendári</p>
+                <p className="text-xs text-muted-foreground leading-snug">
+                  Žiadna ohlásená udalosť v kalendári Yahoo pre vaše držané tituly.
+                </p>
               )}
+            </div>
+
+            <div className="space-y-1 border-t border-border/40 pt-3">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Odhad za kalendárny rok</p>
+              <div
+                className="text-2xl font-semibold leading-tight tracking-tight truncate text-blue-600 dark:text-blue-400"
+                data-testid="text-estimated-dividend-year"
+              >
+                {pnlBreakdown != null &&
+                pnlBreakdown.estimatedDividendCurrentYear != null &&
+                pnlBreakdown.estimatedDividendCurrentYear > 0
+                  ? `+${maskAmount(formatCurrency(pnlBreakdown.estimatedDividendCurrentYear))}`
+                  : pnlBreakdown != null
+                    ? maskAmount(formatCurrency(0))
+                    : "…"}
+              </div>
+              {pnlBreakdown != null &&
+                pnlBreakdown.dividendNetYtdCalendarYear != null &&
+                pnlBreakdown.dividendNetYtdCalendarYear > 0 && (
+                  <p className="text-[11px] text-muted-foreground truncate">
+                    Už tento rok: {maskAmount(formatCurrency(pnlBreakdown.dividendNetYtdCalendarYear))}
+                  </p>
+                )}
             </div>
           </CardContent>
         </Card>
@@ -1216,47 +1270,53 @@ export default function Dashboard() {
           <Tooltip>
             <TooltipTrigger asChild>
               <div className="min-w-0 cursor-help text-left">
-                <div className="text-[10px] text-muted-foreground mb-0.5 flex items-center gap-1">
+                <div className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1">
                   <CalendarClock className="h-2.5 w-2.5 shrink-0" />
-                  Dividenda (odhad rok)
+                  Dividenda
                   <HelpCircle className="h-2.5 w-2.5" />
                 </div>
+                {upcomingDividendLoading ? (
+                  <Skeleton className="h-8 w-full" />
+                ) : upcomingDividend ? (
+                  <button
+                    type="button"
+                    className="flex w-full items-start gap-2 rounded-md border border-border/40 bg-muted/15 p-1.5 text-left"
+                    onClick={() => setLocation(`/asset/${encodeURIComponent(upcomingDividend.ticker)}`)}
+                  >
+                    <CompanyLogo
+                      ticker={upcomingDividend.ticker}
+                      companyName={upcomingDividend.companyName}
+                      size="sm"
+                      className="shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[11px] font-semibold leading-tight truncate">{upcomingDividend.ticker}</div>
+                      <div className="text-[9px] text-muted-foreground leading-tight truncate mt-0.5">
+                        {new Date(`${upcomingDividend.date}T12:00:00`).toLocaleDateString("sk-SK", {
+                          day: "numeric",
+                          month: "short",
+                        })}
+                        {upcomingDividend.kind === "ex_dividend" ? " · ex-div" : " · výplata"}
+                      </div>
+                    </div>
+                  </button>
+                ) : (
+                  <p className="text-[9px] text-muted-foreground">Bez najbližšej v kalendári</p>
+                )}
+                <div className="text-[10px] text-muted-foreground mt-1.5 pt-1 border-t border-border/30">Odhad rok</div>
                 <div className="text-xs font-semibold tabular-nums truncate text-blue-600 dark:text-blue-400">
                   {pnlBreakdown?.estimatedDividendCurrentYear != null &&
                   pnlBreakdown.estimatedDividendCurrentYear > 0
                     ? `+${maskAmount(formatCurrency(pnlBreakdown.estimatedDividendCurrentYear))}`
                     : "—"}
                 </div>
-                {upcomingDividendLoading ? (
-                  <Skeleton className="h-6 w-full mt-1" />
-                ) : upcomingDividend ? (
-                  <button
-                    type="button"
-                    className="mt-1 flex w-full items-center gap-1.5 text-left"
-                    onClick={() => setLocation(`/asset/${encodeURIComponent(upcomingDividend.ticker)}`)}
-                  >
-                    <CompanyLogo
-                      ticker={upcomingDividend.ticker}
-                      companyName={upcomingDividend.companyName}
-                      size="xs"
-                    />
-                    <span className="min-w-0 flex-1 text-[9px] text-muted-foreground leading-tight truncate">
-                      {upcomingDividend.ticker} ·{" "}
-                      {new Date(`${upcomingDividend.date}T12:00:00`).toLocaleDateString("sk-SK", {
-                        day: "numeric",
-                        month: "short",
-                      })}
-                    </span>
-                  </button>
-                ) : (
-                  <p className="text-[9px] text-muted-foreground mt-0.5">Bez kalendára</p>
-                )}
               </div>
             </TooltipTrigger>
             <TooltipContent className="max-w-[260px]">
               <p className="font-semibold mb-1">Dividenda</p>
               <p className="text-xs">
-                Odhad čistých dividend za kalendárny rok a najbližšia udalosť z Yahoo. Ťuknutím otvoríte detail titulu.
+                Najbližšia udalosť z Yahoo (logo a ticker), pod tým odhad čistých dividend za kalendárny rok. Ťuknutím na
+                riadok otvoríte detail titulu.
               </p>
             </TooltipContent>
           </Tooltip>
@@ -1381,14 +1441,37 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card data-testid="dashboard-daily-gainers">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
+              <CardTitle className="text-base flex items-center gap-2 flex-wrap">
                 <TrendingUp className="h-4 w-4 text-green-500" />
                 Najsilnejšie dnes (%)
+                {moversUsePremarket && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        className="inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-400"
+                        aria-label="Pre-market"
+                      >
+                        <Moon className="h-3.5 w-3.5" />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-[260px]">
+                      <p className="text-xs">
+                        Od 23:00 SEČ do otvorenia hlavnej relácie a počas rána pred 10:00 SEČ sa zobrazuje zmena z{" "}
+                        <span className="font-medium">pre-marketu</span> oproti záverečnej cene, nie denná zmena z regular
+                        hours.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
               </CardTitle>
               <p className="text-xs text-muted-foreground">
-                {isAllPortfolios
-                  ? "Z držaných akcií vo všetkých portfóliách — denná zmena podľa kotácie."
-                  : `Z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ — denná zmena podľa kotácie.`}
+                {moversUsePremarket
+                  ? isAllPortfolios
+                    ? "Pre-market: z držaných akcií vo všetkých portfóliách (Yahoo)."
+                    : `Pre-market: z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ (Yahoo).`
+                  : isAllPortfolios
+                    ? "Z držaných akcií vo všetkých portfóliách — denná zmena podľa kotácie."
+                    : `Z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ — denná zmena podľa kotácie.`}
                 {moversAsOfDate ? ` (k dátumu ${moversAsOfDate})` : ""}
               </p>
             </CardHeader>
@@ -1401,7 +1484,9 @@ export default function Dashboard() {
                 </>
               ) : dailyMovers.gainers.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-2">
-                  Žiadna z držaných akcií dnes nebola v pluse.
+                  {moversUsePremarket
+                    ? "Žiadna držaná akcia nemá v tejto chvíli pre-market pohyb v pluse (alebo broker/Yahoo neposiela údaje)."
+                    : "Žiadna z držaných akcií dnes nebola v pluse."}
                 </p>
               ) : (
                 dailyMovers.gainers.map((row, idx) => (
@@ -1421,8 +1506,13 @@ export default function Dashboard() {
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-0.5 shrink-0">
-                      <span className="text-sm font-semibold tabular-nums text-green-500">
-                        {formatSignedDayPct(row.pct)}
+                      <span className="inline-flex items-center gap-1">
+                        {moversUsePremarket && (
+                          <Moon className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+                        )}
+                        <span className="text-sm font-semibold tabular-nums text-green-500">
+                          {formatSignedDayPct(row.pct)}
+                        </span>
                       </span>
                       {row.dayValueEur != null && Number.isFinite(row.dayValueEur) && (
                         <span
@@ -1442,14 +1532,37 @@ export default function Dashboard() {
 
           <Card data-testid="dashboard-daily-losers">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
+              <CardTitle className="text-base flex items-center gap-2 flex-wrap">
                 <TrendingDown className="h-4 w-4 text-red-500" />
                 Najslabšie dnes (%)
+                {moversUsePremarket && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        className="inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-400"
+                        aria-label="Pre-market"
+                      >
+                        <Moon className="h-3.5 w-3.5" />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-[260px]">
+                      <p className="text-xs">
+                        Od 23:00 SEČ do otvorenia hlavnej relácie a počas rána pred 10:00 SEČ sa zobrazuje zmena z{" "}
+                        <span className="font-medium">pre-marketu</span> oproti záverečnej cene, nie denná zmena z regular
+                        hours.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
               </CardTitle>
               <p className="text-xs text-muted-foreground">
-                {isAllPortfolios
-                  ? "Z držaných akcií vo všetkých portfóliách — denná zmena podľa kotácie."
-                  : `Z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ — denná zmena podľa kotácie.`}
+                {moversUsePremarket
+                  ? isAllPortfolios
+                    ? "Pre-market: z držaných akcií vo všetkých portfóliách (Yahoo)."
+                    : `Pre-market: z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ (Yahoo).`
+                  : isAllPortfolios
+                    ? "Z držaných akcií vo všetkých portfóliách — denná zmena podľa kotácie."
+                    : `Z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ — denná zmena podľa kotácie.`}
                 {moversAsOfDate ? ` (k dátumu ${moversAsOfDate})` : ""}
               </p>
             </CardHeader>
@@ -1462,7 +1575,9 @@ export default function Dashboard() {
                 </>
               ) : dailyMovers.losers.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-2">
-                  Žiadna z držaných akcií dnes nebola v mínuse.
+                  {moversUsePremarket
+                    ? "Žiadna držaná akcia nemá v tejto chvíli pre-market pohyb v mínuse (alebo broker/Yahoo neposiela údaje)."
+                    : "Žiadna z držaných akcií dnes nebola v mínuse."}
                 </p>
               ) : (
                 dailyMovers.losers.map((row, idx) => (
@@ -1482,8 +1597,13 @@ export default function Dashboard() {
                       </div>
                     </div>
                     <div className="flex flex-col items-end gap-0.5 shrink-0">
-                      <span className="text-sm font-semibold tabular-nums text-red-500">
-                        {formatSignedDayPct(row.pct)}
+                      <span className="inline-flex items-center gap-1">
+                        {moversUsePremarket && (
+                          <Moon className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+                        )}
+                        <span className="text-sm font-semibold tabular-nums text-red-500">
+                          {formatSignedDayPct(row.pct)}
+                        </span>
                       </span>
                       {row.dayValueEur != null && Number.isFinite(row.dayValueEur) && (
                         <span
