@@ -440,97 +440,178 @@ export default function AssetDetail() {
                 Žiadne otvorené nákupné dávky (všetko môže byť predané, alebo chýba cena z trhu).
               </p>
             ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Portfólio</TableHead>
-                      <TableHead>Dátum nákupu</TableHead>
-                      <TableHead className="text-right">Kusy</TableHead>
-                      <TableHead className="text-right">Nákup / ks</TableHead>
-                      <TableHead className="text-right">Kurz nákupu (EUR/1)</TableHead>
-                      <TableHead className="text-right">Aktuálny PnL</TableHead>
-                      <TableHead>Stav</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {fifoLotRows.map((row, idx) => {
-                      const pnlClass =
-                        !row.currentPriceAvailable
-                          ? "text-muted-foreground"
-                          : row.currentPnl > 0
-                            ? "text-emerald-600"
-                            : row.currentPnl < 0
-                              ? "text-red-500"
-                              : "";
-                      return (
-                        <TableRow
-                          key={`${row.portfolioId ?? "n"}-${row.acquiredAt}-${idx}-${row.remainingShares}`}
-                        >
-                          <TableCell className="max-w-[140px] truncate">{row.portfolioName}</TableCell>
-                          <TableCell>
-                            {format(
-                              parseISO(row.acquiredAt + "T12:00:00Z"),
-                              "d. M. yyyy",
-                              { locale: sk },
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right font-mono text-sm">
-                            {formatShareQuantity(row.remainingShares)}
-                          </TableCell>
-                          <TableCell className="text-right text-sm">
+              <div className="space-y-2">
+                <div className="md:hidden space-y-2">
+                  {fifoLotRows.map((row, idx) => {
+                    const pnlClass =
+                      !row.currentPriceAvailable
+                        ? "text-muted-foreground"
+                        : row.currentPnl > 0
+                          ? "text-emerald-600"
+                          : row.currentPnl < 0
+                            ? "text-red-500"
+                            : "";
+                    return (
+                      <div
+                        key={`${row.portfolioId ?? "n"}-${row.acquiredAt}-${idx}-${row.remainingShares}-mobile`}
+                        className="rounded-lg border p-3 space-y-2"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-xs text-muted-foreground">Portfólio</div>
+                            <div className="text-sm font-medium truncate">{row.portfolioName}</div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="text-xs text-muted-foreground">Dátum nákupu</div>
+                            <div className="text-sm">
+                              {format(parseISO(row.acquiredAt + "T12:00:00Z"), "d. M. yyyy", {
+                                locale: sk,
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
+                          <div className="text-muted-foreground">Kusy</div>
+                          <div className="text-right font-mono">{formatShareQuantity(row.remainingShares)}</div>
+                          <div className="text-muted-foreground">Nákup / ks</div>
+                          <div className="text-right">
                             {mask(
                               formatCurrency(
-                                convertPrice(
-                                  row.pricePerShareLocal,
-                                  codeToCurrency(row.purchaseCurrency),
-                                ),
+                                convertPrice(row.pricePerShareLocal, codeToCurrency(row.purchaseCurrency)),
                               ),
                             )}
-                          </TableCell>
-                          <TableCell className="text-right text-xs font-mono text-muted-foreground">
-                            {row.eurPerUnitAtPurchase.toFixed(5)}
-                          </TableCell>
-                          <TableCell className={`text-right text-sm font-medium ${pnlClass}`}>
-                            {!row.currentPriceAvailable
-                              ? "—"
-                              : mask(formatCurrency(row.currentPnl))}
-                          </TableCell>
-                          <TableCell>
-                            {row.taxFree ? (
-                              <div className="inline-flex items-center gap-1 flex-wrap">
-                                <Badge
-                                  className="bg-emerald-600/90 text-white hover:bg-emerald-600 border-0"
-                                  title="Orientačný časový test (1 rok) — detail u daňového poradcu"
-                                >
-                                  <Shield className="h-3 w-3 mr-0.5 inline" />
-                                  Tax free
-                                </Badge>
-                              </div>
-                            ) : row.inTaxFreeCountdown && row.daysToTaxFree != null ? (
-                              <div
-                                className="inline-flex items-center gap-1 text-amber-600"
-                                title={`Cca ${row.daysToTaxFree} d. do 365 dní držby`}
+                          </div>
+                          <div className="text-muted-foreground">Kurz nákupu</div>
+                          <div className="text-right font-mono text-xs text-muted-foreground">
+                            {row.eurPerUnitAtPurchase.toFixed(5)} EUR
+                          </div>
+                          <div className="text-muted-foreground">Aktuálny PnL</div>
+                          <div className={`text-right font-medium ${pnlClass}`}>
+                            {!row.currentPriceAvailable ? "—" : mask(formatCurrency(row.currentPnl))}
+                          </div>
+                        </div>
+                        <div className="pt-1 border-t border-border/60">
+                          {row.taxFree ? (
+                            <div className="inline-flex items-center gap-1 flex-wrap">
+                              <Badge
+                                className="bg-emerald-600/90 text-white hover:bg-emerald-600 border-0"
+                                title="Orientačný časový test (1 rok) — detail u daňového poradcu"
                               >
-                                <Clock
-                                  className="h-4 w-4 shrink-0 motion-safe:animate-pulse"
-                                  aria-hidden
-                                />
-                                <span className="text-xs">
-                                  o {row.daysToTaxFree} d.
+                                <Shield className="h-3 w-3 mr-0.5 inline" />
+                                Tax free
+                              </Badge>
+                            </div>
+                          ) : row.inTaxFreeCountdown && row.daysToTaxFree != null ? (
+                            <div
+                              className="inline-flex items-center gap-1 text-amber-600"
+                              title={`Cca ${row.daysToTaxFree} d. do 365 dní držby`}
+                            >
+                              <Clock className="h-4 w-4 shrink-0 motion-safe:animate-pulse" aria-hidden />
+                              <span className="text-xs">o {row.daysToTaxFree} d.</span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground" title="Držba v dňoch (orient.)">
+                              ⏳ {Math.floor(row.daysHeld)} d.
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="hidden md:block overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Portfólio</TableHead>
+                        <TableHead>Dátum nákupu</TableHead>
+                        <TableHead className="text-right">Kusy</TableHead>
+                        <TableHead className="text-right">Nákup / ks</TableHead>
+                        <TableHead className="text-right">Kurz nákupu (EUR/1)</TableHead>
+                        <TableHead className="text-right">Aktuálny PnL</TableHead>
+                        <TableHead>Stav</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {fifoLotRows.map((row, idx) => {
+                        const pnlClass =
+                          !row.currentPriceAvailable
+                            ? "text-muted-foreground"
+                            : row.currentPnl > 0
+                              ? "text-emerald-600"
+                              : row.currentPnl < 0
+                                ? "text-red-500"
+                                : "";
+                        return (
+                          <TableRow
+                            key={`${row.portfolioId ?? "n"}-${row.acquiredAt}-${idx}-${row.remainingShares}`}
+                          >
+                            <TableCell className="max-w-[140px] truncate">{row.portfolioName}</TableCell>
+                            <TableCell>
+                              {format(
+                                parseISO(row.acquiredAt + "T12:00:00Z"),
+                                "d. M. yyyy",
+                                { locale: sk },
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm">
+                              {formatShareQuantity(row.remainingShares)}
+                            </TableCell>
+                            <TableCell className="text-right text-sm">
+                              {mask(
+                                formatCurrency(
+                                  convertPrice(
+                                    row.pricePerShareLocal,
+                                    codeToCurrency(row.purchaseCurrency),
+                                  ),
+                                ),
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right text-xs font-mono text-muted-foreground">
+                              {row.eurPerUnitAtPurchase.toFixed(5)}
+                            </TableCell>
+                            <TableCell className={`text-right text-sm font-medium ${pnlClass}`}>
+                              {!row.currentPriceAvailable
+                                ? "—"
+                                : mask(formatCurrency(row.currentPnl))}
+                            </TableCell>
+                            <TableCell>
+                              {row.taxFree ? (
+                                <div className="inline-flex items-center gap-1 flex-wrap">
+                                  <Badge
+                                    className="bg-emerald-600/90 text-white hover:bg-emerald-600 border-0"
+                                    title="Orientačný časový test (1 rok) — detail u daňového poradcu"
+                                  >
+                                    <Shield className="h-3 w-3 mr-0.5 inline" />
+                                    Tax free
+                                  </Badge>
+                                </div>
+                              ) : row.inTaxFreeCountdown && row.daysToTaxFree != null ? (
+                                <div
+                                  className="inline-flex items-center gap-1 text-amber-600"
+                                  title={`Cca ${row.daysToTaxFree} d. do 365 dní držby`}
+                                >
+                                  <Clock
+                                    className="h-4 w-4 shrink-0 motion-safe:animate-pulse"
+                                    aria-hidden
+                                  />
+                                  <span className="text-xs">
+                                    o {row.daysToTaxFree} d.
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground" title="Držba v dňoch (orient.)">
+                                  ⏳ {Math.floor(row.daysHeld)} d.
                                 </span>
-                              </div>
-                            ) : (
-                              <span className="text-xs text-muted-foreground" title="Držba v dňoch (orient.)">
-                                ⏳ {Math.floor(row.daysHeld)} d.
-                              </span>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
             )}
           </CardContent>

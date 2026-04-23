@@ -402,6 +402,33 @@ function toYahooTicker(ticker: string): string {
   return ticker;
 }
 
+function quoteDateFromEpoch(
+  epochSeconds: number | null | undefined,
+  timeZone?: string | null,
+): string | null {
+  if (!Number.isFinite(epochSeconds) || !epochSeconds || epochSeconds <= 0) {
+    return null;
+  }
+
+  const dt = new Date(Number(epochSeconds) * 1000);
+  if (Number.isNaN(dt.getTime())) return null;
+
+  try {
+    if (timeZone && timeZone.trim()) {
+      return new Intl.DateTimeFormat("en-CA", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(dt);
+    }
+  } catch {
+    // Fallback below if timezone is invalid/unsupported.
+  }
+
+  return dt.toISOString().split("T")[0];
+}
+
 async function fetchYahooAssetProfile(
   ticker: string,
 ): Promise<{ sector: string; country: string; assetType: AssetClassValue }> {
@@ -599,10 +626,10 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
             : null;
 
         const regularMarketTimeRaw = Number(q?.regularMarketTime);
-        const quoteDate =
-          Number.isFinite(regularMarketTimeRaw) && regularMarketTimeRaw > 0
-            ? new Date(regularMarketTimeRaw * 1000).toISOString().split("T")[0]
-            : null;
+        const quoteDate = quoteDateFromEpoch(
+          regularMarketTimeRaw,
+          typeof q?.exchangeTimezoneName === "string" ? q.exchangeTimezoneName : null,
+        );
 
         return {
           ticker,
@@ -661,10 +688,10 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
             : null;
 
         const regularMarketTimeRaw = Number(meta?.regularMarketTime);
-        const quoteDate =
-          Number.isFinite(regularMarketTimeRaw) && regularMarketTimeRaw > 0
-            ? new Date(regularMarketTimeRaw * 1000).toISOString().split("T")[0]
-            : null;
+        const quoteDate = quoteDateFromEpoch(
+          regularMarketTimeRaw,
+          typeof meta?.exchangeTimezoneName === "string" ? meta.exchangeTimezoneName : null,
+        );
 
         return {
           ticker,
@@ -754,10 +781,7 @@ async function fetchFinnhubQuote(ticker: string): Promise<any> {
         price: data.c, // current price
         change: data.d || 0, // change
         changePercent: data.dp || 0, // change percent
-        quoteDate:
-          Number.isFinite(Number(data.t)) && Number(data.t) > 0
-            ? new Date(Number(data.t) * 1000).toISOString().split("T")[0]
-            : null,
+        quoteDate: null,
         marketState: null,
         isMarketOpen: null,
         preMarketPrice: null,
