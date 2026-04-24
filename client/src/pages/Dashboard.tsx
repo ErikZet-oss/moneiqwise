@@ -426,16 +426,6 @@ export default function Dashboard() {
     upcomingDividendPayload?.all?.[0] ??
     null;
 
-  const { data: fees } = useQuery<{ stockFees: number; optionFees: number; totalFees: number }>({
-    queryKey: ["/api/fees", portfolioParam],
-    queryFn: async () => {
-      const res = await fetch(`/api/fees?portfolio=${portfolioParam}`);
-      if (!res.ok) throw new Error("Failed to fetch fees");
-      return res.json();
-    },
-    enabled: dashboardSecondaryReady,
-  });
-
   const { data: news, isLoading: newsLoading } = useQuery<NewsArticle[]>({
     queryKey: ["/api/news", portfolioParam],
     queryFn: async () => {
@@ -1249,78 +1239,6 @@ export default function Dashboard() {
       />
       
       <div className="md:hidden grid gap-2 grid-cols-2 px-4">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="bg-card rounded-lg p-2.5 border cursor-help">
-              <div className="text-[10px] text-muted-foreground mb-0.5 flex items-center gap-1">
-                Poplatky
-                <HelpCircle className="h-2.5 w-2.5" />
-              </div>
-              <div className="text-xs font-semibold text-orange-500">
-                -{maskAmount(formatCurrency(fees?.totalFees || 0))}
-              </div>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent className="max-w-[250px]">
-            <p className="font-semibold mb-1">Poplatky a provízie</p>
-            <p className="text-xs">Celková suma poplatkov za transakcie s akciami a opciami (otváracia + zatváracia provízia).</p>
-          </TooltipContent>
-        </Tooltip>
-        <div className="bg-card rounded-lg p-2 border flex flex-col min-h-[3.25rem]">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="min-w-0 cursor-help text-left">
-                <div className="text-[10px] text-muted-foreground mb-1 flex items-center gap-1">
-                  <CalendarClock className="h-2.5 w-2.5 shrink-0" />
-                  Dividenda
-                  <HelpCircle className="h-2.5 w-2.5" />
-                </div>
-                {upcomingDividendLoading ? (
-                  <Skeleton className="h-8 w-full" />
-                ) : upcomingDividend ? (
-                  <button
-                    type="button"
-                    className="flex w-full items-start gap-2 rounded-md border border-border/40 bg-muted/15 p-1.5 text-left"
-                    onClick={() => setLocation(`/asset/${encodeURIComponent(upcomingDividend.ticker)}`)}
-                  >
-                    <CompanyLogo
-                      ticker={upcomingDividend.ticker}
-                      companyName={upcomingDividend.companyName}
-                      size="sm"
-                      className="shrink-0"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[11px] font-semibold leading-tight truncate">{upcomingDividend.ticker}</div>
-                      <div className="text-[9px] text-muted-foreground leading-tight truncate mt-0.5">
-                        {new Date(`${upcomingDividend.date}T12:00:00`).toLocaleDateString("sk-SK", {
-                          day: "numeric",
-                          month: "short",
-                        })}
-                        {upcomingDividend.kind === "ex_dividend" ? " · ex-div" : " · výplata"}
-                      </div>
-                    </div>
-                  </button>
-                ) : (
-                  <p className="text-[9px] text-muted-foreground">Bez najbližšej v kalendári</p>
-                )}
-                <div className="text-[10px] text-muted-foreground mt-1.5 pt-1 border-t border-border/30">Odhad rok</div>
-                <div className="text-xs font-semibold tabular-nums truncate text-blue-600 dark:text-blue-400">
-                  {pnlBreakdown?.estimatedDividendCurrentYear != null &&
-                  pnlBreakdown.estimatedDividendCurrentYear > 0
-                    ? `+${maskAmount(formatCurrency(pnlBreakdown.estimatedDividendCurrentYear))}`
-                    : "—"}
-                </div>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-[260px]">
-              <p className="font-semibold mb-1">Dividenda</p>
-              <p className="text-xs">
-                Najbližšia udalosť z Yahoo (logo a ticker), pod tým odhad čistých dividend za kalendárny rok. Ťuknutím na
-                riadok otvoríte detail titulu.
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
         <Tooltip>
           <TooltipTrigger asChild>
             <div className="bg-card rounded-lg p-2.5 border cursor-help">
