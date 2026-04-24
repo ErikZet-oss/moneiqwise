@@ -914,11 +914,11 @@ export default function Dashboard() {
               Pred open:{" "}
               {preOpenPreview.available ? (
                 <>
-                  <span className={`italic ${getChangeColor(preOpenPreview.amount)}`}>
+                  <span className={getChangeColor(preOpenPreview.amount)}>
                     {preOpenPreview.amount >= 0 ? "+" : ""}
                     {maskAmount(formatCurrency(preOpenPreview.amount))}
                   </span>
-                  <span className={`ml-1 italic ${getChangeColor(preOpenPreview.percent)}`}>
+                  <span className={`ml-1 ${getChangeColor(preOpenPreview.percent)}`}>
                     ({formatPercent(preOpenPreview.percent)})
                   </span>
                 </>
@@ -1049,7 +1049,7 @@ export default function Dashboard() {
                 <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
                 Pre-market:{" "}
                 {preOpenPreview.available ? (
-                  <span className="italic">
+                  <span>
                     {preOpenPreview.amount >= 0 ? "+" : ""}
                     {maskAmount(formatCurrency(preOpenPreview.amount))}
                   </span>
@@ -1216,45 +1216,46 @@ export default function Dashboard() {
         totalInvested={metrics.totalInvested}
       />
       
-      <div className="md:hidden grid gap-2 grid-cols-2 px-4">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="bg-card rounded-lg p-2.5 border cursor-help">
-              <div className="text-[10px] text-muted-foreground mb-0.5 flex items-center gap-1">
-                Realizovaný zisk
-                <HelpCircle className="h-2.5 w-2.5" />
+      <div className="md:hidden px-4 space-y-2">
+        <div className="grid gap-2 grid-cols-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="bg-card rounded-lg p-2.5 border cursor-help">
+                <div className="text-[10px] text-muted-foreground mb-0.5 flex items-center gap-1">
+                  Realizovaný zisk
+                  <HelpCircle className="h-2.5 w-2.5" />
+                </div>
+                <div className={`text-xs font-semibold ${getChangeColor(metrics.stockRealizedGain + metrics.optionsRealizedGain)}`}>
+                  {maskAmount(formatCurrency(metrics.stockRealizedGain + metrics.optionsRealizedGain))}
+                </div>
               </div>
-              <div className={`text-xs font-semibold ${getChangeColor(metrics.stockRealizedGain + metrics.optionsRealizedGain)}`}>
-                {maskAmount(formatCurrency(metrics.stockRealizedGain + metrics.optionsRealizedGain))}
+            </TooltipTrigger>
+            <TooltipContent className="max-w-[280px]">
+              <p className="font-semibold mb-1">Realizovaný zisk</p>
+              <p className="text-xs">
+                Akcie: zisk/strata z predajov (FIFO) a z hot. riadkov XTB close trade. Plus realizácia opcií, ak sú v celku vyššie.
+              </p>
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="bg-card rounded-lg p-2.5 border cursor-help">
+                <div className="text-[10px] text-muted-foreground mb-0.5 flex items-center gap-1">
+                  Dividendy (spolu)
+                  <HelpCircle className="h-2.5 w-2.5" />
+                </div>
+                <div className="text-xs font-semibold text-blue-500">
+                  +{maskAmount(formatCurrency(metrics.dividendGain))}
+                </div>
               </div>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent className="max-w-[280px]">
-            <p className="font-semibold mb-1">Realizovaný zisk</p>
-            <p className="text-xs">
-              Akcie: zisk/strata z predajov (FIFO) a z hot. riadkov XTB close trade. Plus realizácia opcií, ak sú v celku vyššie.
-            </p>
-          </TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="bg-card rounded-lg p-2.5 border cursor-help">
-              <div className="text-[10px] text-muted-foreground mb-0.5 flex items-center gap-1">
-                Dividendy (spolu)
-                <HelpCircle className="h-2.5 w-2.5" />
-              </div>
-              <div className="text-xs font-semibold text-blue-500">
-                +{maskAmount(formatCurrency(metrics.dividendGain))}
-              </div>
-            </div>
-          </TooltipTrigger>
-          <TooltipContent className="max-w-[250px]">
-            <p className="font-semibold mb-1">Dividendy</p>
-            <p className="text-xs">Čisté vyplatené dividendy po zrážkovej dani. Zahŕňa všetky dividendové platby od začiatku sledovania.</p>
-          </TooltipContent>
-        </Tooltip>
-      </div>
-      <div className="md:hidden px-4">
+            </TooltipTrigger>
+            <TooltipContent className="max-w-[250px]">
+              <p className="font-semibold mb-1">Dividendy</p>
+              <p className="text-xs">Čisté vyplatené dividendy po zrážkovej dani. Zahŕňa všetky dividendové platby od začiatku sledovania.</p>
+            </TooltipContent>
+          </Tooltip>
+        </div>
+
         <div className="bg-card rounded-lg border px-2.5 py-2">
           <div className="flex items-center justify-between text-[10px]">
             <span className="text-muted-foreground">Moje YTD</span>
@@ -1275,10 +1276,8 @@ export default function Dashboard() {
             </span>
           </div>
         </div>
-      </div>
-      
-      {metrics.optionsIncluded && (
-        <div className="md:hidden px-4">
+
+        {metrics.optionsIncluded && (
           <div className="bg-card rounded-lg p-2.5 border flex items-center justify-between">
             <span className="text-[10px] text-muted-foreground">
               Opcie zahrnuté
@@ -1290,8 +1289,8 @@ export default function Dashboard() {
               Realizované: <span className="font-semibold">{maskAmount(formatCurrency(metrics.optionsRealizedGain))}</span>
             </span>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* News Section */}
       {showNews && holdings && holdings.length > 0 && (
@@ -1428,13 +1427,13 @@ export default function Dashboard() {
                         {moversUsePremarket && (
                           <Moon className={`h-3.5 w-3.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
                         )}
-                        <span className={`text-sm font-semibold tabular-nums text-green-500 ${moversUsePremarket ? "italic" : ""}`}>
+                        <span className="text-sm font-semibold tabular-nums text-green-500">
                           {formatSignedDayPct(row.pct)}
                         </span>
                       </span>
                       {row.dayValueEur != null && Number.isFinite(row.dayValueEur) && (
                         <span
-                          className={`text-[10px] tabular-nums ${moversUsePremarket ? "italic" : ""} ${getChangeColor(row.dayValueEur)}`}
+                          className={`text-[10px] tabular-nums ${getChangeColor(row.dayValueEur)}`}
                           data-testid={`dashboard-gainer-value-${idx}`}
                         >
                           {row.dayValueEur >= 0 ? "+" : ""}
@@ -1519,13 +1518,13 @@ export default function Dashboard() {
                         {moversUsePremarket && (
                           <Moon className={`h-3.5 w-3.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
                         )}
-                        <span className={`text-sm font-semibold tabular-nums text-red-500 ${moversUsePremarket ? "italic" : ""}`}>
+                        <span className="text-sm font-semibold tabular-nums text-red-500">
                           {formatSignedDayPct(row.pct)}
                         </span>
                       </span>
                       {row.dayValueEur != null && Number.isFinite(row.dayValueEur) && (
                         <span
-                          className={`text-[10px] tabular-nums ${moversUsePremarket ? "italic" : ""} ${getChangeColor(row.dayValueEur)}`}
+                          className={`text-[10px] tabular-nums ${getChangeColor(row.dayValueEur)}`}
                           data-testid={`dashboard-loser-value-${idx}`}
                         >
                           {row.dayValueEur >= 0 ? "+" : ""}
@@ -1644,13 +1643,13 @@ export default function Dashboard() {
                               )}
                             </span>
                             {showPremarketPrice && (
-                              <span className="mt-0.5 inline-flex items-center gap-0.5 text-[8px] italic text-muted-foreground">
+                              <span className="mt-0.5 inline-flex items-center gap-0.5 text-[8px] text-muted-foreground">
                                 <Moon className={`h-2.5 w-2.5 ${premarketMoonClass}`} />
                                 {maskAmount(formatCurrency(preMarketPrice))}
                               </span>
                             )}
                             {showOffHoursDailyChange && (
-                              <span className={`mt-0.5 inline-flex items-center gap-0.5 text-[8px] italic ${getChangeColor(quote?.preMarketChange ?? 0)}`}>
+                              <span className={`mt-0.5 inline-flex items-center gap-0.5 text-[8px] ${getChangeColor(quote?.preMarketChange ?? 0)}`}>
                                 <Moon className={`h-2.5 w-2.5 ${premarketMoonClass}`} />
                                 {formatPercent(quote?.preMarketChangePercent ?? 0)}
                               </span>
@@ -1807,13 +1806,13 @@ export default function Dashboard() {
                                 )}
                               </div>
                               {showPremarketPrice && (
-                                <div className="mt-0.5 inline-flex items-center gap-1 text-[10px] italic text-muted-foreground">
+                                <div className="mt-0.5 inline-flex items-center gap-1 text-[10px] text-muted-foreground">
                                   <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
                                   {maskAmount(formatCurrency(preMarketPrice))}
                                 </div>
                               )}
                               {showOffHoursDailyChange && (
-                                <div className={`mt-0.5 inline-flex items-center gap-1 text-[10px] italic ${getChangeColor(quote?.preMarketChange ?? 0)}`}>
+                                <div className={`mt-0.5 inline-flex items-center gap-1 text-[10px] ${getChangeColor(quote?.preMarketChange ?? 0)}`}>
                                   <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
                                   {formatPercent(quote?.preMarketChangePercent ?? 0)}
                                 </div>

@@ -638,7 +638,7 @@ export function MobilePortfolioChart({
           <span>
             Pre-market:{" "}
             {preOpenPreview.available ? (
-              <span className="italic">
+              <span>
                 {preOpenPreview.amount >= 0 ? "+" : ""}
                 {maskAmount(formatCurrency(preOpenPreview.amount))}
               </span>
@@ -677,7 +677,7 @@ export function MobilePortfolioChart({
             <span
               className={`text-xs font-medium ${
                 preOpenPreview.amount >= 0 ? "text-green-500" : "text-red-500"
-              } italic`}
+              }`}
               data-testid="text-mobile-pre-open-amount"
             >
               {preOpenPreview.amount >= 0 ? "+" : ""}
@@ -688,7 +688,7 @@ export function MobilePortfolioChart({
                 preOpenPreview.amount >= 0
                   ? "bg-green-500/20 text-green-500"
                   : "bg-red-500/20 text-red-500"
-              } italic`}
+              }`}
               data-testid="text-mobile-pre-open-percent"
             >
               {preOpenPreview.percent >= 0 ? "+" : ""}
