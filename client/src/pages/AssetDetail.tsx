@@ -347,8 +347,22 @@ export default function AssetDetail() {
                   })}
                 </div>
                 <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 leading-snug">
-                  Očakávaný dátum podľa Yahoo Finance (môže sa zmeniť).
+                  Očakávaný dátum (Yahoo alebo Finnhub), môže sa zmeniť.
                 </p>
+              </CardContent>
+            </Card>
+          )}
+          {data.ticker !== "CASH" && data.nextEarnings == null && (
+            <Card className="shrink-0 w-full sm:w-auto sm:min-w-[200px] border-dashed border-muted-foreground/25">
+              <CardContent className="p-3 sm:p-4">
+                <div className="text-[10px] sm:text-xs text-muted-foreground flex items-start gap-2 leading-snug">
+                  <Calendar className="h-3.5 w-3.5 shrink-0 mt-0.5 opacity-70" />
+                  <span>
+                    Najbližšie earnings sa nepodarilo načítať. Yahoo často blokuje API; so{" "}
+                    <span className="font-mono">FINNHUB_API_KEY</span> na serveri sa použije záložný kalendár
+                    Finnhub.
+                  </span>
+                </div>
               </CardContent>
             </Card>
           )}

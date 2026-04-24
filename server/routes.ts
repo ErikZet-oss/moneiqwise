@@ -634,39 +634,36 @@ async function fetchYahooUpcomingDividendEvents(
   }
 }
 
-/** Yahoo: najbližší zverejnený dátum výsledkov (earnings) z calendarEvents (cache). */
-const nextEarningsYahooCache = new Map<
-  string,
-  { t: number; v: { date: string } | null }
->();
-const NEXT_EARNINGS_YAHOO_TTL_MS = 45 * 60 * 1000;
+/** Najbližší earnings: Yahoo calendarEvents (ak odpovie), inak Finnhub calendar (vyžaduje FINNHUB_API_KEY). */
+const nextEarningsAssetCache = new Map<string, { t: number; v: { date: string } | null }>();
+const NEXT_EARNINGS_ASSET_TTL_MS = 45 * 60 * 1000;
 
-async function fetchYahooNextEarningsDate(ticker: string): Promise<{ date: string } | null> {
-  const key = ticker.toUpperCase();
-  const cached = nextEarningsYahooCache.get(key);
-  if (cached && Date.now() - cached.t < NEXT_EARNINGS_YAHOO_TTL_MS) {
-    return cached.v;
-  }
+function calendarDateStringFromMs(ms: number): string {
+  const d = new Date(ms);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
+/** Yahoo quoteSummary — často blokuje bez crumbu; pri úspechu vráti dátum. */
+async function tryYahooNextEarningsDate(tickerUpper: string): Promise<{ date: string } | null> {
   try {
-    const yahooTicker = toYahooTicker(key);
+    const yahooTicker = toYahooTicker(tickerUpper);
     const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(yahooTicker)}?modules=calendarEvents`;
 
     const response = await fetch(url, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept: "application/json",
       },
     });
 
-    if (!response.ok) {
-      nextEarningsYahooCache.set(key, { t: Date.now(), v: null });
-      return null;
-    }
+    if (!response.ok) return null;
 
     const data = await response.json();
     const cr = data?.quoteSummary;
     if (cr?.error || !Array.isArray(cr?.result) || cr.result.length === 0) {
-      nextEarningsYahooCache.set(key, { t: Date.now(), v: null });
       return null;
     }
 
@@ -675,43 +672,98 @@ async function fetchYahooNextEarningsDate(ticker: string): Promise<{ date: strin
     const ed = earnings?.earningsDate;
 
     type EdItem = { raw?: number; fmt?: string };
-    const items: EdItem[] = Array.isArray(ed) ? ed : ed && typeof ed === "object" ? [ed as EdItem] : [];
+    const items: EdItem[] = Array.isArray(ed)
+      ? ed
+      : ed && typeof ed === "object"
+        ? [ed as EdItem]
+        : [];
 
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const t0 = todayStart.getTime();
 
     let bestMs = Infinity;
-    let bestFmt: string | null = null;
 
     for (const item of items) {
       const raw = item?.raw;
       const fmt = typeof item?.fmt === "string" ? item.fmt.trim() : "";
-      const ms = typeof raw === "number" ? yahooRawTsToMs(raw) : NaN;
+      let ms = typeof raw === "number" ? yahooRawTsToMs(raw) : NaN;
+      if (!Number.isFinite(ms) && fmt.length > 0) {
+        const parsed = Date.parse(fmt);
+        if (Number.isFinite(parsed)) ms = parsed;
+      }
+      if (!Number.isFinite(ms) || ms < t0) continue;
+      if (ms < bestMs) bestMs = ms;
+    }
+
+    if (!Number.isFinite(bestMs) || bestMs === Infinity) return null;
+
+    return { date: calendarDateStringFromMs(bestMs) };
+  } catch {
+    return null;
+  }
+}
+
+/** Finnhub earnings calendar — spoľahlivejší, ak je nastavený API kľúč. */
+async function tryFinnhubNextEarningsDate(tickerUpper: string): Promise<{ date: string } | null> {
+  if (!FINNHUB_API_KEY) return null;
+
+  try {
+    const from = new Date();
+    from.setHours(0, 0, 0, 0);
+    const to = new Date(from);
+    to.setDate(to.getDate() + 200);
+
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const fromStr = `${from.getFullYear()}-${pad(from.getMonth() + 1)}-${pad(from.getDate())}`;
+    const toStr = `${to.getFullYear()}-${pad(to.getMonth() + 1)}-${pad(to.getDate())}`;
+
+    const url =
+      `https://finnhub.io/api/v1/calendar/earnings?from=${fromStr}&to=${toStr}` +
+      `&symbol=${encodeURIComponent(tickerUpper)}&token=${FINNHUB_API_KEY}`;
+
+    const response = await fetch(url);
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const rows = data?.earningsCalendar;
+    if (!Array.isArray(rows) || rows.length === 0) return null;
+
+    const t0 = from.getTime();
+    let best: string | null = null;
+    let bestMs = Infinity;
+
+    for (const row of rows) {
+      const d = row?.date;
+      if (typeof d !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+      const ms = new Date(`${d}T12:00:00`).getTime();
       if (!Number.isFinite(ms) || ms < t0) continue;
       if (ms < bestMs) {
         bestMs = ms;
-        bestFmt = fmt.length > 0 ? fmt : null;
+        best = d;
       }
     }
 
-    if (!Number.isFinite(bestMs) || bestMs === Infinity) {
-      nextEarningsYahooCache.set(key, { t: Date.now(), v: null });
-      return null;
-    }
-
-    const date =
-      bestFmt && /^\d{4}-\d{2}-\d{2}$/.test(bestFmt)
-        ? bestFmt
-        : new Date(bestMs).toISOString().slice(0, 10);
-
-    const v = { date };
-    nextEarningsYahooCache.set(key, { t: Date.now(), v });
-    return v;
+    return best ? { date: best } : null;
   } catch {
-    nextEarningsYahooCache.set(key, { t: Date.now(), v: null });
     return null;
   }
+}
+
+async function fetchNextEarningsDateForAsset(ticker: string): Promise<{ date: string } | null> {
+  const key = ticker.toUpperCase();
+  const cached = nextEarningsAssetCache.get(key);
+  if (cached && Date.now() - cached.t < NEXT_EARNINGS_ASSET_TTL_MS) {
+    return cached.v;
+  }
+
+  let v: { date: string } | null = await tryYahooNextEarningsDate(key);
+  if (!v) {
+    v = await tryFinnhubNextEarningsDate(key);
+  }
+
+  nextEarningsAssetCache.set(key, { t: Date.now(), v });
+  return v;
 }
 
 interface NewsArticle {
@@ -2416,7 +2468,7 @@ export async function registerRoutes(
       let nextEarnings: { date: string } | null = null;
       if (upperTicker !== "CASH") {
         try {
-          nextEarnings = await fetchYahooNextEarningsDate(upperTicker);
+          nextEarnings = await fetchNextEarningsDateForAsset(upperTicker);
         } catch {
           nextEarnings = null;
         }

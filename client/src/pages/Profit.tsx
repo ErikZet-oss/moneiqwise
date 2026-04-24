@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -97,7 +97,16 @@ interface PerformanceResponse {
 export default function Profit() {
   const { currency, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
   const { getQueryParam } = usePortfolio();
-  
+  const [narrowViewport, setNarrowViewport] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 767px)");
+    const apply = () => setNarrowViewport(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
+
   const portfolioParam = getQueryParam();
 
   const { data: transactions, isLoading: transactionsLoading } = useQuery<Transaction[]>({
@@ -406,16 +415,14 @@ export default function Profit() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
+      <div className="max-w-full space-y-3 overflow-x-hidden md:space-y-6">
         <Card>
-          <CardHeader>
-            <Skeleton className="h-6 w-48" />
-            <Skeleton className="h-4 w-64" />
+          <CardHeader className="p-3 md:p-6">
+            <Skeleton className="h-5 w-40 md:h-6 md:w-48" />
+            <Skeleton className="h-3 w-56 md:h-4 md:w-64" />
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <Skeleton className="h-64 w-full" />
-            </div>
+          <CardContent className="px-3 pb-3 pt-0 md:p-6 md:pt-0">
+            <Skeleton className="h-48 w-full md:h-64" />
           </CardContent>
         </Card>
       </div>
@@ -424,26 +431,36 @@ export default function Profit() {
 
   if (!transactions || transactions.length === 0) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Zisk v čase</CardTitle>
-          <CardDescription>Štatistika vášho zisku podľa období</CardDescription>
+      <Card className="max-w-full overflow-x-hidden">
+        <CardHeader className="p-3 md:p-6">
+          <CardTitle className="text-base md:text-2xl">Zisk v čase</CardTitle>
+          <CardDescription className="text-xs md:text-sm">
+            Štatistika vášho zisku podľa období
+          </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="text-center py-12 text-muted-foreground">
-            <p>Zatiaľ žiadne transakcie na zobrazenie.</p>
-            <p className="text-sm mt-2">Začnite nákupom akcií aby ste videli štatistiku.</p>
+        <CardContent className="px-3 pb-3 md:p-6 md:pt-0">
+          <div className="py-8 text-center text-muted-foreground md:py-12">
+            <p className="text-sm md:text-base">Zatiaľ žiadne transakcie na zobrazenie.</p>
+            <p className="mt-2 text-xs md:text-sm">Začnite nákupom akcií aby ste videli štatistiku.</p>
           </div>
         </CardContent>
       </Card>
     );
   }
 
+  const chartYTick = (v: number) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return "";
+    if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (Math.abs(n) >= 1000) return `${(n / 1000).toFixed(0)}k`;
+    return String(Math.round(n));
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="max-w-full space-y-3 overflow-x-hidden pb-6 md:space-y-6 md:pb-10">
       {!hasHistoricalData && (
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
+        <Alert className="px-3 py-2 text-xs md:px-4 md:py-3 md:text-sm">
+          <AlertCircle className="h-3.5 w-3.5 md:h-4 md:w-4" />
           <AlertDescription>
             Historické ceny nie sú úplne k dispozícii. Niektoré výpočty môžu používať aktuálne ceny.
           </AlertDescription>
@@ -451,15 +468,15 @@ export default function Profit() {
       )}
 
       {Object.keys(historicalErrors).length > 0 && (
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
+        <Alert className="px-3 py-2 text-xs md:px-4 md:py-3 md:text-sm">
+          <AlertCircle className="h-3.5 w-3.5 md:h-4 md:w-4" />
+          <AlertDescription className="break-words">
             Historické ceny nie sú dostupné pre: {Object.keys(historicalErrors).join(", ")}
           </AlertDescription>
         </Alert>
       )}
 
-      <h2 className="text-xl font-semibold">Analýza zisku</h2>
+      <h2 className="text-lg font-semibold md:text-xl">Analýza zisku</h2>
 
       {/* Year / month performance breakdown (server-aggregated, cached) */}
       <YearMonthPerformance
@@ -470,44 +487,44 @@ export default function Profit() {
       />
 
       {/* Realized Gains Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Wallet className="h-5 w-5" />
+      <Card className="max-w-full overflow-x-hidden">
+        <CardHeader className="space-y-1 p-3 md:p-6">
+          <CardTitle className="flex items-center gap-1.5 text-base font-semibold md:gap-2 md:text-2xl">
+            <Wallet className="h-4 w-4 shrink-0 md:h-5 md:w-5" />
             Realizovaný zisk/strata
           </CardTitle>
-          <CardDescription>
-            Predaje akcií (FIFO) a príp. hotov. efekt z XTB „close trade“ — súčet v poli Celkovo
+          <CardDescription className="text-xs leading-snug md:text-sm">
+            Z predajov podľa histórie; celkom vrátane príp. XTB „close trade“.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-3 pb-3 pt-0 md:p-6 md:pt-0">
           {realizedGains &&
           (realizedGains.transactionCount > 0 ||
             Math.abs(realizedGains.closeTradeNetEur ?? 0) > 1e-9) ? (
-            <div className="space-y-6">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="p-4 rounded-lg bg-muted/50">
-                  <div className="text-sm text-muted-foreground mb-1">Dnes</div>
-                  <div className={`text-lg font-bold ${realizedGains.realizedToday >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-today">
+            <div className="space-y-4 md:space-y-6">
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-4">
+                <div className="rounded-lg bg-muted/50 p-2 md:p-4">
+                  <div className="mb-0.5 text-[10px] text-muted-foreground md:text-sm">Dnes</div>
+                  <div className={`text-sm font-bold tabular-nums md:text-lg ${realizedGains.realizedToday >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-today">
                     {formatCurrency(realizedGains.realizedToday)}
                   </div>
                 </div>
-                <div className="p-4 rounded-lg bg-muted/50">
-                  <div className="text-sm text-muted-foreground mb-1">Tento mesiac</div>
-                  <div className={`text-lg font-bold ${realizedGains.realizedThisMonth >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-month">
+                <div className="rounded-lg bg-muted/50 p-2 md:p-4">
+                  <div className="mb-0.5 text-[10px] text-muted-foreground md:text-sm">Mesiac</div>
+                  <div className={`text-sm font-bold tabular-nums md:text-lg ${realizedGains.realizedThisMonth >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-month">
                     {formatCurrency(realizedGains.realizedThisMonth)}
                   </div>
                 </div>
-                <div className="p-4 rounded-lg bg-muted/50">
-                  <div className="text-sm text-muted-foreground mb-1">YTD</div>
-                  <div className={`text-lg font-bold ${realizedGains.realizedYTD >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-ytd">
+                <div className="rounded-lg bg-muted/50 p-2 md:p-4">
+                  <div className="mb-0.5 text-[10px] text-muted-foreground md:text-sm">YTD</div>
+                  <div className={`text-sm font-bold tabular-nums md:text-lg ${realizedGains.realizedYTD >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-ytd">
                     {formatCurrency(realizedGains.realizedYTD)}
                   </div>
                 </div>
-                <div className="p-4 rounded-lg bg-muted/50">
-                  <div className="text-sm text-muted-foreground mb-1">Celkovo</div>
+                <div className="rounded-lg bg-muted/50 p-2 md:p-4">
+                  <div className="mb-0.5 text-[10px] text-muted-foreground md:text-sm">Celkovo</div>
                   <div
-                    className={`text-lg font-bold ${(realizedGains.realizedGainTotal ?? realizedGains.totalRealized) >= 0 ? "text-green-500" : "text-red-500"}`}
+                    className={`text-sm font-bold tabular-nums md:text-lg ${(realizedGains.realizedGainTotal ?? realizedGains.totalRealized) >= 0 ? "text-green-500" : "text-red-500"}`}
                     data-testid="text-realized-total"
                   >
                     {formatCurrency(
@@ -519,8 +536,35 @@ export default function Profit() {
 
               {realizedGains.byTicker.length > 0 && (
                 <div>
-                  <h4 className="text-sm font-medium text-muted-foreground mb-3">Podľa tickerov</h4>
-                  <Table>
+                  <h4 className="mb-2 text-xs font-medium text-muted-foreground md:mb-3 md:text-sm">
+                    Podľa tickerov
+                  </h4>
+                  <div className="space-y-2 md:hidden">
+                    {realizedGains.byTicker.map((item) => (
+                      <div
+                        key={item.ticker}
+                        className="flex items-center gap-2 rounded-lg border bg-card/50 px-2 py-2 text-xs"
+                        data-testid={`row-realized-${item.ticker}`}
+                      >
+                        <CompanyLogo ticker={item.ticker} companyName={item.companyName} size="sm" className="shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span className="font-mono font-semibold">{item.ticker}</span>
+                            <span className={`shrink-0 tabular-nums font-medium ${item.totalGain >= 0 ? "text-green-500" : "text-red-500"}`}>
+                              {item.totalGain >= 0 ? "+" : ""}
+                              {formatCurrency(item.totalGain)}
+                            </span>
+                          </div>
+                          <div className="mt-0.5 line-clamp-1 text-[10px] text-muted-foreground">{item.companyName}</div>
+                          <div className="mt-1 flex justify-between text-[10px] text-muted-foreground tabular-nums">
+                            <span>{item.transactions}× predaj</span>
+                            <span>{formatCurrency(item.totalSold)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <Table className="hidden min-w-0 md:table">
                     <TableHeader>
                       <TableRow>
                         <TableHead>Ticker</TableHead>
@@ -532,14 +576,14 @@ export default function Profit() {
                     </TableHeader>
                     <TableBody>
                       {realizedGains.byTicker.map((item) => (
-                        <TableRow key={item.ticker} data-testid={`row-realized-${item.ticker}`}>
+                        <TableRow key={item.ticker} data-testid={`row-realized-${item.ticker}-table`}>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <CompanyLogo ticker={item.ticker} companyName={item.companyName} size="sm" />
                               <span className="font-medium">{item.ticker}</span>
                             </div>
                           </TableCell>
-                          <TableCell className="text-muted-foreground max-w-[200px] truncate">{item.companyName}</TableCell>
+                          <TableCell className="max-w-[200px] truncate text-muted-foreground">{item.companyName}</TableCell>
                           <TableCell className="text-right">{item.transactions}</TableCell>
                           <TableCell className="text-right">{formatCurrency(item.totalSold)}</TableCell>
                           <TableCell className={`text-right font-medium ${item.totalGain >= 0 ? "text-green-500" : "text-red-500"}`}>
@@ -553,34 +597,36 @@ export default function Profit() {
               )}
             </div>
           ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              <p>Zatiaľ ste nepredali žiadne akcie.</p>
-              <p className="text-sm mt-1">Po predaji akcií tu uvidíte realizovaný zisk alebo stratu.</p>
+            <div className="py-6 text-center text-muted-foreground md:py-8">
+              <p className="text-sm md:text-base">Zatiaľ ste nepredali žiadne akcie.</p>
+              <p className="mt-1 text-xs md:text-sm">Po predaji akcií tu uvidíte realizovaný zisk alebo stratu.</p>
             </div>
           )}
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Vývoj hodnoty portfólia</CardTitle>
-          <CardDescription>Od prvého obchodu po dnes (obchodné dni)</CardDescription>
+      <Card className="max-w-full overflow-x-hidden">
+        <CardHeader className="space-y-1 p-3 md:p-6">
+          <CardTitle className="text-base md:text-2xl">Vývoj hodnoty portfólia</CardTitle>
+          <CardDescription className="text-xs md:text-sm">Od prvého obchodu po dnes (obchodné dni)</CardDescription>
         </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={dailyData}>
+        <CardContent className="px-2 pb-3 pt-0 md:px-6 md:pb-6 md:pt-0">
+          <div className="h-[200px] w-full max-w-full min-w-0 md:h-[280px]">
+            <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={dailyData} margin={{ top: 4, right: 4, left: -8, bottom: 4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis 
                 dataKey="dateStr" 
                 stroke="hsl(var(--muted-foreground))"
-                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
+                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
                 tickFormatter={(value) => format(parseISO(value), "d.M.yy", { locale: sk })}
-                minTickGap={32}
+                minTickGap={24}
               />
               <YAxis 
+                width={36}
                 stroke="hsl(var(--muted-foreground))"
-                tick={{ fill: "hsl(var(--muted-foreground))" }}
-                tickFormatter={(value) => `$${(value / 1000).toFixed(1)}k`}
+                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
+                tickFormatter={chartYTick}
               />
               <Tooltip 
                 formatter={(value: number) => [formatCurrency(value), "Hodnota"]}
@@ -590,6 +636,7 @@ export default function Profit() {
                   border: "1px solid hsl(var(--border))",
                   borderRadius: "0.5rem",
                   color: "hsl(var(--foreground))",
+                  fontSize: "12px",
                 }}
               />
               <Line 
@@ -611,28 +658,37 @@ export default function Profit() {
               />
             </LineChart>
           </ResponsiveContainer>
+          </div>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Mesačný zisk/strata</CardTitle>
-          <CardDescription>
-            Zisk alebo strata za obdobie
-          </CardDescription>
+      <Card className="max-w-full overflow-x-hidden">
+        <CardHeader className="space-y-1 p-3 md:p-6">
+          <CardTitle className="text-base md:text-2xl">Mesačný zisk/strata</CardTitle>
+          <CardDescription className="text-xs md:text-sm">Zisk alebo strata za obdobie</CardDescription>
         </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={periodStats}>
+        <CardContent className="px-2 pb-3 pt-0 md:px-6 md:pb-6 md:pt-0">
+          <div className="h-[200px] w-full max-w-full min-w-0 md:h-[280px]">
+            <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={periodStats}
+              margin={{ top: 4, right: 4, left: -8, bottom: narrowViewport ? 16 : 8 }}
+            >
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis 
                 dataKey="period" 
                 stroke="hsl(var(--muted-foreground))"
-                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
+                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: narrowViewport ? 9 : 11 }}
+                interval="preserveStartEnd"
+                angle={narrowViewport ? -35 : 0}
+                textAnchor={narrowViewport ? "end" : "middle"}
+                height={narrowViewport ? 48 : 28}
               />
               <YAxis 
+                width={36}
                 stroke="hsl(var(--muted-foreground))"
-                tick={{ fill: "hsl(var(--muted-foreground))" }}
+                tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
+                tickFormatter={chartYTick}
               />
               <Tooltip 
                 formatter={(value: number) => [formatCurrency(value), "Zisk"]}
@@ -641,10 +697,11 @@ export default function Profit() {
                   border: "1px solid hsl(var(--border))",
                   borderRadius: "0.5rem",
                   color: "hsl(var(--foreground))",
+                  fontSize: "12px",
                 }}
               />
               <ReferenceLine y={0} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" />
-              <Bar dataKey="periodProfit" name="Zisk">
+              <Bar dataKey="periodProfit" name="Zisk" maxBarSize={28}>
                 {periodStats.map((entry, index) => (
                   <Cell 
                     key={`cell-${index}`} 
@@ -654,38 +711,47 @@ export default function Profit() {
               </Bar>
             </BarChart>
           </ResponsiveContainer>
+          </div>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Mesačné štatistiky</CardTitle>
-          <CardDescription>
-            Detailný prehľad za obdobie
-          </CardDescription>
+      <Card className="max-w-full overflow-x-hidden">
+        <CardHeader className="space-y-1 p-3 md:p-6">
+          <CardTitle className="text-base md:text-2xl">Mesačné štatistiky</CardTitle>
+          <CardDescription className="text-xs md:text-sm">Detailný prehľad za obdobie</CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
+        <CardContent className="px-2 pb-3 pt-0 md:px-6 md:pb-6 md:pt-0">
+          <div className="w-full max-w-full overflow-x-hidden">
+            <Table className="w-full min-w-0 text-xs md:text-sm">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Obdobie</TableHead>
-                  <TableHead className="text-right">Hodnota na začiatku</TableHead>
-                  <TableHead className="text-right">Hodnota na konci</TableHead>
-                  <TableHead className="text-right">Zisk/Strata</TableHead>
-                  <TableHead className="text-right">% Výnos</TableHead>
+                  <TableHead className="h-9 px-1.5 py-1 md:h-12 md:px-4">Obdobie</TableHead>
+                  <TableHead className="hidden h-9 px-1.5 text-right md:table-cell md:h-12 md:px-4">
+                    Hodnota na začiatku
+                  </TableHead>
+                  <TableHead className="hidden h-9 px-1.5 text-right md:table-cell md:h-12 md:px-4">
+                    Hodnota na konci
+                  </TableHead>
+                  <TableHead className="h-9 px-1.5 py-1 text-right md:h-12 md:px-4">Zisk</TableHead>
+                  <TableHead className="h-9 w-12 px-1 py-1 text-right md:h-12 md:w-auto md:px-4">%</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {periodStats.map((period) => (
                   <TableRow key={period.period} data-testid={`row-profit-period-${period.period}`}>
-                    <TableCell className="font-medium">{period.period}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(period.startValue)}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(period.endValue)}</TableCell>
-                    <TableCell className={`text-right font-medium ${period.periodProfit >= 0 ? "text-green-600 dark:text-green-500" : "text-red-600 dark:text-red-500"}`}>
+                    <TableCell className="max-w-[5.5rem] truncate px-1.5 py-1.5 font-medium md:max-w-none md:px-4 md:py-3">
+                      {period.period}
+                    </TableCell>
+                    <TableCell className="hidden px-1.5 text-right md:table-cell md:px-4">
+                      {formatCurrency(period.startValue)}
+                    </TableCell>
+                    <TableCell className="hidden px-1.5 text-right md:table-cell md:px-4">
+                      {formatCurrency(period.endValue)}
+                    </TableCell>
+                    <TableCell className={`px-1.5 py-1.5 text-right text-[11px] font-medium tabular-nums md:px-4 md:py-3 md:text-sm ${period.periodProfit >= 0 ? "text-green-600 dark:text-green-500" : "text-red-600 dark:text-red-500"}`}>
                       {formatCurrency(period.periodProfit)}
                     </TableCell>
-                    <TableCell className={`text-right ${period.percentReturn >= 0 ? "text-green-600 dark:text-green-500" : "text-red-600 dark:text-red-500"}`}>
+                    <TableCell className={`px-1 py-1.5 text-right text-[11px] tabular-nums md:px-4 md:py-3 md:text-sm ${period.percentReturn >= 0 ? "text-green-600 dark:text-green-500" : "text-red-600 dark:text-red-500"}`}>
                       {formatPercent(period.percentReturn)}
                     </TableCell>
                   </TableRow>
@@ -720,7 +786,7 @@ function YearMonthPerformance({
 
   if (loading && !data) {
     return (
-      <Card>
+      <Card className="max-w-full overflow-x-hidden">
         <CardHeader className="space-y-1 p-4 md:space-y-1.5 md:p-6">
           <CardTitle className="flex items-center gap-1.5 text-base font-semibold leading-tight md:gap-2 md:text-2xl">
             <CalendarDays className="h-4 w-4 shrink-0 md:h-5 md:w-5" />
@@ -759,7 +825,7 @@ function YearMonthPerformance({
   };
 
   return (
-    <Card>
+    <Card className="max-w-full overflow-x-hidden">
       <CardHeader className="space-y-1 p-4 md:space-y-1.5 md:p-6">
         <CardTitle className="flex items-center gap-1.5 text-base font-semibold leading-tight md:gap-2 md:text-2xl">
           <CalendarDays className="h-4 w-4 shrink-0 md:h-5 md:w-5" />
@@ -771,8 +837,8 @@ function YearMonthPerformance({
         </CardDescription>
       </CardHeader>
       <CardContent className="px-2 pb-3 pt-0 md:p-6 md:pt-0">
-        <div className="overflow-x-auto -mx-0.5 px-0.5 md:mx-0 md:px-0">
-          <Table className="min-w-[320px] text-xs md:min-w-0 md:text-sm">
+        <div className="w-full max-w-full overflow-x-hidden">
+          <Table className="w-full min-w-0 text-[10px] md:text-sm">
             <TableHeader className="[&_th]:h-8 [&_th]:px-1.5 [&_th]:py-1.5 md:[&_th]:h-12 md:[&_th]:px-4 md:[&_th]:py-3">
               <TableRow>
                 <TableHead className="w-6 md:w-8"></TableHead>
@@ -780,8 +846,11 @@ function YearMonthPerformance({
                 <TableHead className="text-right hidden md:table-cell">Hodnota na začiatku</TableHead>
                 <TableHead className="text-right hidden md:table-cell">Hodnota na konci</TableHead>
                 <TableHead className="text-right hidden lg:table-cell">Vklady − výbery</TableHead>
-                <TableHead className="text-right whitespace-nowrap">Zisk/Strata</TableHead>
-                <TableHead className="text-right whitespace-nowrap">% Výnos</TableHead>
+                <TableHead className="text-right whitespace-nowrap">
+                  <span className="md:hidden">Zisk</span>
+                  <span className="hidden md:inline">Zisk/Strata</span>
+                </TableHead>
+                <TableHead className="text-right whitespace-nowrap">%</TableHead>
                 <TableHead className="text-right hidden lg:table-cell">Dividendy</TableHead>
               </TableRow>
             </TableHeader>
@@ -800,7 +869,9 @@ function YearMonthPerformance({
                           className={`h-3.5 w-3.5 shrink-0 transition-transform md:h-4 md:w-4 ${isOpen ? "rotate-90" : ""}`}
                         />
                       </TableCell>
-                      <TableCell className="font-semibold">{year.label}</TableCell>
+                      <TableCell className="max-w-[4.5rem] truncate font-semibold md:max-w-none">
+                        {year.label}
+                      </TableCell>
                       <TableCell className="text-right hidden md:table-cell">
                         {formatCurrency(year.startValue)}
                       </TableCell>
@@ -810,10 +881,10 @@ function YearMonthPerformance({
                       <TableCell className="text-right hidden lg:table-cell text-muted-foreground">
                         {formatCurrency(year.netInflow)}
                       </TableCell>
-                      <TableCell className={`text-right font-semibold ${signClass(year.profit)}`}>
+                      <TableCell className={`text-right text-[10px] font-semibold tabular-nums md:text-sm ${signClass(year.profit)}`}>
                         {formatCurrency(year.profit)}
                       </TableCell>
-                      <TableCell className={`text-right font-semibold ${signClass(year.profit)}`}>
+                      <TableCell className={`text-right text-[10px] font-semibold tabular-nums md:text-sm ${signClass(year.profit)}`}>
                         {formatPercent(year.percentReturn)}
                       </TableCell>
                       <TableCell className="text-right hidden lg:table-cell">
@@ -837,7 +908,7 @@ function YearMonthPerformance({
                           data-testid={`row-perf-month-${m.label}`}
                         >
                           <TableCell></TableCell>
-                          <TableCell className="pl-3 capitalize text-muted-foreground md:pl-8">
+                          <TableCell className="max-w-[5rem] truncate pl-3 capitalize text-muted-foreground md:max-w-none md:pl-8">
                             {monthName(m.label)}
                           </TableCell>
                           <TableCell className="text-right hidden md:table-cell text-muted-foreground">
@@ -849,10 +920,10 @@ function YearMonthPerformance({
                           <TableCell className="text-right hidden lg:table-cell text-muted-foreground">
                             {formatCurrency(m.netInflow)}
                           </TableCell>
-                          <TableCell className={`text-right ${signClass(m.profit)}`}>
+                          <TableCell className={`text-right text-[10px] tabular-nums md:text-sm ${signClass(m.profit)}`}>
                             {formatCurrency(m.profit)}
                           </TableCell>
-                          <TableCell className={`text-right ${signClass(m.profit)}`}>
+                          <TableCell className={`text-right text-[10px] tabular-nums md:text-sm ${signClass(m.profit)}`}>
                             {formatPercent(m.percentReturn)}
                           </TableCell>
                           <TableCell className="text-right hidden lg:table-cell text-muted-foreground">

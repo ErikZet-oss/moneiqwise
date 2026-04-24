@@ -13,17 +13,6 @@ export { transactionLotKey } from "@shared/lotKey";
 
 const REALIZED_NEAR_ZERO = 1e-6;
 
-function sumScaledStoredGainEur(
-  sells: Transaction[],
-  eurPerUnitByTxnId: Map<string, number | null>,
-): number {
-  let s = 0;
-  for (const t of sells) {
-    s += scaleStoredRealizedGainToEur(t, eurPerUnitByTxnId.get(t.id) ?? null);
-  }
-  return s;
-}
-
 /**
  * Broker uloží `realizedGain` v mene obchodu (rovnako ako cena). Prevedie na EUR
  * rovnakým pomerom ako výnos riadka (EUR / lokálny výnos), aby sedelo s `buySellLineEur`.
@@ -49,8 +38,9 @@ function scaleStoredRealizedGainToEur(t: Transaction, fb: number | null): number
 }
 
 /**
- * Záloha, ak FIFO nezapočíta žiadny SELL (napr. chýbajúce loty po importe), ale v DB je
- * pri predaji vypočítaný `realizedGain` a ceny — agregácia podľa tickeru v EUR.
+ * Súčet realizovaného zisku zo stĺpca `realizedGain` pri SELL (rovnaká logika ako v Histórii),
+ * s prepočtom do EUR keď je k dispozícii kurz. Ak prepočet vyjde 0 ale v DB je hodnota, použije sa
+ * číslo z DB — zodpovedá zobrazeniu v histórii transakcií.
  */
 function summaryFromStoredSellRealized(
   sells: Transaction[],
@@ -78,10 +68,19 @@ function summaryFromStoredSellRealized(
   for (const txn of sorted) {
     const sh = Math.abs(parseFloat(String(txn.shares)));
     if (!(sh > 0)) continue;
+
+    const rgRaw = parseFloat(String(txn.realizedGain ?? "0"));
     const fb = eurPerUnitByTxnId.get(txn.id) ?? null;
-    const proceedsEur = resolveBuySellLineEur(txn, fb);
-    const gainEur = scaleStoredRealizedGainToEur(txn, fb);
-    if (Math.abs(proceedsEur) < 1e-9 && Math.abs(gainEur) < 1e-9) continue;
+    let gainEur = scaleStoredRealizedGainToEur(txn, fb);
+    if (
+      Number.isFinite(rgRaw) &&
+      Math.abs(rgRaw) >= 1e-9 &&
+      Math.abs(gainEur) < REALIZED_NEAR_ZERO
+    ) {
+      gainEur = rgRaw;
+    }
+    if (!Number.isFinite(gainEur) || Math.abs(gainEur) < 1e-12) continue;
+
     transactionCount++;
     totalRealized += gainEur;
 
@@ -89,6 +88,17 @@ function summaryFromStoredSellRealized(
     if (txnDate >= startOfYear) realizedYTD += gainEur;
     if (txnDate >= startOfMonth) realizedThisMonth += gainEur;
     if (txnDate >= todayStart) realizedToday += gainEur;
+
+    const proceedsEur = resolveBuySellLineEur(txn, fb);
+    const { gross, commission } = grossAndCommission(txn);
+    const lineLocal = gross - commission;
+    const epu = eurPerUnitFromTxn(txn, fb);
+    const soldEur =
+      Number.isFinite(proceedsEur) && Math.abs(proceedsEur) >= 1e-9
+        ? Math.abs(proceedsEur)
+        : epu != null && Number.isFinite(lineLocal)
+          ? Math.abs(lineLocal * epu)
+          : Math.abs(lineLocal);
 
     const tk = String(txn.ticker ?? "")
       .trim()
@@ -103,7 +113,7 @@ function summaryFromStoredSellRealized(
       };
     }
     byTicker[tk].totalGain += gainEur;
-    byTicker[tk].totalSold += Math.abs(proceedsEur);
+    byTicker[tk].totalSold += soldEur;
     byTicker[tk].transactions += 1;
   }
 
@@ -117,6 +127,13 @@ function summaryFromStoredSellRealized(
   };
 }
 
+function sellsHaveStoredRealizedGain(sells: Transaction[]): boolean {
+  return sells.some((t) => {
+    const r = parseFloat(String(t.realizedGain ?? "0"));
+    return Number.isFinite(r) && Math.abs(r) >= 1e-9;
+  });
+}
+
 /**
  * FIFO v EUR; historický kurz: `baseCurrencyAmount` alebo `exchangeRateAtTransaction`,
  * inak Frankfurter podľa dňa transakcie.
@@ -126,7 +143,6 @@ export async function computeRealizedGainsFromTransactionsAsync(
   now = new Date(),
 ): Promise<RealizedGainsComputedSummary> {
   const m = await buildEurPerUnitByTxnIdForTransactions(userTransactions);
-  const fifo = computeFifoRealizedGainsFromTransactions(userTransactions, m, now);
   const sells = userTransactions.filter(
     (t) =>
       String(t.type ?? "")
@@ -134,16 +150,15 @@ export async function computeRealizedGainsFromTransactionsAsync(
         .toUpperCase() === "SELL",
   );
 
-  const storedSum = sumScaledStoredGainEur(sells, m);
-  if (
-    sells.length > 0 &&
-    Math.abs(fifo.summary.totalRealized) < REALIZED_NEAR_ZERO &&
-    Math.abs(storedSum) >= REALIZED_NEAR_ZERO
-  ) {
+  /** Ak má aspoň jeden predaj vyplnený realizovaný zisk v DB, použijeme súčet ako v Histórii (nie FIFO). */
+  if (sellsHaveStoredRealizedGain(sells)) {
     const fromStored = summaryFromStoredSellRealized(sells, m, now);
-    if (fromStored.transactionCount > 0) return fromStored;
+    if (fromStored.transactionCount > 0) {
+      return fromStored;
+    }
   }
 
+  const fifo = computeFifoRealizedGainsFromTransactions(userTransactions, m, now);
   if (fifo.summary.transactionCount > 0) {
     return fifo.summary;
   }
@@ -169,7 +184,6 @@ export function computeRealizedGainsFromTransactions(
 ): RealizedGainsComputedSummary {
   const m = new Map<string, number | null>();
   for (const t of userTransactions) m.set(t.id, null);
-  const fifo = computeFifoRealizedGainsFromTransactions(userTransactions, m, now);
   const sells = userTransactions.filter(
     (t) =>
       String(t.type ?? "")
@@ -177,16 +191,14 @@ export function computeRealizedGainsFromTransactions(
         .toUpperCase() === "SELL",
   );
 
-  const storedSum = sumScaledStoredGainEur(sells, m);
-  if (
-    sells.length > 0 &&
-    Math.abs(fifo.summary.totalRealized) < REALIZED_NEAR_ZERO &&
-    Math.abs(storedSum) >= REALIZED_NEAR_ZERO
-  ) {
+  if (sellsHaveStoredRealizedGain(sells)) {
     const fromStored = summaryFromStoredSellRealized(sells, m, now);
-    if (fromStored.transactionCount > 0) return fromStored;
+    if (fromStored.transactionCount > 0) {
+      return fromStored;
+    }
   }
 
+  const fifo = computeFifoRealizedGainsFromTransactions(userTransactions, m, now);
   if (fifo.summary.transactionCount > 0) {
     return fifo.summary;
   }
