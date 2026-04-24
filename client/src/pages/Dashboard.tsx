@@ -1563,6 +1563,17 @@ export default function Dashboard() {
                   const avgCostDisplay = convertPrice(parseFloat(holding.averageCost), tickerCurrency);
                   const investedDisplay = convertPrice(parseFloat(holding.totalInvested), tickerCurrency);
                   const currentPrice = quote ? convertPrice(quote.price, tickerCurrency) : avgCostDisplay;
+                  const preMarketPrice =
+                    quote?.preMarketPrice != null ? convertPrice(quote.preMarketPrice, tickerCurrency) : null;
+                  const showPremarketPrice =
+                    usSessionState !== "LIVE" &&
+                    preMarketPrice != null &&
+                    Number.isFinite(preMarketPrice) &&
+                    preMarketPrice > 0;
+                  const showOffHoursDailyChange =
+                    usSessionState !== "LIVE" &&
+                    quote?.preMarketChangePercent != null &&
+                    Number.isFinite(quote.preMarketChangePercent);
                   const currentValue = shares * currentPrice;
                   const gainLoss = currentValue - investedDisplay;
                   const gainLossPercent = investedDisplay > 0 ? (gainLoss / investedDisplay) * 100 : 0;
@@ -1625,8 +1636,25 @@ export default function Dashboard() {
                       <div className="flex items-center justify-between mt-1 text-[9px] text-muted-foreground">
                         <div className="flex items-center gap-3">
                           <span>Priem: <span className="text-foreground">{maskAmount(formatCurrency(avgCostDisplay))}</span></span>
-                          <span>Cena: <span className="text-foreground">{maskAmount(formatCurrency(currentPrice))}</span>
-                            {quote && <span className={`ml-0.5 ${getChangeColor(quote.change)}`}>{formatPercent(quote.changePercent)}</span>}
+                          <span className="inline-flex flex-col">
+                            <span>
+                              Cena: <span className="text-foreground">{maskAmount(formatCurrency(currentPrice))}</span>
+                              {usSessionState === "LIVE" && quote && (
+                                <span className={`ml-0.5 ${getChangeColor(quote.change)}`}>{formatPercent(quote.changePercent)}</span>
+                              )}
+                            </span>
+                            {showPremarketPrice && (
+                              <span className="mt-0.5 inline-flex items-center gap-0.5 text-[8px] text-muted-foreground">
+                                <Moon className="h-2.5 w-2.5" />
+                                {maskAmount(formatCurrency(preMarketPrice))}
+                              </span>
+                            )}
+                            {showOffHoursDailyChange && (
+                              <span className={`mt-0.5 inline-flex items-center gap-0.5 text-[8px] ${getChangeColor(quote?.preMarketChange ?? 0)}`}>
+                                <Moon className="h-2.5 w-2.5" />
+                                {formatPercent(quote?.preMarketChangePercent ?? 0)}
+                              </span>
+                            )}
                           </span>
                         </div>
                         <span className={getChangeColor(gainLoss)}>{maskAmount(formatCurrency(gainLoss))}</span>
@@ -1721,6 +1749,17 @@ export default function Dashboard() {
                       const avgCostDisplay = convertPrice(parseFloat(holding.averageCost), tickerCurrency);
                       const investedDisplay = convertPrice(parseFloat(holding.totalInvested), tickerCurrency);
                       const currentPrice = quote ? convertPrice(quote.price, tickerCurrency) : avgCostDisplay;
+                      const preMarketPrice =
+                        quote?.preMarketPrice != null ? convertPrice(quote.preMarketPrice, tickerCurrency) : null;
+                      const showPremarketPrice =
+                        usSessionState !== "LIVE" &&
+                        preMarketPrice != null &&
+                        Number.isFinite(preMarketPrice) &&
+                        preMarketPrice > 0;
+                      const showOffHoursDailyChange =
+                        usSessionState !== "LIVE" &&
+                        quote?.preMarketChangePercent != null &&
+                        Number.isFinite(quote.preMarketChangePercent);
                       const currentValue = shares * currentPrice;
                       const gainLoss = currentValue - investedDisplay;
                       const gainLossPercent = investedDisplay > 0 ? (gainLoss / investedDisplay) * 100 : 0;
@@ -1758,12 +1797,26 @@ export default function Dashboard() {
                           <TableCell className="text-right">{formatShareQuantity(shares)}</TableCell>
                           <TableCell className="text-right">{maskAmount(formatCurrency(avgCostDisplay))}</TableCell>
                           <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              {maskAmount(formatCurrency(currentPrice))}
-                              {quote && (
-                                <span className={`text-xs ${getChangeColor(quote.change)}`}>
-                                  ({formatPercent(quote.changePercent)})
-                                </span>
+                            <div className="flex flex-col items-end">
+                              <div className="flex items-center justify-end gap-1">
+                                {maskAmount(formatCurrency(currentPrice))}
+                                {usSessionState === "LIVE" && quote && (
+                                  <span className={`text-xs ${getChangeColor(quote.change)}`}>
+                                    ({formatPercent(quote.changePercent)})
+                                  </span>
+                                )}
+                              </div>
+                              {showPremarketPrice && (
+                                <div className="mt-0.5 inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                                  <Moon className="h-3 w-3" />
+                                  {maskAmount(formatCurrency(preMarketPrice))}
+                                </div>
+                              )}
+                              {showOffHoursDailyChange && (
+                                <div className={`mt-0.5 inline-flex items-center gap-1 text-[10px] ${getChangeColor(quote?.preMarketChange ?? 0)}`}>
+                                  <Moon className="h-3 w-3" />
+                                  {formatPercent(quote?.preMarketChangePercent ?? 0)}
+                                </div>
                               )}
                             </div>
                           </TableCell>
