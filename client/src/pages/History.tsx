@@ -21,8 +21,16 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { CompanyLogo } from "@/components/CompanyLogo";
 import { CASH_FLOW_TICKER, type Transaction } from "@shared/schema";
+import { getTickerCurrency } from "@shared/tickerCurrency";
 import { AddTransactionForm } from "@/components/AddTransactionForm";
 import { formatShareQuantity } from "@/lib/utils";
+
+/** Mena, v ktorej je v DB `realizedGain` pri SELL (rovnako ako cena) — ako na `/api/realized-gains`. */
+function realizedGainSourceCurrency(tx: Transaction): "EUR" | "USD" | "GBP" | "CZK" | "PLN" {
+  const c = (tx.currency || "").trim().toUpperCase();
+  if (c === "USD" || c === "EUR" || c === "GBP" || c === "CZK" || c === "PLN") return c;
+  return getTickerCurrency(tx.ticker);
+}
 
 interface ImportResult {
   imported: number;
@@ -46,7 +54,7 @@ interface EditFormData {
 
 export default function History() {
   const { toast } = useToast();
-  const { formatCurrency } = useCurrency();
+  const { formatCurrency, convertPrice } = useCurrency();
   const { getQueryParam, portfolios, isAllPortfolios, selectedPortfolio } = usePortfolio();
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [tickerFilter, setTickerFilter] = useState<string>("all");
@@ -558,12 +566,12 @@ export default function History() {
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-4 mb-6">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Typ:</span>
+        <CardContent className="px-3 sm:px-6">
+          <div className="flex flex-col gap-3 mb-6 md:flex-row md:flex-wrap md:items-center md:gap-4">
+            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2 md:flex-row">
+              <span className="text-sm text-muted-foreground shrink-0">Typ</span>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-[140px]" data-testid="select-type-filter">
+                <SelectTrigger className="w-full md:w-[160px]" data-testid="select-type-filter">
                   <SelectValue placeholder="Všetky" />
                 </SelectTrigger>
                 <SelectContent>
@@ -577,10 +585,10 @@ export default function History() {
               </Select>
             </div>
 
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Akcia:</span>
+            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2 md:flex-row">
+              <span className="text-sm text-muted-foreground shrink-0">Akcia</span>
               <Select value={tickerFilter} onValueChange={setTickerFilter}>
-                <SelectTrigger className="w-[140px]" data-testid="select-ticker-filter">
+                <SelectTrigger className="w-full md:w-[160px]" data-testid="select-ticker-filter">
                   <SelectValue placeholder="Všetky" />
                 </SelectTrigger>
                 <SelectContent>
@@ -595,7 +603,7 @@ export default function History() {
             </div>
 
             {selectedIds.size > 0 && (
-              <div className="flex items-center gap-2 ml-auto">
+              <div className="flex flex-wrap items-center gap-2 md:ml-auto">
                 <Badge variant="secondary">
                   Označených: {selectedIds.size}
                 </Badge>
@@ -623,8 +631,8 @@ export default function History() {
             </div>
           ) : (
             <>
-              {/* Mobile view - compact list */}
-              <div className="md:hidden space-y-1">
+              {/* Mobile view — väčšie karty, viac miesta na čítanie */}
+              <div className="md:hidden flex flex-col gap-3">
                 {filteredTransactions.map((transaction) => {
                   const shares = parseFloat(transaction.shares);
                   const price = parseFloat(transaction.pricePerShare);
@@ -639,6 +647,14 @@ export default function History() {
                     ? grossAmount + commission
                     : grossAmount - commission;
                   const isSelected = selectedIds.has(transaction.id);
+                  const sellRealizedGain =
+                    transaction.type === "SELL"
+                      ? parseFloat(String(transaction.realizedGain ?? "0"))
+                      : NaN;
+                  const showSellRealizedGain =
+                    transaction.type === "SELL" &&
+                    Number.isFinite(sellRealizedGain) &&
+                    Math.abs(sellRealizedGain) > 1e-9;
                   const tickerLabel =
                     transaction.ticker === CASH_FLOW_TICKER || isCash
                       ? "Hotovosť"
@@ -659,27 +675,29 @@ export default function History() {
                   return (
                     <div 
                       key={transaction.id} 
-                      className={`py-2.5 px-1 border-b last:border-b-0 ${isSelected ? "bg-muted/50 rounded-lg" : ""}`}
+                      className={`rounded-xl border border-border/80 bg-card/60 px-3.5 py-3.5 shadow-sm ${
+                        isSelected ? "ring-2 ring-primary/25 bg-muted/50" : ""
+                      }`}
                       data-testid={`row-mobile-transaction-${transaction.id}`}
                     >
-                      <div className="flex items-start gap-2">
+                      <div className="flex items-start gap-3">
                         <Checkbox
                           checked={isSelected}
                           onCheckedChange={(checked) => handleSelectOne(transaction.id, checked as boolean)}
                           aria-label={`Označiť transakciu ${transaction.ticker}`}
-                          className="mt-1"
+                          className="mt-1.5"
                           data-testid={`checkbox-mobile-transaction-${transaction.id}`}
                         />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <CompanyLogo ticker={transaction.ticker} companyName={transaction.companyName} size="xs" />
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="font-semibold text-xs">{tickerLabel}</span>
+                        <div className="flex-1 min-w-0 space-y-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-3 min-w-0 flex-1">
+                              <CompanyLogo ticker={transaction.ticker} companyName={transaction.companyName} size="sm" className="shrink-0" />
+                              <div className="min-w-0 flex-1 space-y-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-semibold text-sm">{tickerLabel}</span>
                                   <Badge 
                                     variant={transaction.type === "SELL" || transaction.type === "WITHDRAWAL" ? "destructive" : "default"}
-                                    className={`text-[10px] px-1.5 py-0 h-4 ${
+                                    className={`text-xs px-2 py-0.5 h-6 font-medium ${
                                       transaction.type === "BUY" 
                                         ? "bg-green-500/20 text-green-600 border-green-500/30" 
                                         : transaction.type === "DIVIDEND"
@@ -694,57 +712,59 @@ export default function History() {
                                     {typeLabel}
                                   </Badge>
                                 </div>
-                                <p className="text-[9px] text-muted-foreground truncate">{transaction.companyName}</p>
+                                <p className="text-xs text-muted-foreground leading-snug line-clamp-2">{transaction.companyName}</p>
                               </div>
                             </div>
-                            <div className="text-right shrink-0">
-                              <div className="text-xs font-semibold">{formatCurrency(total)}</div>
-                              {transaction.type === "SELL" && transaction.realizedGain ? (
-                                <div className={`text-[10px] ${parseFloat(transaction.realizedGain) >= 0 ? "text-green-500" : "text-red-500"}`}>
-                                  {parseFloat(transaction.realizedGain) >= 0 ? "+" : ""}{formatCurrency(parseFloat(transaction.realizedGain))}
+                            <div className="text-right shrink-0 space-y-0.5">
+                              <div className="text-base font-bold tabular-nums leading-tight">{formatCurrency(total)}</div>
+                              {(transaction.type === "BUY" || transaction.type === "SELL") && !isCash && (
+                                <div className="text-xs text-muted-foreground tabular-nums">
+                                  {formatShareQuantity(shares)} ks
+                                </div>
+                              )}
+                              {showSellRealizedGain ? (
+                                <div className={`text-xs font-medium ${sellRealizedGain >= 0 ? "text-green-500" : "text-red-500"}`}>
+                                  {sellRealizedGain >= 0 ? "+" : ""}
+                                  {formatCurrency(convertPrice(sellRealizedGain, realizedGainSourceCurrency(transaction)))}
                                 </div>
                               ) : transaction.type === "DIVIDEND" ? (
-                                <div className="text-[10px] text-blue-500">+{formatCurrency(total)}</div>
+                                <div className="text-xs text-blue-500 font-medium">+{formatCurrency(total)}</div>
                               ) : isCash ? (
-                                <div className={`text-[10px] ${parseFloat(String(transaction.pricePerShare)) >= 0 ? "text-emerald-600" : "text-amber-800"}`}>
+                                <div className={`text-xs font-medium ${parseFloat(String(transaction.pricePerShare)) >= 0 ? "text-emerald-600" : "text-amber-800"}`}>
                                   {formatCurrency(grossAmount)}
                                 </div>
-                              ) : (
-                                <div className="text-[10px] text-muted-foreground">{formatShareQuantity(shares)} ks</div>
-                              )}
+                              ) : null}
                             </div>
                           </div>
-                          <div className="flex items-center justify-between mt-1.5">
-                            <div className="flex items-center gap-2 text-[9px] text-muted-foreground">
-                              <span>{formatDate(transaction.transactionDate)}</span>
-                              <span>•</span>
-                              <span>{isCash ? formatCurrency(Math.abs(price)) : `${formatCurrency(price)}/ks`}</span>
-                              {commission > 0 && (
-                                <>
-                                  <span>•</span>
-                                  <span>Popl: {formatCurrency(commission)}</span>
-                                </>
-                              )}
+                          <div className="flex items-end justify-between gap-3 pt-1 border-t border-border/50">
+                            <div className="min-w-0 space-y-1 text-xs text-muted-foreground leading-relaxed">
+                              <div className="font-medium text-foreground/90">{formatDate(transaction.transactionDate)}</div>
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                <span>{isCash ? `Suma: ${formatCurrency(Math.abs(price))}` : `${formatCurrency(price)} / ks`}</span>
+                                {commission > 0 && (
+                                  <span>Poplatok {formatCurrency(commission)}</span>
+                                )}
+                              </div>
                             </div>
-                            <div className="flex gap-0.5">
+                            <div className="flex gap-1 shrink-0">
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-6 w-6"
+                                className="h-9 w-9"
                                 onClick={() => handleEditClick(transaction)}
                                 data-testid={`button-mobile-edit-${transaction.id}`}
                               >
-                                <Pencil className="h-3 w-3 text-blue-500" />
+                                <Pencil className="h-4 w-4 text-blue-500" />
                               </Button>
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-6 w-6"
+                                className="h-9 w-9"
                                 onClick={() => deleteMutation.mutate(transaction.id)}
                                 disabled={deleteMutation.isPending}
                                 data-testid={`button-mobile-delete-${transaction.id}`}
                               >
-                                <Trash2 className="h-3 w-3 text-red-500" />
+                                <Trash2 className="h-4 w-4 text-red-500" />
                               </Button>
                             </div>
                           </div>
@@ -807,6 +827,14 @@ export default function History() {
                     ? grossAmount + commission
                     : grossAmount - commission;
                   const isSelected = selectedIds.has(transaction.id);
+                  const sellRealizedGain =
+                    transaction.type === "SELL"
+                      ? parseFloat(String(transaction.realizedGain ?? "0"))
+                      : NaN;
+                  const showSellRealizedGain =
+                    transaction.type === "SELL" &&
+                    Number.isFinite(sellRealizedGain) &&
+                    Math.abs(sellRealizedGain) > 1e-9;
                   const tickerLabel =
                     transaction.ticker === CASH_FLOW_TICKER || isCash
                       ? "Hotovosť"
@@ -882,10 +910,10 @@ export default function History() {
                         {formatCurrency(total)}
                       </TableCell>
                       <TableCell className="text-right">
-                        {transaction.type === "SELL" && transaction.realizedGain ? (
-                          <span className={`font-medium ${parseFloat(transaction.realizedGain) >= 0 ? "text-green-500" : "text-red-500"}`}>
-                            {parseFloat(transaction.realizedGain) >= 0 ? "+" : ""}
-                            {formatCurrency(parseFloat(transaction.realizedGain))}
+                        {showSellRealizedGain ? (
+                          <span className={`font-medium ${sellRealizedGain >= 0 ? "text-green-500" : "text-red-500"}`}>
+                            {sellRealizedGain >= 0 ? "+" : ""}
+                            {formatCurrency(convertPrice(sellRealizedGain, realizedGainSourceCurrency(transaction)))}
                           </span>
                         ) : transaction.type === "DIVIDEND" ? (
                           <span className="font-medium text-blue-500">
