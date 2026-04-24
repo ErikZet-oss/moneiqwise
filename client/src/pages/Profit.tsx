@@ -564,17 +564,18 @@ export default function Profit() {
       <Card>
         <CardHeader>
           <CardTitle>Vývoj hodnoty portfólia</CardTitle>
-          <CardDescription>Hodnota portfólia v čase</CardDescription>
+          <CardDescription>Od prvého obchodu po dnes (obchodné dni)</CardDescription>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={dailyData.slice(-90)}>
+            <LineChart data={dailyData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis 
                 dataKey="dateStr" 
                 stroke="hsl(var(--muted-foreground))"
                 tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
-                tickFormatter={(value) => format(parseISO(value), "d.M", { locale: sk })}
+                tickFormatter={(value) => format(parseISO(value), "d.M.yy", { locale: sk })}
+                minTickGap={32}
               />
               <YAxis 
                 stroke="hsl(var(--muted-foreground))"
@@ -720,14 +721,16 @@ function YearMonthPerformance({
   if (loading && !data) {
     return (
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <CalendarDays className="h-5 w-5" />
+        <CardHeader className="space-y-1 p-4 md:space-y-1.5 md:p-6">
+          <CardTitle className="flex items-center gap-1.5 text-base font-semibold leading-tight md:gap-2 md:text-2xl">
+            <CalendarDays className="h-4 w-4 shrink-0 md:h-5 md:w-5" />
             Výkonnosť podľa rokov a mesiacov
           </CardTitle>
-          <CardDescription>Ročný a mesačný prehľad výnosov portfólia</CardDescription>
+          <CardDescription className="text-xs leading-snug md:text-sm">
+            Ročný a mesačný prehľad výnosov portfólia
+          </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-4 pb-4 pt-0 md:p-6 md:pt-0">
           <Skeleton className="h-40 w-full" />
         </CardContent>
       </Card>
@@ -757,32 +760,32 @@ function YearMonthPerformance({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <CalendarDays className="h-5 w-5" />
+      <CardHeader className="space-y-1 p-4 md:space-y-1.5 md:p-6">
+        <CardTitle className="flex items-center gap-1.5 text-base font-semibold leading-tight md:gap-2 md:text-2xl">
+          <CalendarDays className="h-4 w-4 shrink-0 md:h-5 md:w-5" />
           Výkonnosť podľa rokov a mesiacov
         </CardTitle>
-        <CardDescription>
+        <CardDescription className="text-xs leading-snug md:text-sm">
           Ročný prehľad s rozbalením na jednotlivé mesiace. Výpočet beží na serveri a je udržaný v pamäti,
           takže opakované otvorenia sú okamžité.
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
+      <CardContent className="px-2 pb-3 pt-0 md:p-6 md:pt-0">
+        <div className="overflow-x-auto -mx-0.5 px-0.5 md:mx-0 md:px-0">
+          <Table className="min-w-[320px] text-xs md:min-w-0 md:text-sm">
+            <TableHeader className="[&_th]:h-8 [&_th]:px-1.5 [&_th]:py-1.5 md:[&_th]:h-12 md:[&_th]:px-4 md:[&_th]:py-3">
               <TableRow>
-                <TableHead className="w-8"></TableHead>
+                <TableHead className="w-6 md:w-8"></TableHead>
                 <TableHead>Obdobie</TableHead>
                 <TableHead className="text-right hidden md:table-cell">Hodnota na začiatku</TableHead>
                 <TableHead className="text-right hidden md:table-cell">Hodnota na konci</TableHead>
                 <TableHead className="text-right hidden lg:table-cell">Vklady − výbery</TableHead>
-                <TableHead className="text-right">Zisk/Strata</TableHead>
-                <TableHead className="text-right">% Výnos</TableHead>
+                <TableHead className="text-right whitespace-nowrap">Zisk/Strata</TableHead>
+                <TableHead className="text-right whitespace-nowrap">% Výnos</TableHead>
                 <TableHead className="text-right hidden lg:table-cell">Dividendy</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody>
+            <TableBody className="[&_td]:px-1.5 [&_td]:py-1.5 md:[&_td]:p-4">
               {data.years.map((year) => {
                 const isOpen = !!expanded[year.year];
                 return (
@@ -792,9 +795,9 @@ function YearMonthPerformance({
                       onClick={() => toggleYear(year.year)}
                       data-testid={`row-perf-year-${year.year}`}
                     >
-                      <TableCell>
+                      <TableCell className="w-6 md:w-8">
                         <ChevronRight
-                          className={`h-4 w-4 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                          className={`h-3.5 w-3.5 shrink-0 transition-transform md:h-4 md:w-4 ${isOpen ? "rotate-90" : ""}`}
                         />
                       </TableCell>
                       <TableCell className="font-semibold">{year.label}</TableCell>
@@ -820,7 +823,7 @@ function YearMonthPerformance({
 
                     {isOpen && year.months.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-3">
+                        <TableCell colSpan={8} className="py-2 text-center text-xs text-muted-foreground md:py-3 md:text-sm">
                           Žiadne dáta za tento rok.
                         </TableCell>
                       </TableRow>
@@ -834,7 +837,7 @@ function YearMonthPerformance({
                           data-testid={`row-perf-month-${m.label}`}
                         >
                           <TableCell></TableCell>
-                          <TableCell className="pl-8 capitalize text-muted-foreground">
+                          <TableCell className="pl-3 capitalize text-muted-foreground md:pl-8">
                             {monthName(m.label)}
                           </TableCell>
                           <TableCell className="text-right hidden md:table-cell text-muted-foreground">

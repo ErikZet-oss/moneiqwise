@@ -65,7 +65,9 @@ export function buySellLineEur(
   /** EUR za 1 jednotku `inferTradeCurrency(t)` — z Frankfurteru ak chýba rate v DB */
   fallbackEurPerUnit: number | null,
 ): { eur: number; source: "base" | "storedRate" | "frankfurtFallback" } {
-  const kind = String(t.type ?? "").toUpperCase();
+  const kind = String(t.type ?? "")
+    .trim()
+    .toUpperCase();
   if (kind !== "BUY" && kind !== "SELL") {
     return { eur: 0, source: "base" };
   }
@@ -103,6 +105,87 @@ export function buySellLineEur(
   return { eur: 0, source: "frankfurtFallback" };
 }
 
+/**
+ * EUR za 1 jednotku meny obchodu (1 USD …). Ak je `baseCurrencyAmount`, odvodí sa z pomeru k lokálnemu riadku.
+ */
+export function eurPerUnitFromTxn(
+  t: Pick<
+    Transaction,
+    | "type"
+    | "ticker"
+    | "shares"
+    | "pricePerShare"
+    | "commission"
+    | "exchangeRateAtTransaction"
+    | "originalCurrency"
+    | "currency"
+    | "baseCurrencyAmount"
+  >,
+  fallbackEurPerUnit: number | null,
+): number | null {
+  const fromBase =
+    t.baseCurrencyAmount != null && String(t.baseCurrencyAmount).trim() !== ""
+      ? parseFloat(String(t.baseCurrencyAmount))
+      : NaN;
+  const hasMeaningfulBaseEur =
+    Number.isFinite(fromBase) && Math.abs(fromBase) >= 1e-6;
+  if (hasMeaningfulBaseEur) {
+    const kind = String(t.type ?? "")
+      .trim()
+      .toUpperCase();
+    if (kind !== "BUY" && kind !== "SELL") return null;
+    const { gross, commission } = grossAndCommission(t);
+    const lineLocal = kind === "BUY" ? gross + commission : gross - commission;
+    if (!Number.isFinite(lineLocal) || Math.abs(lineLocal) < 1e-12) return null;
+    return Math.abs(fromBase) / Math.abs(lineLocal);
+  }
+
+  const ccy = inferTradeCurrency(t);
+  if (ccy === "EUR") return 1;
+  const ex =
+    t.exchangeRateAtTransaction != null && String(t.exchangeRateAtTransaction).trim() !== ""
+      ? parseFloat(String(t.exchangeRateAtTransaction))
+      : NaN;
+  if (Number.isFinite(ex) && ex > 0) return ex;
+  if (fallbackEurPerUnit != null && Number.isFinite(fallbackEurPerUnit) && fallbackEurPerUnit > 0) {
+    return fallbackEurPerUnit;
+  }
+  return null;
+}
+
+/**
+ * Riadok BUY/SELL v EUR: rovnako ako `buySellLineEur`, ale ak tá vráti ~0, do počíta sa `lineLocal * eurPerUnit`
+ * (uložený kurz alebo Frankfurter `fallbackEurPerUnit`).
+ */
+export function resolveBuySellLineEur(
+  t: Pick<
+    Transaction,
+    | "type"
+    | "ticker"
+    | "shares"
+    | "pricePerShare"
+    | "commission"
+    | "baseCurrencyAmount"
+    | "exchangeRateAtTransaction"
+    | "originalCurrency"
+    | "currency"
+  >,
+  fallbackEurPerUnit: number | null,
+): number {
+  const { eur } = buySellLineEur(t, fallbackEurPerUnit);
+  if (Number.isFinite(eur) && Math.abs(eur) >= 1e-9) return eur;
+  const kind = String(t.type ?? "")
+    .trim()
+    .toUpperCase();
+  if (kind !== "BUY" && kind !== "SELL") return 0;
+  const epu = eurPerUnitFromTxn(t, fallbackEurPerUnit);
+  if (epu == null) return 0;
+  const { gross, commission } = grossAndCommission(t);
+  const lineLocal = kind === "BUY" ? gross + commission : gross - commission;
+  if (!Number.isFinite(lineLocal)) return 0;
+  return lineLocal * epu;
+}
+
 /** Pre FIFO lot: cena/akciu (lokálna) a kurz € / 1 jednotka meny (USD atď.). */
 export function eurPerUnitOfTradeCurrency(
   t: Pick<Transaction, "ticker" | "exchangeRateAtTransaction" | "originalCurrency" | "currency" | "shares" | "pricePerShare" | "commission" | "baseCurrencyAmount" | "type">,
@@ -111,7 +194,9 @@ export function eurPerUnitOfTradeCurrency(
 ): { eurPerUnit: number; priceLocal: number; ccy: TradeCurrency } {
   const ccy = inferTradeCurrency(t);
   const { gross, commission } = grossAndCommission(t);
-  const kind = String(t.type ?? "").toUpperCase();
+  const kind = String(t.type ?? "")
+    .trim()
+    .toUpperCase();
   if (kind !== "BUY" && kind !== "SELL") {
     return { eurPerUnit: 1, priceLocal: 0, ccy };
   }

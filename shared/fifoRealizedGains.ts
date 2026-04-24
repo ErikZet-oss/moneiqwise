@@ -2,7 +2,7 @@ import type { Transaction } from "./schema";
 import { transactionLotKey } from "./lotKey";
 import type { RealizedGainsComputedSummary, RealizedTickerRow } from "./realizedGainsTypes";
 import { inferTradeCurrency, type TradeCurrency } from "./transactionEur";
-import { buySellLineEur, eurPerUnitOfTradeCurrency } from "./transactionEur";
+import { eurPerUnitOfTradeCurrency, resolveBuySellLineEur } from "./transactionEur";
 
 /**
  * Otvorený nákupný lot (FIFO).
@@ -38,7 +38,9 @@ export function computeFifoRealizedGainsFromTransactions(
   realizedEurByYearMonth: Record<string, number>;
 } {
   const txnTypeOrder = (t: Transaction) => {
-    const k = String(t.type ?? "").toUpperCase();
+    const k = String(t.type ?? "")
+      .trim()
+      .toUpperCase();
     if (k === "BUY") return 0;
     if (k === "SELL") return 1;
     return 2;
@@ -73,10 +75,12 @@ export function computeFifoRealizedGainsFromTransactions(
 
   for (const txn of sorted) {
     const key = getKey(txn);
-    const txnKind = String(txn.type ?? "").toUpperCase();
+    const txnKind = String(txn.type ?? "")
+      .trim()
+      .toUpperCase();
     if (txnKind === "BUY") {
       const fb = eurPerUnitByTxnId.get(txn.id) ?? null;
-      const { eur: lineEur } = buySellLineEur(txn, fb);
+      const lineEur = resolveBuySellLineEur(txn, fb);
       const shRaw = parseFloat(String(txn.shares));
       const sh = Math.abs(shRaw);
       if (!(sh > 0) || !Number.isFinite(lineEur) || lineEur <= 0) continue;
@@ -93,10 +97,12 @@ export function computeFifoRealizedGainsFromTransactions(
       });
     } else if (txnKind === "SELL") {
       const fb = eurPerUnitByTxnId.get(txn.id) ?? null;
-      const { eur: proceedsEur } = buySellLineEur(txn, fb);
+      const proceedsEur = resolveBuySellLineEur(txn, fb);
       const shSellRaw = parseFloat(String(txn.shares));
       const shSell = Math.abs(shSellRaw);
-      if (!(shSell > 0) || !Number.isFinite(proceedsEur)) continue;
+      // Bez platného EUR výnosu neukončujeme FIFO riadok — inak by sa zvýšil transactionCount
+      // s gain = 0 a zablokovala sa záloha zo `realizedGain`.
+      if (!(shSell > 0) || !Number.isFinite(proceedsEur) || Math.abs(proceedsEur) < 1e-9) continue;
       transactionCount++;
 
       const queue = lots[key] ?? [];
@@ -128,8 +134,6 @@ export function computeFifoRealizedGainsFromTransactions(
       const aggTicker = String(txn.ticker ?? "")
         .trim()
         .toUpperCase();
-      const sellValue =
-        Math.abs(parseFloat(String(txn.shares))) * parseFloat(String(txn.pricePerShare));
       if (!byTicker[aggTicker]) {
         byTicker[aggTicker] = {
           ticker: aggTicker,
@@ -140,7 +144,7 @@ export function computeFifoRealizedGainsFromTransactions(
         };
       }
       byTicker[aggTicker].totalGain += gain;
-      byTicker[aggTicker].totalSold += Math.abs(sellValue);
+      byTicker[aggTicker].totalSold += Math.abs(proceedsEur);
       byTicker[aggTicker].transactions += 1;
     }
   }

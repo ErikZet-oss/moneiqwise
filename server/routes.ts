@@ -634,6 +634,86 @@ async function fetchYahooUpcomingDividendEvents(
   }
 }
 
+/** Yahoo: najbližší zverejnený dátum výsledkov (earnings) z calendarEvents (cache). */
+const nextEarningsYahooCache = new Map<
+  string,
+  { t: number; v: { date: string } | null }
+>();
+const NEXT_EARNINGS_YAHOO_TTL_MS = 45 * 60 * 1000;
+
+async function fetchYahooNextEarningsDate(ticker: string): Promise<{ date: string } | null> {
+  const key = ticker.toUpperCase();
+  const cached = nextEarningsYahooCache.get(key);
+  if (cached && Date.now() - cached.t < NEXT_EARNINGS_YAHOO_TTL_MS) {
+    return cached.v;
+  }
+
+  try {
+    const yahooTicker = toYahooTicker(key);
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(yahooTicker)}?modules=calendarEvents`;
+
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      },
+    });
+
+    if (!response.ok) {
+      nextEarningsYahooCache.set(key, { t: Date.now(), v: null });
+      return null;
+    }
+
+    const data = await response.json();
+    const cr = data?.quoteSummary;
+    if (cr?.error || !Array.isArray(cr?.result) || cr.result.length === 0) {
+      nextEarningsYahooCache.set(key, { t: Date.now(), v: null });
+      return null;
+    }
+
+    const result = cr.result[0];
+    const earnings = result?.calendarEvents?.earnings;
+    const ed = earnings?.earningsDate;
+
+    type EdItem = { raw?: number; fmt?: string };
+    const items: EdItem[] = Array.isArray(ed) ? ed : ed && typeof ed === "object" ? [ed as EdItem] : [];
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const t0 = todayStart.getTime();
+
+    let bestMs = Infinity;
+    let bestFmt: string | null = null;
+
+    for (const item of items) {
+      const raw = item?.raw;
+      const fmt = typeof item?.fmt === "string" ? item.fmt.trim() : "";
+      const ms = typeof raw === "number" ? yahooRawTsToMs(raw) : NaN;
+      if (!Number.isFinite(ms) || ms < t0) continue;
+      if (ms < bestMs) {
+        bestMs = ms;
+        bestFmt = fmt.length > 0 ? fmt : null;
+      }
+    }
+
+    if (!Number.isFinite(bestMs) || bestMs === Infinity) {
+      nextEarningsYahooCache.set(key, { t: Date.now(), v: null });
+      return null;
+    }
+
+    const date =
+      bestFmt && /^\d{4}-\d{2}-\d{2}$/.test(bestFmt)
+        ? bestFmt
+        : new Date(bestMs).toISOString().slice(0, 10);
+
+    const v = { date };
+    nextEarningsYahooCache.set(key, { t: Date.now(), v });
+    return v;
+  } catch {
+    nextEarningsYahooCache.set(key, { t: Date.now(), v: null });
+    return null;
+  }
+}
+
 interface NewsArticle {
   ticker: string;
   title: string;
@@ -2333,6 +2413,15 @@ export async function registerRoutes(
         }
       }
 
+      let nextEarnings: { date: string } | null = null;
+      if (upperTicker !== "CASH") {
+        try {
+          nextEarnings = await fetchYahooNextEarningsDate(upperTicker);
+        } catch {
+          nextEarnings = null;
+        }
+      }
+
       const marketTransactions = txRows.filter((t) => t.type === "BUY" || t.type === "SELL");
 
       res.json({
@@ -2356,6 +2445,7 @@ export async function registerRoutes(
         transactions: txRows,
         quote,
         prices,
+        nextEarnings,
       });
     } catch (error) {
       console.error("Error fetching asset detail:", error);

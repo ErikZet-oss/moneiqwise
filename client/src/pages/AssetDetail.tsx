@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
-import { format, parseISO } from "date-fns";
+import { format, parse, parseISO } from "date-fns";
 import { sk } from "date-fns/locale";
 import {
   LineChart,
@@ -13,7 +13,7 @@ import {
   ResponsiveContainer,
   ReferenceDot,
 } from "recharts";
-import { ArrowLeft, ExternalLink, TrendingDown, TrendingUp, Clock, Shield } from "lucide-react";
+import { ArrowLeft, ExternalLink, TrendingDown, TrendingUp, Clock, Shield, Calendar } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -67,6 +67,8 @@ type AssetDetailResponse = {
     changePercent: number;
   } | null;
   prices: Record<string, number>;
+  /** Najbližší očakávaný dátum výsledkov (Yahoo calendarEvents), YYYY-MM-DD. */
+  nextEarnings: { date: string } | null;
 };
 
 type OpenFifoLotRow = {
@@ -331,27 +333,47 @@ export default function AssetDetail() {
           </div>
         </div>
 
-        {quote && data.ticker !== "CASH" && (
-          <Card className="shrink-0 w-full sm:w-auto sm:min-w-[200px]">
-            <CardContent className="p-4">
-              <div className="text-xs text-muted-foreground uppercase tracking-wide">Aktuálna cena</div>
-              <div className="text-2xl font-bold">{mask(formatWithConversion(quote.price, data.ticker))}</div>
-              <div
-                className={`text-sm flex items-center gap-1 ${changePositive ? "text-green-500" : "text-red-500"}`}
-              >
-                {changePositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                {mask(formatCurrency(convertPrice(quote.change, tc)))}{" "}
-                <span className="text-xs">
-                  ({changePositive ? "+" : ""}
-                  {(quote.changePercent ?? 0).toFixed(2)}%)
-                </span>
-              </div>
-              <div className="text-xs text-muted-foreground mt-1">
-                Menovka kotácie: {tc} · zobrazenie: {currency}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        <div className="flex flex-col gap-3 w-full sm:w-auto sm:items-end sm:max-w-full">
+          {data.nextEarnings && data.ticker !== "CASH" && (
+            <Card className="shrink-0 w-full sm:w-auto sm:min-w-[200px] border-amber-500/25 bg-amber-500/[0.06] dark:bg-amber-500/10">
+              <CardContent className="p-3 sm:p-4">
+                <div className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                  <Calendar className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                  Najbližšie earnings
+                </div>
+                <div className="text-base sm:text-lg font-semibold mt-1 tabular-nums">
+                  {format(parse(data.nextEarnings.date, "yyyy-MM-dd", new Date()), "d. MMMM yyyy", {
+                    locale: sk,
+                  })}
+                </div>
+                <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 leading-snug">
+                  Očakávaný dátum podľa Yahoo Finance (môže sa zmeniť).
+                </p>
+              </CardContent>
+            </Card>
+          )}
+          {quote && data.ticker !== "CASH" && (
+            <Card className="shrink-0 w-full sm:w-auto sm:min-w-[200px]">
+              <CardContent className="p-4">
+                <div className="text-xs text-muted-foreground uppercase tracking-wide">Aktuálna cena</div>
+                <div className="text-2xl font-bold">{mask(formatWithConversion(quote.price, data.ticker))}</div>
+                <div
+                  className={`text-sm flex items-center gap-1 ${changePositive ? "text-green-500" : "text-red-500"}`}
+                >
+                  {changePositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                  {mask(formatCurrency(convertPrice(quote.change, tc)))}{" "}
+                  <span className="text-xs">
+                    ({changePositive ? "+" : ""}
+                    {(quote.changePercent ?? 0).toFixed(2)}%)
+                  </span>
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  Menovka kotácie: {tc} · zobrazenie: {currency}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       </div>
 
       <Card>
