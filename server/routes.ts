@@ -2344,6 +2344,75 @@ export async function registerRoutes(
     }
   });
 
+  /**
+   * Najbližší earnings dátum medzi držanými titulmi (Yahoo / Finnhub, cache ako pri detaile aktíva).
+   * Query `portfolio` rovnako ako pri GET /api/holdings.
+   */
+  app.get("/api/holdings/next-earnings", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const portfolioId = req.query.portfolio as string | undefined;
+      const userHoldings = await storage.getHoldingsByUser(userId, portfolioId);
+
+      const seen = new Set<string>();
+      const unique: { ticker: string; companyName: string }[] = [];
+      for (const h of userHoldings) {
+        const sh = parseFloat(h.shares);
+        if (!(sh > 1e-9)) continue;
+        const t = h.ticker.toUpperCase();
+        if (t === "CASH" || t === CASH_FLOW_TICKER) continue;
+        if (seen.has(t)) continue;
+        seen.add(t);
+        unique.push({ ticker: t, companyName: h.companyName || t });
+      }
+
+      if (unique.length === 0) {
+        return res.json({ next: null });
+      }
+
+      const CONCURRENCY = 4;
+      type WithDate = { ticker: string; companyName: string; date: string; ms: number };
+      const withDates: WithDate[] = [];
+
+      for (let i = 0; i < unique.length; i += CONCURRENCY) {
+        const chunk = unique.slice(i, i + CONCURRENCY);
+        const chunkResults = await Promise.all(
+          chunk.map(async (row) => {
+            try {
+              const next = await fetchNextEarningsDateForAsset(row.ticker);
+              if (!next?.date) return null;
+              const ms = new Date(`${next.date}T12:00:00`).getTime();
+              if (!Number.isFinite(ms)) return null;
+              return { ...row, date: next.date, ms };
+            } catch {
+              return null;
+            }
+          }),
+        );
+        for (const r of chunkResults) {
+          if (r) withDates.push(r);
+        }
+      }
+
+      if (withDates.length === 0) {
+        return res.json({ next: null });
+      }
+
+      withDates.sort((a, b) => a.ms - b.ms);
+      const best = withDates[0];
+      res.json({
+        next: {
+          ticker: best.ticker,
+          companyName: best.companyName,
+          date: best.date,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching next earnings for holdings:", error);
+      res.status(500).json({ message: "Nepodarilo sa načítať earnings." });
+    }
+  });
+
   // Single-asset detail: holdings per portfolio, transactions, dividends, quote & historical prices
   app.get("/api/assets/:ticker", isAuthenticated, async (req: any, res) => {
     try {

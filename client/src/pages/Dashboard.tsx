@@ -1,6 +1,8 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { format, parse } from "date-fns";
+import { sk } from "date-fns/locale";
 import { queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -9,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Wallet, Banknote, Newspaper, ExternalLink, HelpCircle, Loader2, RefreshCw, Moon } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Wallet, Banknote, Newspaper, ExternalLink, HelpCircle, Loader2, RefreshCw, Moon, Calendar } from "lucide-react";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
@@ -135,6 +137,10 @@ interface PortfolioHistoryYtdPoint {
 interface PortfolioHistoryYtdRes {
   points: PortfolioHistoryYtdPoint[];
   startIso?: string;
+}
+
+interface HoldingsNextEarningsRes {
+  next: { ticker: string; companyName: string; date: string } | null;
 }
 
 export default function Dashboard() {
@@ -426,6 +432,20 @@ export default function Dashboard() {
     },
     enabled: dashboardSecondaryReady && showNews && !!holdings && holdings.length > 0,
     staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: holdingsNextEarnings } = useQuery<HoldingsNextEarningsRes>({
+    queryKey: ["/api/holdings/next-earnings", portfolioParam],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/holdings/next-earnings?portfolio=${encodeURIComponent(portfolioParam)}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) throw new Error("next earnings");
+      return res.json();
+    },
+    staleTime: 45 * 60 * 1000,
+    enabled: dashboardSecondaryReady && !!holdings && holdings.length > 0,
   });
 
   const formatRelativeTime = (timestamp: number) => {
@@ -1225,6 +1245,40 @@ export default function Dashboard() {
             </span>
           </div>
         </div>
+
+        {holdingsNextEarnings?.next && (
+          <button
+            type="button"
+            className="w-full flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.07] px-2.5 py-1.5 text-left transition-colors hover:bg-amber-500/12 dark:border-amber-500/25 dark:bg-amber-500/10 dark:hover:bg-amber-500/[0.14]"
+            onClick={() =>
+              setLocation(`/asset/${encodeURIComponent(holdingsNextEarnings.next!.ticker)}`)
+            }
+            data-testid="row-mobile-next-earnings"
+          >
+            <CompanyLogo
+              ticker={holdingsNextEarnings.next.ticker}
+              companyName={holdingsNextEarnings.next.companyName}
+              size="xs"
+              className="shrink-0"
+            />
+            <div className="min-w-0 flex-1 flex items-center gap-1.5">
+              <Calendar className="h-3 w-3 shrink-0 text-amber-700/90 dark:text-amber-400/90" aria-hidden />
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wide shrink-0">
+                Earnings
+              </span>
+              <span className="text-[11px] font-medium truncate min-w-0 text-foreground/90">
+                {holdingsNextEarnings.next.ticker}
+              </span>
+            </div>
+            <span className="text-[11px] font-semibold tabular-nums text-amber-950 dark:text-amber-100 shrink-0">
+              {format(
+                parse(holdingsNextEarnings.next.date, "yyyy-MM-dd", new Date()),
+                "d. MMM yyyy",
+                { locale: sk },
+              )}
+            </span>
+          </button>
+        )}
 
         {metrics.optionsIncluded && (
           <div className="bg-card rounded-lg p-2.5 border flex items-center justify-between">

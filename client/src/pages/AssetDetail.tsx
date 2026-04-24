@@ -333,59 +333,78 @@ export default function AssetDetail() {
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 w-full sm:w-auto sm:items-end sm:max-w-full">
-          {data.nextEarnings && data.ticker !== "CASH" && (
-            <Card className="shrink-0 w-full sm:w-auto sm:min-w-[200px] border-amber-500/25 bg-amber-500/[0.06] dark:bg-amber-500/10">
-              <CardContent className="p-3 sm:p-4">
-                <div className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                  <Calendar className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                  Najbližšie earnings
-                </div>
-                <div className="text-base sm:text-lg font-semibold mt-1 tabular-nums">
-                  {format(parse(data.nextEarnings.date, "yyyy-MM-dd", new Date()), "d. MMMM yyyy", {
-                    locale: sk,
-                  })}
-                </div>
-                <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 leading-snug">
-                  Očakávaný dátum (Yahoo alebo Finnhub), môže sa zmeniť.
-                </p>
-              </CardContent>
-            </Card>
-          )}
-          {data.ticker !== "CASH" && data.nextEarnings == null && (
-            <Card className="shrink-0 w-full sm:w-auto sm:min-w-[200px] border-dashed border-muted-foreground/25">
-              <CardContent className="p-3 sm:p-4">
-                <div className="text-[10px] sm:text-xs text-muted-foreground flex items-start gap-2 leading-snug">
-                  <Calendar className="h-3.5 w-3.5 shrink-0 mt-0.5 opacity-70" />
-                  <span>
-                    Najbližšie earnings sa nepodarilo načítať. Yahoo často blokuje API; so{" "}
-                    <span className="font-mono">FINNHUB_API_KEY</span> na serveri sa použije záložný kalendár
-                    Finnhub.
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-          {quote && data.ticker !== "CASH" && (
-            <Card className="shrink-0 w-full sm:w-auto sm:min-w-[200px]">
-              <CardContent className="p-4">
-                <div className="text-xs text-muted-foreground uppercase tracking-wide">Aktuálna cena</div>
-                <div className="text-2xl font-bold">{mask(formatWithConversion(quote.price, data.ticker))}</div>
-                <div
-                  className={`text-sm flex items-center gap-1 ${changePositive ? "text-green-500" : "text-red-500"}`}
+        <div className="flex w-full flex-col gap-3 sm:w-auto sm:max-w-full sm:flex-row sm:items-stretch sm:gap-3">
+          {data.ticker !== "CASH" && (
+            <>
+              <Card className="shrink-0 w-full sm:w-auto sm:min-w-[280px]">
+                <CardContent className="p-3 sm:p-4">
+                  {quote ? (
+                    <>
+                      <div className="text-xs text-muted-foreground uppercase tracking-wide">Aktuálna cena</div>
+                      <div className="text-2xl font-bold">
+                        {mask(formatWithConversion(quote.price, data.ticker))}
+                      </div>
+                      <div
+                        className={`text-sm flex items-center gap-1 ${changePositive ? "text-green-500" : "text-red-500"}`}
+                      >
+                        {changePositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                        {mask(formatCurrency(convertPrice(quote.change, tc)))}{" "}
+                        <span className="text-xs">
+                          ({changePositive ? "+" : ""}
+                          {(quote.changePercent ?? 0).toFixed(2)}%)
+                        </span>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Menovka kotácie: {tc} · zobrazenie: {currency}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-xs text-muted-foreground uppercase tracking-wide">Aktuálna cena</div>
+                      <div className="text-sm text-muted-foreground mt-1">Kotácia momentálne nedostupná.</div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+
+              {data.nextEarnings ? (
+                <Card
+                  className="shrink-0 w-full border-amber-500/25 bg-amber-500/[0.06] dark:bg-amber-500/10 sm:w-auto sm:min-w-[220px]"
+                  title="Očakávaný dátum (Yahoo alebo Finnhub), môže sa zmeniť."
                 >
-                  {changePositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                  {mask(formatCurrency(convertPrice(quote.change, tc)))}{" "}
-                  <span className="text-xs">
-                    ({changePositive ? "+" : ""}
-                    {(quote.changePercent ?? 0).toFixed(2)}%)
-                  </span>
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  Menovka kotácie: {tc} · zobrazenie: {currency}
-                </div>
-              </CardContent>
-            </Card>
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wide">
+                      <Calendar className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                      Najbližšie earnings
+                    </div>
+                    <div className="text-base sm:text-lg font-semibold mt-1 tabular-nums">
+                      {format(parse(data.nextEarnings.date, "yyyy-MM-dd", new Date()), "d. MMMM yyyy", {
+                        locale: sk,
+                      })}
+                    </div>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 leading-snug">
+                      Očakávaný dátum, môže sa zmeniť.
+                    </p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card
+                  className="shrink-0 w-full border-dashed border-muted-foreground/25 sm:w-auto sm:min-w-[220px]"
+                  title="Yahoo často blokuje API; so FINNHUB_API_KEY na serveri sa použije záložný kalendár Finnhub."
+                >
+                  <CardContent className="p-3 sm:p-4">
+                    <div className="flex items-start gap-2 text-[10px] sm:text-xs text-muted-foreground leading-snug">
+                      <Calendar className="h-3.5 w-3.5 shrink-0 mt-0.5 opacity-70" />
+                      <span>
+                        Najbližšie earnings sa nepodarilo načítať. Yahoo často blokuje API; so{" "}
+                        <span className="font-mono">FINNHUB_API_KEY</span> na serveri sa použije záložný kalendár
+                        Finnhub.
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </>
           )}
         </div>
       </div>
