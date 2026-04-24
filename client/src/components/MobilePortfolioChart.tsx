@@ -633,7 +633,7 @@ export function MobilePortfolioChart({
         </div>
       )}
       {usSessionState === "PRE_MARKET" && (
-        <div className="flex items-center gap-1.5 -mt-3 mb-3 text-[10px] text-muted-foreground">
+        <div className="flex items-center gap-1.5 mb-1 text-[10px] text-muted-foreground">
           <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
           <span>
             Pre-market:{" "}
@@ -649,10 +649,10 @@ export function MobilePortfolioChart({
         </div>
       )}
       {usSessionState === "CLOSED" && (
-        <div className="-mt-3 mb-3 text-[10px] text-muted-foreground">Trh uzatvorený</div>
+        <div className="mb-1 text-[10px] text-muted-foreground">Trh uzatvorený</div>
       )}
 
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-2">
         <span className="text-[10px] text-muted-foreground">
           Nerealizovaný zisk:
         </span>
@@ -667,7 +667,7 @@ export function MobilePortfolioChart({
         </span>
       </div>
 
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-2">
         <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
           <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
           Pred open:

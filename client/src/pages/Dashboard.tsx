@@ -1216,7 +1216,7 @@ export default function Dashboard() {
         totalInvested={metrics.totalInvested}
       />
       
-      <div className="md:hidden px-4 space-y-2">
+      <div className="md:hidden px-4 space-y-2 -mt-1">
         <div className="grid gap-2 grid-cols-2">
           <Tooltip>
             <TooltipTrigger asChild>
