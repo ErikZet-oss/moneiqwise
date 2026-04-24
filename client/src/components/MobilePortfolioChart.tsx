@@ -61,6 +61,7 @@ export function MobilePortfolioChart({
   onRefreshQuotes,
   quotesRefreshing = false,
 }: MobilePortfolioChartProps) {
+  const premarketMoonClass = "text-amber-600 dark:text-amber-400";
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>("ALL");
   /** Odloží ťažké dotazy (história, eur map) až po idle — rýchlejší prvý render dashboardu. */
   const [chartDataIdle, setChartDataIdle] = useState(false);
@@ -631,7 +632,7 @@ export function MobilePortfolioChart({
       </div>
       {usSessionState === "PRE_MARKET" && (
         <div className="flex items-center gap-1.5 -mt-3 mb-3 text-[10px] text-muted-foreground">
-          <Moon className="h-3 w-3" />
+          <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
           <span>
             Pre-market:{" "}
             {preOpenPreview.available
@@ -660,7 +661,10 @@ export function MobilePortfolioChart({
       </div>
 
       <div className="flex items-center gap-2 mb-4">
-        <span className="text-[10px] text-muted-foreground">Pred open:</span>
+        <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+          <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
+          Pred open:
+        </span>
         {preOpenPreview.available ? (
           <>
             <span

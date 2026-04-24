@@ -145,6 +145,7 @@ export default function Dashboard() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   
   const maskAmount = (amount: string) => hideAmounts ? "••••••" : amount;
+  const premarketMoonClass = "text-amber-600 dark:text-amber-400";
   
   const portfolioParam = getQueryParam();
 
@@ -900,7 +901,8 @@ export default function Dashboard() {
                 Z toho hotovosť / margin: {maskAmount(formatCurrency(metrics.cashValue))}
               </p>
             )}
-            <p className="text-xs text-muted-foreground truncate mt-0.5" data-testid="text-pre-open-preview">
+            <p className="text-xs text-muted-foreground truncate mt-0.5 inline-flex items-center gap-1" data-testid="text-pre-open-preview">
+              <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
               Pred open:{" "}
               {preOpenPreview.available ? (
                 <>
@@ -1036,7 +1038,7 @@ export default function Dashboard() {
             </p>
             {usSessionState === "PRE_MARKET" && (
               <p className="text-[11px] text-muted-foreground mt-1 inline-flex items-center gap-1">
-                <Moon className="h-3 w-3" />
+                <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
                 Pre-market:{" "}
                 {preOpenPreview.available
                   ? `${preOpenPreview.amount >= 0 ? "+" : ""}${maskAmount(formatCurrency(preOpenPreview.amount))}`
@@ -1369,7 +1371,7 @@ export default function Dashboard() {
                         className="inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-400"
                         aria-label="Pre-market"
                       >
-                        <Moon className="h-3.5 w-3.5" />
+                        <Moon className={`h-3.5 w-3.5 ${premarketMoonClass}`} />
                       </span>
                     </TooltipTrigger>
                     <TooltipContent className="max-w-[260px]">
@@ -1426,7 +1428,7 @@ export default function Dashboard() {
                     <div className="flex flex-col items-end gap-0.5 shrink-0">
                       <span className="inline-flex items-center gap-1">
                         {moversUsePremarket && (
-                          <Moon className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+                          <Moon className={`h-3.5 w-3.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
                         )}
                         <span className="text-sm font-semibold tabular-nums text-green-500">
                           {formatSignedDayPct(row.pct)}
@@ -1460,7 +1462,7 @@ export default function Dashboard() {
                         className="inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-400"
                         aria-label="Pre-market"
                       >
-                        <Moon className="h-3.5 w-3.5" />
+                        <Moon className={`h-3.5 w-3.5 ${premarketMoonClass}`} />
                       </span>
                     </TooltipTrigger>
                     <TooltipContent className="max-w-[260px]">
@@ -1517,7 +1519,7 @@ export default function Dashboard() {
                     <div className="flex flex-col items-end gap-0.5 shrink-0">
                       <span className="inline-flex items-center gap-1">
                         {moversUsePremarket && (
-                          <Moon className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+                          <Moon className={`h-3.5 w-3.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
                         )}
                         <span className="text-sm font-semibold tabular-nums text-red-500">
                           {formatSignedDayPct(row.pct)}
@@ -1645,13 +1647,13 @@ export default function Dashboard() {
                             </span>
                             {showPremarketPrice && (
                               <span className="mt-0.5 inline-flex items-center gap-0.5 text-[8px] text-muted-foreground">
-                                <Moon className="h-2.5 w-2.5" />
+                                <Moon className={`h-2.5 w-2.5 ${premarketMoonClass}`} />
                                 {maskAmount(formatCurrency(preMarketPrice))}
                               </span>
                             )}
                             {showOffHoursDailyChange && (
                               <span className={`mt-0.5 inline-flex items-center gap-0.5 text-[8px] ${getChangeColor(quote?.preMarketChange ?? 0)}`}>
-                                <Moon className="h-2.5 w-2.5" />
+                                <Moon className={`h-2.5 w-2.5 ${premarketMoonClass}`} />
                                 {formatPercent(quote?.preMarketChangePercent ?? 0)}
                               </span>
                             )}
@@ -1808,13 +1810,13 @@ export default function Dashboard() {
                               </div>
                               {showPremarketPrice && (
                                 <div className="mt-0.5 inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-                                  <Moon className="h-3 w-3" />
+                                  <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
                                   {maskAmount(formatCurrency(preMarketPrice))}
                                 </div>
                               )}
                               {showOffHoursDailyChange && (
                                 <div className={`mt-0.5 inline-flex items-center gap-1 text-[10px] ${getChangeColor(quote?.preMarketChange ?? 0)}`}>
-                                  <Moon className="h-3 w-3" />
+                                  <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
                                   {formatPercent(quote?.preMarketChangePercent ?? 0)}
                                 </div>
                               )}
