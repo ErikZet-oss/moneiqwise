@@ -26,6 +26,7 @@ import { db } from "./db";
 import { buildEurPerUnitByTxnIdForTransactions } from "./eurAtTransactionDate";
 import { computeFifoRealizedGainsFromTransactions } from "@shared/fifoRealizedGains";
 import { sumCloseTradeCashFlowEurFromRows } from "@shared/cashFromTransactions";
+import { dividendNetEur } from "./pnlBreakdown";
 import { eq, and, desc, asc, sql, isNull, or, inArray, notInArray } from "drizzle-orm";
 
 export interface IStorage {
@@ -90,6 +91,7 @@ export interface IStorage {
         totalRealized: number;
         /** Súčet hotovostných riadkov XTB „close trade“ (DEPOSIT/WITHDRAWAL) v EUR — mimo FIFO. */
         closeTradeNetEur: number;
+        /** Čisté dividendy v EUR (dividendNetEur), ako v P&amp;L rozklade. */
         dividendNet: number;
         cashEur: number;
       }
@@ -753,6 +755,7 @@ export class DatabaseStorage implements IStorage {
         holdings: Holding[];
         totalRealized: number;
         closeTradeNetEur: number;
+        /** Čisté dividendy v EUR — dividendNetEur(list), nie súčet v pôvodných menách. */
         dividendNet: number;
         cashEur: number;
       }
@@ -827,21 +830,7 @@ export class DatabaseStorage implements IStorage {
         ).summary.totalRealized;
         const closeTradeNetEur = sumCloseTradeCashFlowEurFromRows(list);
 
-        let dividendNet = 0;
-        const dividendTransactions = list.filter((t) => t.type === "DIVIDEND");
-        const taxTransactions = list.filter((t) => t.type === "TAX");
-        for (const txn of dividendTransactions) {
-          const shares = parseFloat(txn.shares);
-          const dividendPerShare = parseFloat(txn.pricePerShare);
-          const tax = parseFloat(txn.commission || "0");
-          const gross = shares * dividendPerShare;
-          dividendNet += gross - tax;
-        }
-        for (const txn of taxTransactions) {
-          const shares = parseFloat(txn.shares);
-          const pricePerShare = parseFloat(txn.pricePerShare);
-          dividendNet += shares * pricePerShare;
-        }
+        const dividendNet = dividendNetEur(list, rates);
 
         const cashEur = await netLedgerCashEur(list, rates, eurM);
 

@@ -85,7 +85,7 @@ function RangeToggle({
 }
 
 export default function Grafy() {
-  const { formatCurrency } = useCurrency();
+  const { formatCurrency, currency } = useCurrency();
   const { getQueryParam, isLoading: pLoading } = usePortfolio();
   const { hideAmounts } = useChartSettings();
   const mask = (s: string) => (hideAmounts ? "••••••" : s);
@@ -95,7 +95,7 @@ export default function Grafy() {
   const [range, setRange] = useState<RangeVal>("1y");
 
   const { data: history, isLoading: histLoading, error: histErr } = useQuery<PortfolioHistoryRes>({
-    queryKey: ["/api/portfolio-history", portfolioParam, range],
+    queryKey: ["/api/portfolio-history", portfolioParam, range, currency],
     queryFn: async () => {
       const u = new URLSearchParams();
       u.set("portfolio", portfolioParam);

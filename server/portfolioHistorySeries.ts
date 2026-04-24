@@ -2,7 +2,6 @@ import type { Transaction } from "@shared/schema";
 import { mtmValueAtEod } from "./gipsMtmValue";
 import { sumCashFlowEurUpTo } from "@shared/cashFromTransactions";
 import { convertAmountBetween, type AllExchangeRates } from "./convertAmountBetween";
-import { CASH_FLOW_TICKER } from "@shared/schema";
 
 export type PortfolioHistoryRange = "1m" | "6m" | "ytd" | "1y" | "all";
 
@@ -23,29 +22,6 @@ export function spCloseOnOrBefore(
     if (h[t] != null && Number.isFinite(h[t])) return h[t]!;
   }
   return null;
-}
-
-/**
- * Suma vkladov − výberov v EUR (k dátumu EOD) — len hotov. riadky, alebo
- * všeobecné DEPOSIT/WITHDRAWAL ak ešte nemá PFC ticker.
- */
-export function netExternalFlowEurUpTo(
-  allTransactions: Transaction[],
-  eod: Date,
-): number {
-  const cashTicker = allTransactions.some(
-    (t) => t.ticker === CASH_FLOW_TICKER && (t.type === "DEPOSIT" || t.type === "WITHDRAWAL"),
-  );
-  if (cashTicker) {
-    const only = allTransactions.filter(
-      (t) => t.ticker === CASH_FLOW_TICKER && (t.type === "DEPOSIT" || t.type === "WITHDRAWAL"),
-    );
-    return sumCashFlowEurUpTo(only, eod);
-  }
-  const dw = allTransactions.filter(
-    (t) => t.type === "DEPOSIT" || t.type === "WITHDRAWAL",
-  );
-  return sumCashFlowEurUpTo(dw, eod);
 }
 
 function toUserCcy(
@@ -184,7 +160,8 @@ export function computePortfolioHistorySeries(
       userCcy,
       todayIso,
     );
-    const netEur = netExternalFlowEurUpTo(sortedTx, eod);
+    /** Rovnaká báza ako hotovosť v `mtmValueAtEod`: všetky DEPOSIT/WITHDRAWAL. */
+    const netEur = sumCashFlowEurUpTo(sortedTx, eod);
     const N = toUserCcy(netEur, userCcy, rates);
 
     if (i > 0) {
@@ -199,11 +176,7 @@ export function computePortfolioHistorySeries(
         userCcy,
         todayIso,
       );
-      const n0U = toUserCcy(
-        netExternalFlowEurUpTo(sortedTx, eodP),
-        userCcy,
-        rates,
-      );
+      const n0U = toUserCcy(sumCashFlowEurUpTo(sortedTx, eodP), userCcy, rates);
       const dN = N - n0U;
       if (v0 > 1e-9) {
         const r = (V - v0 - dN) / v0;
@@ -233,6 +206,7 @@ export function computePortfolioHistorySeries(
     currency: userCcy,
     methodNote:
       "Celková hodnota = oceňovanie účtovaných transakcií a hotovosť (mtmValueAtEod, ako TWR). " +
+      "Čisté vklady − výbery = súčet všetkých DEPOSIT/WITHDRAWAL do daného dňa (rovnako ako hotovosť v celkovej hodnote). " +
       (hasSp
         ? "Kumulatívny % portfólia: reťaz. segmenty výnosov (V−V0−ΔN)/V0 medzi dátumami; S&P: uzávierky voči prvému dňu rozsahu. "
         : "S&P 500 nebolo možné načítať; benchmark 0 %. ") +

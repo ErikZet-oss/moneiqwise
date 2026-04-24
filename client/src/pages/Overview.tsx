@@ -5,11 +5,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Briefcase,
   TrendingUp,
   TrendingDown,
   Loader2,
   RefreshCw,
+  HelpCircle,
 } from "lucide-react";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
@@ -33,6 +39,7 @@ interface OverviewBundle {
       totalRealized: number;
       /** Hotov. efekt z XTB „close trade“ (vklad/výber), nie je v FIFO. */
       closeTradeNetEur: number;
+      /** Čisté dividendy v EUR (server: dividendNetEur). */
       dividendNet: number;
       /** Čistá hotovosť (EUR) z vkladov a výberov */
       cashEur: number;
@@ -51,7 +58,9 @@ interface PortfolioMetrics {
   totalProfitPercent: number;
   dailyChange: number;
   dailyChangePercent: number;
+  /** Čisté dividendy (po dani z riadkov) v mene zobrazenia — z API v EUR. */
   passiveIncome: number;
+  /** Kumulatívne dividendy / aktuálna hodnota akcií — nie ročný dividend yield. */
   passiveIncomePercent: number;
   hasQuotes: boolean;
 }
@@ -132,7 +141,7 @@ export default function Overview() {
     holdings: Holding[],
     totalRealizedFifoEur: number,
     closeTradeNetEur: number,
-    dividends: number,
+    dividendNetEur: number,
     cashEur: number,
   ): PortfolioMetrics => {
     let stockValue = 0;
@@ -162,6 +171,11 @@ export default function Overview() {
       "EUR",
     );
 
+    const dividendsDisplay = convertPrice(
+      Number.isFinite(dividendNetEur) ? dividendNetEur : 0,
+      "EUR",
+    );
+
     const totalValue = stockValue + cashValue;
 
     const unrealized = stockValue - totalInvested;
@@ -174,11 +188,12 @@ export default function Overview() {
       "EUR",
     );
     const realizedGain = rFifo + rClose;
-    const totalProfit = unrealized + realizedGain + dividends;
+    const totalProfit = unrealized + realizedGain + dividendsDisplay;
     const totalProfitPercent = totalInvested > 0 ? (totalProfit / totalInvested) * 100 : 0;
     const baseValue = stockValue - dailyChange;
     const dailyChangePercent = baseValue > 0 ? (dailyChange / baseValue) * 100 : 0;
-    const passiveIncomePercent = stockValue > 0 ? (dividends / stockValue) * 100 : 0;
+    const passiveIncomePercent =
+      stockValue > 0 ? (dividendsDisplay / stockValue) * 100 : 0;
 
     return {
       totalValue,
@@ -190,7 +205,7 @@ export default function Overview() {
       totalProfitPercent,
       dailyChange,
       dailyChangePercent,
-      passiveIncome: dividends,
+      passiveIncome: dividendsDisplay,
       passiveIncomePercent,
       hasQuotes: anyQuote,
     };
@@ -267,11 +282,11 @@ export default function Overview() {
       const holdings = row?.holdings ?? [];
       const totalRealizedFifoEur = row?.totalRealized ?? 0;
       const closeTradeNetEur = row?.closeTradeNetEur ?? 0;
-      const dividends = row?.dividendNet ?? 0;
+      const dividendNetEur = row?.dividendNet ?? 0;
       const cashEur = row?.cashEur ?? 0;
       map.set(
         p.id,
-        computeMetrics(holdings, totalRealizedFifoEur, closeTradeNetEur, dividends, cashEur),
+        computeMetrics(holdings, totalRealizedFifoEur, closeTradeNetEur, dividendNetEur, cashEur),
       );
     }
     return map;
@@ -479,7 +494,22 @@ export default function Overview() {
                       </div>
 
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-muted-foreground">Pasívny príjem</span>
+                        <span className="text-muted-foreground inline-flex items-center gap-1">
+                          Pasívny príjem
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <HelpCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-[280px] text-xs">
+                              <p className="font-medium mb-1">Čo znamenajú čísla</p>
+                              <p>
+                                Suma = čisté dividendy z histórie transakcií (DIVIDEND + TAX), prepočítané do
+                                vašej meny. Percentá = tento kumulatívny súčet voči aktuálnej trhovej hodnote
+                                akcií — nie ročný dividend yield z kotácie.
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </span>
                         <span className="font-medium">
                           <span className={m.passiveIncome > 0 ? "text-green-500" : "text-muted-foreground"}>
                             {formatPercent(m.passiveIncomePercent)}

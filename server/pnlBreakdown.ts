@@ -15,7 +15,8 @@ function eurPerOneUnitOfCcy(ccy: string, rates: AllExchangeRates): number {
   return 1;
 }
 
-function dividendNetEur(tx: Transaction[], rates: AllExchangeRates): number {
+/** Čisté dividendy v EUR: DIVIDEND (hrubá − commission ako daň) + riadky TAX, prepočet podľa meny tickera. */
+export function dividendNetEur(tx: Transaction[], rates: AllExchangeRates): number {
   let net = 0;
   for (const t of tx) {
     if (t.type === "DIVIDEND") {
