@@ -914,11 +914,11 @@ export default function Dashboard() {
               Pred open:{" "}
               {preOpenPreview.available ? (
                 <>
-                  <span className={getChangeColor(preOpenPreview.amount)}>
+                  <span className={`italic ${getChangeColor(preOpenPreview.amount)}`}>
                     {preOpenPreview.amount >= 0 ? "+" : ""}
                     {maskAmount(formatCurrency(preOpenPreview.amount))}
                   </span>
-                  <span className={`ml-1 ${getChangeColor(preOpenPreview.percent)}`}>
+                  <span className={`ml-1 italic ${getChangeColor(preOpenPreview.percent)}`}>
                     ({formatPercent(preOpenPreview.percent)})
                   </span>
                 </>
@@ -1048,9 +1048,14 @@ export default function Dashboard() {
               <p className="text-[11px] text-muted-foreground mt-1 inline-flex items-center gap-1">
                 <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
                 Pre-market:{" "}
-                {preOpenPreview.available
-                  ? `${preOpenPreview.amount >= 0 ? "+" : ""}${maskAmount(formatCurrency(preOpenPreview.amount))}`
-                  : "bez dát"}
+                {preOpenPreview.available ? (
+                  <span className="italic">
+                    {preOpenPreview.amount >= 0 ? "+" : ""}
+                    {maskAmount(formatCurrency(preOpenPreview.amount))}
+                  </span>
+                ) : (
+                  "bez dát"
+                )}
               </p>
             )}
             {usSessionState === "CLOSED" && (
@@ -1249,6 +1254,28 @@ export default function Dashboard() {
           </TooltipContent>
         </Tooltip>
       </div>
+      <div className="md:hidden px-4">
+        <div className="bg-card rounded-lg border px-2.5 py-2">
+          <div className="flex items-center justify-between text-[10px]">
+            <span className="text-muted-foreground">Moje YTD</span>
+            <span className={`font-semibold tabular-nums ${getChangeColor(ytdComparison?.portfolio ?? 0)}`}>
+              {ytdComparison ? formatPercent(ytdComparison.portfolio) : "—"}
+            </span>
+          </div>
+          <div className="mt-1 flex items-center justify-between text-[10px]">
+            <span className="text-muted-foreground">S&amp;P 500 YTD</span>
+            <span className={`font-semibold tabular-nums ${getChangeColor(ytdComparison?.sp500 ?? 0)}`}>
+              {ytdComparison ? formatPercent(ytdComparison.sp500) : "—"}
+            </span>
+          </div>
+          <div className="mt-1.5 flex items-center justify-between text-[11px] border-t border-border/40 pt-1.5">
+            <span className="font-medium text-muted-foreground">Alpha</span>
+            <span className={`font-bold tabular-nums ${getChangeColor(ytdComparison?.alpha ?? 0)}`}>
+              {ytdComparison ? formatPercent(ytdComparison.alpha) : "—"}
+            </span>
+          </div>
+        </div>
+      </div>
       
       {metrics.optionsIncluded && (
         <div className="md:hidden px-4">
@@ -1401,13 +1428,13 @@ export default function Dashboard() {
                         {moversUsePremarket && (
                           <Moon className={`h-3.5 w-3.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
                         )}
-                        <span className="text-sm font-semibold tabular-nums text-green-500">
+                        <span className={`text-sm font-semibold tabular-nums text-green-500 ${moversUsePremarket ? "italic" : ""}`}>
                           {formatSignedDayPct(row.pct)}
                         </span>
                       </span>
                       {row.dayValueEur != null && Number.isFinite(row.dayValueEur) && (
                         <span
-                          className={`text-[10px] tabular-nums ${getChangeColor(row.dayValueEur)}`}
+                          className={`text-[10px] tabular-nums ${moversUsePremarket ? "italic" : ""} ${getChangeColor(row.dayValueEur)}`}
                           data-testid={`dashboard-gainer-value-${idx}`}
                         >
                           {row.dayValueEur >= 0 ? "+" : ""}
@@ -1492,13 +1519,13 @@ export default function Dashboard() {
                         {moversUsePremarket && (
                           <Moon className={`h-3.5 w-3.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
                         )}
-                        <span className="text-sm font-semibold tabular-nums text-red-500">
+                        <span className={`text-sm font-semibold tabular-nums text-red-500 ${moversUsePremarket ? "italic" : ""}`}>
                           {formatSignedDayPct(row.pct)}
                         </span>
                       </span>
                       {row.dayValueEur != null && Number.isFinite(row.dayValueEur) && (
                         <span
-                          className={`text-[10px] tabular-nums ${getChangeColor(row.dayValueEur)}`}
+                          className={`text-[10px] tabular-nums ${moversUsePremarket ? "italic" : ""} ${getChangeColor(row.dayValueEur)}`}
                           data-testid={`dashboard-loser-value-${idx}`}
                         >
                           {row.dayValueEur >= 0 ? "+" : ""}
@@ -1617,13 +1644,13 @@ export default function Dashboard() {
                               )}
                             </span>
                             {showPremarketPrice && (
-                              <span className="mt-0.5 inline-flex items-center gap-0.5 text-[8px] text-muted-foreground">
+                              <span className="mt-0.5 inline-flex items-center gap-0.5 text-[8px] italic text-muted-foreground">
                                 <Moon className={`h-2.5 w-2.5 ${premarketMoonClass}`} />
                                 {maskAmount(formatCurrency(preMarketPrice))}
                               </span>
                             )}
                             {showOffHoursDailyChange && (
-                              <span className={`mt-0.5 inline-flex items-center gap-0.5 text-[8px] ${getChangeColor(quote?.preMarketChange ?? 0)}`}>
+                              <span className={`mt-0.5 inline-flex items-center gap-0.5 text-[8px] italic ${getChangeColor(quote?.preMarketChange ?? 0)}`}>
                                 <Moon className={`h-2.5 w-2.5 ${premarketMoonClass}`} />
                                 {formatPercent(quote?.preMarketChangePercent ?? 0)}
                               </span>
@@ -1780,13 +1807,13 @@ export default function Dashboard() {
                                 )}
                               </div>
                               {showPremarketPrice && (
-                                <div className="mt-0.5 inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+                                <div className="mt-0.5 inline-flex items-center gap-1 text-[10px] italic text-muted-foreground">
                                   <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
                                   {maskAmount(formatCurrency(preMarketPrice))}
                                 </div>
                               )}
                               {showOffHoursDailyChange && (
-                                <div className={`mt-0.5 inline-flex items-center gap-1 text-[10px] ${getChangeColor(quote?.preMarketChange ?? 0)}`}>
+                                <div className={`mt-0.5 inline-flex items-center gap-1 text-[10px] italic ${getChangeColor(quote?.preMarketChange ?? 0)}`}>
                                   <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
                                   {formatPercent(quote?.preMarketChangePercent ?? 0)}
                                 </div>

@@ -608,36 +608,43 @@ export function MobilePortfolioChart({
         </span>
       </div>
 
-      <div className="flex items-center gap-2 mb-4">
-        <Popover>
-          <PopoverTrigger asChild>
-            <span className="text-[10px] text-muted-foreground flex items-center gap-1 cursor-help">
-              Denná zmena:
-              <HelpCircle className="h-2.5 w-2.5" />
-            </span>
-          </PopoverTrigger>
-          <PopoverContent className="max-w-[260px] p-3">
-            <p className="font-semibold mb-1 text-sm">Denná zmena</p>
-            <p className="text-xs text-muted-foreground">Zmena hodnoty portfólia za posledný obchodný deň.</p>
-          </PopoverContent>
-        </Popover>
-        <span className={`text-xs font-medium ${displayedDailyChange >= 0 ? "text-green-500" : "text-red-500"}`}>
-          {displayedDailyChange >= 0 ? "+" : ""}{maskAmount(formatCurrency(displayedDailyChange))}
-        </span>
-        <span className={`text-[10px] px-1 py-0.5 rounded font-medium ${
-          displayedDailyChange >= 0 ? "bg-green-500/20 text-green-500" : "bg-red-500/20 text-red-500"
-        }`}>
-          {displayedDailyChange >= 0 ? "+" : ""}{displayedDailyChangePercent.toFixed(2)}%
-        </span>
-      </div>
+      {usSessionState === "LIVE" && (
+        <div className="flex items-center gap-2 mb-4">
+          <Popover>
+            <PopoverTrigger asChild>
+              <span className="text-[10px] text-muted-foreground flex items-center gap-1 cursor-help">
+                Denná zmena:
+                <HelpCircle className="h-2.5 w-2.5" />
+              </span>
+            </PopoverTrigger>
+            <PopoverContent className="max-w-[260px] p-3">
+              <p className="font-semibold mb-1 text-sm">Denná zmena</p>
+              <p className="text-xs text-muted-foreground">Zmena hodnoty portfólia za posledný obchodný deň.</p>
+            </PopoverContent>
+          </Popover>
+          <span className={`text-xs font-medium ${displayedDailyChange >= 0 ? "text-green-500" : "text-red-500"}`}>
+            {displayedDailyChange >= 0 ? "+" : ""}{maskAmount(formatCurrency(displayedDailyChange))}
+          </span>
+          <span className={`text-[10px] px-1 py-0.5 rounded font-medium ${
+            displayedDailyChange >= 0 ? "bg-green-500/20 text-green-500" : "bg-red-500/20 text-red-500"
+          }`}>
+            {displayedDailyChange >= 0 ? "+" : ""}{displayedDailyChangePercent.toFixed(2)}%
+          </span>
+        </div>
+      )}
       {usSessionState === "PRE_MARKET" && (
         <div className="flex items-center gap-1.5 -mt-3 mb-3 text-[10px] text-muted-foreground">
           <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
           <span>
             Pre-market:{" "}
-            {preOpenPreview.available
-              ? `${preOpenPreview.amount >= 0 ? "+" : ""}${maskAmount(formatCurrency(preOpenPreview.amount))}`
-              : "bez dát"}
+            {preOpenPreview.available ? (
+              <span className="italic">
+                {preOpenPreview.amount >= 0 ? "+" : ""}
+                {maskAmount(formatCurrency(preOpenPreview.amount))}
+              </span>
+            ) : (
+              "bez dát"
+            )}
           </span>
         </div>
       )}
@@ -670,7 +677,7 @@ export function MobilePortfolioChart({
             <span
               className={`text-xs font-medium ${
                 preOpenPreview.amount >= 0 ? "text-green-500" : "text-red-500"
-              }`}
+              } italic`}
               data-testid="text-mobile-pre-open-amount"
             >
               {preOpenPreview.amount >= 0 ? "+" : ""}
@@ -681,7 +688,7 @@ export function MobilePortfolioChart({
                 preOpenPreview.amount >= 0
                   ? "bg-green-500/20 text-green-500"
                   : "bg-red-500/20 text-red-500"
-              }`}
+              } italic`}
               data-testid="text-mobile-pre-open-percent"
             >
               {preOpenPreview.percent >= 0 ? "+" : ""}
