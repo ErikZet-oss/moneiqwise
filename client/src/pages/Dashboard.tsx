@@ -221,7 +221,7 @@ export default function Dashboard() {
     return map;
   }, [holdings]);
 
-  const { usSessionState, moversUsePremarket } = (() => {
+  const { usSessionState, moversUseExtendedQuotes } = (() => {
     const parts = new Intl.DateTimeFormat("en-GB", {
       timeZone: "Europe/Bratislava",
       hour: "2-digit",
@@ -245,16 +245,12 @@ export default function Dashboard() {
     } else state = "CLOSED";
 
     /**
-     * Od 23:00 SEČ do polnoci a od polnoci do 10:00 (prac. dni) — rebríčky z pre-marketu do otvorenia trhu,
-     * aby sa neukazovali „zamrznuté“ denné % z regular session. Počas LIVE (15:30–22:00) — klasická denná zmena.
+     * Rebríček najlepšie/najhoršie: počas LIVE len RTH denná zmena (change). Mimo LIVE sa použije pred/po-obchodná
+     * kotácia (preMarket* z API), ak ju máme; inak posledná známa RTH zmena (napr. víkend).
      */
-    const moversPremarket =
-      state === "PRE_MARKET" ||
-      (state === "CLOSED" &&
-        !isWeekend &&
-        (minutesFromMidnight < 10 * 60 || minutesFromMidnight >= 23 * 60));
+    const moversUseExtendedQuotes = state !== "LIVE";
 
-    return { usSessionState: state, moversUsePremarket: moversPremarket };
+    return { usSessionState: state, moversUseExtendedQuotes };
   })();
 
   const dailyMovers = useMemo(() => {
@@ -272,6 +268,8 @@ export default function Dashboard() {
       sharesByTicker.set(h.ticker, (sharesByTicker.get(h.ticker) ?? 0) + sh);
     }
 
+    const num = (v: unknown) => (typeof v === "number" ? v : parseFloat(String(v ?? "")));
+
     const rows = moversTickers
       .map((t) => {
         const q = quotesData[t];
@@ -279,19 +277,18 @@ export default function Dashboard() {
         let pct: number;
         let dayValueEur: number | null = null;
 
-        if (moversUsePremarket) {
-          const rawPct = q?.preMarketChangePercent;
-          pct = typeof rawPct === "number" ? rawPct : parseFloat(String(rawPct ?? ""));
-          const chRaw = q?.preMarketChange;
-          const ch = typeof chRaw === "number" ? chRaw : parseFloat(String(chRaw ?? ""));
+        if (usSessionState === "LIVE") {
+          pct = num(q?.changePercent);
+          const ch = num(q?.change);
           if (shares > 0 && Number.isFinite(ch)) {
             dayValueEur = shares * convertPrice(ch, getTickerCurrency(t));
           }
         } else {
-          const raw = q?.changePercent;
-          pct = typeof raw === "number" ? raw : parseFloat(String(raw ?? ""));
-          const chRaw = q?.change;
-          const ch = typeof chRaw === "number" ? chRaw : parseFloat(String(chRaw ?? ""));
+          const extPct = num(q?.preMarketChangePercent);
+          const useExt = Number.isFinite(extPct);
+          pct = useExt ? extPct : num(q?.changePercent);
+          const chRaw = useExt ? q?.preMarketChange : q?.change;
+          const ch = num(chRaw);
           if (shares > 0 && Number.isFinite(ch)) {
             dayValueEur = shares * convertPrice(ch, getTickerCurrency(t));
           }
@@ -323,7 +320,7 @@ export default function Dashboard() {
     holdings,
     convertPrice,
     getTickerCurrency,
-    moversUsePremarket,
+    usSessionState,
   ]);
 
   const formatSignedDayPct = (value: number) => {
@@ -1313,34 +1310,34 @@ export default function Dashboard() {
               <CardTitle className="text-base flex items-center gap-2 flex-wrap">
                 <TrendingUp className="h-4 w-4 text-green-500" />
                 Najlepšie (%)
-                {moversUsePremarket && (
+                {moversUseExtendedQuotes && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span
                         className="inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-400"
-                        aria-label="Pre-market"
+                        aria-label="Mimo hlavnej relácie"
                       >
                         <Moon className={`h-3.5 w-3.5 ${premarketMoonClass}`} />
                       </span>
                     </TooltipTrigger>
                     <TooltipContent className="max-w-[260px]">
                       <p className="text-xs">
-                        Od 23:00 SEČ do otvorenia hlavnej relácie a počas rána pred 10:00 SEČ sa zobrazuje zmena z{" "}
-                        <span className="font-medium">pre-marketu</span> oproti záverečnej cene, nie denná zmena z regular
-                        hours.
+                        Počas hlavnej relácie US (15:30–22:00 SEČ v pracovný deň) je rebríček z{" "}
+                        <span className="font-medium">dennej zmeny RTH</span>. Mimo toho sa použije predobchodná alebo
+                        poobchodná zmena oproti záverečnej cene RTH, ak ju máme v kotácii.
                       </p>
                     </TooltipContent>
                   </Tooltip>
                 )}
               </CardTitle>
               <p className="text-xs text-muted-foreground">
-                {moversUsePremarket
+                {moversUseExtendedQuotes
                   ? isAllPortfolios
-                    ? "Pre-market: z držaných akcií vo všetkých portfóliách (Yahoo)."
-                    : `Pre-market: z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ (Yahoo).`
+                    ? "Mimo hlavnej relácie US: pred/po obchode z držaných akcií vo všetkých portfóliách (ak dáta chýbajú, ostáva posledná RTH zmena)."
+                    : `Mimo hlavnej relácie US: pred/po obchode z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ (ak dáta chýbajú, ostáva posledná RTH zmena).`
                   : isAllPortfolios
-                    ? "Z držaných akcií vo všetkých portfóliách — denná zmena podľa kotácie."
-                    : `Z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ — denná zmena podľa kotácie.`}
+                    ? "Počas hlavnej relácie US: denná zmena RTH z držaných akcií vo všetkých portfóliách."
+                    : `Počas hlavnej relácie US: denná zmena RTH z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“.`}
               </p>
             </CardHeader>
             <CardContent className="space-y-2 pt-0">
@@ -1352,9 +1349,9 @@ export default function Dashboard() {
                 </>
               ) : dailyMovers.gainers.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-2">
-                  {moversUsePremarket
-                    ? "Žiadna držaná akcia nemá v tejto chvíli pre-market pohyb v pluse (alebo broker/Yahoo neposiela údaje)."
-                    : "Žiadna z držaných akcií dnes nebola v pluse."}
+                  {moversUseExtendedQuotes
+                    ? "Žiadna držaná akcia nemá v pluse pred/po-obchodný pohyb (alebo kotácia neposiela údaje)."
+                    : "Žiadna z držaných akcií v hlavnej relácii dnes nebola v pluse."}
                 </p>
               ) : (
                 dailyMovers.gainers.map((row, idx) => (
@@ -1375,7 +1372,7 @@ export default function Dashboard() {
                     </div>
                     <div className="flex flex-col items-end gap-0.5 shrink-0">
                       <span className="inline-flex items-center gap-1">
-                        {moversUsePremarket && (
+                        {moversUseExtendedQuotes && (
                           <Moon className={`h-3.5 w-3.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
                         )}
                         <span className="text-sm font-semibold tabular-nums text-green-500">
@@ -1403,34 +1400,34 @@ export default function Dashboard() {
               <CardTitle className="text-base flex items-center gap-2 flex-wrap">
                 <TrendingDown className="h-4 w-4 text-red-500" />
                 Najhoršie (%)
-                {moversUsePremarket && (
+                {moversUseExtendedQuotes && (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span
                         className="inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-400"
-                        aria-label="Pre-market"
+                        aria-label="Mimo hlavnej relácie"
                       >
                         <Moon className={`h-3.5 w-3.5 ${premarketMoonClass}`} />
                       </span>
                     </TooltipTrigger>
                     <TooltipContent className="max-w-[260px]">
                       <p className="text-xs">
-                        Od 23:00 SEČ do otvorenia hlavnej relácie a počas rána pred 10:00 SEČ sa zobrazuje zmena z{" "}
-                        <span className="font-medium">pre-marketu</span> oproti záverečnej cene, nie denná zmena z regular
-                        hours.
+                        Počas hlavnej relácie US (15:30–22:00 SEČ v pracovný deň) je rebríček z{" "}
+                        <span className="font-medium">dennej zmeny RTH</span>. Mimo toho sa použije predobchodná alebo
+                        poobchodná zmena oproti záverečnej cene RTH, ak ju máme v kotácii.
                       </p>
                     </TooltipContent>
                   </Tooltip>
                 )}
               </CardTitle>
               <p className="text-xs text-muted-foreground">
-                {moversUsePremarket
+                {moversUseExtendedQuotes
                   ? isAllPortfolios
-                    ? "Pre-market: z držaných akcií vo všetkých portfóliách (Yahoo)."
-                    : `Pre-market: z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ (Yahoo).`
+                    ? "Mimo hlavnej relácie US: pred/po obchode z držaných akcií vo všetkých portfóliách (ak dáta chýbajú, ostáva posledná RTH zmena)."
+                    : `Mimo hlavnej relácie US: pred/po obchode z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ (ak dáta chýbajú, ostáva posledná RTH zmena).`
                   : isAllPortfolios
-                    ? "Z držaných akcií vo všetkých portfóliách — denná zmena podľa kotácie."
-                    : `Z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ — denná zmena podľa kotácie.`}
+                    ? "Počas hlavnej relácie US: denná zmena RTH z držaných akcií vo všetkých portfóliách."
+                    : `Počas hlavnej relácie US: denná zmena RTH z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“.`}
               </p>
             </CardHeader>
             <CardContent className="space-y-2 pt-0">
@@ -1442,9 +1439,9 @@ export default function Dashboard() {
                 </>
               ) : dailyMovers.losers.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-2">
-                  {moversUsePremarket
-                    ? "Žiadna držaná akcia nemá v tejto chvíli pre-market pohyb v mínuse (alebo broker/Yahoo neposiela údaje)."
-                    : "Žiadna z držaných akcií dnes nebola v mínuse."}
+                  {moversUseExtendedQuotes
+                    ? "Žiadna držaná akcia nemá v mínuse pred/po-obchodný pohyb (alebo kotácia neposiela údaje)."
+                    : "Žiadna z držaných akcií v hlavnej relácii dnes nebola v mínuse."}
                 </p>
               ) : (
                 dailyMovers.losers.map((row, idx) => (
@@ -1465,7 +1462,7 @@ export default function Dashboard() {
                     </div>
                     <div className="flex flex-col items-end gap-0.5 shrink-0">
                       <span className="inline-flex items-center gap-1">
-                        {moversUsePremarket && (
+                        {moversUseExtendedQuotes && (
                           <Moon className={`h-3.5 w-3.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
                         )}
                         <span className="text-sm font-semibold tabular-nums text-red-500">
