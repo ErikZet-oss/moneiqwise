@@ -879,23 +879,25 @@ export default function Dashboard() {
                 Z toho hotovosť / margin: {maskAmount(formatCurrency(metrics.cashValue))}
               </p>
             )}
-            <p className="text-xs text-muted-foreground truncate mt-0.5 inline-flex items-center gap-1" data-testid="text-pre-open-preview">
-              <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
-              Pred open:{" "}
-              {preOpenPreview.available ? (
-                <>
-                  <span className={getChangeColor(preOpenPreview.amount)}>
-                    {preOpenPreview.amount >= 0 ? "+" : ""}
-                    {maskAmount(formatCurrency(preOpenPreview.amount))}
-                  </span>
-                  <span className={`ml-1 ${getChangeColor(preOpenPreview.percent)}`}>
-                    ({formatPercent(preOpenPreview.percent)})
-                  </span>
-                </>
-              ) : (
-                "bez dát"
-              )}
-            </p>
+            {usSessionState !== "LIVE" && (
+              <p className="text-xs text-muted-foreground truncate mt-0.5 inline-flex items-center gap-1" data-testid="text-pre-open-preview">
+                <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
+                Pred open:{" "}
+                {preOpenPreview.available ? (
+                  <>
+                    <span className={getChangeColor(preOpenPreview.amount)}>
+                      {preOpenPreview.amount >= 0 ? "+" : ""}
+                      {maskAmount(formatCurrency(preOpenPreview.amount))}
+                    </span>
+                    <span className={`ml-1 ${getChangeColor(preOpenPreview.percent)}`}>
+                      ({formatPercent(preOpenPreview.percent)})
+                    </span>
+                  </>
+                ) : (
+                  "bez dát"
+                )}
+              </p>
+            )}
           </CardContent>
         </Card>
 

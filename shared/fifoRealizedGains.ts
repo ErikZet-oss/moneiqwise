@@ -65,7 +65,8 @@ export function computeFifoRealizedGainsFromTransactions(
     if (txn.type === "BUY") {
       const fb = eurPerUnitByTxnId.get(txn.id) ?? null;
       const { eur: lineEur } = buySellLineEur(txn, fb);
-      const sh = parseFloat(String(txn.shares));
+      const shRaw = parseFloat(String(txn.shares));
+      const sh = Math.abs(shRaw);
       if (!(sh > 0) || !Number.isFinite(lineEur) || lineEur <= 0) continue;
       const epu = eurPerUnitOfTradeCurrency(txn, lineEur, fb);
       const cps = lineEur / sh;
@@ -81,7 +82,8 @@ export function computeFifoRealizedGainsFromTransactions(
     } else if (txn.type === "SELL") {
       const fb = eurPerUnitByTxnId.get(txn.id) ?? null;
       const { eur: proceedsEur } = buySellLineEur(txn, fb);
-      const shSell = parseFloat(String(txn.shares));
+      const shSellRaw = parseFloat(String(txn.shares));
+      const shSell = Math.abs(shSellRaw);
       if (!(shSell > 0) || !Number.isFinite(proceedsEur)) continue;
       transactionCount++;
 
@@ -123,7 +125,7 @@ export function computeFifoRealizedGainsFromTransactions(
         };
       }
       byTicker[aggTicker].totalGain += gain;
-      byTicker[aggTicker].totalSold += sellValue;
+      byTicker[aggTicker].totalSold += Math.abs(sellValue);
       byTicker[aggTicker].transactions += 1;
     }
   }

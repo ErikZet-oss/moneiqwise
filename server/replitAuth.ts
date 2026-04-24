@@ -29,6 +29,17 @@ function parseBool(value: string | undefined, defaultValue: boolean) {
   return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
 
+function getEmailAllowlist() {
+  const raw = process.env.LOCAL_AUTH_EMAIL_ALLOWLIST;
+  if (!raw) return null;
+  const entries = raw
+    .split(",")
+    .map((v) => v.trim().toLowerCase())
+    .filter((v) => v.length > 0);
+  if (entries.length === 0) return null;
+  return new Set(entries);
+}
+
 /** True if request is clearly not from loopback (used only in production when LOCAL_AUTH_ALLOW_REMOTE=false). */
 function isRemoteIp(ip: string | undefined) {
   if (!ip) return false;
@@ -252,6 +263,14 @@ async function consumePasswordReset(email: string, token: string) {
 export async function setupAuth(app: Express) {
   const allowRemote = parseBool(process.env.LOCAL_AUTH_ALLOW_REMOTE, false);
   const sessionSecret = process.env.SESSION_SECRET || process.env.LOCAL_AUTH_SESSION_SECRET || "dev-only-change-me";
+  const emailAllowlist = getEmailAllowlist();
+
+  if (
+    process.env.NODE_ENV === "production" &&
+    (!process.env.SESSION_SECRET || process.env.SESSION_SECRET.trim().length < 32)
+  ) {
+    throw new Error("SESSION_SECRET musi byt v produkcii nastaveny a mat aspon 32 znakov.");
+  }
 
   app.set("trust proxy", 1);
   app.use(
@@ -339,6 +358,10 @@ export async function setupAuth(app: Express) {
       const values = validateCredentials(req, res, { requireStrongPassword: true });
       if (!values) return;
       const rememberMe = Boolean(req.body?.rememberMe);
+
+      if (emailAllowlist && !emailAllowlist.has(values.email)) {
+        return res.status(403).json({ message: "Registracia je povolena iba pre schvalene emaily." });
+      }
 
       const { firstName, lastName } = req.body ?? {};
       const existing = await findAccountByEmail(values.email);

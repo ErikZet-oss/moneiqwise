@@ -136,7 +136,83 @@ export default function FaqPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>3. Slovník pojmov</CardTitle>
+            <CardTitle>3. Zabezpečenie dát klienta</CardTitle>
+            <CardDescription>Čo je chránené a čo odporúčame nastaviť v produkcii.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6 text-sm text-foreground leading-relaxed">
+            <section>
+              <h3 className="text-base font-semibold mb-2">Ako chránime prihlásenie a heslá?</h3>
+              <ul className="list-disc pl-5 space-y-2">
+                <li>
+                  Heslá sa neukladajú v čitateľnej podobe; ukladajú sa ako <strong>hash + salt</strong> (scrypt).
+                </li>
+                <li>
+                  Prihlasovanie je chránené <strong>rate limitom</strong> a dočasným zámkom účtu po viacerých neúspešných pokusoch.
+                </li>
+                <li>
+                  Session cookie je nastavená ako <code>httpOnly</code> a v produkcii aj <code>secure</code> (len cez HTTPS).
+                </li>
+              </ul>
+            </section>
+
+            <Separator />
+
+            <section>
+              <h3 className="text-base font-semibold mb-2">Môžem obmedziť registrácie len na schválené emaily?</h3>
+              <p>
+                Áno. V produkcii vieš zapnúť email allowlist cez{" "}
+                <code>LOCAL_AUTH_EMAIL_ALLOWLIST</code> (zoznam emailov oddelených čiarkou). Registrácia mimo zoznamu bude odmietnutá.
+              </p>
+            </section>
+
+            <Separator />
+
+            <section>
+              <h3 className="text-base font-semibold mb-2">Čo odporúčame pre čo najvyššiu bezpečnosť?</h3>
+              <ul className="list-disc pl-5 space-y-2">
+                <li>
+                  V produkcii nastav silný <code>SESSION_SECRET</code> (dlhý náhodný reťazec, aspoň 32 znakov).
+                </li>
+                <li>
+                  Prevádzkuj aplikáciu výhradne cez <strong>HTTPS</strong>.
+                </li>
+                <li>
+                  Obmedz prístupy k databáze (least privilege), používaj pravidelné zálohy a overuj obnovu.
+                </li>
+                <li>
+                  Aktualizuj závislosti a sleduj bezpečnostné upozornenia.
+                </li>
+              </ul>
+            </section>
+
+            <Separator />
+
+            <section>
+              <h3 className="text-base font-semibold mb-2">Aké sú otváracie hodiny a čo znamená ikona mesiaca?</h3>
+              <p>
+                Pre americký trh používame orientačné časové pásma podľa času v Bratislave:
+              </p>
+              <ul className="list-disc pl-5 space-y-2 mt-2">
+                <li>
+                  <strong>PRE_MARKET:</strong> približne 10:00 – 15:30 (pracovné dni)
+                </li>
+                <li>
+                  <strong>LIVE (hlavná relácia):</strong> 15:30 – 22:00
+                </li>
+                <li>
+                  <strong>CLOSED:</strong> mimo týchto hodín a počas víkendu
+                </li>
+              </ul>
+              <p className="mt-2">
+                Ikona <strong>mesiaca</strong> označuje hodnoty mimo hlavnej burzovej relácie (pre-market / off-hours). Takéto ceny a percentá sa môžu meniť inak ako počas LIVE obchodovania a slúžia najmä ako orientačný prehľad pred otvorením trhu.
+              </p>
+            </section>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>4. Slovník pojmov</CardTitle>
             <CardDescription>Stručné definície.</CardDescription>
           </CardHeader>
           <CardContent className="text-sm space-y-3 text-foreground leading-relaxed">
@@ -171,7 +247,7 @@ export default function FaqPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>4. Riešenie problémov</CardTitle>
+            <CardTitle>5. Riešenie problémov</CardTitle>
             <CardDescription>Keď niečo nenájdeš alebo import zlyhá.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6 text-sm text-foreground leading-relaxed">

@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, TrendingDown, Calendar, CalendarDays, AlertCircle, BarChart3, Wallet, ChevronRight } from "lucide-react";
+import { Calendar, CalendarDays, AlertCircle, BarChart3, Wallet, ChevronRight } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, ReferenceLine } from "recharts";
 import { format, startOfMonth, endOfMonth, startOfYear, endOfYear, eachDayOfInterval, eachMonthOfInterval, eachYearOfInterval, parseISO, isAfter, isBefore, isSameDay, subDays, isWeekend, startOfDay } from "date-fns";
 import { sk } from "date-fns/locale";
@@ -435,59 +435,6 @@ export default function Profit() {
     }).filter(p => p.startValue > 0 || p.endValue > 0 || p.periodProfit !== 0);
   }, [dailyData, viewMode]);
 
-  const summaryStats = useMemo(() => {
-    if (dailyData.length === 0 || !transactions) {
-      return null;
-    }
-
-    const today = dailyData[dailyData.length - 1];
-    const yesterday = dailyData.length > 1 ? dailyData[dailyData.length - 2] : null;
-    
-    const dailyProfit = today.dailyProfit;
-    const dailyPercent = yesterday ? (dailyProfit / yesterday.portfolioValue) * 100 : 0;
-
-    const thisMonth = dailyData.filter(d => 
-      d.date.getMonth() === new Date().getMonth() && 
-      d.date.getFullYear() === new Date().getFullYear()
-    );
-    const monthlyProfit = thisMonth.reduce((sum, d) => sum + d.dailyProfit, 0);
-    const monthStartValue = thisMonth.length > 0 ? 
-      (dailyData.findIndex(d => isSameDay(d.date, thisMonth[0].date)) > 0 
-        ? dailyData[dailyData.findIndex(d => isSameDay(d.date, thisMonth[0].date)) - 1].portfolioValue 
-        : thisMonth[0].totalCost) 
-      : 0;
-    const monthlyPercent = monthStartValue > 0 ? (monthlyProfit / monthStartValue) * 100 : 0;
-
-    const thisYear = dailyData.filter(d => d.date.getFullYear() === new Date().getFullYear());
-    const yearlyProfit = thisYear.reduce((sum, d) => sum + d.dailyProfit, 0);
-    const yearStartValue = thisYear.length > 0 ? 
-      (dailyData.findIndex(d => isSameDay(d.date, thisYear[0].date)) > 0 
-        ? dailyData[dailyData.findIndex(d => isSameDay(d.date, thisYear[0].date)) - 1].portfolioValue 
-        : thisYear[0].totalCost) 
-      : 0;
-    const yearlyPercent = yearStartValue > 0 ? (yearlyProfit / yearStartValue) * 100 : 0;
-
-    const totalProfit = today.cumulativeProfit;
-    const totalPercent = today.totalCost > 0 ? (totalProfit / today.totalCost) * 100 : 0;
-
-    const dates = transactions.map(t => parseISO(t.transactionDate as unknown as string));
-    const firstPurchaseDate = new Date(Math.min(...dates.map(d => d.getTime())));
-
-    return {
-      currentValue: today.portfolioValue,
-      totalCost: today.totalCost,
-      dailyProfit,
-      dailyPercent,
-      monthlyProfit,
-      monthlyPercent,
-      yearlyProfit,
-      yearlyPercent,
-      totalProfit,
-      totalPercent,
-      firstPurchaseDate,
-    };
-  }, [dailyData, transactions]);
-
   const formatPercent = (value: number) => {
     const sign = value >= 0 ? "+" : "";
     return `${sign}${value.toFixed(2)}%`;
@@ -589,106 +536,6 @@ export default function Profit() {
             YTD
           </Button>
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Denný zisk</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className={`text-xl font-bold ${(summaryStats?.dailyProfit ?? 0) >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-daily-profit">
-              {summaryStats ? formatCurrency(summaryStats.dailyProfit) : "-"}
-            </div>
-            <div className={`text-sm flex items-center gap-1 ${(summaryStats?.dailyPercent ?? 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
-              {(summaryStats?.dailyPercent ?? 0) >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-              {summaryStats ? formatPercent(summaryStats.dailyPercent) : "-"}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Mesačný zisk</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className={`text-xl font-bold ${(summaryStats?.monthlyProfit ?? 0) >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-monthly-profit">
-              {summaryStats ? formatCurrency(summaryStats.monthlyProfit) : "-"}
-            </div>
-            <div className={`text-sm flex items-center gap-1 ${(summaryStats?.monthlyPercent ?? 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
-              {(summaryStats?.monthlyPercent ?? 0) >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-              {summaryStats ? formatPercent(summaryStats.monthlyPercent) : "-"}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">YTD zisk</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className={`text-xl font-bold ${(summaryStats?.yearlyProfit ?? 0) >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-ytd-profit">
-              {summaryStats ? formatCurrency(summaryStats.yearlyProfit) : "-"}
-            </div>
-            <div className={`text-sm flex items-center gap-1 ${(summaryStats?.yearlyPercent ?? 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
-              {(summaryStats?.yearlyPercent ?? 0) >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-              {summaryStats ? formatPercent(summaryStats.yearlyPercent) : "-"}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Celkový zisk</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className={`text-xl font-bold ${(summaryStats?.totalProfit ?? 0) >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-total-profit">
-              {summaryStats ? formatCurrency(summaryStats.totalProfit) : "-"}
-            </div>
-            <div className={`text-sm flex items-center gap-1 ${(summaryStats?.totalPercent ?? 0) >= 0 ? "text-green-500" : "text-red-500"}`}>
-              {(summaryStats?.totalPercent ?? 0) >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-              {summaryStats ? formatPercent(summaryStats.totalPercent) : "-"}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Aktuálna hodnota</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-current-value">
-              {summaryStats ? formatCurrency(summaryStats.currentValue) : "-"}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Celkovo investované</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-total-invested">
-              {summaryStats ? formatCurrency(summaryStats.totalCost) : "-"}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Prvý nákup</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-first-purchase">
-              {summaryStats?.firstPurchaseDate 
-                ? format(summaryStats.firstPurchaseDate, "d. MMM yyyy", { locale: sk })
-                : "-"
-              }
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Year / month performance breakdown (server-aggregated, cached) */}

@@ -165,6 +165,28 @@
 
 /* Utility classes for profit/loss colors */
 @layer utilities {
+  @keyframes market-ticker-marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  .market-ticker-track {
+    display: flex;
+    width: max-content;
+    will-change: transform;
+    animation: market-ticker-marquee 42s linear infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .market-ticker-track {
+      animation: none;
+    }
+  }
+
   .text-profit {
     @apply text-green-500;
   }
