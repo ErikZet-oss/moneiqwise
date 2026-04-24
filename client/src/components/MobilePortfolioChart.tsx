@@ -501,8 +501,8 @@ export function MobilePortfolioChart({
     return "CLOSED" as const;
   })();
 
-  const displayedDailyChange = usSessionState === "PRE_MARKET" ? 0 : dailyChange;
-  const displayedDailyChangePercent = usSessionState === "PRE_MARKET" ? 0 : dailyChangePercent;
+  const displayedDailyChange = usSessionState === "LIVE" ? dailyChange : 0;
+  const displayedDailyChangePercent = usSessionState === "LIVE" ? dailyChangePercent : 0;
 
   const formatLargeNumber = (num: number) => {
     const formatted = formatCurrency(num);

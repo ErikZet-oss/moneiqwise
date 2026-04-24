@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Wallet, Banknote, Newspaper, ExternalLink, HelpCircle, Loader2, RefreshCw, Moon, CalendarClock } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Wallet, Banknote, Newspaper, ExternalLink, HelpCircle, Loader2, RefreshCw, Moon } from "lucide-react";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
@@ -62,17 +62,7 @@ interface PnlBreakdown {
   dividendNet: number;
   projectedDividendNext12m?: number;
   dividendNetYtdCalendarYear?: number;
-  estimatedDividendCurrentYear?: number;
   method: { realized: string; costEur: string };
-}
-
-interface UpcomingDividendNext {
-  ticker: string;
-  companyName: string;
-  date: string;
-  kind: "ex_dividend" | "payout";
-  estimatedGrossInUserCcy: number | null;
-  eventMs: number;
 }
 
 interface OptionTrade {
@@ -134,6 +124,17 @@ interface NewsArticle {
   publishedAt: number;
   summary?: string;
   thumbnail?: string;
+}
+
+interface PortfolioHistoryYtdPoint {
+  date: string;
+  portfolioCumulativePct: number;
+  sp500CumulativePct: number;
+}
+
+interface PortfolioHistoryYtdRes {
+  points: PortfolioHistoryYtdPoint[];
+  startIso?: string;
 }
 
 export default function Dashboard() {
@@ -405,27 +406,19 @@ export default function Dashboard() {
     enabled: dashboardSecondaryReady,
   });
 
-  const { data: upcomingDividendPayload, isLoading: upcomingDividendLoading } = useQuery<{
-    next: UpcomingDividendNext | null;
-    all?: UpcomingDividendNext[];
-  }>({
-    queryKey: ["/api/dividends/upcoming", portfolioParam],
+  const { data: ytdHistory } = useQuery<PortfolioHistoryYtdRes>({
+    queryKey: ["/api/portfolio-history", portfolioParam, "ytd"],
     queryFn: async () => {
-      const res = await fetch(
-        `/api/dividends/upcoming?portfolio=${encodeURIComponent(portfolioParam)}`,
-        { credentials: "include" },
-      );
-      if (!res.ok) throw new Error("upcoming dividend");
+      const params = new URLSearchParams();
+      params.set("portfolio", portfolioParam);
+      params.set("range", "ytd");
+      const res = await fetch(`/api/portfolio-history?${params.toString()}`, { credentials: "include" });
+      if (!res.ok) throw new Error("ytd history");
       return res.json();
     },
-    staleTime: 60 * 60 * 1000,
-    enabled: dashboardSecondaryReady && !!holdings && holdings.length > 0,
+    staleTime: 15 * 60 * 1000,
+    enabled: dashboardSecondaryReady,
   });
-
-  const upcomingDividend =
-    upcomingDividendPayload?.next ??
-    upcomingDividendPayload?.all?.[0] ??
-    null;
 
   const { data: news, isLoading: newsLoading } = useQuery<NewsArticle[]>({
     queryKey: ["/api/news", portfolioParam],
@@ -660,8 +653,23 @@ export default function Dashboard() {
     return { available: true, amount, percent };
   }, [holdings, quotes, convertPrice, getTickerCurrency]);
 
-  const displayedDailyChange = usSessionState === "PRE_MARKET" ? 0 : metrics.dailyChange;
-  const displayedDailyChangePercent = usSessionState === "PRE_MARKET" ? 0 : metrics.dailyChangePercent;
+  const ytdComparison = useMemo(() => {
+    const points = ytdHistory?.points ?? [];
+    if (points.length === 0) return null;
+    const last = points[points.length - 1];
+    if (!last) return null;
+    const portfolio = Number.isFinite(last.portfolioCumulativePct) ? last.portfolioCumulativePct : 0;
+    const sp500 = Number.isFinite(last.sp500CumulativePct) ? last.sp500CumulativePct : 0;
+    return {
+      portfolio,
+      sp500,
+      alpha: portfolio - sp500,
+      yearLabel: ytdHistory?.startIso?.slice(0, 4) ?? String(new Date().getFullYear()),
+    };
+  }, [ytdHistory]);
+
+  const displayedDailyChange = usSessionState === "LIVE" ? metrics.dailyChange : 0;
+  const displayedDailyChangePercent = usSessionState === "LIVE" ? metrics.dailyChangePercent : 0;
 
   const moversAsOfDate = useMemo(() => {
     if (!quotesData) return null;
@@ -1056,97 +1064,60 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="h-full border-border/70 bg-card/95 shadow-sm" data-testid="card-dividend-preview">
+        <Card className="h-full border-border/70 bg-card/95 shadow-sm" data-testid="card-ytd-benchmark">
           <CardHeader className="flex min-h-[68px] flex-row items-center justify-between gap-2 border-b border-border/40 p-4 pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">
-              <CalendarClock className="h-4 w-4" />
-              Dividenda
+              <ArrowUpDown className="h-4 w-4" />
+              YTD vs S&P 500
               <Tooltip>
                 <TooltipTrigger asChild>
                   <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                 </TooltipTrigger>
                 <TooltipContent className="max-w-[300px]">
-                  <p className="font-semibold mb-1">Odhad za kalendárny rok</p>
+                  <p className="font-semibold mb-1">Porovnanie od začiatku roka</p>
                   <p className="text-xs">
-                    Čisté dividendy už pripísané tento rok plus odhad zvyšku podľa miery z posledných 12 mesiacov. Najbližšia
-                    udalosť podľa kalendára Yahoo (ex-dividend alebo výplata), suma výplaty je len orientačná z poslednej
-                    známnej dividendy na kus.
+                    Porovnávame výkonnosť vášho portfólia voči S&amp;P 500 v rovnakom YTD intervale. Alpha je rozdiel portfólia
+                    mínus index.
                   </p>
                 </TooltipContent>
               </Tooltip>
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-4 pt-3 space-y-3">
-            <div data-testid="block-nearest-dividend">
-              <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2">
-                Najbližšia dividenda
-              </p>
-              {upcomingDividendLoading ? (
-                <Skeleton className="h-14 w-full rounded-lg" />
-              ) : upcomingDividend ? (
-                <button
-                  type="button"
-                  className="w-full flex items-start gap-3 rounded-lg border border-border/50 bg-muted/20 p-2.5 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={() => setLocation(`/asset/${encodeURIComponent(upcomingDividend.ticker)}`)}
-                  data-testid="button-nearest-dividend"
+          <CardContent className="p-4 pt-3 space-y-2">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              YTD {ytdComparison?.yearLabel ?? new Date().getFullYear()}
+            </div>
+            {ytdComparison ? (
+              <>
+                <div className="flex items-center justify-between rounded-md border border-border/50 bg-muted/20 px-2.5 py-2">
+                  <span className="text-xs text-muted-foreground">Moje portfólio (YTD)</span>
+                  <span className={`text-sm font-semibold tabular-nums ${getChangeColor(ytdComparison.portfolio)}`}>
+                    {formatPercent(ytdComparison.portfolio)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between rounded-md border border-border/50 bg-muted/20 px-2.5 py-2">
+                  <span className="text-xs text-muted-foreground">S&amp;P 500 (YTD)</span>
+                  <span className={`text-sm font-semibold tabular-nums ${getChangeColor(ytdComparison.sp500)}`}>
+                    {formatPercent(ytdComparison.sp500)}
+                  </span>
+                </div>
+                <div
+                  className={`flex items-center justify-between rounded-md border px-2.5 py-2 ${
+                    ytdComparison.alpha >= 0
+                      ? "border-emerald-500/40 bg-emerald-500/10"
+                      : "border-rose-500/40 bg-rose-500/10"
+                  }`}
+                  data-testid="text-ytd-alpha"
                 >
-                  <CompanyLogo
-                    ticker={upcomingDividend.ticker}
-                    companyName={upcomingDividend.companyName}
-                    size="md"
-                    className="shrink-0"
-                  />
-                  <div className="min-w-0 flex-1 space-y-0.5">
-                    <div className="text-sm font-semibold tracking-tight text-foreground truncate">
-                      {upcomingDividend.ticker}
-                    </div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {new Date(`${upcomingDividend.date}T12:00:00`).toLocaleDateString("sk-SK", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                      <span className="text-muted-foreground/80">
-                        {upcomingDividend.kind === "ex_dividend" ? " · ex-dividend" : " · výplata"}
-                      </span>
-                    </div>
-                    {upcomingDividend.estimatedGrossInUserCcy != null &&
-                      upcomingDividend.estimatedGrossInUserCcy > 0 && (
-                        <div className="text-xs font-medium tabular-nums text-blue-600 dark:text-blue-400 pt-0.5">
-                          Odhad hrubého: ~{maskAmount(formatCurrency(upcomingDividend.estimatedGrossInUserCcy))}
-                        </div>
-                      )}
-                  </div>
-                </button>
-              ) : (
-                <p className="text-xs text-muted-foreground leading-snug">
-                  Žiadna ohlásená udalosť v kalendári Yahoo pre vaše držané tituly.
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-1 border-t border-border/40 pt-3">
-              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Odhad za kalendárny rok</p>
-              <div
-                className="text-2xl font-semibold leading-tight tracking-tight truncate text-blue-600 dark:text-blue-400"
-                data-testid="text-estimated-dividend-year"
-              >
-                {pnlBreakdown != null &&
-                pnlBreakdown.estimatedDividendCurrentYear != null &&
-                pnlBreakdown.estimatedDividendCurrentYear > 0
-                  ? `+${maskAmount(formatCurrency(pnlBreakdown.estimatedDividendCurrentYear))}`
-                  : pnlBreakdown != null
-                    ? maskAmount(formatCurrency(0))
-                    : "…"}
-              </div>
-              {pnlBreakdown != null &&
-                pnlBreakdown.dividendNetYtdCalendarYear != null &&
-                pnlBreakdown.dividendNetYtdCalendarYear > 0 && (
-                  <p className="text-[11px] text-muted-foreground truncate">
-                    Už tento rok: {maskAmount(formatCurrency(pnlBreakdown.dividendNetYtdCalendarYear))}
-                  </p>
-                )}
-            </div>
+                  <span className="text-xs font-medium">Nadvynos (Alpha)</span>
+                  <span className={`text-sm font-bold tabular-nums ${getChangeColor(ytdComparison.alpha)}`}>
+                    {formatPercent(ytdComparison.alpha)}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">YTD porovnanie sa zobrazi po nacitani historickych dat.</p>
+            )}
           </CardContent>
         </Card>
 
