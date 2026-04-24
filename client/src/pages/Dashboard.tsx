@@ -778,12 +778,6 @@ export default function Dashboard() {
     return "text-muted-foreground";
   };
 
-  const getMarketDotStyle = (isOpen: boolean | null | undefined) => {
-    if (isOpen === true) return { cls: "bg-green-500", title: "Trh otvorený" };
-    if (isOpen === false) return { cls: "bg-red-500", title: "Trh zatvorený" };
-    return { cls: "bg-muted-foreground/50", title: "Stav trhu nejednoznačný" };
-  };
-
   if (holdingsLoading) {
     return (
       <div className="space-y-6">
@@ -1549,7 +1543,6 @@ export default function Dashboard() {
                       }}
                     >
                       {(() => {
-                        const marketDot = getMarketDotStyle(quotes?.[holding.ticker]?.isMarketOpen);
                         return (
                           <>
                             <div className="flex items-center justify-between">
@@ -1565,10 +1558,6 @@ export default function Dashboard() {
                                       data-testid={`link-ticker-${holding.ticker}`}
                                       onClick={(e) => e.stopPropagation()}
                                     >
-                                      <span
-                                        className={`inline-block h-1.5 w-1.5 rounded-full mr-1.5 align-middle ${marketDot.cls}`}
-                                        title={marketDot.title}
-                                      />
                                       {holding.ticker}
                                     </a>
                                     <span className="text-[9px] text-muted-foreground">
@@ -1721,7 +1710,6 @@ export default function Dashboard() {
 
                       return (
                         (() => {
-                          const marketDot = getMarketDotStyle(quotes?.[holding.ticker]?.isMarketOpen);
                           return (
                         <TableRow
                           key={holding.id}
@@ -1740,10 +1728,6 @@ export default function Dashboard() {
                                 data-testid={`link-ticker-${holding.ticker}`}
                                 onClick={(e) => e.stopPropagation()}
                               >
-                                <span
-                                  className={`inline-block h-2 w-2 rounded-full mr-2 align-middle ${marketDot.cls}`}
-                                  title={marketDot.title}
-                                />
                                 {holding.ticker}
                               </a>
                             </div>

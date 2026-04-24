@@ -72,7 +72,8 @@ export function MarketQuoteTicker() {
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     const update = () => {
       const overflows = content.scrollWidth - viewport.clientWidth > 8;
-      setShouldAnimate(overflows && !reducedMotion.matches);
+      const animateOnMobile = isMobile;
+      setShouldAnimate((overflows || animateOnMobile) && !reducedMotion.matches);
     };
 
     update();
@@ -86,7 +87,7 @@ export function MarketQuoteTicker() {
       observer.disconnect();
       reducedMotion.removeEventListener("change", update);
     };
-  }, [isLoading, data]);
+  }, [isLoading, data, isMobile]);
 
   const renderItems = (duplicate = false) =>
     isLoading

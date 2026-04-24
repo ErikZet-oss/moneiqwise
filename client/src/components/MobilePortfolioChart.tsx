@@ -651,38 +651,40 @@ export function MobilePortfolioChart({
         </span>
       </div>
 
-      <div className="flex items-center gap-2 mb-2">
-        <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
-          <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
-          Pred open:
-        </span>
-        {preOpenPreview.available ? (
-          <>
-            <span
-              className={`text-xs font-medium ${
-                preOpenPreview.amount >= 0 ? "text-green-500" : "text-red-500"
-              }`}
-              data-testid="text-mobile-pre-open-amount"
-            >
-              {preOpenPreview.amount >= 0 ? "+" : ""}
-              {maskAmount(formatCurrency(preOpenPreview.amount))}
-            </span>
-            <span
-              className={`text-[10px] px-1 py-0.5 rounded font-medium ${
-                preOpenPreview.amount >= 0
-                  ? "bg-green-500/20 text-green-500"
-                  : "bg-red-500/20 text-red-500"
-              }`}
-              data-testid="text-mobile-pre-open-percent"
-            >
-              {preOpenPreview.percent >= 0 ? "+" : ""}
-              {preOpenPreview.percent.toFixed(2)}%
-            </span>
-          </>
-        ) : (
-          <span className="text-xs text-muted-foreground">bez dát</span>
-        )}
-      </div>
+      {usSessionState !== "LIVE" && (
+        <div className="flex items-center gap-2 mb-2">
+          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
+            <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
+            Pred open:
+          </span>
+          {preOpenPreview.available ? (
+            <>
+              <span
+                className={`text-xs font-medium ${
+                  preOpenPreview.amount >= 0 ? "text-green-500" : "text-red-500"
+                }`}
+                data-testid="text-mobile-pre-open-amount"
+              >
+                {preOpenPreview.amount >= 0 ? "+" : ""}
+                {maskAmount(formatCurrency(preOpenPreview.amount))}
+              </span>
+              <span
+                className={`text-[10px] px-1 py-0.5 rounded font-medium ${
+                  preOpenPreview.amount >= 0
+                    ? "bg-green-500/20 text-green-500"
+                    : "bg-red-500/20 text-red-500"
+                }`}
+                data-testid="text-mobile-pre-open-percent"
+              >
+                {preOpenPreview.percent >= 0 ? "+" : ""}
+                {preOpenPreview.percent.toFixed(2)}%
+              </span>
+            </>
+          ) : (
+            <span className="text-xs text-muted-foreground">bez dát</span>
+          )}
+        </div>
+      )}
 
       {showChart && (
         <>

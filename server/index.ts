@@ -10,7 +10,16 @@ const httpServer = createServer(app);
 
 app.use(
   helmet({
-    contentSecurityPolicy: process.env.NODE_ENV === "production" ? undefined : false,
+    contentSecurityPolicy:
+      process.env.NODE_ENV === "production"
+        ? {
+            useDefaults: true,
+            directives: {
+              // CompanyLogo/BrokerLogo načítavajú logá z externých HTTPS domén.
+              imgSrc: ["'self'", "data:", "https:"],
+            },
+          }
+        : false,
     crossOriginEmbedderPolicy: false,
   }),
 );
