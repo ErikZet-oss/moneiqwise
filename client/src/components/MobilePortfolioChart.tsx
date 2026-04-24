@@ -632,23 +632,7 @@ export function MobilePortfolioChart({
           </span>
         </div>
       )}
-      {usSessionState === "PRE_MARKET" && (
-        <div className="flex items-center gap-1.5 mb-1 text-[10px] text-muted-foreground">
-          <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
-          <span>
-            Pre-market:{" "}
-            {preOpenPreview.available ? (
-              <span>
-                {preOpenPreview.amount >= 0 ? "+" : ""}
-                {maskAmount(formatCurrency(preOpenPreview.amount))}
-              </span>
-            ) : (
-              "bez dát"
-            )}
-          </span>
-        </div>
-      )}
-      {usSessionState === "CLOSED" && (
+      {usSessionState !== "LIVE" && (
         <div className="mb-1 text-[10px] text-muted-foreground">Trh uzatvorený</div>
       )}
 

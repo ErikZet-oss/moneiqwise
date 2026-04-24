@@ -671,36 +671,6 @@ export default function Dashboard() {
   const displayedDailyChange = usSessionState === "LIVE" ? metrics.dailyChange : 0;
   const displayedDailyChangePercent = usSessionState === "LIVE" ? metrics.dailyChangePercent : 0;
 
-  const moversAsOfDate = useMemo(() => {
-    if (!quotesData) return null;
-    const anyMarketOpen = Object.values(quotesData).some((q) => q.isMarketOpen === true);
-    const dates = Object.values(quotesData)
-      .map((q) => q.quoteDate)
-      .filter((d): d is string => typeof d === "string" && d.length > 0);
-    if (dates.length === 0) return null;
-    const latest = dates.sort().at(-1);
-    if (!latest) return null;
-
-    let parsed = new Date(`${latest}T00:00:00`);
-    if (Number.isNaN(parsed.getTime())) return latest;
-
-    // Ak nie je otvorený žiadny trh, "dnes" pri movers zväčša znamená posledný
-    // uzavretý obchodný deň (predošlá session), nie aktuálny kalendárny deň.
-    if (!anyMarketOpen) {
-      const adjusted = new Date(parsed);
-      do {
-        adjusted.setDate(adjusted.getDate() - 1);
-      } while (adjusted.getDay() === 0 || adjusted.getDay() === 6);
-      parsed = adjusted;
-    }
-
-    return parsed.toLocaleDateString("sk-SK", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    });
-  }, [quotesData]);
-
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDirection(sortDirection === "asc" ? "desc" : "asc");
@@ -1044,21 +1014,7 @@ export default function Dashboard() {
             <p className={`text-xs mt-1 ${getChangeColor(displayedDailyChangePercent)}`}>
               {formatPercent(displayedDailyChangePercent)}
             </p>
-            {usSessionState === "PRE_MARKET" && (
-              <p className="text-[11px] text-muted-foreground mt-1 inline-flex items-center gap-1">
-                <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
-                Pre-market:{" "}
-                {preOpenPreview.available ? (
-                  <span>
-                    {preOpenPreview.amount >= 0 ? "+" : ""}
-                    {maskAmount(formatCurrency(preOpenPreview.amount))}
-                  </span>
-                ) : (
-                  "bez dát"
-                )}
-              </p>
-            )}
-            {usSessionState === "CLOSED" && (
+            {usSessionState !== "LIVE" && (
               <p className="text-[11px] text-muted-foreground mt-1">Trh uzatvorený</p>
             )}
             {dataUpdatedAt && (
@@ -1360,7 +1316,7 @@ export default function Dashboard() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2 flex-wrap">
                 <TrendingUp className="h-4 w-4 text-green-500" />
-                Najsilnejšie dnes (%)
+                Najlepšie (%)
                 {moversUsePremarket && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -1389,7 +1345,6 @@ export default function Dashboard() {
                   : isAllPortfolios
                     ? "Z držaných akcií vo všetkých portfóliách — denná zmena podľa kotácie."
                     : `Z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ — denná zmena podľa kotácie.`}
-                {moversAsOfDate ? ` (k dátumu ${moversAsOfDate})` : ""}
               </p>
             </CardHeader>
             <CardContent className="space-y-2 pt-0">
@@ -1451,7 +1406,7 @@ export default function Dashboard() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2 flex-wrap">
                 <TrendingDown className="h-4 w-4 text-red-500" />
-                Najslabšie dnes (%)
+                Najhoršie (%)
                 {moversUsePremarket && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -1480,7 +1435,6 @@ export default function Dashboard() {
                   : isAllPortfolios
                     ? "Z držaných akcií vo všetkých portfóliách — denná zmena podľa kotácie."
                     : `Z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ — denná zmena podľa kotácie.`}
-                {moversAsOfDate ? ` (k dátumu ${moversAsOfDate})` : ""}
               </p>
             </CardHeader>
             <CardContent className="space-y-2 pt-0">
