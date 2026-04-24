@@ -3,10 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
-import { Calendar, CalendarDays, AlertCircle, BarChart3, Wallet, ChevronRight } from "lucide-react";
+import { CalendarDays, AlertCircle, Wallet, ChevronRight } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, ReferenceLine } from "recharts";
-import { format, startOfMonth, endOfMonth, startOfYear, endOfYear, eachDayOfInterval, eachMonthOfInterval, eachYearOfInterval, parseISO, isAfter, isBefore, isSameDay, subDays, isWeekend, startOfDay } from "date-fns";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, eachMonthOfInterval, parseISO, isAfter, isBefore, isSameDay, subDays, isWeekend, startOfDay } from "date-fns";
 import { sk } from "date-fns/locale";
 import { apiRequest } from "@/lib/queryClient";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -95,10 +94,7 @@ interface PerformanceResponse {
   computedAt: number;
 }
 
-type ViewMode = "daily" | "month" | "year" | "ytd";
-
 export default function Profit() {
-  const [viewMode, setViewMode] = useState<ViewMode>("month");
   const { currency, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
   const { getQueryParam } = usePortfolio();
   
@@ -360,46 +356,12 @@ export default function Profit() {
     const firstDate = dailyData[0].date;
     const lastDate = dailyData[dailyData.length - 1].date;
 
-    let periods: { start: Date; end: Date; label: string }[] = [];
-
-    if (viewMode === "daily") {
-      const last30Days = dailyData.slice(-30);
-      return last30Days.map((day, index) => {
-        const prevDay = index > 0 ? last30Days[index - 1] : null;
-        const startValue = prevDay ? prevDay.portfolioValue : day.totalCost;
-        const percentReturn = startValue > 0 ? (day.dailyProfit / startValue) * 100 : 0;
-        
-        return {
-          period: format(day.date, "d. MMM", { locale: sk }),
-          periodDate: day.date,
-          startValue,
-          endValue: day.portfolioValue,
-          periodProfit: day.dailyProfit,
-          percentReturn,
-        };
-      });
-    } else if (viewMode === "month") {
-      const months = eachMonthOfInterval({ start: startOfMonth(firstDate), end: endOfMonth(lastDate) });
-      periods = months.map(month => ({
-        start: startOfMonth(month),
-        end: endOfMonth(month),
-        label: format(month, "MMM yyyy", { locale: sk }),
-      }));
-    } else if (viewMode === "year") {
-      const years = eachYearOfInterval({ start: startOfYear(firstDate), end: endOfYear(lastDate) });
-      periods = years.map(year => ({
-        start: startOfYear(year),
-        end: endOfYear(year),
-        label: format(year, "yyyy"),
-      }));
-    } else if (viewMode === "ytd") {
-      const ytdStart = startOfYear(new Date());
-      periods = [{
-        start: ytdStart,
-        end: new Date(),
-        label: `YTD ${format(new Date(), "yyyy")}`,
-      }];
-    }
+    const months = eachMonthOfInterval({ start: startOfMonth(firstDate), end: endOfMonth(lastDate) });
+    const periods = months.map((month) => ({
+      start: startOfMonth(month),
+      end: endOfMonth(month),
+      label: format(month, "MMM yyyy", { locale: sk }),
+    }));
 
     return periods.map(period => {
       const daysInPeriod = dailyData.filter(d => 
@@ -433,7 +395,7 @@ export default function Profit() {
         percentReturn,
       };
     }).filter(p => p.startValue > 0 || p.endValue > 0 || p.periodProfit !== 0);
-  }, [dailyData, viewMode]);
+  }, [dailyData]);
 
   const formatPercent = (value: number) => {
     const sign = value >= 0 ? "+" : "";
@@ -497,46 +459,7 @@ export default function Profit() {
         </Alert>
       )}
 
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h2 className="text-xl font-semibold">Analýza zisku</h2>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant={viewMode === "daily" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setViewMode("daily")}
-            data-testid="button-view-daily"
-          >
-            <BarChart3 className="h-4 w-4 mr-2" />
-            Denný
-          </Button>
-          <Button
-            variant={viewMode === "month" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setViewMode("month")}
-            data-testid="button-view-month"
-          >
-            <Calendar className="h-4 w-4 mr-2" />
-            Mesačný
-          </Button>
-          <Button
-            variant={viewMode === "year" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setViewMode("year")}
-            data-testid="button-view-year"
-          >
-            <CalendarDays className="h-4 w-4 mr-2" />
-            Ročný
-          </Button>
-          <Button
-            variant={viewMode === "ytd" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setViewMode("ytd")}
-            data-testid="button-view-ytd"
-          >
-            YTD
-          </Button>
-        </div>
-      </div>
+      <h2 className="text-xl font-semibold">Analýza zisku</h2>
 
       {/* Year / month performance breakdown (server-aggregated, cached) */}
       <YearMonthPerformance
@@ -692,9 +615,7 @@ export default function Profit() {
 
       <Card>
         <CardHeader>
-          <CardTitle>
-            {viewMode === "daily" ? "Denný" : viewMode === "month" ? "Mesačný" : viewMode === "year" ? "Ročný" : "YTD"} zisk/strata
-          </CardTitle>
+          <CardTitle>Mesačný zisk/strata</CardTitle>
           <CardDescription>
             Zisk alebo strata za obdobie
           </CardDescription>
@@ -737,9 +658,7 @@ export default function Profit() {
 
       <Card>
         <CardHeader>
-          <CardTitle>
-            {viewMode === "daily" ? "Denné" : viewMode === "month" ? "Mesačné" : viewMode === "year" ? "Ročné" : "YTD"} štatistiky
-          </CardTitle>
+          <CardTitle>Mesačné štatistiky</CardTitle>
           <CardDescription>
             Detailný prehľad za obdobie
           </CardDescription>

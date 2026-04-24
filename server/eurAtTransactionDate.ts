@@ -90,7 +90,8 @@ function txnIsoDate(t: Transaction): string {
 }
 
 function needsFrankfurtFallback(t: Transaction): boolean {
-  if (t.type !== "BUY" && t.type !== "SELL") return false;
+  const kind = String(t.type ?? "").toUpperCase();
+  if (kind !== "BUY" && kind !== "SELL") return false;
   const ccy = inferTradeCurrency(t);
   if (ccy === "EUR") return false;
   if (t.baseCurrencyAmount != null && String(t.baseCurrencyAmount).trim() !== "") {

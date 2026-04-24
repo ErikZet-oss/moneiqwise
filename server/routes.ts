@@ -3706,7 +3706,7 @@ export async function registerRoutes(
       let updatedCount = 0;
       
       for (const txn of sortedTransactions) {
-        const shares = parseFloat(txn.shares);
+        const shares = Math.abs(parseFloat(String(txn.shares)));
         const price = parseFloat(txn.pricePerShare);
         const commission = parseFloat(txn.commission || "0");
         const lotKey = transactionLotKey(txn);

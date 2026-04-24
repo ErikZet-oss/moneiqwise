@@ -6,5 +6,8 @@ export function transactionLotKey(txn: {
   ticker: string;
 }): string {
   const pid = txn.portfolioId ?? "__none__";
-  return `${pid}::${txn.ticker}`;
+  const sym = String(txn.ticker ?? "")
+    .trim()
+    .toUpperCase();
+  return `${pid}::${sym}`;
 }

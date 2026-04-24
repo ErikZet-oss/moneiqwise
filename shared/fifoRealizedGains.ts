@@ -37,11 +37,22 @@ export function computeFifoRealizedGainsFromTransactions(
   /** Kľúč YYYY-MM (UTC) → realizovaný zisk v EUR. */
   realizedEurByYearMonth: Record<string, number>;
 } {
-  const sorted = [...userTransactions].sort(
-    (a, b) =>
-      new Date(a.transactionDate as unknown as string).getTime() -
-      new Date(b.transactionDate as unknown as string).getTime(),
-  );
+  const txnTypeOrder = (t: Transaction) => {
+    const k = String(t.type ?? "").toUpperCase();
+    if (k === "BUY") return 0;
+    if (k === "SELL") return 1;
+    return 2;
+  };
+
+  const sorted = [...userTransactions].sort((a, b) => {
+    const ta = new Date(a.transactionDate as unknown as string).getTime();
+    const tb = new Date(b.transactionDate as unknown as string).getTime();
+    if (ta !== tb) return ta - tb;
+    const oa = txnTypeOrder(a);
+    const ob = txnTypeOrder(b);
+    if (oa !== ob) return oa - ob;
+    return String(a.id).localeCompare(String(b.id));
+  });
 
   const startOfYear = new Date(now.getFullYear(), 0, 1);
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -62,7 +73,8 @@ export function computeFifoRealizedGainsFromTransactions(
 
   for (const txn of sorted) {
     const key = getKey(txn);
-    if (txn.type === "BUY") {
+    const txnKind = String(txn.type ?? "").toUpperCase();
+    if (txnKind === "BUY") {
       const fb = eurPerUnitByTxnId.get(txn.id) ?? null;
       const { eur: lineEur } = buySellLineEur(txn, fb);
       const shRaw = parseFloat(String(txn.shares));
@@ -79,7 +91,7 @@ export function computeFifoRealizedGainsFromTransactions(
         eurPerUnit: epu.eurPerUnit,
         ccy: inferTradeCurrency(txn),
       });
-    } else if (txn.type === "SELL") {
+    } else if (txnKind === "SELL") {
       const fb = eurPerUnitByTxnId.get(txn.id) ?? null;
       const { eur: proceedsEur } = buySellLineEur(txn, fb);
       const shSellRaw = parseFloat(String(txn.shares));
@@ -113,12 +125,15 @@ export function computeFifoRealizedGainsFromTransactions(
       if (txnDate >= startOfMonth) realizedThisMonth += gain;
       if (txnDate >= todayStart) realizedToday += gain;
 
-      const aggTicker = txn.ticker;
-      const sellValue = parseFloat(String(txn.shares)) * parseFloat(String(txn.pricePerShare));
+      const aggTicker = String(txn.ticker ?? "")
+        .trim()
+        .toUpperCase();
+      const sellValue =
+        Math.abs(parseFloat(String(txn.shares))) * parseFloat(String(txn.pricePerShare));
       if (!byTicker[aggTicker]) {
         byTicker[aggTicker] = {
-          ticker: txn.ticker,
-          companyName: txn.companyName,
+          ticker: aggTicker,
+          companyName: txn.companyName || aggTicker,
           totalGain: 0,
           totalSold: 0,
           transactions: 0,

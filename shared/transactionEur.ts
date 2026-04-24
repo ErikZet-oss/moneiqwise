@@ -32,7 +32,7 @@ export function cashLineEur(t: Pick<Transaction, "type" | "ticker" | "shares" | 
 export function grossAndCommission(
   t: Pick<Transaction, "shares" | "pricePerShare" | "commission">,
 ): { gross: number; commission: number } {
-  const sh = parseFloat(String(t.shares));
+  const sh = Math.abs(parseFloat(String(t.shares)));
   const px = parseFloat(String(t.pricePerShare));
   const comm = parseFloat(String(t.commission || "0"));
   return {
@@ -65,7 +65,8 @@ export function buySellLineEur(
   /** EUR za 1 jednotku `inferTradeCurrency(t)` — z Frankfurteru ak chýba rate v DB */
   fallbackEurPerUnit: number | null,
 ): { eur: number; source: "base" | "storedRate" | "frankfurtFallback" } {
-  if (t.type !== "BUY" && t.type !== "SELL") {
+  const kind = String(t.type ?? "").toUpperCase();
+  if (kind !== "BUY" && kind !== "SELL") {
     return { eur: 0, source: "base" };
   }
   const fromBase = t.baseCurrencyAmount != null && String(t.baseCurrencyAmount).trim() !== ""
@@ -86,17 +87,17 @@ export function buySellLineEur(
     : NaN;
   if (ccy === "EUR") {
     return {
-      eur: t.type === "BUY" ? gross + commission : gross - commission,
+      eur: kind === "BUY" ? gross + commission : gross - commission,
       source: "storedRate",
     };
   }
   if (Number.isFinite(ex) && ex > 0) {
     // schéma: ex = EUR za 1 jednotku cudzej meny
-    const lineLocal = t.type === "BUY" ? gross + commission : gross - commission;
+    const lineLocal = kind === "BUY" ? gross + commission : gross - commission;
     return { eur: lineLocal * ex, source: "storedRate" };
   }
   if (fallbackEurPerUnit != null && Number.isFinite(fallbackEurPerUnit) && fallbackEurPerUnit > 0) {
-    const lineLocal = t.type === "BUY" ? gross + commission : gross - commission;
+    const lineLocal = kind === "BUY" ? gross + commission : gross - commission;
     return { eur: lineLocal * fallbackEurPerUnit, source: "frankfurtFallback" };
   }
   return { eur: 0, source: "frankfurtFallback" };
@@ -110,10 +111,11 @@ export function eurPerUnitOfTradeCurrency(
 ): { eurPerUnit: number; priceLocal: number; ccy: TradeCurrency } {
   const ccy = inferTradeCurrency(t);
   const { gross, commission } = grossAndCommission(t);
-  if (t.type !== "BUY" && t.type !== "SELL") {
+  const kind = String(t.type ?? "").toUpperCase();
+  if (kind !== "BUY" && kind !== "SELL") {
     return { eurPerUnit: 1, priceLocal: 0, ccy };
   }
-  const lineLocal = t.type === "BUY" ? gross + commission : gross - commission;
+  const lineLocal = kind === "BUY" ? gross + commission : gross - commission;
   if (ccy === "EUR") {
     return { eurPerUnit: 1, priceLocal: parseFloat(String(t.pricePerShare)) || 0, ccy };
   }
