@@ -611,10 +611,15 @@ function AllocationPieCard({
   chartReady: boolean;
 }) {
   const narrow = useIsNarrowScreen();
+  const [showAllLegendItems, setShowAllLegendItems] = useState(false);
   const chartData = data.map((d) => ({ ...d }));
 
-  const innerR = narrow ? 44 : 58;
-  const outerR = narrow ? 78 : 96;
+  const innerR = narrow ? 52 : 58;
+  const outerR = narrow ? 90 : 96;
+  const mobileLegendLimit = denseLegend ? 6 : 5;
+  const hasMoreLegendItems = narrow && chartData.length > mobileLegendLimit;
+  const visibleLegendSlices =
+    narrow && !showAllLegendItems ? chartData.slice(0, mobileLegendLimit) : chartData;
 
   return (
     <Card
@@ -644,7 +649,7 @@ function AllocationPieCard({
             <div className="flex justify-center w-full min-w-0">
               <div
                 className={cn(
-                  "w-full max-w-[280px] aspect-square max-h-[260px] sm:max-h-[280px]",
+                  "w-full max-w-[320px] aspect-square max-h-[300px] sm:max-h-[280px]",
                   !chartReady && "opacity-0 pointer-events-none"
                 )}
               >
@@ -680,13 +685,28 @@ function AllocationPieCard({
             </div>
 
             <AllocationLegend
-              slices={chartData}
+              slices={visibleLegendSlices}
               total={total}
               displayMode={displayMode}
               mask={mask}
               formatCurrency={formatCurrency}
               dense={denseLegend}
             />
+            {hasMoreLegendItems && (
+              <div className="flex justify-center">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-3 text-xs"
+                  onClick={() => setShowAllLegendItems((prev) => !prev)}
+                >
+                  {showAllLegendItems
+                    ? "Zobraziť menej"
+                    : `Zobraziť viac (${chartData.length - mobileLegendLimit})`}
+                </Button>
+              </div>
+            )}
           </>
         )}
       </CardContent>
@@ -713,8 +733,7 @@ function AllocationLegend({
     <div
       className={cn(
         "rounded-xl border border-border/70 bg-muted/25 px-2 py-2 sm:px-3",
-        dense ? "max-h-[min(260px,42vh)] sm:max-h-[220px]" : "max-h-[min(220px,38vh)] sm:max-h-[200px]",
-        "overflow-y-auto overscroll-y-contain scroll-smooth space-y-1"
+        "space-y-1"
       )}
       role="list"
     >
