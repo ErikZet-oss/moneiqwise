@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
-import { Loader2, Eye, EyeOff, Coins, Calculator, RefreshCw, Briefcase, Plus, Pencil, Trash2, LineChart, Newspaper, AlertTriangle, ChevronUp, ChevronDown, Eraser, TrendingUp } from "lucide-react";
+import { Loader2, Eye, EyeOff, Coins, Calculator, RefreshCw, Briefcase, Plus, Pencil, Trash2, LineChart, Newspaper, AlertTriangle, ChevronUp, ChevronDown, Eraser, TrendingUp, Code2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { BrokerLogo, BrokerSelectItem, BROKER_CATALOG } from "@/components/BrokerLogo";
 import { BROKER_CODES, type Currency, type BrokerCode } from "@shared/schema";
@@ -22,6 +22,20 @@ interface ApiSettings {
 interface ExchangeRate {
   eurToUsd: number;
   usdToEur: number;
+}
+
+interface SnapshotDevPoint {
+  date: string;
+  totalValueEur: number;
+  investedAmountEur: number;
+  dailyProfitEur: number;
+}
+
+interface SnapshotDevResponse {
+  points: SnapshotDevPoint[];
+  source?: string;
+  startIso?: string;
+  endIso?: string;
 }
 
 export default function Settings() {
@@ -50,6 +64,7 @@ export default function Settings() {
   const [reorderingPortfolio, setReorderingPortfolio] = useState(false);
   const [wipeDialogOpen, setWipeDialogOpen] = useState(false);
   const [wipeConfirmText, setWipeConfirmText] = useState("");
+  const [devSnapshotScope, setDevSnapshotScope] = useState<string>("all");
 
   const { data: settings, isLoading } = useQuery<ApiSettings>({
     queryKey: ["/api/settings"],
@@ -58,6 +73,54 @@ export default function Settings() {
   const { data: exchangeRate } = useQuery<ExchangeRate>({
     queryKey: ["/api/exchange-rate"],
     staleTime: 60 * 60 * 1000,
+  });
+
+  const {
+    data: snapshotDevData,
+    isLoading: snapshotDevLoading,
+    refetch: refetchSnapshotDev,
+  } = useQuery<SnapshotDevResponse>({
+    queryKey: ["/api/portfolio/history", "dev", devSnapshotScope],
+    queryFn: async () => {
+      const p = new URLSearchParams();
+      p.set("portfolio", devSnapshotScope);
+      p.set("range", "all");
+      const res = await fetch(`/api/portfolio/history?${p.toString()}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Snapshot debug fetch failed");
+      return res.json();
+    },
+    staleTime: 30 * 1000,
+  });
+
+  const backfillSnapshotsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/portfolio/history/backfill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ portfolio: devSnapshotScope }),
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || "Backfill snapshotov zlyhal");
+      }
+      return response.json();
+    },
+    onSuccess: async () => {
+      await refetchSnapshotDev();
+      queryClient.invalidateQueries({ queryKey: ["/api/portfolio/history"] });
+      toast({
+        title: "Developer",
+        description: "Snapshot backfill dokončený.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Developer",
+        description: error.message || "Nepodarilo sa spraviť backfill snapshotov.",
+        variant: "destructive",
+      });
+    },
   });
 
   const updateSettingsMutation = useMutation({
@@ -812,6 +875,114 @@ export default function Settings() {
               </>
             )}
           </Button>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Code2 className="h-5 w-5 text-primary" />
+            <CardTitle>Developer</CardTitle>
+          </div>
+          <CardDescription>
+            Dočasný debug náhľad snapshotov histórie portfólia (čo sa ukladá do `portfolio_snapshots`).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={devSnapshotScope} onValueChange={setDevSnapshotScope}>
+              <SelectTrigger className="w-[260px]" data-testid="select-dev-snapshot-scope">
+                <SelectValue placeholder="Vyber scope" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Všetky portfóliá (all)</SelectItem>
+                {allPortfolios.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void refetchSnapshotDev()}
+              disabled={snapshotDevLoading}
+              data-testid="button-dev-refresh-snapshots"
+            >
+              {snapshotDevLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Načítavam…
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Obnoviť
+                </>
+              )}
+            </Button>
+            <Button
+              type="button"
+              onClick={() => backfillSnapshotsMutation.mutate()}
+              disabled={backfillSnapshotsMutation.isPending}
+              data-testid="button-dev-backfill-snapshots"
+            >
+              {backfillSnapshotsMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Backfill…
+                </>
+              ) : (
+                "Spustiť backfill"
+              )}
+            </Button>
+          </div>
+
+          <div className="rounded-lg border bg-muted/30 p-3 text-xs space-y-1">
+            <div>
+              <span className="text-muted-foreground">Source:</span>{" "}
+              <span className="font-mono">{snapshotDevData?.source ?? "—"}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Rozsah:</span>{" "}
+              <span className="font-mono">{snapshotDevData?.startIso ?? "—"} → {snapshotDevData?.endIso ?? "—"}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Počet bodov:</span>{" "}
+              <span className="font-semibold">{snapshotDevData?.points?.length ?? 0}</span>
+            </div>
+          </div>
+
+          <div className="max-h-64 overflow-auto rounded-lg border">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-background border-b">
+                <tr className="text-left">
+                  <th className="px-2 py-1.5 font-medium">Dátum</th>
+                  <th className="px-2 py-1.5 font-medium text-right">Total EUR</th>
+                  <th className="px-2 py-1.5 font-medium text-right">Invested EUR</th>
+                  <th className="px-2 py-1.5 font-medium text-right">Daily EUR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(snapshotDevData?.points ?? []).slice(-120).map((p) => (
+                  <tr key={p.date} className="border-b last:border-b-0">
+                    <td className="px-2 py-1.5 font-mono">{p.date}</td>
+                    <td className="px-2 py-1.5 text-right font-mono">{p.totalValueEur.toFixed(2)}</td>
+                    <td className="px-2 py-1.5 text-right font-mono">{p.investedAmountEur.toFixed(2)}</td>
+                    <td className="px-2 py-1.5 text-right font-mono">{p.dailyProfitEur.toFixed(2)}</td>
+                  </tr>
+                ))}
+                {(snapshotDevData?.points?.length ?? 0) === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-2 py-3 text-center text-muted-foreground">
+                      Zatiaľ žiadne snapshot body.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </CardContent>
       </Card>
 

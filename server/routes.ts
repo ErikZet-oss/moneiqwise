@@ -3868,64 +3868,70 @@ export async function registerRoutes(
       const scopeKey = portfolioParam === "all" ? "all" : portfolioParam;
       const range = parseSnapshotRange(req.query.range as string | undefined);
       const todayIso = new Date().toISOString().slice(0, 10);
+      const respondFromLiveFallback = async () => {
+        const out = await computeSnapshotSeriesForScope(userId, portfolioParam);
+        const firstIso = out.points[0]?.date ?? todayIso;
+        const startIso = rangeStartIsoFromEnd(range, todayIso, firstIso);
+        const liveRows = out.points.filter((p) => p.date >= startIso && p.date <= todayIso);
+        return res.json({
+          points: liveRows.map((p, i) => ({
+            date: p.date,
+            totalValueEur: Number(p.totalValue),
+            investedAmountEur: Number(p.netInvested),
+            dailyProfitEur:
+              i === 0 ? 0 : Number(p.totalValue) - Number(liveRows[i - 1]!.totalValue),
+          })),
+          range,
+          portfolio: portfolioParam,
+          currency: "EUR",
+          source: "live-fallback",
+          startIso,
+          endIso: todayIso,
+        });
+      };
 
-      let last = await storage.getLastPortfolioSnapshot(userId, scopeKey);
-      if (!last) {
-        try {
-          await backfillPortfolioSnapshotsForScope(userId, portfolioParam);
-          last = await storage.getLastPortfolioSnapshot(userId, scopeKey);
-        } catch (err) {
-          // Fallback: when snapshot table is missing/not migrated yet, serve on-the-fly series.
-          const out = await computeSnapshotSeriesForScope(userId, portfolioParam);
-          const firstIso = out.points[0]?.date ?? todayIso;
-          const startIso = rangeStartIsoFromEnd(range, todayIso, firstIso);
-          const liveRows = out.points.filter((p) => p.date >= startIso && p.date <= todayIso);
+      try {
+        let last = await storage.getLastPortfolioSnapshot(userId, scopeKey);
+        if (!last) {
+          try {
+            await backfillPortfolioSnapshotsForScope(userId, portfolioParam);
+            last = await storage.getLastPortfolioSnapshot(userId, scopeKey);
+          } catch {
+            return await respondFromLiveFallback();
+          }
+        }
+        if (!last) {
           return res.json({
-            points: liveRows.map((p, i) => ({
-              date: p.date,
-              totalValueEur: Number(p.totalValue),
-              investedAmountEur: Number(p.netInvested),
-              dailyProfitEur:
-                i === 0 ? 0 : Number(p.totalValue) - Number(liveRows[i - 1]!.totalValue),
-            })),
+            points: [],
             range,
             portfolio: portfolioParam,
             currency: "EUR",
-            source: "live-fallback",
-            startIso,
-            endIso: todayIso,
+            source: "snapshots",
           });
         }
-      }
-      if (!last) {
+
+        const allRows = await storage.getPortfolioSnapshots(userId, scopeKey);
+        const firstIso = allRows[0]?.date ?? last.date;
+        const startIso = rangeStartIsoFromEnd(range, todayIso, firstIso);
+        const rows = await storage.getPortfolioSnapshots(userId, scopeKey, startIso, todayIso);
+
         return res.json({
-          points: [],
+          points: rows.map((r) => ({
+            date: r.date,
+            totalValueEur: Number(r.totalValueEur),
+            investedAmountEur: Number(r.investedAmountEur),
+            dailyProfitEur: Number(r.dailyProfitEur),
+          })),
           range,
           portfolio: portfolioParam,
           currency: "EUR",
           source: "snapshots",
+          startIso,
+          endIso: todayIso,
         });
+      } catch {
+        return await respondFromLiveFallback();
       }
-
-      const allRows = await storage.getPortfolioSnapshots(userId, scopeKey);
-      const firstIso = allRows[0]?.date ?? last.date;
-      const startIso = rangeStartIsoFromEnd(range, todayIso, firstIso);
-      const rows = await storage.getPortfolioSnapshots(userId, scopeKey, startIso, todayIso);
-
-      res.json({
-        points: rows.map((r) => ({
-          date: r.date,
-          totalValueEur: Number(r.totalValueEur),
-          investedAmountEur: Number(r.investedAmountEur),
-          dailyProfitEur: Number(r.dailyProfitEur),
-        })),
-        range,
-        portfolio: portfolioParam,
-        currency: "EUR",
-        source: "snapshots",
-        startIso,
-        endIso: todayIso,
-      });
     } catch (error) {
       console.error("Error reading portfolio snapshots:", error);
       res.status(500).json({ message: "Nepodarilo sa načítať históriu zo snapshotov." });
