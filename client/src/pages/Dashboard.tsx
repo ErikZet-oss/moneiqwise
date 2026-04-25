@@ -261,10 +261,12 @@ export default function Dashboard() {
     } else state = "CLOSED";
 
     /**
-     * Rebríček najlepšie/najhoršie: počas LIVE len RTH denná zmena (change). Mimo LIVE sa použije pred/po-obchodná
-     * kotácia (preMarket* z API), ak ju máme; inak posledná známa RTH zmena (napr. víkend).
+     * Rebríček najlepšie/najhoršie:
+     * - LIVE: denná RTH zmena
+     * - PRE_MARKET: pred/po-obchodná zmena (ak existuje)
+     * - CLOSED (napr. víkend): posledná RTH zmena
      */
-    const moversUseExtendedQuotes = state !== "LIVE";
+    const moversUseExtendedQuotes = state === "PRE_MARKET";
 
     return { usSessionState: state, moversUseExtendedQuotes };
   })();
@@ -299,12 +301,18 @@ export default function Dashboard() {
           if (shares > 0 && Number.isFinite(ch)) {
             dayValueEur = shares * convertPrice(ch, getTickerCurrency(t));
           }
-        } else {
+        } else if (moversUseExtendedQuotes) {
           const extPct = num(q?.preMarketChangePercent);
           const useExt = Number.isFinite(extPct);
           pct = useExt ? extPct : num(q?.changePercent);
           const chRaw = useExt ? q?.preMarketChange : q?.change;
           const ch = num(chRaw);
+          if (shares > 0 && Number.isFinite(ch)) {
+            dayValueEur = shares * convertPrice(ch, getTickerCurrency(t));
+          }
+        } else {
+          pct = num(q?.changePercent);
+          const ch = num(q?.change);
           if (shares > 0 && Number.isFinite(ch)) {
             dayValueEur = shares * convertPrice(ch, getTickerCurrency(t));
           }
@@ -337,6 +345,7 @@ export default function Dashboard() {
     convertPrice,
     getTickerCurrency,
     usSessionState,
+    moversUseExtendedQuotes,
   ]);
 
   const formatSignedDayPct = (value: number) => {
@@ -620,6 +629,7 @@ export default function Dashboard() {
         stockRealizedGain,
         dividendGain,
         totalProfit,
+        totalProfitPercent: 0,
       };
     }
 
@@ -1269,6 +1279,8 @@ export default function Dashboard() {
       <DesktopPortfolioChart 
         totalValue={metrics.totalValue}
         totalInvested={metrics.totalInvested}
+        totalProfit={metrics.totalProfit}
+        totalProfitPercent={metrics.totalProfitPercent}
       />
       
       <div className="md:hidden px-4 space-y-2 -mt-1">

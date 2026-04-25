@@ -208,7 +208,10 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {menuItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
+                <SidebarMenuItem
+                  key={item.title}
+                  className={item.url === "/faq" ? "hidden md:block" : undefined}
+                >
                   <SidebarMenuButton 
                     asChild
                     isActive={location === item.url}
@@ -274,9 +277,37 @@ export function AppSidebar() {
             </div>
           </SidebarMenuItem>
           <SidebarMenuItem>
+            <div className="md:hidden flex items-center justify-end gap-2">
+              <SidebarMenuButton
+                asChild
+                isActive={location === "/faq"}
+                className="h-8 px-2 text-xs"
+                data-testid="nav-faq-mobile-inline"
+              >
+                <a
+                  href="/faq"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setLocation("/faq");
+                    closeMobileSidebar();
+                  }}
+                >
+                  <CircleHelp className="h-4 w-4" />
+                  <span>FAQ</span>
+                </a>
+              </SidebarMenuButton>
+              <SidebarMenuButton
+                data-testid="button-logout-mobile-inline"
+                className="h-8 px-2 text-xs"
+                onClick={handleLogout}
+              >
+                <LogOut className="h-4 w-4" />
+                <span>Odhlásiť sa</span>
+              </SidebarMenuButton>
+            </div>
             <SidebarMenuButton
               data-testid="button-logout"
-              className="text-xs md:text-sm py-1.5 md:py-2"
+              className="hidden md:flex text-xs md:text-sm py-1.5 md:py-2"
               onClick={handleLogout}
             >
               <LogOut className="h-4 w-4 md:h-5 md:w-5" />

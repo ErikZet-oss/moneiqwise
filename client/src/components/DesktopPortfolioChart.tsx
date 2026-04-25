@@ -23,11 +23,15 @@ interface SnapshotHistoryRes {
 interface DesktopPortfolioChartProps {
   totalValue: number;
   totalInvested: number;
+  totalProfit: number;
+  totalProfitPercent: number;
 }
 
 export function DesktopPortfolioChart({ 
   totalValue, 
-  totalInvested
+  totalInvested,
+  totalProfit,
+  totalProfitPercent,
 }: DesktopPortfolioChartProps) {
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>("ALL");
   const [chartDataIdle, setChartDataIdle] = useState(false);
@@ -99,6 +103,9 @@ export function DesktopPortfolioChart({
   //   periodGain = value_now − value_at_period_start − (buys − sells in period)
   // For "ALL" the formula naturally collapses to totalValue − totalInvested.
   const periodGainLoss = useMemo(() => {
+    if (selectedPeriod === "ALL") {
+      return { amount: totalProfit, percent: totalProfitPercent };
+    }
     if (chartData.length < 2) {
       const change = totalValue - totalInvested;
       const percent = totalInvested > 0 ? (change / totalInvested) * 100 : 0;
@@ -118,6 +125,9 @@ export function DesktopPortfolioChart({
     return { amount: change, percent };
   }, [
     chartData,
+    selectedPeriod,
+    totalProfit,
+    totalProfitPercent,
     totalValue,
     totalInvested,
   ]);

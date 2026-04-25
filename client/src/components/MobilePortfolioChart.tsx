@@ -179,6 +179,9 @@ export function MobilePortfolioChart({
   //   periodGain = lastValue − firstValue − (buys − sells inside window)
   // For "ALL" the formula naturally collapses to totalValue − totalInvested.
   const periodChange = useMemo(() => {
+    if (selectedPeriod === "ALL") {
+      return { amount: totalProfit, percent: totalProfitPercent };
+    }
     if (chartData.length < 2) {
       const change = totalValue - totalInvested;
       const percent = totalInvested > 0 ? (change / totalInvested) * 100 : 0;
@@ -198,6 +201,9 @@ export function MobilePortfolioChart({
     return { amount: change, percent };
   }, [
     chartData,
+    selectedPeriod,
+    totalProfit,
+    totalProfitPercent,
     totalValue,
     totalInvested,
   ]);

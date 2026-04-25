@@ -679,6 +679,12 @@ export default function History() {
                   const commission = parseFloat(transaction.commission || "0");
                   const grossAmount = shares * price;
                   const isCash = transaction.type === "DEPOSIT" || transaction.type === "WITHDRAWAL";
+                  const isCloseTradeCash =
+                    isCash && /close trade/i.test(String(transaction.companyName || ""));
+                  const baseEur = parseFloat(String(transaction.baseCurrencyAmount ?? "NaN"));
+                  const cashDisplayAmount = Number.isFinite(baseEur)
+                    ? convertPrice(baseEur, "EUR")
+                    : convertPrice(grossAmount, realizedGainSourceCurrency(transaction));
                   const total = transaction.type === "DIVIDEND"
                     ? grossAmount - commission
                     : isCash
@@ -766,6 +772,11 @@ export default function History() {
                                 <div className={`text-xs font-medium ${sellRealizedGain >= 0 ? "text-green-500" : "text-red-500"}`}>
                                   {sellRealizedGain >= 0 ? "+" : ""}
                                   {formatCurrency(convertPrice(sellRealizedGain, realizedGainSourceCurrency(transaction)))}
+                                </div>
+                              ) : isCloseTradeCash && Math.abs(cashDisplayAmount) > 1e-9 ? (
+                                <div className={`text-xs font-medium ${cashDisplayAmount >= 0 ? "text-green-500" : "text-red-500"}`}>
+                                  {cashDisplayAmount >= 0 ? "+" : ""}
+                                  {formatCurrency(cashDisplayAmount)}
                                 </div>
                               ) : transaction.type === "DIVIDEND" ? (
                                 <div className="text-xs text-blue-500 font-medium">+{formatCurrency(total)}</div>
@@ -859,6 +870,12 @@ export default function History() {
                   const commission = parseFloat(transaction.commission || "0");
                   const grossAmount = shares * price;
                   const isCash = transaction.type === "DEPOSIT" || transaction.type === "WITHDRAWAL";
+                  const isCloseTradeCash =
+                    isCash && /close trade/i.test(String(transaction.companyName || ""));
+                  const baseEur = parseFloat(String(transaction.baseCurrencyAmount ?? "NaN"));
+                  const cashDisplayAmount = Number.isFinite(baseEur)
+                    ? convertPrice(baseEur, "EUR")
+                    : convertPrice(grossAmount, realizedGainSourceCurrency(transaction));
                   const total = transaction.type === "DIVIDEND"
                     ? grossAmount - commission
                     : isCash
@@ -954,6 +971,11 @@ export default function History() {
                           <span className={`font-medium ${sellRealizedGain >= 0 ? "text-green-500" : "text-red-500"}`}>
                             {sellRealizedGain >= 0 ? "+" : ""}
                             {formatCurrency(convertPrice(sellRealizedGain, realizedGainSourceCurrency(transaction)))}
+                          </span>
+                        ) : isCloseTradeCash && Math.abs(cashDisplayAmount) > 1e-9 ? (
+                          <span className={`font-medium ${cashDisplayAmount >= 0 ? "text-green-500" : "text-red-500"}`}>
+                            {cashDisplayAmount >= 0 ? "+" : ""}
+                            {formatCurrency(cashDisplayAmount)}
                           </span>
                         ) : transaction.type === "DIVIDEND" ? (
                           <span className="font-medium text-blue-500">

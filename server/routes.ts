@@ -5477,6 +5477,12 @@ export async function registerRoutes(
             }
           }
 
+          const isCloseTradeCashImport =
+            isCashFlow &&
+            /close trade/i.test(
+              String(cashCustomName || companyName || ""),
+            );
+
           const payload: InsertTransaction = {
             userId,
             portfolioId: targetPortfolioId,
@@ -5492,6 +5498,7 @@ export async function registerRoutes(
             currency: origCur,
             exchangeRateAtTransaction: exRate.toFixed(8),
             baseCurrencyAmount: baseNum.toFixed(4),
+            ...(isCloseTradeCashImport ? { realizedGain: baseNum.toFixed(4) } : {}),
             ...(txId ? { transactionId: txId } : {}),
           };
 
