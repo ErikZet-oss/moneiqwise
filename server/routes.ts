@@ -3813,7 +3813,12 @@ export async function registerRoutes(
     const tickerArr = Array.from(tickers);
     const rates = await fetchAllExchangeRates();
     const todayIso = new Date().toISOString().slice(0, 10);
-    const [quotePairs, histPairs, spHist] = await Promise.all([
+    const currencies = new Set<string>();
+    for (const t of tickerArr) {
+      const c = getTickerCurrency(t);
+      if (c !== "EUR") currencies.add(c);
+    }
+    const [quotePairs, histPairs, spHist, fxPairs] = await Promise.all([
       Promise.all(
         tickerArr.map(async (t) => {
           try {
@@ -3839,6 +3844,15 @@ export async function registerRoutes(
       fetchHistoricalPrices("^GSPC")
         .then((h) => h || {})
         .catch(() => ({})),
+      Promise.all(
+        Array.from(currencies).map(async (c) => {
+          try {
+            return [c, (await fetchHistoricalPrices(`EUR${c}=X`)) || {}] as const;
+          } catch {
+            return [c, {}] as const;
+          }
+        }),
+      ),
     ]);
     const currentPrices: Record<string, number> = {};
     for (const [t, p] of quotePairs) {
@@ -3846,11 +3860,22 @@ export async function registerRoutes(
     }
     const historicalByTicker: Record<string, Record<string, number>> = {};
     for (const [t, h] of histPairs) historicalByTicker[t] = h;
+    const historicalFxEurPerUnitByCurrency: Record<string, Record<string, number>> = {};
+    for (const [ccy, h] of fxPairs) {
+      const eurPerUnit: Record<string, number> = {};
+      for (const [iso, eurToCcy] of Object.entries(h)) {
+        if (Number.isFinite(eurToCcy) && eurToCcy > 0) {
+          eurPerUnit[iso] = 1 / eurToCcy;
+        }
+      }
+      historicalFxEurPerUnitByCurrency[ccy] = eurPerUnit;
+    }
 
     const out = computePortfolioHistorySeries(
       sorted,
       spHist,
       historicalByTicker,
+      historicalFxEurPerUnitByCurrency,
       currentPrices,
       rates,
       "EUR",
@@ -3977,7 +4002,12 @@ export async function registerRoutes(
       }
 
       const tickerArr = Array.from(tickers);
-      const [quotePairs, histPairs, spHist] = await Promise.all([
+      const currencies = new Set<string>();
+      for (const t of tickerArr) {
+        const c = getTickerCurrency(t);
+        if (c !== "EUR") currencies.add(c);
+      }
+      const [quotePairs, histPairs, spHist, fxPairs] = await Promise.all([
         Promise.all(
           tickerArr.map(async (t) => {
             try {
@@ -4003,6 +4033,15 @@ export async function registerRoutes(
         fetchHistoricalPrices("^GSPC")
           .then((h) => h || {})
           .catch(() => ({})),
+        Promise.all(
+          Array.from(currencies).map(async (c) => {
+            try {
+              return [c, (await fetchHistoricalPrices(`EUR${c}=X`)) || {}] as const;
+            } catch {
+              return [c, {}] as const;
+            }
+          }),
+        ),
       ]);
 
       const currentPrices: Record<string, number> = {};
@@ -4014,11 +4053,22 @@ export async function registerRoutes(
       for (const [t, h] of histPairs) {
         historicalByTicker[t] = h;
       }
+      const historicalFxEurPerUnitByCurrency: Record<string, Record<string, number>> = {};
+      for (const [ccy, h] of fxPairs) {
+        const eurPerUnit: Record<string, number> = {};
+        for (const [iso, eurToCcy] of Object.entries(h)) {
+          if (Number.isFinite(eurToCcy) && eurToCcy > 0) {
+            eurPerUnit[iso] = 1 / eurToCcy;
+          }
+        }
+        historicalFxEurPerUnitByCurrency[ccy] = eurPerUnit;
+      }
 
       const out = computePortfolioHistorySeries(
         sorted,
         spHist,
         historicalByTicker,
+        historicalFxEurPerUnitByCurrency,
         currentPrices,
         rates,
         userCcy,

@@ -28,6 +28,7 @@ export function mtmValueAtEod(
   sortedTx: Transaction[],
   baseIso: string, // "YYYY-MM-DD" — EOD vrátane tohoto dňa
   historicalByTicker: Record<string, Record<string, number>>,
+  historicalFxEurPerUnitByCurrency: Record<string, Record<string, number>>,
   currentPrices: Record<string, number>,
   rates: AllExchangeRates,
   userCcy: string,
@@ -68,6 +69,21 @@ export function mtmValueAtEod(
   const cashEur = sumCashFlowEurUpTo(sortedTx, eod);
 
   let sum = 0;
+  const eurPerUnitOnOrBefore = (
+    currency: ReturnType<typeof getTickerCurrency>,
+    iso: string,
+  ): number | null => {
+    if (currency === "EUR") return 1;
+    const h = historicalFxEurPerUnitByCurrency[currency];
+    const eurPerUnit = priceOnOrBefore(h, iso);
+    if (eurPerUnit != null && Number.isFinite(eurPerUnit) && eurPerUnit > 0) {
+      return eurPerUnit;
+    }
+    // Fallback to current FX if historical point missing.
+    const fallback = convertAmountBetween(1, currency, "EUR", rates);
+    return Number.isFinite(fallback) && fallback > 0 ? fallback : null;
+  };
+
   const priceInCcy = (ticker: string, iso: string): number | null => {
     const u = ticker.toUpperCase();
     const hist = historicalByTicker[u];
@@ -76,7 +92,11 @@ export function mtmValueAtEod(
       raw = currentPrices[u];
     }
     if (raw == null) return null;
-    return convertAmountBetween(raw, getTickerCurrency(u), userCcy, rates);
+    const tickerCcy = getTickerCurrency(u);
+    const eurPerUnit = eurPerUnitOnOrBefore(tickerCcy, iso);
+    if (eurPerUnit == null) return null;
+    const eurPrice = raw * eurPerUnit;
+    return convertAmountBetween(eurPrice, "EUR", userCcy, rates);
   };
 
   state.forEach((h, ticker) => {
