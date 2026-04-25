@@ -187,6 +187,28 @@ export const holdings = pgTable(
 export type Holding = typeof holdings.$inferSelect;
 export type InsertHolding = typeof holdings.$inferInsert;
 
+/**
+ * Denné snapshoty hodnoty portfólia (EUR) pre rýchle grafy histórie.
+ * `scopeKey`: "all" alebo konkrétne `portfolio.id`.
+ */
+export const portfolioSnapshots = pgTable(
+  "portfolio_snapshots",
+  {
+    userId: varchar("user_id").notNull().references(() => users.id),
+    scopeKey: varchar("scope_key", { length: 64 }).notNull(),
+    date: varchar("date", { length: 10 }).notNull(), // YYYY-MM-DD (EOD)
+    totalValueEur: numeric("total_value_eur", { precision: 20, scale: 4 }).notNull(),
+    investedAmountEur: numeric("invested_amount_eur", { precision: 20, scale: 4 }).notNull(),
+    dailyProfitEur: numeric("daily_profit_eur", { precision: 20, scale: 4 }).notNull().default("0"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.scopeKey, t.date] })],
+);
+
+export type PortfolioSnapshot = typeof portfolioSnapshots.$inferSelect;
+export type InsertPortfolioSnapshot = typeof portfolioSnapshots.$inferInsert;
+
 export const ASSET_CLASS_VALUES = [
   "AKCIA",
   "ETF",

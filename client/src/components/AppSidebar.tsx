@@ -21,6 +21,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/useAuth";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useTheme } from "@/hooks/useTheme";
@@ -256,19 +257,21 @@ export function AppSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton
-              onClick={toggleTheme}
+            <div
+              className="flex items-center justify-between rounded-md px-2 py-1.5 md:px-3 md:py-2 hover:bg-sidebar-accent/50"
               data-testid="button-theme-toggle"
-              aria-label={theme === "dark" ? "Prepnúť na svetlý režim" : "Prepnúť na tmavý režim"}
-              className="text-xs md:text-sm py-1.5 md:py-2"
             >
-              {theme === "dark" ? (
-                <Sun className="h-4 w-4 md:h-5 md:w-5" />
-              ) : (
-                <Moon className="h-4 w-4 md:h-5 md:w-5" />
-              )}
-              <span>{theme === "dark" ? "Svetlý režim" : "Tmavý režim"}</span>
-            </SidebarMenuButton>
+              <div className="flex items-center gap-2">
+                <Sun className={`h-4 w-4 md:h-5 md:w-5 ${theme === "dark" ? "text-muted-foreground" : "text-amber-500"}`} />
+                <span className="text-xs md:text-sm text-muted-foreground">Téma</span>
+                <Moon className={`h-4 w-4 md:h-5 md:w-5 ${theme === "dark" ? "text-indigo-400" : "text-muted-foreground"}`} />
+              </div>
+              <Switch
+                checked={theme === "dark"}
+                onCheckedChange={toggleTheme}
+                aria-label={theme === "dark" ? "Prepnúť na svetlý režim" : "Prepnúť na tmavý režim"}
+              />
+            </div>
           </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton

@@ -14,6 +14,7 @@ import {
   type AssetClassValue,
   type InsertTransaction,
   transactions,
+  users,
   type Transaction,
 } from "@shared/schema";
 import { sumCloseTradeCashFlowEurFromRows } from "@shared/cashFromTransactions";
@@ -3723,6 +3724,186 @@ export async function registerRoutes(
     return "1y";
   }
 
+  function parseSnapshotRange(
+    q: string | undefined,
+  ): "1m" | "3m" | "6m" | "ytd" | "1y" | "all" {
+    const u = (q || "1y").trim().toLowerCase();
+    if (u === "1m") return "1m";
+    if (u === "3m") return "3m";
+    if (u === "6m") return "6m";
+    if (u === "ytd") return "ytd";
+    if (u === "1y" || u === "12m") return "1y";
+    if (u === "all" || u === "max") return "all";
+    return "1y";
+  }
+
+  function rangeStartIsoFromEnd(
+    range: "1m" | "3m" | "6m" | "ytd" | "1y" | "all",
+    endIso: string,
+    firstIso: string,
+  ): string {
+    if (range === "all") return firstIso;
+    const end = new Date(`${endIso}T12:00:00.000Z`);
+    const start = new Date(end);
+    if (range === "1m") start.setUTCMonth(start.getUTCMonth() - 1);
+    else if (range === "3m") start.setUTCMonth(start.getUTCMonth() - 3);
+    else if (range === "6m") start.setUTCMonth(start.getUTCMonth() - 6);
+    else if (range === "1y") start.setUTCFullYear(start.getUTCFullYear() - 1);
+    else if (range === "ytd") return `${end.getUTCFullYear()}-01-01`;
+    const iso = start.toISOString().slice(0, 10);
+    return iso < firstIso ? firstIso : iso;
+  }
+
+  async function backfillPortfolioSnapshotsForScope(
+    userId: string,
+    portfolioParam: string,
+  ): Promise<number> {
+    const tx = await storage.getTransactionsByUser(
+      userId,
+      portfolioParam === "all" ? null : portfolioParam,
+    );
+    if (tx.length === 0) return 0;
+
+    const sorted = [...tx].sort(
+      (a, b) =>
+        new Date(a.transactionDate as unknown as string).getTime() -
+        new Date(b.transactionDate as unknown as string).getTime(),
+    );
+    const tickers = new Set<string>();
+    for (const t of sorted) {
+      const u = t.ticker?.toUpperCase() ?? "";
+      if (isMarketDataTicker(u)) tickers.add(u);
+    }
+    const tickerArr = Array.from(tickers);
+    const rates = await fetchAllExchangeRates();
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const [quotePairs, histPairs, spHist] = await Promise.all([
+      Promise.all(
+        tickerArr.map(async (t) => {
+          try {
+            const q = await fetchStockQuote(t);
+            if (q && typeof q.price === "number" && Number.isFinite(q.price)) {
+              return [t, q.price] as const;
+            }
+          } catch {
+            // ignore quote failures during backfill
+          }
+          return [t, undefined] as const;
+        }),
+      ),
+      Promise.all(
+        tickerArr.map(async (t) => {
+          try {
+            return [t, (await fetchHistoricalPrices(t)) || {}] as const;
+          } catch {
+            return [t, {}] as const;
+          }
+        }),
+      ),
+      fetchHistoricalPrices("^GSPC")
+        .then((h) => h || {})
+        .catch(() => ({})),
+    ]);
+    const currentPrices: Record<string, number> = {};
+    for (const [t, p] of quotePairs) {
+      if (p !== undefined) currentPrices[t] = p;
+    }
+    const historicalByTicker: Record<string, Record<string, number>> = {};
+    for (const [t, h] of histPairs) historicalByTicker[t] = h;
+
+    const out = computePortfolioHistorySeries(
+      sorted,
+      spHist,
+      historicalByTicker,
+      currentPrices,
+      rates,
+      "EUR",
+      todayIso,
+      "all",
+      12000,
+    );
+    if (out.points.length === 0) return 0;
+
+    const scopeKey = portfolioParam === "all" ? "all" : portfolioParam;
+    let prevTotal = 0;
+    let written = 0;
+    for (let i = 0; i < out.points.length; i++) {
+      const p = out.points[i]!;
+      const daily = i === 0 ? 0 : p.totalValue - prevTotal;
+      await storage.upsertPortfolioSnapshot({
+        userId,
+        scopeKey,
+        date: p.date,
+        totalValueEur: p.totalValue,
+        investedAmountEur: p.netInvested,
+        dailyProfitEur: daily,
+      });
+      prevTotal = p.totalValue;
+      written++;
+    }
+    return written;
+  }
+
+  app.get("/api/portfolio/history", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const portfolioParam = (req.query.portfolio as string) || "all";
+      const scopeKey = portfolioParam === "all" ? "all" : portfolioParam;
+      const range = parseSnapshotRange(req.query.range as string | undefined);
+      const todayIso = new Date().toISOString().slice(0, 10);
+
+      let last = await storage.getLastPortfolioSnapshot(userId, scopeKey);
+      if (!last) {
+        await backfillPortfolioSnapshotsForScope(userId, portfolioParam);
+        last = await storage.getLastPortfolioSnapshot(userId, scopeKey);
+      }
+      if (!last) {
+        return res.json({
+          points: [],
+          range,
+          portfolio: portfolioParam,
+          currency: "EUR",
+          source: "snapshots",
+        });
+      }
+
+      const allRows = await storage.getPortfolioSnapshots(userId, scopeKey);
+      const firstIso = allRows[0]?.date ?? last.date;
+      const startIso = rangeStartIsoFromEnd(range, todayIso, firstIso);
+      const rows = await storage.getPortfolioSnapshots(userId, scopeKey, startIso, todayIso);
+
+      res.json({
+        points: rows.map((r) => ({
+          date: r.date,
+          totalValueEur: Number(r.totalValueEur),
+          investedAmountEur: Number(r.investedAmountEur),
+          dailyProfitEur: Number(r.dailyProfitEur),
+        })),
+        range,
+        portfolio: portfolioParam,
+        currency: "EUR",
+        source: "snapshots",
+        startIso,
+        endIso: todayIso,
+      });
+    } catch (error) {
+      console.error("Error reading portfolio snapshots:", error);
+      res.status(500).json({ message: "Nepodarilo sa načítať históriu zo snapshotov." });
+    }
+  });
+
+  app.post("/api/portfolio/history/backfill", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const portfolioParam = ((req.body?.portfolio as string) || "all").trim() || "all";
+      const written = await backfillPortfolioSnapshotsForScope(userId, portfolioParam);
+      res.json({ ok: true, portfolio: portfolioParam, written });
+    } catch (error) {
+      console.error("Error backfilling portfolio snapshots:", error);
+      res.status(500).json({ message: "Nepodarilo sa spraviť backfill snapshotov." });
+    }
+  });
+
   app.get("/api/portfolio-history", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
@@ -5204,6 +5385,39 @@ export async function registerRoutes(
       });
     }
   });
+
+  // Nočný snapshot job (pracovné dni po close USA).
+  const snapshotCronEnabled = process.env.SNAPSHOT_CRON_ENABLED !== "false";
+  const snapshotCronMinute = Number.parseInt(process.env.SNAPSHOT_CRON_MINUTE || "0", 10);
+  let snapshotCronLastRunIso: string | null = null;
+
+  async function runNightlySnapshotBackfillForAllUsers(): Promise<void> {
+    const userRows = await db.select({ id: users.id }).from(users);
+    for (const u of userRows) {
+      try {
+        await backfillPortfolioSnapshotsForScope(u.id, "all");
+      } catch (err) {
+        console.error("Nightly snapshot backfill failed for user", u.id, err);
+      }
+    }
+  }
+
+  if (snapshotCronEnabled) {
+    setInterval(() => {
+      const now = new Date();
+      const day = now.getDay(); // 0 Sun, 6 Sat
+      if (day === 0 || day === 6) return;
+      const h = now.getHours();
+      const m = now.getMinutes();
+      const todayIso = now.toISOString().slice(0, 10);
+      if (h !== 23 || m < snapshotCronMinute || m >= snapshotCronMinute + 10) return;
+      if (snapshotCronLastRunIso === todayIso) return;
+      snapshotCronLastRunIso = todayIso;
+      runNightlySnapshotBackfillForAllUsers().catch((err) => {
+        console.error("Nightly snapshot backfill failed:", err);
+      });
+    }, 5 * 60 * 1000);
+  }
 
   return httpServer;
 }

@@ -2,6 +2,7 @@ import {
   users,
   transactions,
   holdings,
+  portfolioSnapshots,
   userAssetMetadata,
   userSettings,
   portfolios,
@@ -11,6 +12,7 @@ import {
   type Transaction,
   type InsertTransaction,
   type Holding,
+  type PortfolioSnapshot,
   type InsertHolding,
   type UserSettings,
   type Portfolio,
@@ -79,6 +81,21 @@ export interface IStorage {
   
   // Holdings operations
   getHoldingsByUser(userId: string, portfolioId?: string | null): Promise<Holding[]>;
+  upsertPortfolioSnapshot(row: {
+    userId: string;
+    scopeKey: string;
+    date: string;
+    totalValueEur: number;
+    investedAmountEur: number;
+    dailyProfitEur: number;
+  }): Promise<PortfolioSnapshot>;
+  getPortfolioSnapshots(
+    userId: string,
+    scopeKey: string,
+    startDateIso?: string,
+    endDateIso?: string,
+  ): Promise<PortfolioSnapshot[]>;
+  getLastPortfolioSnapshot(userId: string, scopeKey: string): Promise<PortfolioSnapshot | undefined>;
   /** Single fetch for Overview page: holdings + totals per visible portfolio (no N× round-trips). */
   getOverviewBundle(
     userId: string,
@@ -663,6 +680,76 @@ export class DatabaseStorage implements IStorage {
     }
     
     return Array.from(aggregatedMap.values());
+  }
+
+  async upsertPortfolioSnapshot(row: {
+    userId: string;
+    scopeKey: string;
+    date: string;
+    totalValueEur: number;
+    investedAmountEur: number;
+    dailyProfitEur: number;
+  }): Promise<PortfolioSnapshot> {
+    const [saved] = await db
+      .insert(portfolioSnapshots)
+      .values({
+        userId: row.userId,
+        scopeKey: row.scopeKey,
+        date: row.date,
+        totalValueEur: String(row.totalValueEur),
+        investedAmountEur: String(row.investedAmountEur),
+        dailyProfitEur: String(row.dailyProfitEur),
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [
+          portfolioSnapshots.userId,
+          portfolioSnapshots.scopeKey,
+          portfolioSnapshots.date,
+        ],
+        set: {
+          totalValueEur: String(row.totalValueEur),
+          investedAmountEur: String(row.investedAmountEur),
+          dailyProfitEur: String(row.dailyProfitEur),
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return saved;
+  }
+
+  async getPortfolioSnapshots(
+    userId: string,
+    scopeKey: string,
+    startDateIso?: string,
+    endDateIso?: string,
+  ): Promise<PortfolioSnapshot[]> {
+    const whereParts = [
+      eq(portfolioSnapshots.userId, userId),
+      eq(portfolioSnapshots.scopeKey, scopeKey),
+    ];
+    if (startDateIso) whereParts.push(sql`${portfolioSnapshots.date} >= ${startDateIso}`);
+    if (endDateIso) whereParts.push(sql`${portfolioSnapshots.date} <= ${endDateIso}`);
+    return await db
+      .select()
+      .from(portfolioSnapshots)
+      .where(and(...whereParts))
+      .orderBy(asc(portfolioSnapshots.date));
+  }
+
+  async getLastPortfolioSnapshot(userId: string, scopeKey: string): Promise<PortfolioSnapshot | undefined> {
+    const [row] = await db
+      .select()
+      .from(portfolioSnapshots)
+      .where(
+        and(
+          eq(portfolioSnapshots.userId, userId),
+          eq(portfolioSnapshots.scopeKey, scopeKey),
+        ),
+      )
+      .orderBy(desc(portfolioSnapshots.date))
+      .limit(1);
+    return row;
   }
 
   async getComputedCashEurByPortfolioIds(

@@ -1,12 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip } from "recharts";
-import { format, subDays, subMonths, subYears, startOfYear, parseISO, isAfter, startOfDay, isSameDay, isWeekend, subHours, eachDayOfInterval, eachHourOfInterval, endOfDay } from "date-fns";
-import type { AllExchangeRates } from "@shared/convertAmountBetween";
-import {
-  sumNetCashLedgerEurUpTo,
-  transactionNetCashDeltaEur,
-} from "@shared/netCashLedgerUpTo";
+import { format, parse, subHours, eachHourOfInterval } from "date-fns";
 import { sk } from "date-fns/locale";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
@@ -15,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button";
 import { BrokerLogo } from "@/components/BrokerLogo";
 import { ArrowRightLeft, Eye, EyeOff, HelpCircle, Loader2, Moon, RefreshCw } from "lucide-react";
-import type { Transaction, Holding } from "@shared/schema";
+import type { Holding } from "@shared/schema";
 
 interface StockQuote {
   ticker: string;
@@ -25,18 +20,18 @@ interface StockQuote {
   preMarketPrice?: number | null;
 }
 
-interface HistoricalPrices {
-  [ticker: string]: Record<string, number>;
+type TimePeriod = "1M" | "3M" | "6M" | "YTD" | "ALL";
+
+interface SnapshotPoint {
+  date: string;
+  totalValueEur: number;
+  investedAmountEur: number;
+  dailyProfitEur: number;
 }
 
-interface HistoricalResponse {
-  prices: HistoricalPrices;
-  errors: Record<string, string>;
-  fetchedCount: number;
-  totalRequested: number;
+interface SnapshotHistoryRes {
+  points: SnapshotPoint[];
 }
-
-type TimePeriod = "1D" | "1W" | "1M" | "YTD" | "1Y" | "ALL";
 
 interface MobilePortfolioChartProps {
   totalValue: number;
@@ -84,7 +79,7 @@ export function MobilePortfolioChart({
     };
   }, []);
 
-  const { currency, convertPrice, getTickerCurrency, formatCurrency, exchangeRate } = useCurrency();
+  const { currency, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
   const { getQueryParam, selectedPortfolio, selectedPortfolioId } = usePortfolio();
   const { showChart, showTooltip, hideAmounts, toggleHideAmounts } = useChartSettings();
   
@@ -92,16 +87,6 @@ export function MobilePortfolioChart({
   
   const portfolioParam = getQueryParam();
   const chartQueriesEnabled = showChart && chartDataIdle;
-
-  const { data: transactions } = useQuery<Transaction[]>({
-    queryKey: ["/api/transactions", portfolioParam],
-    queryFn: async () => {
-      const res = await fetch(`/api/transactions?portfolio=${portfolioParam}`);
-      if (!res.ok) throw new Error("Failed to fetch transactions");
-      return res.json();
-    },
-    enabled: chartQueriesEnabled,
-  });
 
   const { data: holdings } = useQuery<Holding[]>({
     queryKey: ["/api/holdings", portfolioParam],
@@ -139,85 +124,27 @@ export function MobilePortfolioChart({
     },
   });
 
-  const { data: eurPerUnitByTxnId } = useQuery<Record<string, number | null>>({
-    queryKey: ["/api/txn-eur-per-unit", portfolioParam],
-    queryFn: async () => {
-      const res = await fetch(
-        `/api/txn-eur-per-unit?portfolio=${encodeURIComponent(portfolioParam)}`,
-        { credentials: "include" },
-      );
-      if (!res.ok) throw new Error("Failed to fetch txn EUR map");
-      return res.json();
-    },
-    enabled: chartQueriesEnabled && !!transactions && transactions.length > 0,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const ledgerRates: AllExchangeRates = useMemo(
-    () => ({
-      eurToUsd: exchangeRate.eurToUsd,
-      usdToEur: exchangeRate.usdToEur,
-      eurToCzk: exchangeRate.eurToCzk,
-      czkToEur: exchangeRate.czkToEur,
-      eurToPln: exchangeRate.eurToPln,
-      plnToEur: exchangeRate.plnToEur,
-      eurToGbp: exchangeRate.eurToGbp,
-      gbpToEur: exchangeRate.gbpToEur,
-    }),
-    [exchangeRate],
-  );
-
-  const { data: historicalData } = useQuery<HistoricalResponse>({
-    queryKey: ["/api/stocks/history/batch", holdings?.map(h => h.ticker)],
-    enabled: chartQueriesEnabled && !!holdings && holdings.length > 0,
-    staleTime: 1000 * 60 * 30,
-    queryFn: async () => {
-      if (!holdings || holdings.length === 0) return { prices: {}, errors: {}, fetchedCount: 0, totalRequested: 0 };
-      const tickers = holdings.map(h => h.ticker);
-      const res = await fetch("/api/stocks/history/batch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tickers }),
-      });
-      if (!res.ok) throw new Error("Failed to fetch historical prices");
-      return res.json();
-    },
-  });
-
-  const historicalPrices = historicalData?.prices || {};
-
-  const getPrice = (ticker: string, date: Date): number | null => {
-    const upperTicker = ticker.toUpperCase();
-    const dateStr = format(date, "yyyy-MM-dd");
-    const tickerCurrency = getTickerCurrency(ticker);
-    
-    let price: number | null = null;
-    
-    if (historicalPrices[upperTicker]?.[dateStr]) {
-      price = historicalPrices[upperTicker][dateStr];
-    }
-    
-    if (!price) {
-      for (let i = 1; i <= 7; i++) {
-        const prevDateStr = format(subDays(date, i), "yyyy-MM-dd");
-        if (historicalPrices[upperTicker]?.[prevDateStr]) {
-          price = historicalPrices[upperTicker][prevDateStr];
-          break;
-        }
-      }
-    }
-    
-    if (!price) {
-      if (quotes?.[upperTicker]) price = quotes[upperTicker].price;
-      else if (quotes?.[ticker]) price = quotes[ticker].price;
-    }
-    
-    if (price !== null) {
-      return convertPrice(price, tickerCurrency);
-    }
-    
-    return null;
+  const periodToRange: Record<TimePeriod, "1m" | "3m" | "6m" | "ytd" | "all"> = {
+    "1M": "1m",
+    "3M": "3m",
+    "6M": "6m",
+    YTD: "ytd",
+    ALL: "all",
   };
+
+  const { data: history } = useQuery<SnapshotHistoryRes>({
+    queryKey: ["/api/portfolio/history", portfolioParam, periodToRange[selectedPeriod]],
+    enabled: chartQueriesEnabled,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const p = new URLSearchParams();
+      p.set("portfolio", portfolioParam);
+      p.set("range", periodToRange[selectedPeriod]);
+      const res = await fetch(`/api/portfolio/history?${p.toString()}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch portfolio history snapshots");
+      return res.json();
+    },
+  });
 
   const getCurrentPrice = (ticker: string): number | null => {
     const upperTicker = ticker.toUpperCase();
@@ -233,143 +160,18 @@ export function MobilePortfolioChart({
     return null;
   };
 
-  const calculateHoldingsAtDate = (targetDate: Date) => {
-    if (!transactions) return {};
-    
-    const holdingsAtDate: Record<string, { shares: number; avgCost: number; totalCost: number }> = {};
-    
-    const txnsUpToDate = transactions
-      .filter(t => {
-        const txnDate = parseISO(t.transactionDate as unknown as string);
-        return !isAfter(startOfDay(txnDate), startOfDay(targetDate));
-      })
-      .sort((a, b) => {
-        const dateA = parseISO(a.transactionDate as unknown as string);
-        const dateB = parseISO(b.transactionDate as unknown as string);
-        return dateA.getTime() - dateB.getTime();
-      });
-
-    txnsUpToDate.forEach(txn => {
-      if (txn.type !== "BUY" && txn.type !== "SELL") return;
-      
-      const shares = parseFloat(txn.shares);
-      const price = parseFloat(txn.pricePerShare);
-      const commission = parseFloat(txn.commission || "0");
-
-      if (txn.type === "BUY") {
-        if (!holdingsAtDate[txn.ticker]) {
-          holdingsAtDate[txn.ticker] = { shares: 0, avgCost: 0, totalCost: 0 };
-        }
-        const existing = holdingsAtDate[txn.ticker];
-        const totalCost = shares * price + commission;
-        const newShares = existing.shares + shares;
-        existing.totalCost += totalCost;
-        existing.avgCost = existing.totalCost / newShares;
-        existing.shares = newShares;
-      } else if (txn.type === "SELL") {
-        if (holdingsAtDate[txn.ticker]) {
-          const existing = holdingsAtDate[txn.ticker];
-          const soldCost = shares * existing.avgCost;
-          existing.shares = Math.max(0, existing.shares - shares);
-          existing.totalCost = Math.max(0, existing.totalCost - soldCost);
-        }
-      }
-    });
-
-    return holdingsAtDate;
-  };
-
-  const calculatePortfolioValueAtDate = (targetDate: Date, useCurrentPrices: boolean = false): number => {
-    const holdingsAtDate = calculateHoldingsAtDate(targetDate);
-    let totalValue = 0;
-
-    Object.entries(holdingsAtDate).forEach(([ticker, holding]) => {
-      if (holding.shares > 0) {
-        let price: number | null = null;
-        
-        if (useCurrentPrices) {
-          price = getCurrentPrice(ticker);
-        } else {
-          price = getPrice(ticker, targetDate);
-        }
-        
-        if (price) {
-          totalValue += holding.shares * price;
-        } else {
-          totalValue += holding.totalCost;
-        }
-      }
-    });
-
-    const cashEur = sumNetCashLedgerEurUpTo(
-      transactions ?? [],
-      endOfDay(targetDate),
-      eurPerUnitByTxnId ?? {},
-      ledgerRates,
-    );
-    return totalValue + convertPrice(cashEur, "EUR");
-  };
-
   const chartData = useMemo(() => {
-    if (!transactions || transactions.length === 0) {
+    const points = history?.points ?? [];
+    if (points.length === 0) {
       return [];
     }
-
-    const now = new Date();
-    let startDate: Date;
-    
-    switch (selectedPeriod) {
-      case "1D":
-        startDate = subDays(now, 1);
-        break;
-      case "1W":
-        startDate = subDays(now, 7);
-        break;
-      case "1M":
-        startDate = subMonths(now, 1);
-        break;
-      case "YTD":
-        startDate = startOfYear(now);
-        break;
-      case "1Y":
-        startDate = subYears(now, 1);
-        break;
-      case "ALL":
-        const dates = transactions.map(t => parseISO(t.transactionDate as unknown as string));
-        startDate = new Date(Math.min(...dates.map(d => d.getTime())));
-        break;
-      default:
-        startDate = subMonths(now, 1);
-    }
-
-    const allDays = eachDayOfInterval({ start: startOfDay(startDate), end: startOfDay(now) });
-    const tradingDays = allDays.filter(day => !isWeekend(day));
-
-    const data: { date: string; value: number; displayDate: string }[] = [];
-
-    tradingDays.forEach((day) => {
-      const isToday = isSameDay(day, now);
-      const value = calculatePortfolioValueAtDate(day, isToday);
-      
-      if (value !== 0 && Number.isFinite(value)) {
-        data.push({
-          date: format(day, "yyyy-MM-dd"),
-          displayDate: format(day, "d. MMM", { locale: sk }),
-          value,
-        });
-      }
-    });
-
-    return data;
-  }, [
-    transactions,
-    historicalPrices,
-    quotes,
-    selectedPeriod,
-    eurPerUnitByTxnId,
-    ledgerRates,
-    convertPrice,
-  ]);
+    return points.map((p) => ({
+      date: p.date,
+      displayDate: format(parse(p.date, "yyyy-MM-dd", new Date()), "d. MMM", { locale: sk }),
+      value: convertPrice(p.totalValueEur, "EUR"),
+      invested: convertPrice(p.investedAmountEur, "EUR"),
+    }));
+  }, [history?.points, convertPrice]);
 
   // P&L for the selected range. The chart line jumps whenever there's a BUY
   // or SELL inside the window, so to get an honest gain we subtract the net
@@ -388,17 +190,7 @@ export function MobilePortfolioChart({
     const firstValue = firstPoint.value;
     const lastValue = lastPoint.value;
 
-    let netInflowEur = 0;
-    if (transactions) {
-      const map = eurPerUnitByTxnId ?? {};
-      transactions.forEach((t) => {
-        const d = format(parseISO(t.transactionDate as unknown as string), "yyyy-MM-dd");
-        if (d > firstPoint.date && d <= lastPoint.date) {
-          netInflowEur += transactionNetCashDeltaEur(t, map[t.id] ?? null, ledgerRates);
-        }
-      });
-    }
-    const netInflow = convertPrice(netInflowEur, "EUR");
+    const netInflow = lastPoint.invested - firstPoint.invested;
 
     const change = lastValue - firstValue - netInflow;
     const baseline = firstValue + Math.max(netInflow, 0);
@@ -406,20 +198,15 @@ export function MobilePortfolioChart({
     return { amount: change, percent };
   }, [
     chartData,
-    transactions,
     totalValue,
     totalInvested,
-    eurPerUnitByTxnId,
-    ledgerRates,
-    convertPrice,
   ]);
 
   const periodLabel: Record<TimePeriod, string> = {
-    "1D": "1D",
-    "1W": "1T",
     "1M": "1M",
+    "3M": "3M",
+    "6M": "6M",
     YTD: "YTD",
-    "1Y": "1R",
     ALL: "celé obdobie",
   };
 
@@ -478,7 +265,7 @@ export function MobilePortfolioChart({
     return { available: true, amount, percent };
   }, [holdings, quotes, convertPrice, getTickerCurrency]);
 
-  const periods: TimePeriod[] = ["1D", "1W", "1M", "YTD", "1Y", "ALL"];
+  const periods: TimePeriod[] = ["1M", "3M", "6M", "YTD", "ALL"];
 
   const usSessionState = (() => {
     const parts = new Intl.DateTimeFormat("en-GB", {
