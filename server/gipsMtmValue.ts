@@ -1,6 +1,6 @@
 import type { Transaction } from "@shared/schema";
 import { getTickerCurrency } from "@shared/tickerCurrency";
-import { sumCashFlowEurUpTo } from "@shared/cashFromTransactions";
+import { sumNetCashLedgerEurUpTo } from "@shared/netCashLedgerUpTo";
 import { endOfDay, parseISO } from "date-fns";
 import { convertAmountBetween, type AllExchangeRates } from "./convertAmountBetween";
 
@@ -21,8 +21,8 @@ function priceOnOrBefore(
 }
 
 /**
- * Hmotnosť akcií + kumulovaná hotovosť (vklady/ výbery) v EUR, potom v preferovanej mene.
- * Rovnaká heuristika obchodov ako v computePortfolioPerformance.
+ * Trhová hodnota držby + čistá hotovosť (net ledger) v EUR, potom v preferovanej mene.
+ * Hotovosť musí zohľadňovať DEPOSIT/WITHDRAWAL aj BUY/SELL/DIVIDEND/TAX.
  */
 export function mtmValueAtEod(
   sortedTx: Transaction[],
@@ -66,7 +66,12 @@ export function mtmValueAtEod(
   }
 
   const eod = endOfDay(parseISO(baseIso + "T12:00:00"));
-  const cashEur = sumCashFlowEurUpTo(sortedTx, eod);
+  const cashEur = sumNetCashLedgerEurUpTo(
+    sortedTx,
+    eod,
+    {},
+    rates,
+  );
 
   let sum = 0;
   const eurPerUnitOnOrBefore = (
