@@ -499,6 +499,14 @@ export default function Dashboard() {
     mobileTopPositions.length > 0
       ? mobileTopPositions[mobileTopPositionIndex % mobileTopPositions.length]
       : null;
+  const mobileTopPositionsTotalValue = useMemo(
+    () => mobileTopPositions.reduce((sum, p) => sum + p.value, 0),
+    [mobileTopPositions],
+  );
+  const currentMobileTopPositionPct =
+    currentMobileTopPosition && mobileTopPositionsTotalValue > 0
+      ? (currentMobileTopPosition.value / mobileTopPositionsTotalValue) * 100
+      : 0;
 
   const formatRelativeTime = (timestamp: number) => {
     const now = Math.floor(Date.now() / 1000);
@@ -1392,7 +1400,7 @@ export default function Dashboard() {
                 </span>
               </div>
               <span className="text-[11px] font-semibold tabular-nums text-foreground shrink-0">
-                {maskAmount(formatCurrency(currentMobileTopPosition.value))}
+                {currentMobileTopPositionPct.toFixed(2)}%
               </span>
             </button>
             {mobileTopPositions.length > 1 && (
