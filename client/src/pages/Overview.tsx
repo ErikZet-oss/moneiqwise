@@ -21,7 +21,7 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
 import { BrokerLogo } from "@/components/BrokerLogo";
-import type { Holding } from "@shared/schema";
+import type { Holding, OptionTrade } from "@shared/schema";
 
 interface StockQuote {
   ticker: string;
@@ -86,6 +86,12 @@ async function fetchOverviewQuotesBatch(
   return data.quotes as Record<string, StockQuote>;
 }
 
+async function fetchAllOptionTrades(): Promise<OptionTrade[]> {
+  const res = await fetch("/api/options", { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to fetch option trades");
+  return res.json();
+}
+
 export default function Overview() {
   const queryClient = useQueryClient();
   const [refreshingPortfolioId, setRefreshingPortfolioId] = useState<string | null>(
@@ -137,8 +143,34 @@ export default function Overview() {
     refetchOnWindowFocus: false,
   });
 
+  const { data: optionTrades } = useQuery<OptionTrade[]>({
+    queryKey: ["/api/options", "overview-all"],
+    queryFn: fetchAllOptionTrades,
+    staleTime: 2 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
+
+  const optionsByPortfolioId = useMemo(() => {
+    const out = new Map<string, OptionTrade[]>();
+    portfolios.forEach((p) => out.set(p.id, []));
+    if (!optionTrades || portfolios.length === 0) return out;
+
+    const defaultPortfolioId =
+      portfolios.find((p) => (p as { isDefault?: boolean }).isDefault)?.id ?? portfolios[0]?.id;
+
+    optionTrades.forEach((t) => {
+      const pid = t.portfolioId ?? defaultPortfolioId;
+      if (!pid || !out.has(pid)) return;
+      out.get(pid)!.push(t);
+    });
+    return out;
+  }, [optionTrades, portfolios]);
+
   const computeMetrics = (
     holdings: Holding[],
+    optionTradesForPortfolio: OptionTrade[],
     totalRealizedFifoEur: number,
     closeTradeNetEur: number,
     dividendNetEur: number,
@@ -176,6 +208,39 @@ export default function Overview() {
       "EUR",
     );
 
+    let optionsRealizedGain = 0;
+    let openOptionsBuyPremiumValue = 0;
+    let openOptionsBuyTotalCost = 0;
+    let openOptionsSellCommission = 0;
+
+    optionTradesForPortfolio.forEach((trade) => {
+      const realized = parseFloat(String(trade.realizedGain ?? "0"));
+      if (trade.status !== "OPEN" && Number.isFinite(realized)) {
+        optionsRealizedGain += realized;
+      }
+
+      if (trade.status === "OPEN") {
+        const premium = parseFloat(String(trade.premium ?? "0"));
+        const contracts = parseFloat(String(trade.contracts ?? "0"));
+        const commission = parseFloat(String(trade.commission ?? "0"));
+        const premiumValue =
+          Number.isFinite(premium) && Number.isFinite(contracts)
+            ? premium * 100 * contracts
+            : 0;
+
+        if (trade.direction === "BUY") {
+          openOptionsBuyPremiumValue += premiumValue;
+          openOptionsBuyTotalCost += premiumValue + (Number.isFinite(commission) ? commission : 0);
+        } else {
+          openOptionsSellCommission += Number.isFinite(commission) ? commission : 0;
+        }
+      }
+    });
+
+    stockValue += openOptionsBuyPremiumValue;
+    stockValue -= openOptionsSellCommission;
+    totalInvested += openOptionsBuyTotalCost;
+
     const totalValue = stockValue + cashValue;
 
     const unrealized = stockValue - totalInvested;
@@ -188,7 +253,8 @@ export default function Overview() {
       "EUR",
     );
     const realizedGain = rFifo + rClose;
-    const totalProfit = unrealized + realizedGain + dividendsDisplay;
+    const optionsRealizedDisplay = convertPrice(optionsRealizedGain, "EUR");
+    const totalProfit = unrealized + realizedGain + optionsRealizedDisplay + dividendsDisplay;
     const totalProfitPercent = totalInvested > 0 ? (totalProfit / totalInvested) * 100 : 0;
     const baseValue = stockValue - dailyChange;
     const dailyChangePercent = baseValue > 0 ? (dailyChange / baseValue) * 100 : 0;
@@ -280,18 +346,26 @@ export default function Overview() {
     for (const p of portfolios) {
       const row = overview.byPortfolioId[p.id];
       const holdings = row?.holdings ?? [];
+      const options = optionsByPortfolioId.get(p.id) ?? [];
       const totalRealizedFifoEur = row?.totalRealized ?? 0;
       const closeTradeNetEur = row?.closeTradeNetEur ?? 0;
       const dividendNetEur = row?.dividendNet ?? 0;
       const cashEur = row?.cashEur ?? 0;
       map.set(
         p.id,
-        computeMetrics(holdings, totalRealizedFifoEur, closeTradeNetEur, dividendNetEur, cashEur),
+        computeMetrics(
+          holdings,
+          options,
+          totalRealizedFifoEur,
+          closeTradeNetEur,
+          dividendNetEur,
+          cashEur,
+        ),
       );
     }
     return map;
     // quotes / currency helpers must trigger recompute when quotes arrive
-  }, [overview, portfolios, quotes, convertPrice, getTickerCurrency]);
+  }, [overview, portfolios, quotes, convertPrice, getTickerCurrency, optionsByPortfolioId]);
 
   const grandTotal = useMemo(() => {
     let total = 0;
