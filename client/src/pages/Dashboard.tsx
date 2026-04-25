@@ -145,6 +145,11 @@ interface HoldingsNextEarningsRes {
   all: Array<{ ticker: string; companyName: string; date: string }>;
 }
 
+interface UpcomingMacroEventsRes {
+  next: { code: string; shortLabel: string; date: string; title: string } | null;
+  all: Array<{ code: string; shortLabel: string; date: string; title: string }>;
+}
+
 export default function Dashboard() {
   const [, setLocation] = useLocation();
   const { currency, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
@@ -154,6 +159,7 @@ export default function Dashboard() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [mobileEarningsIndex, setMobileEarningsIndex] = useState(0);
   const [mobileTopPositionIndex, setMobileTopPositionIndex] = useState(0);
+  const [mobileMacroEventIndex, setMobileMacroEventIndex] = useState(0);
   
   const maskAmount = (amount: string) => hideAmounts ? "••••••" : amount;
   const premarketMoonClass = "text-amber-600 dark:text-amber-400";
@@ -452,6 +458,17 @@ export default function Dashboard() {
     enabled: dashboardSecondaryReady && !!holdings && holdings.length > 0,
   });
 
+  const { data: upcomingMacroEvents, dataUpdatedAt: macroEventsUpdatedAt } = useQuery<UpcomingMacroEventsRes>({
+    queryKey: ["/api/macro-events/upcoming"],
+    queryFn: async () => {
+      const res = await fetch("/api/macro-events/upcoming", { credentials: "include" });
+      if (!res.ok) throw new Error("macro events");
+      return res.json();
+    },
+    staleTime: 12 * 60 * 60 * 1000,
+    enabled: dashboardSecondaryReady,
+  });
+
   useEffect(() => {
     setMobileEarningsIndex(0);
   }, [earningsUpdatedAt]);
@@ -507,6 +524,15 @@ export default function Dashboard() {
     currentMobileTopPosition && mobileTopPositionsTotalValue > 0
       ? (currentMobileTopPosition.value / mobileTopPositionsTotalValue) * 100
       : 0;
+  const mobileMacroEvents = upcomingMacroEvents?.all ?? [];
+  const currentMobileMacroEvent =
+    mobileMacroEvents.length > 0
+      ? mobileMacroEvents[mobileMacroEventIndex % mobileMacroEvents.length]
+      : null;
+
+  useEffect(() => {
+    setMobileMacroEventIndex(0);
+  }, [macroEventsUpdatedAt]);
 
   const formatRelativeTime = (timestamp: number) => {
     const now = Math.floor(Date.now() / 1000);
@@ -1412,6 +1438,43 @@ export default function Dashboard() {
                   setMobileTopPositionIndex((prev) => (prev + 1) % mobileTopPositions.length)
                 }
                 data-testid="button-mobile-top-position-next"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        )}
+
+        {currentMobileMacroEvent && (
+          <div
+            className="w-full flex items-center gap-2 rounded-lg border border-sky-500/25 bg-sky-500/[0.08] px-2.5 py-1.5 text-left transition-colors hover:bg-sky-500/[0.13] dark:border-sky-500/35 dark:bg-sky-500/10 dark:hover:bg-sky-500/[0.16]"
+            data-testid="row-mobile-next-macro-event"
+          >
+            <div className="min-w-0 flex-1 flex items-center gap-1.5">
+              <Calendar className="h-3 w-3 shrink-0 text-sky-700/90 dark:text-sky-300/90" aria-hidden />
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wide shrink-0">
+                Udalosť
+              </span>
+              <span className="text-[11px] font-medium truncate min-w-0 text-foreground/90">
+                {currentMobileMacroEvent.shortLabel}
+              </span>
+            </div>
+            <span className="text-[11px] font-semibold tabular-nums text-sky-950 dark:text-sky-100 shrink-0">
+              {format(
+                parse(currentMobileMacroEvent.date, "yyyy-MM-dd", new Date()),
+                "d. MMM yyyy",
+                { locale: sk },
+              )}
+            </span>
+            {mobileMacroEvents.length > 1 && (
+              <button
+                type="button"
+                className="shrink-0 rounded-full p-1 text-sky-900/85 hover:bg-sky-500/25 dark:text-sky-100/90"
+                aria-label="Ďalšia makro udalosť"
+                onClick={() =>
+                  setMobileMacroEventIndex((prev) => (prev + 1) % mobileMacroEvents.length)
+                }
+                data-testid="button-mobile-next-macro-event-next"
               >
                 <ChevronRight className="h-3.5 w-3.5" />
               </button>

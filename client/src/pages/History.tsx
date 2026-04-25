@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -346,6 +346,46 @@ export default function History() {
     filteredTransactions.every(t => selectedIds.has(t.id));
   const someSelected = filteredTransactions && 
     filteredTransactions.some(t => selectedIds.has(t.id));
+
+  const selectedTransactions = useMemo(
+    () => (filteredTransactions ?? []).filter((t) => selectedIds.has(t.id)),
+    [filteredTransactions, selectedIds],
+  );
+
+  const selectedSummary = useMemo(() => {
+    let totalAmount = 0;
+    let realizedGain = 0;
+    let dividends = 0;
+    let cashFlow = 0;
+
+    for (const t of selectedTransactions) {
+      const shares = parseFloat(String(t.shares ?? "0"));
+      const price = parseFloat(String(t.pricePerShare ?? "0"));
+      const commission = parseFloat(String(t.commission ?? "0"));
+      if (!Number.isFinite(shares) || !Number.isFinite(price)) continue;
+      const gross = shares * price;
+      const isCash = t.type === "DEPOSIT" || t.type === "WITHDRAWAL";
+      const txTotal = t.type === "DIVIDEND"
+        ? gross - (Number.isFinite(commission) ? commission : 0)
+        : isCash
+          ? gross
+          : t.type === "BUY"
+            ? gross + (Number.isFinite(commission) ? commission : 0)
+            : gross - (Number.isFinite(commission) ? commission : 0);
+      if (Number.isFinite(txTotal)) totalAmount += txTotal;
+
+      if (t.type === "SELL") {
+        const rg = parseFloat(String(t.realizedGain ?? "0"));
+        if (Number.isFinite(rg)) {
+          realizedGain += convertPrice(rg, realizedGainSourceCurrency(t));
+        }
+      }
+      if (t.type === "DIVIDEND" && Number.isFinite(txTotal)) dividends += txTotal;
+      if (isCash && Number.isFinite(gross)) cashFlow += gross;
+    }
+
+    return { totalAmount, realizedGain, dividends, cashFlow };
+  }, [selectedTransactions, convertPrice]);
 
   const formatDate = (date: Date | string) => {
     const d = typeof date === "string" ? new Date(date) : date;
@@ -958,9 +998,32 @@ export default function History() {
           )}
 
           {filteredTransactions && filteredTransactions.length > 0 && (
-            <div className="mt-4 text-sm text-muted-foreground text-right">
-              Zobrazených {filteredTransactions.length} z {transactions?.length || 0} transakcií
-            </div>
+            <>
+              {selectedTransactions.length > 0 && (
+                <div className="mt-4 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <span className="font-medium text-foreground">
+                      Súhrn označených ({selectedTransactions.length})
+                    </span>
+                    <span className="text-muted-foreground">
+                      Celkom: <span className="font-medium text-foreground">{formatCurrency(selectedSummary.totalAmount)}</span>
+                    </span>
+                    <span className={selectedSummary.realizedGain >= 0 ? "text-green-600" : "text-red-600"}>
+                      Realizovaný: {selectedSummary.realizedGain >= 0 ? "+" : ""}{formatCurrency(selectedSummary.realizedGain)}
+                    </span>
+                    <span className="text-blue-600">
+                      Dividendy: +{formatCurrency(selectedSummary.dividends)}
+                    </span>
+                    <span className={selectedSummary.cashFlow >= 0 ? "text-emerald-700" : "text-amber-800"}>
+                      Cash flow: {selectedSummary.cashFlow >= 0 ? "+" : ""}{formatCurrency(selectedSummary.cashFlow)}
+                    </span>
+                  </div>
+                </div>
+              )}
+              <div className="mt-4 text-sm text-muted-foreground text-right">
+                Zobrazených {filteredTransactions.length} z {transactions?.length || 0} transakcií
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

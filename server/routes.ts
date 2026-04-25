@@ -767,6 +767,108 @@ async function fetchNextEarningsDateForAsset(ticker: string): Promise<{ date: st
   return v;
 }
 
+type MacroEventCode = "CPI" | "CORE_CPI" | "FOMC" | "NFP" | "PCE";
+
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function toDateAtNoon(iso: string): Date {
+  return new Date(`${iso}T12:00:00`);
+}
+
+function nextBusinessDay(d: Date): Date {
+  const out = new Date(d);
+  while (out.getDay() === 0 || out.getDay() === 6) {
+    out.setDate(out.getDate() + 1);
+  }
+  return out;
+}
+
+function firstFriday(year: number, monthZeroBased: number): Date {
+  const d = new Date(year, monthZeroBased, 1, 12, 0, 0);
+  while (d.getDay() !== 5) d.setDate(d.getDate() + 1);
+  return d;
+}
+
+function lastBusinessDay(year: number, monthZeroBased: number): Date {
+  const d = new Date(year, monthZeroBased + 1, 0, 12, 0, 0);
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1);
+  return d;
+}
+
+function buildUpcomingMacroEvents(): Array<{ code: MacroEventCode; shortLabel: string; date: string; title: string }> {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
+  const events: Array<{ code: MacroEventCode; shortLabel: string; date: string; title: string }> = [];
+
+  // FOMC scheduled dates (US Fed) for 2026–2027.
+  const fomcDates = [
+    "2026-01-28", "2026-03-18", "2026-04-29", "2026-06-17",
+    "2026-07-29", "2026-09-16", "2026-11-04", "2026-12-16",
+    "2027-01-27", "2027-03-17", "2027-04-28", "2027-06-16",
+    "2027-07-28", "2027-09-22", "2027-11-03", "2027-12-15",
+  ];
+
+  for (const iso of fomcDates) {
+    const d = toDateAtNoon(iso);
+    if (d >= start) {
+      events.push({
+        code: "FOMC",
+        shortLabel: "FOMC",
+        date: iso,
+        title: "FOMC Interest Rate Decision",
+      });
+    }
+  }
+
+  for (let i = 0; i <= 15; i++) {
+    const d = new Date(start.getFullYear(), start.getMonth() + i, 1, 12, 0, 0);
+    const y = d.getFullYear();
+    const m = d.getMonth();
+
+    const nfp = firstFriday(y, m);
+    if (nfp >= start) {
+      events.push({
+        code: "NFP",
+        shortLabel: "NFP",
+        date: isoDate(nfp),
+        title: "Non-Farm Payrolls",
+      });
+    }
+
+    const cpiBase = new Date(y, m, 12, 12, 0, 0);
+    const cpi = nextBusinessDay(cpiBase);
+    if (cpi >= start) {
+      events.push({
+        code: "CPI",
+        shortLabel: "CPI",
+        date: isoDate(cpi),
+        title: "CPI (Inflation Data)",
+      });
+      events.push({
+        code: "CORE_CPI",
+        shortLabel: "Core CPI",
+        date: isoDate(cpi),
+        title: "Core CPI (Inflation Data)",
+      });
+    }
+
+    const pce = lastBusinessDay(y, m);
+    if (pce >= start) {
+      events.push({
+        code: "PCE",
+        shortLabel: "PCE",
+        date: isoDate(pce),
+        title: "PCE Price Index",
+      });
+    }
+  }
+
+  events.sort((a, b) => a.date.localeCompare(b.date) || a.shortLabel.localeCompare(b.shortLabel));
+  return events;
+}
+
 interface NewsArticle {
   ticker: string;
   title: string;
@@ -2416,6 +2518,17 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching next earnings for holdings:", error);
       res.status(500).json({ message: "Nepodarilo sa načítať earnings." });
+    }
+  });
+
+  app.get("/api/macro-events/upcoming", isAuthenticated, async (_req: any, res) => {
+    try {
+      const all = buildUpcomingMacroEvents();
+      const next = all.length > 0 ? all[0] : null;
+      res.json({ next, all });
+    } catch (error) {
+      console.error("Error fetching upcoming macro events:", error);
+      res.status(500).json({ message: "Nepodarilo sa načítať makro udalosti." });
     }
   });
 
