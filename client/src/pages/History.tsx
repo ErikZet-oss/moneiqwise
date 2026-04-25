@@ -58,6 +58,17 @@ interface EditFormData {
   originalCurrency: string;
 }
 
+type SortField =
+  | "transactionDate"
+  | "type"
+  | "ticker"
+  | "shares"
+  | "pricePerShare"
+  | "commission"
+  | "total"
+  | "realizedGain";
+type SortDirection = "asc" | "desc";
+
 export default function History() {
   const { toast } = useToast();
   const { formatCurrency, convertPrice } = useCurrency();
@@ -65,6 +76,9 @@ export default function History() {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [tickerFilter, setTickerFilter] = useState<string>("all");
   const [idFilter, setIdFilter] = useState<string>("");
+  const [sortField, setSortField] = useState<SortField>("transactionDate");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [showRealizedDebug, setShowRealizedDebug] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -341,12 +355,74 @@ export default function History() {
   const tickerFilterLabel = (ticker: string) =>
     ticker === CASH_FLOW_TICKER ? "Hotovosť (vklady/výbery)" : ticker;
 
-  const filteredTransactions = transactions?.filter((t) => {
-    if (typeFilter !== "all" && t.type !== typeFilter) return false;
-    if (tickerFilter !== "all" && t.ticker !== tickerFilter) return false;
-    if (idFilter && !t.id.toLowerCase().includes(idFilter.toLowerCase())) return false;
-    return true;
-  });
+  const filteredTransactions = useMemo(
+    () =>
+      (transactions ?? []).filter((t) => {
+        if (typeFilter !== "all" && t.type !== typeFilter) return false;
+        if (tickerFilter !== "all" && t.ticker !== tickerFilter) return false;
+        if (idFilter && !t.id.toLowerCase().includes(idFilter.toLowerCase())) return false;
+        return true;
+      }),
+    [transactions, typeFilter, tickerFilter, idFilter],
+  );
+
+  const sortedTransactions = useMemo(() => {
+    const rows = [...(filteredTransactions ?? [])];
+    const dir = sortDirection === "asc" ? 1 : -1;
+
+    const txTotal = (t: Transaction) => {
+      const shares = parseFloat(String(t.shares ?? "0"));
+      const price = parseFloat(String(t.pricePerShare ?? "0"));
+      const commission = parseFloat(String(t.commission ?? "0"));
+      if (!Number.isFinite(shares) || !Number.isFinite(price)) return 0;
+      const gross = shares * price;
+      const isCash = t.type === "DEPOSIT" || t.type === "WITHDRAWAL";
+      if (t.type === "DIVIDEND") return gross - (Number.isFinite(commission) ? commission : 0);
+      if (isCash) return gross;
+      if (t.type === "BUY") return gross + (Number.isFinite(commission) ? commission : 0);
+      return gross - (Number.isFinite(commission) ? commission : 0);
+    };
+
+    const realizedAmount = (t: Transaction) => {
+      if (t.type !== "SELL") return 0;
+      const rg = parseFloat(String(t.realizedGain ?? "0"));
+      return Number.isFinite(rg) ? rg : 0;
+    };
+
+    const getKey = (t: Transaction): string | number => {
+      switch (sortField) {
+        case "transactionDate":
+          return new Date(t.transactionDate).getTime();
+        case "type":
+          return t.type || "";
+        case "ticker":
+          return t.ticker || "";
+        case "shares":
+          return parseFloat(String(t.shares ?? "0")) || 0;
+        case "pricePerShare":
+          return parseFloat(String(t.pricePerShare ?? "0")) || 0;
+        case "commission":
+          return parseFloat(String(t.commission ?? "0")) || 0;
+        case "total":
+          return txTotal(t);
+        case "realizedGain":
+          return realizedAmount(t);
+        default:
+          return 0;
+      }
+    };
+
+    rows.sort((a, b) => {
+      const av = getKey(a);
+      const bv = getKey(b);
+      if (typeof av === "number" && typeof bv === "number") {
+        return (av - bv) * dir;
+      }
+      return String(av).localeCompare(String(bv), "sk") * dir;
+    });
+
+    return rows;
+  }, [filteredTransactions, sortField, sortDirection]);
 
   const allSelected = filteredTransactions && filteredTransactions.length > 0 && 
     filteredTransactions.every(t => selectedIds.has(t.id));
@@ -376,6 +452,18 @@ export default function History() {
     const usedCloseIds = new Set<string>();
     const bySellId = new Map<string, number>();
     const maxDiffMs = 5 * 60 * 1000;
+    const minuteMs = 60 * 1000;
+    const toMinuteKey = (ts: number) => Math.floor(ts / minuteMs);
+    const closeByMinute = new Map<number, Transaction[]>();
+
+    for (const c of closeCashRows) {
+      const ts = new Date(c.transactionDate).getTime();
+      if (!Number.isFinite(ts)) continue;
+      const key = toMinuteKey(ts);
+      const arr = closeByMinute.get(key) ?? [];
+      arr.push(c);
+      closeByMinute.set(key, arr);
+    }
 
     for (const sell of sells) {
       const sellRg = parseFloat(String(sell.realizedGain ?? "0"));
@@ -385,13 +473,18 @@ export default function History() {
       if (!Number.isFinite(sellTs)) continue;
 
       let best: { tx: Transaction; diff: number } | null = null;
-      for (const cashTx of closeCashRows) {
-        if (usedCloseIds.has(cashTx.id)) continue;
-        const cashTs = new Date(cashTx.transactionDate).getTime();
-        if (!Number.isFinite(cashTs)) continue;
-        const diff = Math.abs(cashTs - sellTs);
-        if (diff > maxDiffMs) continue;
-        if (!best || diff < best.diff) best = { tx: cashTx, diff };
+      const sellMinute = toMinuteKey(sellTs);
+      for (let delta = -5; delta <= 5; delta++) {
+        const bucket = closeByMinute.get(sellMinute + delta);
+        if (!bucket || bucket.length === 0) continue;
+        for (const cashTx of bucket) {
+          if (usedCloseIds.has(cashTx.id)) continue;
+          const cashTs = new Date(cashTx.transactionDate).getTime();
+          if (!Number.isFinite(cashTs)) continue;
+          const diff = Math.abs(cashTs - sellTs);
+          if (diff > maxDiffMs) continue;
+          if (!best || diff < best.diff) best = { tx: cashTx, diff };
+        }
       }
       if (!best) continue;
 
@@ -452,6 +545,18 @@ export default function History() {
   }, [selectedTransactions, convertPrice, fallbackPairing]);
 
   const realizedDebug = useMemo(() => {
+    if (!showRealizedDebug) {
+      return {
+        sellRows: 0,
+        sellStored: 0,
+        sellFallback: 0,
+        sellDisplayed: 0,
+        closeTradeCash: 0,
+        diffVsCloseTrade: 0,
+        unmatchedSellRows: 0,
+        unmatchedCloseTradeRows: 0,
+      };
+    }
     const all = filteredTransactions ?? [];
     let sellStored = 0;
     let sellFallback = 0;
@@ -514,7 +619,7 @@ export default function History() {
       unmatchedSellRows,
       unmatchedCloseTradeRows,
     };
-  }, [filteredTransactions, transactions, convertPrice, fallbackPairing]);
+  }, [filteredTransactions, transactions, convertPrice, fallbackPairing, showRealizedDebug]);
 
   const formatDate = (date: Date | string) => {
     const d = typeof date === "string" ? new Date(date) : date;
@@ -771,6 +876,34 @@ export default function History() {
               </Select>
             </div>
 
+            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2 md:flex-row">
+              <span className="text-sm text-muted-foreground shrink-0">Zoradiť</span>
+              <Select value={sortField} onValueChange={(v) => setSortField(v as SortField)}>
+                <SelectTrigger className="w-full md:w-[180px]" data-testid="select-sort-field">
+                  <SelectValue placeholder="Dátum" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="transactionDate">Dátum</SelectItem>
+                  <SelectItem value="type">Typ</SelectItem>
+                  <SelectItem value="ticker">Ticker</SelectItem>
+                  <SelectItem value="shares">Počet kusov</SelectItem>
+                  <SelectItem value="pricePerShare">Cena/ks</SelectItem>
+                  <SelectItem value="commission">Poplatky</SelectItem>
+                  <SelectItem value="total">Celkom</SelectItem>
+                  <SelectItem value="realizedGain">Realiz. zisk</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setSortDirection((d) => (d === "asc" ? "desc" : "asc"))}
+                data-testid="button-sort-direction"
+              >
+                {sortDirection === "asc" ? "Vzostupne" : "Zostupne"}
+              </Button>
+            </div>
+
             {selectedIds.size > 0 && (
               <div className="flex flex-wrap items-center gap-2 md:ml-auto">
                 <Badge variant="secondary">
@@ -788,7 +921,7 @@ export default function History() {
             )}
           </div>
 
-          {!filteredTransactions || filteredTransactions.length === 0 ? (
+          {!sortedTransactions || sortedTransactions.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground" data-testid="text-no-transactions">
               <p>Žiadne transakcie na zobrazenie.</p>
               {transactions && transactions.length > 0 && (
@@ -802,7 +935,7 @@ export default function History() {
             <>
               {/* Mobile view — väčšie karty, viac miesta na čítanie */}
               <div className="md:hidden flex flex-col gap-3">
-                {filteredTransactions.map((transaction) => {
+                {sortedTransactions.map((transaction) => {
                   const shares = parseFloat(transaction.shares);
                   const price = parseFloat(transaction.pricePerShare);
                   const commission = parseFloat(transaction.commission || "0");
@@ -999,7 +1132,7 @@ export default function History() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredTransactions.map((transaction) => {
+                {sortedTransactions.map((transaction) => {
                   const shares = parseFloat(transaction.shares);
                   const price = parseFloat(transaction.pricePerShare);
                   const commission = parseFloat(transaction.commission || "0");
@@ -1160,7 +1293,7 @@ export default function History() {
             </>
           )}
 
-          {filteredTransactions && filteredTransactions.length > 0 && (
+          {sortedTransactions && sortedTransactions.length > 0 && (
             <>
               {selectedTransactions.length > 0 && (
                 <div className="mt-4 rounded-lg border bg-muted/30 px-3 py-2 text-sm">
@@ -1183,37 +1316,50 @@ export default function History() {
                   </div>
                 </div>
               )}
-              <div className="mt-3 rounded-lg border bg-muted/20 px-3 py-2 text-xs">
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                  <span className="font-medium text-foreground">Debug realizácie (aktuálny filter)</span>
-                  <span className="text-muted-foreground">
-                    SELL riadky: <span className="font-medium text-foreground">{realizedDebug.sellRows}</span>
-                  </span>
-                  <span className="text-muted-foreground">
-                    SELL uložené: <span className="font-medium text-foreground">{formatCurrency(realizedDebug.sellStored)}</span>
-                  </span>
-                  <span className="text-muted-foreground">
-                    SELL fallback close-trade: <span className="font-medium text-foreground">{formatCurrency(realizedDebug.sellFallback)}</span>
-                  </span>
-                  <span className={realizedDebug.sellDisplayed >= 0 ? "text-green-600" : "text-red-600"}>
-                    SELL spolu zobrazené: {realizedDebug.sellDisplayed >= 0 ? "+" : ""}{formatCurrency(realizedDebug.sellDisplayed)}
-                  </span>
-                  <span className={realizedDebug.closeTradeCash >= 0 ? "text-green-600" : "text-red-600"}>
-                    Close trade cash spolu: {realizedDebug.closeTradeCash >= 0 ? "+" : ""}{formatCurrency(realizedDebug.closeTradeCash)}
-                  </span>
-                  <span className={realizedDebug.diffVsCloseTrade >= 0 ? "text-amber-700" : "text-amber-800"}>
-                    Rozdiel SELL vs close-trade: {realizedDebug.diffVsCloseTrade >= 0 ? "+" : ""}{formatCurrency(realizedDebug.diffVsCloseTrade)}
-                  </span>
-                  <span className="text-muted-foreground">
-                    Nespárované SELL: <span className="font-medium text-foreground">{realizedDebug.unmatchedSellRows}</span>
-                  </span>
-                  <span className="text-muted-foreground">
-                    Nespárované close trade: <span className="font-medium text-foreground">{realizedDebug.unmatchedCloseTradeRows}</span>
-                  </span>
-                </div>
+              <div className="mt-3">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowRealizedDebug((v) => !v)}
+                  data-testid="button-toggle-realized-debug"
+                >
+                  {showRealizedDebug ? "Skryť debug realizácie" : "Zobraziť debug realizácie"}
+                </Button>
               </div>
+              {showRealizedDebug && (
+                <div className="mt-3 rounded-lg border bg-muted/20 px-3 py-2 text-xs">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <span className="font-medium text-foreground">Debug realizácie (aktuálny filter)</span>
+                    <span className="text-muted-foreground">
+                      SELL riadky: <span className="font-medium text-foreground">{realizedDebug.sellRows}</span>
+                    </span>
+                    <span className="text-muted-foreground">
+                      SELL uložené: <span className="font-medium text-foreground">{formatCurrency(realizedDebug.sellStored)}</span>
+                    </span>
+                    <span className="text-muted-foreground">
+                      SELL fallback close-trade: <span className="font-medium text-foreground">{formatCurrency(realizedDebug.sellFallback)}</span>
+                    </span>
+                    <span className={realizedDebug.sellDisplayed >= 0 ? "text-green-600" : "text-red-600"}>
+                      SELL spolu zobrazené: {realizedDebug.sellDisplayed >= 0 ? "+" : ""}{formatCurrency(realizedDebug.sellDisplayed)}
+                    </span>
+                    <span className={realizedDebug.closeTradeCash >= 0 ? "text-green-600" : "text-red-600"}>
+                      Close trade cash spolu: {realizedDebug.closeTradeCash >= 0 ? "+" : ""}{formatCurrency(realizedDebug.closeTradeCash)}
+                    </span>
+                    <span className={realizedDebug.diffVsCloseTrade >= 0 ? "text-amber-700" : "text-amber-800"}>
+                      Rozdiel SELL vs close-trade: {realizedDebug.diffVsCloseTrade >= 0 ? "+" : ""}{formatCurrency(realizedDebug.diffVsCloseTrade)}
+                    </span>
+                    <span className="text-muted-foreground">
+                      Nespárované SELL: <span className="font-medium text-foreground">{realizedDebug.unmatchedSellRows}</span>
+                    </span>
+                    <span className="text-muted-foreground">
+                      Nespárované close trade: <span className="font-medium text-foreground">{realizedDebug.unmatchedCloseTradeRows}</span>
+                    </span>
+                  </div>
+                </div>
+              )}
               <div className="mt-4 text-sm text-muted-foreground text-right">
-                Zobrazených {filteredTransactions.length} z {transactions?.length || 0} transakcií
+                Zobrazených {sortedTransactions.length} z {transactions?.length || 0} transakcií
               </div>
             </>
           )}
