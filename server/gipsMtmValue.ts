@@ -1,6 +1,7 @@
 import type { Transaction } from "@shared/schema";
 import { getTickerCurrency } from "@shared/tickerCurrency";
 import { sumNetCashLedgerEurUpTo } from "@shared/netCashLedgerUpTo";
+import { inferTradeCurrency } from "@shared/transactionEur";
 import { endOfDay, parseISO } from "date-fns";
 import { convertAmountBetween, type AllExchangeRates } from "./convertAmountBetween";
 
@@ -66,10 +67,19 @@ export function mtmValueAtEod(
   }
 
   const eod = endOfDay(parseISO(baseIso + "T12:00:00"));
+  // Fallback EUR/1 unit per transaction currency for legacy rows without
+  // baseCurrencyAmount / stored FX. Prevents BUY/SELL cash impact from
+  // becoming zero (which would understate total value on long ranges).
+  const eurPerUnitByTxnId: Record<string, number | null> = {};
+  for (const t of sortedTx) {
+    if (t.type !== "BUY" && t.type !== "SELL") continue;
+    const ccy = inferTradeCurrency(t);
+    eurPerUnitByTxnId[t.id] = convertAmountBetween(1, ccy, "EUR", rates);
+  }
   const cashEur = sumNetCashLedgerEurUpTo(
     sortedTx,
     eod,
-    {},
+    eurPerUnitByTxnId,
     rates,
   );
 
