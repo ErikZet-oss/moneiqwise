@@ -2368,7 +2368,7 @@ export async function registerRoutes(
       }
 
       if (unique.length === 0) {
-        return res.json({ next: null });
+        return res.json({ next: null, all: [] });
       }
 
       const CONCURRENCY = 4;
@@ -2396,7 +2396,7 @@ export async function registerRoutes(
       }
 
       if (withDates.length === 0) {
-        return res.json({ next: null });
+        return res.json({ next: null, all: [] });
       }
 
       withDates.sort((a, b) => a.ms - b.ms);
@@ -2407,6 +2407,11 @@ export async function registerRoutes(
           companyName: best.companyName,
           date: best.date,
         },
+        all: withDates.map((e) => ({
+          ticker: e.ticker,
+          companyName: e.companyName,
+          date: e.date,
+        })),
       });
     } catch (error) {
       console.error("Error fetching next earnings for holdings:", error);
@@ -3758,11 +3763,42 @@ export async function registerRoutes(
     userId: string,
     portfolioParam: string,
   ): Promise<number> {
+    const out = await computeSnapshotSeriesForScope(userId, portfolioParam);
+    if (out.points.length === 0) return 0;
+    const scopeKey = portfolioParam === "all" ? "all" : portfolioParam;
+    let prevTotal = 0;
+    let written = 0;
+    for (let i = 0; i < out.points.length; i++) {
+      const p = out.points[i]!;
+      const daily = i === 0 ? 0 : p.totalValue - prevTotal;
+      await storage.upsertPortfolioSnapshot({
+        userId,
+        scopeKey,
+        date: p.date,
+        totalValueEur: p.totalValue,
+        investedAmountEur: p.netInvested,
+        dailyProfitEur: daily,
+      });
+      prevTotal = p.totalValue;
+      written++;
+    }
+    return written;
+  }
+
+  async function computeSnapshotSeriesForScope(
+    userId: string,
+    portfolioParam: string,
+  ) {
     const tx = await storage.getTransactionsByUser(
       userId,
       portfolioParam === "all" ? null : portfolioParam,
     );
-    if (tx.length === 0) return 0;
+    if (tx.length === 0) {
+      return {
+        points: [] as Array<{ date: string; totalValue: number; netInvested: number }>,
+        endIso: new Date().toISOString().slice(0, 10),
+      };
+    }
 
     const sorted = [...tx].sort(
       (a, b) =>
@@ -3822,26 +3858,7 @@ export async function registerRoutes(
       "all",
       12000,
     );
-    if (out.points.length === 0) return 0;
-
-    const scopeKey = portfolioParam === "all" ? "all" : portfolioParam;
-    let prevTotal = 0;
-    let written = 0;
-    for (let i = 0; i < out.points.length; i++) {
-      const p = out.points[i]!;
-      const daily = i === 0 ? 0 : p.totalValue - prevTotal;
-      await storage.upsertPortfolioSnapshot({
-        userId,
-        scopeKey,
-        date: p.date,
-        totalValueEur: p.totalValue,
-        investedAmountEur: p.netInvested,
-        dailyProfitEur: daily,
-      });
-      prevTotal = p.totalValue;
-      written++;
-    }
-    return written;
+    return out;
   }
 
   app.get("/api/portfolio/history", isAuthenticated, async (req: any, res) => {
@@ -3854,8 +3871,31 @@ export async function registerRoutes(
 
       let last = await storage.getLastPortfolioSnapshot(userId, scopeKey);
       if (!last) {
-        await backfillPortfolioSnapshotsForScope(userId, portfolioParam);
-        last = await storage.getLastPortfolioSnapshot(userId, scopeKey);
+        try {
+          await backfillPortfolioSnapshotsForScope(userId, portfolioParam);
+          last = await storage.getLastPortfolioSnapshot(userId, scopeKey);
+        } catch (err) {
+          // Fallback: when snapshot table is missing/not migrated yet, serve on-the-fly series.
+          const out = await computeSnapshotSeriesForScope(userId, portfolioParam);
+          const firstIso = out.points[0]?.date ?? todayIso;
+          const startIso = rangeStartIsoFromEnd(range, todayIso, firstIso);
+          const liveRows = out.points.filter((p) => p.date >= startIso && p.date <= todayIso);
+          return res.json({
+            points: liveRows.map((p, i) => ({
+              date: p.date,
+              totalValueEur: Number(p.totalValue),
+              investedAmountEur: Number(p.netInvested),
+              dailyProfitEur:
+                i === 0 ? 0 : Number(p.totalValue) - Number(liveRows[i - 1]!.totalValue),
+            })),
+            range,
+            portfolio: portfolioParam,
+            currency: "EUR",
+            source: "live-fallback",
+            startIso,
+            endIso: todayIso,
+          });
+        }
       }
       if (!last) {
         return res.json({

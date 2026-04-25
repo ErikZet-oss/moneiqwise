@@ -256,7 +256,7 @@ export function AppSidebar() {
               </a>
             </SidebarMenuButton>
           </SidebarMenuItem>
-          <SidebarMenuItem>
+          <SidebarMenuItem className="hidden md:block">
             <div
               className="flex items-center justify-between rounded-md px-2 py-1.5 md:px-3 md:py-2 hover:bg-sidebar-accent/50"
               data-testid="button-theme-toggle"
@@ -301,9 +301,21 @@ export function AppSidebar() {
               {getDisplayName(user)}
             </p>
             {user?.email && (
-              <p className="text-[10px] md:text-xs text-muted-foreground truncate">
-                {user.email}
-              </p>
+              <div className="mt-0.5 flex items-center justify-between gap-2 md:block">
+                <p className="text-[10px] md:text-xs text-muted-foreground truncate">
+                  {user.email}
+                </p>
+                <div className="md:hidden flex items-center gap-1.5">
+                  <Sun className={`h-3 w-3 ${theme === "dark" ? "text-muted-foreground" : "text-amber-500"}`} />
+                  <Switch
+                    checked={theme === "dark"}
+                    onCheckedChange={toggleTheme}
+                    className="scale-75 origin-right"
+                    aria-label={theme === "dark" ? "Prepnúť na svetlý režim" : "Prepnúť na tmavý režim"}
+                  />
+                  <Moon className={`h-3 w-3 ${theme === "dark" ? "text-indigo-400" : "text-muted-foreground"}`} />
+                </div>
+              </div>
             )}
           </div>
         </div>

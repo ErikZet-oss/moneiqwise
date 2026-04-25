@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Wallet, Banknote, Newspaper, ExternalLink, HelpCircle, Loader2, RefreshCw, Moon, Calendar } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Wallet, Banknote, Newspaper, ExternalLink, HelpCircle, Loader2, RefreshCw, Moon, Calendar, ChevronRight } from "lucide-react";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
@@ -141,6 +141,7 @@ interface PortfolioHistoryYtdRes {
 
 interface HoldingsNextEarningsRes {
   next: { ticker: string; companyName: string; date: string } | null;
+  all: Array<{ ticker: string; companyName: string; date: string }>;
 }
 
 export default function Dashboard() {
@@ -150,6 +151,7 @@ export default function Dashboard() {
   const { hideAmounts, showNews, showDailyMovers } = useChartSettings();
   const [sortField, setSortField] = useState<SortField>("ticker");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [mobileEarningsIndex, setMobileEarningsIndex] = useState(0);
   
   const maskAmount = (amount: string) => hideAmounts ? "••••••" : amount;
   const premarketMoonClass = "text-amber-600 dark:text-amber-400";
@@ -434,7 +436,7 @@ export default function Dashboard() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: holdingsNextEarnings } = useQuery<HoldingsNextEarningsRes>({
+  const { data: holdingsNextEarnings, dataUpdatedAt: earningsUpdatedAt } = useQuery<HoldingsNextEarningsRes>({
     queryKey: ["/api/holdings/next-earnings", portfolioParam],
     queryFn: async () => {
       const res = await fetch(
@@ -447,6 +449,16 @@ export default function Dashboard() {
     staleTime: 45 * 60 * 1000,
     enabled: dashboardSecondaryReady && !!holdings && holdings.length > 0,
   });
+
+  useEffect(() => {
+    setMobileEarningsIndex(0);
+  }, [earningsUpdatedAt]);
+
+  const mobileEarningsItems = holdingsNextEarnings?.all ?? [];
+  const currentMobileEarnings =
+    mobileEarningsItems.length > 0
+      ? mobileEarningsItems[mobileEarningsIndex % mobileEarningsItems.length]
+      : null;
 
   const formatRelativeTime = (timestamp: number) => {
     const now = Math.floor(Date.now() / 1000);
@@ -1246,38 +1258,55 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {holdingsNextEarnings?.next && (
-          <button
-            type="button"
+        {currentMobileEarnings && (
+          <div
             className="w-full flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.07] px-2.5 py-1.5 text-left transition-colors hover:bg-amber-500/12 dark:border-amber-500/25 dark:bg-amber-500/10 dark:hover:bg-amber-500/[0.14]"
-            onClick={() =>
-              setLocation(`/asset/${encodeURIComponent(holdingsNextEarnings.next!.ticker)}`)
-            }
             data-testid="row-mobile-next-earnings"
           >
-            <CompanyLogo
-              ticker={holdingsNextEarnings.next.ticker}
-              companyName={holdingsNextEarnings.next.companyName}
-              size="xs"
-              className="shrink-0"
-            />
-            <div className="min-w-0 flex-1 flex items-center gap-1.5">
-              <Calendar className="h-3 w-3 shrink-0 text-amber-700/90 dark:text-amber-400/90" aria-hidden />
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wide shrink-0">
-                Earnings
+            <button
+              type="button"
+              className="min-w-0 flex-1 flex items-center gap-2 text-left"
+              onClick={() =>
+                setLocation(`/asset/${encodeURIComponent(currentMobileEarnings.ticker)}`)
+              }
+            >
+              <CompanyLogo
+                ticker={currentMobileEarnings.ticker}
+                companyName={currentMobileEarnings.companyName}
+                size="xs"
+                className="shrink-0"
+              />
+              <div className="min-w-0 flex-1 flex items-center gap-1.5">
+                <Calendar className="h-3 w-3 shrink-0 text-amber-700/90 dark:text-amber-400/90" aria-hidden />
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wide shrink-0">
+                  Earnings
+                </span>
+                <span className="text-[11px] font-medium truncate min-w-0 text-foreground/90">
+                  {currentMobileEarnings.ticker}
+                </span>
+              </div>
+              <span className="text-[11px] font-semibold tabular-nums text-amber-950 dark:text-amber-100 shrink-0">
+                {format(
+                  parse(currentMobileEarnings.date, "yyyy-MM-dd", new Date()),
+                  "d. MMM yyyy",
+                  { locale: sk },
+                )}
               </span>
-              <span className="text-[11px] font-medium truncate min-w-0 text-foreground/90">
-                {holdingsNextEarnings.next.ticker}
-              </span>
-            </div>
-            <span className="text-[11px] font-semibold tabular-nums text-amber-950 dark:text-amber-100 shrink-0">
-              {format(
-                parse(holdingsNextEarnings.next.date, "yyyy-MM-dd", new Date()),
-                "d. MMM yyyy",
-                { locale: sk },
-              )}
-            </span>
-          </button>
+            </button>
+            {mobileEarningsItems.length > 1 && (
+              <button
+                type="button"
+                className="shrink-0 rounded-full p-1 text-amber-900/80 hover:bg-amber-500/20 dark:text-amber-100/90"
+                aria-label="Ďalší earnings"
+                onClick={() =>
+                  setMobileEarningsIndex((prev) => (prev + 1) % mobileEarningsItems.length)
+                }
+                data-testid="button-mobile-next-earnings-next"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
         )}
 
         {metrics.optionsIncluded && (
