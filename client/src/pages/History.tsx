@@ -358,7 +358,7 @@ export default function History() {
     [filteredTransactions, selectedIds],
   );
 
-  const fallbackSellRealizedEurById = useMemo(() => {
+  const fallbackPairing = useMemo(() => {
     const all = transactions ?? [];
     const sells = all
       .filter((t) => t.type === "SELL")
@@ -374,7 +374,7 @@ export default function History() {
       );
 
     const usedCloseIds = new Set<string>();
-    const out = new Map<string, number>();
+    const bySellId = new Map<string, number>();
     const maxDiffMs = 5 * 60 * 1000;
 
     for (const sell of sells) {
@@ -405,10 +405,10 @@ export default function History() {
           ? shares * price
           : NaN;
       if (!Number.isFinite(amtEur) || Math.abs(amtEur) <= 1e-9) continue;
-      out.set(sell.id, amtEur);
+      bySellId.set(sell.id, amtEur);
     }
 
-    return out;
+    return { bySellId, usedCloseIds };
   }, [transactions]);
 
   const selectedSummary = useMemo(() => {
@@ -438,7 +438,7 @@ export default function History() {
         if (Number.isFinite(rg) && Math.abs(rg) > 1e-9) {
           realizedGain += convertPrice(rg, realizedGainSourceCurrency(t));
         } else {
-          const fallbackEur = fallbackSellRealizedEurById.get(t.id);
+          const fallbackEur = fallbackPairing.bySellId.get(t.id);
           if (Number.isFinite(fallbackEur)) {
             realizedGain += convertPrice(fallbackEur as number, "EUR");
           }
@@ -449,7 +449,72 @@ export default function History() {
     }
 
     return { totalAmount, realizedGain, dividends, cashFlow };
-  }, [selectedTransactions, convertPrice, fallbackSellRealizedEurById]);
+  }, [selectedTransactions, convertPrice, fallbackPairing]);
+
+  const realizedDebug = useMemo(() => {
+    const all = filteredTransactions ?? [];
+    let sellStored = 0;
+    let sellFallback = 0;
+    let sellDisplayed = 0;
+    let closeTradeCash = 0;
+    let sellRows = 0;
+
+    for (const t of all) {
+      if (t.type === "SELL") {
+        sellRows += 1;
+        const rg = parseFloat(String(t.realizedGain ?? "0"));
+        if (Number.isFinite(rg) && Math.abs(rg) > 1e-9) {
+          const converted = convertPrice(rg, realizedGainSourceCurrency(t));
+          sellStored += converted;
+          sellDisplayed += converted;
+        } else {
+          const fb = fallbackPairing.bySellId.get(t.id);
+          if (Number.isFinite(fb)) {
+            const converted = convertPrice(fb as number, "EUR");
+            sellFallback += converted;
+            sellDisplayed += converted;
+          }
+        }
+      }
+
+      if (isCloseTradeCashRow(t)) {
+        const baseEur = parseFloat(String(t.baseCurrencyAmount ?? "NaN"));
+        const shares = parseFloat(String(t.shares ?? "NaN"));
+        const price = parseFloat(String(t.pricePerShare ?? "NaN"));
+        const amountEur = Number.isFinite(baseEur)
+          ? baseEur
+          : Number.isFinite(shares) && Number.isFinite(price)
+            ? shares * price
+            : NaN;
+        if (Number.isFinite(amountEur)) {
+          closeTradeCash += convertPrice(amountEur as number, "EUR");
+        }
+      }
+    }
+
+    const closeTradeRowsAll = (transactions ?? []).filter((t) => isCloseTradeCashRow(t));
+    const unmatchedCloseTradeRows = closeTradeRowsAll.filter(
+      (t) => !fallbackPairing.usedCloseIds.has(t.id),
+    ).length;
+    const unmatchedSellRows = all.filter((t) => {
+      if (t.type !== "SELL") return false;
+      const rg = parseFloat(String(t.realizedGain ?? "0"));
+      const hasStored = Number.isFinite(rg) && Math.abs(rg) > 1e-9;
+      const hasFallback = fallbackPairing.bySellId.has(t.id);
+      return !hasStored && !hasFallback;
+    }).length;
+
+    return {
+      sellRows,
+      sellStored,
+      sellFallback,
+      sellDisplayed,
+      closeTradeCash,
+      diffVsCloseTrade: sellDisplayed - closeTradeCash,
+      unmatchedSellRows,
+      unmatchedCloseTradeRows,
+    };
+  }, [filteredTransactions, transactions, convertPrice, fallbackPairing]);
 
   const formatDate = (date: Date | string) => {
     const d = typeof date === "string" ? new Date(date) : date;
@@ -761,7 +826,7 @@ export default function History() {
                     transaction.type === "SELL"
                       ? parseFloat(String(transaction.realizedGain ?? "0"))
                       : NaN;
-                  const fallbackSellRealizedEur = fallbackSellRealizedEurById.get(transaction.id);
+                  const fallbackSellRealizedEur = fallbackPairing.bySellId.get(transaction.id);
                   const showSellRealizedGain =
                     transaction.type === "SELL" &&
                     Number.isFinite(sellRealizedGain) &&
@@ -958,7 +1023,7 @@ export default function History() {
                     transaction.type === "SELL"
                       ? parseFloat(String(transaction.realizedGain ?? "0"))
                       : NaN;
-                  const fallbackSellRealizedEur = fallbackSellRealizedEurById.get(transaction.id);
+                  const fallbackSellRealizedEur = fallbackPairing.bySellId.get(transaction.id);
                   const showSellRealizedGain =
                     transaction.type === "SELL" &&
                     Number.isFinite(sellRealizedGain) &&
@@ -1118,6 +1183,35 @@ export default function History() {
                   </div>
                 </div>
               )}
+              <div className="mt-3 rounded-lg border bg-muted/20 px-3 py-2 text-xs">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <span className="font-medium text-foreground">Debug realizácie (aktuálny filter)</span>
+                  <span className="text-muted-foreground">
+                    SELL riadky: <span className="font-medium text-foreground">{realizedDebug.sellRows}</span>
+                  </span>
+                  <span className="text-muted-foreground">
+                    SELL uložené: <span className="font-medium text-foreground">{formatCurrency(realizedDebug.sellStored)}</span>
+                  </span>
+                  <span className="text-muted-foreground">
+                    SELL fallback close-trade: <span className="font-medium text-foreground">{formatCurrency(realizedDebug.sellFallback)}</span>
+                  </span>
+                  <span className={realizedDebug.sellDisplayed >= 0 ? "text-green-600" : "text-red-600"}>
+                    SELL spolu zobrazené: {realizedDebug.sellDisplayed >= 0 ? "+" : ""}{formatCurrency(realizedDebug.sellDisplayed)}
+                  </span>
+                  <span className={realizedDebug.closeTradeCash >= 0 ? "text-green-600" : "text-red-600"}>
+                    Close trade cash spolu: {realizedDebug.closeTradeCash >= 0 ? "+" : ""}{formatCurrency(realizedDebug.closeTradeCash)}
+                  </span>
+                  <span className={realizedDebug.diffVsCloseTrade >= 0 ? "text-amber-700" : "text-amber-800"}>
+                    Rozdiel SELL vs close-trade: {realizedDebug.diffVsCloseTrade >= 0 ? "+" : ""}{formatCurrency(realizedDebug.diffVsCloseTrade)}
+                  </span>
+                  <span className="text-muted-foreground">
+                    Nespárované SELL: <span className="font-medium text-foreground">{realizedDebug.unmatchedSellRows}</span>
+                  </span>
+                  <span className="text-muted-foreground">
+                    Nespárované close trade: <span className="font-medium text-foreground">{realizedDebug.unmatchedCloseTradeRows}</span>
+                  </span>
+                </div>
+              </div>
               <div className="mt-4 text-sm text-muted-foreground text-right">
                 Zobrazených {filteredTransactions.length} z {transactions?.length || 0} transakcií
               </div>
