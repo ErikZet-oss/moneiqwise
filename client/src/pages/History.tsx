@@ -32,6 +32,12 @@ function realizedGainSourceCurrency(tx: Transaction): "EUR" | "USD" | "GBP" | "C
   return getTickerCurrency(tx.ticker);
 }
 
+function isCloseTradeCashRow(tx: Transaction): boolean {
+  if (tx.type !== "DEPOSIT" && tx.type !== "WITHDRAWAL") return false;
+  const label = String(tx.companyName || "").toLowerCase();
+  return label.includes("close trade") || label.includes("profit of position");
+}
+
 interface ImportResult {
   imported: number;
   skipped: number;
@@ -352,6 +358,59 @@ export default function History() {
     [filteredTransactions, selectedIds],
   );
 
+  const fallbackSellRealizedEurById = useMemo(() => {
+    const all = transactions ?? [];
+    const sells = all
+      .filter((t) => t.type === "SELL")
+      .sort(
+        (a, b) =>
+          new Date(a.transactionDate).getTime() - new Date(b.transactionDate).getTime(),
+      );
+    const closeCashRows = all
+      .filter((t) => isCloseTradeCashRow(t))
+      .sort(
+        (a, b) =>
+          new Date(a.transactionDate).getTime() - new Date(b.transactionDate).getTime(),
+      );
+
+    const usedCloseIds = new Set<string>();
+    const out = new Map<string, number>();
+    const maxDiffMs = 5 * 60 * 1000;
+
+    for (const sell of sells) {
+      const sellRg = parseFloat(String(sell.realizedGain ?? "0"));
+      if (Number.isFinite(sellRg) && Math.abs(sellRg) > 1e-9) continue;
+
+      const sellTs = new Date(sell.transactionDate).getTime();
+      if (!Number.isFinite(sellTs)) continue;
+
+      let best: { tx: Transaction; diff: number } | null = null;
+      for (const cashTx of closeCashRows) {
+        if (usedCloseIds.has(cashTx.id)) continue;
+        const cashTs = new Date(cashTx.transactionDate).getTime();
+        if (!Number.isFinite(cashTs)) continue;
+        const diff = Math.abs(cashTs - sellTs);
+        if (diff > maxDiffMs) continue;
+        if (!best || diff < best.diff) best = { tx: cashTx, diff };
+      }
+      if (!best) continue;
+
+      usedCloseIds.add(best.tx.id);
+      const baseEur = parseFloat(String(best.tx.baseCurrencyAmount ?? "NaN"));
+      const shares = parseFloat(String(best.tx.shares ?? "NaN"));
+      const price = parseFloat(String(best.tx.pricePerShare ?? "NaN"));
+      const amtEur = Number.isFinite(baseEur)
+        ? baseEur
+        : Number.isFinite(shares) && Number.isFinite(price)
+          ? shares * price
+          : NaN;
+      if (!Number.isFinite(amtEur) || Math.abs(amtEur) <= 1e-9) continue;
+      out.set(sell.id, amtEur);
+    }
+
+    return out;
+  }, [transactions]);
+
   const selectedSummary = useMemo(() => {
     let totalAmount = 0;
     let realizedGain = 0;
@@ -376,8 +435,13 @@ export default function History() {
 
       if (t.type === "SELL") {
         const rg = parseFloat(String(t.realizedGain ?? "0"));
-        if (Number.isFinite(rg)) {
+        if (Number.isFinite(rg) && Math.abs(rg) > 1e-9) {
           realizedGain += convertPrice(rg, realizedGainSourceCurrency(t));
+        } else {
+          const fallbackEur = fallbackSellRealizedEurById.get(t.id);
+          if (Number.isFinite(fallbackEur)) {
+            realizedGain += convertPrice(fallbackEur as number, "EUR");
+          }
         }
       }
       if (t.type === "DIVIDEND" && Number.isFinite(txTotal)) dividends += txTotal;
@@ -385,7 +449,7 @@ export default function History() {
     }
 
     return { totalAmount, realizedGain, dividends, cashFlow };
-  }, [selectedTransactions, convertPrice]);
+  }, [selectedTransactions, convertPrice, fallbackSellRealizedEurById]);
 
   const formatDate = (date: Date | string) => {
     const d = typeof date === "string" ? new Date(date) : date;
@@ -697,6 +761,7 @@ export default function History() {
                     transaction.type === "SELL"
                       ? parseFloat(String(transaction.realizedGain ?? "0"))
                       : NaN;
+                  const fallbackSellRealizedEur = fallbackSellRealizedEurById.get(transaction.id);
                   const showSellRealizedGain =
                     transaction.type === "SELL" &&
                     Number.isFinite(sellRealizedGain) &&
@@ -772,6 +837,11 @@ export default function History() {
                                 <div className={`text-xs font-medium ${sellRealizedGain >= 0 ? "text-green-500" : "text-red-500"}`}>
                                   {sellRealizedGain >= 0 ? "+" : ""}
                                   {formatCurrency(convertPrice(sellRealizedGain, realizedGainSourceCurrency(transaction)))}
+                                </div>
+                              ) : transaction.type === "SELL" && Number.isFinite(fallbackSellRealizedEur) && Math.abs(fallbackSellRealizedEur as number) > 1e-9 ? (
+                                <div className={`text-xs font-medium ${(fallbackSellRealizedEur as number) >= 0 ? "text-green-500" : "text-red-500"}`}>
+                                  {(fallbackSellRealizedEur as number) >= 0 ? "+" : ""}
+                                  {formatCurrency(convertPrice(fallbackSellRealizedEur as number, "EUR"))}
                                 </div>
                               ) : isCloseTradeCash && Math.abs(cashDisplayAmount) > 1e-9 ? (
                                 <div className={`text-xs font-medium ${cashDisplayAmount >= 0 ? "text-green-500" : "text-red-500"}`}>
@@ -888,6 +958,7 @@ export default function History() {
                     transaction.type === "SELL"
                       ? parseFloat(String(transaction.realizedGain ?? "0"))
                       : NaN;
+                  const fallbackSellRealizedEur = fallbackSellRealizedEurById.get(transaction.id);
                   const showSellRealizedGain =
                     transaction.type === "SELL" &&
                     Number.isFinite(sellRealizedGain) &&
@@ -971,6 +1042,11 @@ export default function History() {
                           <span className={`font-medium ${sellRealizedGain >= 0 ? "text-green-500" : "text-red-500"}`}>
                             {sellRealizedGain >= 0 ? "+" : ""}
                             {formatCurrency(convertPrice(sellRealizedGain, realizedGainSourceCurrency(transaction)))}
+                          </span>
+                        ) : transaction.type === "SELL" && Number.isFinite(fallbackSellRealizedEur) && Math.abs(fallbackSellRealizedEur as number) > 1e-9 ? (
+                          <span className={`font-medium ${(fallbackSellRealizedEur as number) >= 0 ? "text-green-500" : "text-red-500"}`}>
+                            {(fallbackSellRealizedEur as number) >= 0 ? "+" : ""}
+                            {formatCurrency(convertPrice(fallbackSellRealizedEur as number, "EUR"))}
                           </span>
                         ) : isCloseTradeCash && Math.abs(cashDisplayAmount) > 1e-9 ? (
                           <span className={`font-medium ${cashDisplayAmount >= 0 ? "text-green-500" : "text-red-500"}`}>

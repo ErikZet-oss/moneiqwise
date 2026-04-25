@@ -263,10 +263,9 @@ export default function Dashboard() {
     /**
      * Rebríček najlepšie/najhoršie:
      * - LIVE: denná RTH zmena
-     * - PRE_MARKET: pred/po-obchodná zmena (ak existuje)
-     * - CLOSED (napr. víkend): posledná RTH zmena
+     * - mimo LIVE: pred/po-obchodná zmena (ak existuje), bez fallbacku na starú RTH zmenu
      */
-    const moversUseExtendedQuotes = state === "PRE_MARKET";
+    const moversUseExtendedQuotes = state !== "LIVE";
 
     return { usSessionState: state, moversUseExtendedQuotes };
   })();
@@ -304,11 +303,12 @@ export default function Dashboard() {
         } else if (moversUseExtendedQuotes) {
           const extPct = num(q?.preMarketChangePercent);
           const useExt = Number.isFinite(extPct);
-          pct = useExt ? extPct : num(q?.changePercent);
-          const chRaw = useExt ? q?.preMarketChange : q?.change;
-          const ch = num(chRaw);
-          if (shares > 0 && Number.isFinite(ch)) {
-            dayValueEur = shares * convertPrice(ch, getTickerCurrency(t));
+          pct = useExt ? extPct : NaN;
+          if (useExt) {
+            const ch = num(q?.preMarketChange);
+            if (shares > 0 && Number.isFinite(ch)) {
+              dayValueEur = shares * convertPrice(ch, getTickerCurrency(t));
+            }
           }
         } else {
           pct = num(q?.changePercent);
@@ -1601,8 +1601,8 @@ export default function Dashboard() {
               <p className="text-xs text-muted-foreground">
                 {moversUseExtendedQuotes
                   ? isAllPortfolios
-                    ? "Mimo hlavnej relácie US: pred/po obchode z držaných akcií vo všetkých portfóliách (ak dáta chýbajú, ostáva posledná RTH zmena)."
-                    : `Mimo hlavnej relácie US: pred/po obchode z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ (ak dáta chýbajú, ostáva posledná RTH zmena).`
+                    ? "Mimo hlavnej relácie US: pred/po obchode z držaných akcií vo všetkých portfóliách (zobrazia sa len tituly s dostupnou pred/po-obchodnou kotáciou)."
+                    : `Mimo hlavnej relácie US: pred/po obchode z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ (zobrazia sa len tituly s dostupnou pred/po-obchodnou kotáciou).`
                   : isAllPortfolios
                     ? "Počas hlavnej relácie US: denná zmena RTH z držaných akcií vo všetkých portfóliách."
                     : `Počas hlavnej relácie US: denná zmena RTH z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“.`}
@@ -1691,8 +1691,8 @@ export default function Dashboard() {
               <p className="text-xs text-muted-foreground">
                 {moversUseExtendedQuotes
                   ? isAllPortfolios
-                    ? "Mimo hlavnej relácie US: pred/po obchode z držaných akcií vo všetkých portfóliách (ak dáta chýbajú, ostáva posledná RTH zmena)."
-                    : `Mimo hlavnej relácie US: pred/po obchode z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ (ak dáta chýbajú, ostáva posledná RTH zmena).`
+                    ? "Mimo hlavnej relácie US: pred/po obchode z držaných akcií vo všetkých portfóliách (zobrazia sa len tituly s dostupnou pred/po-obchodnou kotáciou)."
+                    : `Mimo hlavnej relácie US: pred/po obchode z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ (zobrazia sa len tituly s dostupnou pred/po-obchodnou kotáciou).`
                   : isAllPortfolios
                     ? "Počas hlavnej relácie US: denná zmena RTH z držaných akcií vo všetkých portfóliách."
                     : `Počas hlavnej relácie US: denná zmena RTH z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“.`}
