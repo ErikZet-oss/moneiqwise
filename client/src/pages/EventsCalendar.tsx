@@ -14,7 +14,7 @@ import {
   subMonths,
 } from "date-fns";
 import { sk } from "date-fns/locale";
-import { CalendarClock, ChevronLeft, ChevronRight, ExternalLink, Moon, Sun } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, ExternalLink, Moon, Sun, CalendarPlus } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +59,72 @@ type CalendarEvent = {
   impact: "normal" | "high";
   infoUrl: string;
 };
+
+function toIcsDateUtc(d: Date): string {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  const ss = String(d.getUTCSeconds()).padStart(2, "0");
+  return `${y}${m}${day}T${hh}${mm}${ss}Z`;
+}
+
+function buildCalendarDates(ev: CalendarEvent): { start: Date; end: Date } {
+  const base = new Date(`${ev.date}T12:00:00`);
+  if (ev.type === "earnings" && ev.session === "BMO") {
+    const start = new Date(`${ev.date}T11:00:00Z`);
+    const end = new Date(start.getTime() + 45 * 60 * 1000);
+    return { start, end };
+  }
+  if (ev.type === "earnings" && ev.session === "AMC") {
+    const start = new Date(`${ev.date}T20:30:00Z`);
+    const end = new Date(start.getTime() + 45 * 60 * 1000);
+    return { start, end };
+  }
+  const start = new Date(`${ev.date}T12:00:00Z`);
+  const end = new Date(start.getTime() + 60 * 60 * 1000);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    const fallbackStart = new Date(base);
+    const fallbackEnd = new Date(base.getTime() + 60 * 60 * 1000);
+    return { start: fallbackStart, end: fallbackEnd };
+  }
+  return { start, end };
+}
+
+function buildGoogleCalendarUrl(ev: CalendarEvent): string {
+  const { start, end } = buildCalendarDates(ev);
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: ev.title,
+    details: `${ev.subtitle}\n\nZdroj: ${ev.infoUrl}`,
+    dates: `${toIcsDateUtc(start)}/${toIcsDateUtc(end)}`,
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
+function buildIcsHref(ev: CalendarEvent): string {
+  const { start, end } = buildCalendarDates(ev);
+  const uid = `${encodeURIComponent(ev.title)}-${ev.date}@moneiqwise`;
+  const now = toIcsDateUtc(new Date());
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Moneiqwise//Events Calendar//SK",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    `UID:${uid}`,
+    `DTSTAMP:${now}`,
+    `DTSTART:${toIcsDateUtc(start)}`,
+    `DTEND:${toIcsDateUtc(end)}`,
+    `SUMMARY:${ev.title}`,
+    `DESCRIPTION:${ev.subtitle.replace(/\n/g, " ")}\\n\\nZdroj: ${ev.infoUrl}`,
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].join("\r\n");
+  return `data:text/calendar;charset=utf-8,${encodeURIComponent(ics)}`;
+}
 
 export default function EventsCalendar() {
   const { getQueryParam, selectedPortfolio, isAllPortfolios } = usePortfolio();
@@ -295,20 +361,26 @@ export default function EventsCalendar() {
                         {format(day, "d")}
                       </span>
                       <div className="mt-1 flex items-center gap-1 flex-wrap min-h-[1rem]">
-                        {items.slice(0, 3).map((ev, idx) =>
-                          ev.ticker ? (
-                            <span
-                              key={`${dayIso}-${ev.type}-${ev.title}-${idx}`}
-                              className="-ml-1 first:ml-0 ring-2 ring-card rounded-full bg-card shrink-0"
-                            >
-                              <CompanyLogo ticker={ev.ticker} companyName={ev.subtitle} size="xs" />
-                            </span>
-                          ) : (
+                        {items.slice(0, 3).map((ev, idx) => {
+                          if (ev.ticker) {
+                            return (
+                              <span
+                                key={`${dayIso}-${ev.type}-${ev.title}-${idx}`}
+                                title={ev.title}
+                                className={`-ml-1 first:ml-0 ring-2 rounded-full bg-card shrink-0 ${
+                                  ev.type === "dividend" ? "ring-green-400/70" : "ring-card"
+                                }`}
+                              >
+                                <CompanyLogo ticker={ev.ticker} companyName={ev.subtitle} size="xs" />
+                              </span>
+                            );
+                          }
+                          return (
                             <span key={`${dayIso}-${ev.type}-${ev.title}-${idx}`} title={ev.title}>
                               {macroBadge(ev.title)}
                             </span>
-                          ),
-                        )}
+                          );
+                        })}
                       </div>
                       {items.length > 0 && (
                         <span className="mt-auto text-[9px] sm:text-[11px] font-semibold text-muted-foreground">
@@ -374,6 +446,25 @@ export default function EventsCalendar() {
                         More info
                         <ExternalLink className="h-3 w-3" />
                       </a>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <a
+                          href={buildGoogleCalendarUrl(ev)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                        >
+                          <CalendarPlus className="h-3 w-3" />
+                          Pridat do Google kalendara
+                        </a>
+                        <a
+                          href={buildIcsHref(ev)}
+                          download={`moneiqwise-${ev.type}-${ev.date}.ics`}
+                          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                        >
+                          <CalendarPlus className="h-3 w-3" />
+                          Pridat do kalendara (.ics)
+                        </a>
+                      </div>
                     </div>
                   </div>
                 </div>
