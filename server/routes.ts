@@ -746,8 +746,11 @@ async function fetchYahooUpcomingDividendEvents(
   }
 }
 
+type EarningsSession = "BMO" | "AMC" | null;
+type NextEarningsItem = { date: string; session?: EarningsSession };
+
 /** Najbližší earnings: Yahoo calendarEvents (ak odpovie), inak Finnhub calendar (vyžaduje FINNHUB_API_KEY). */
-const nextEarningsAssetCache = new Map<string, { t: number; v: { date: string } | null }>();
+const nextEarningsAssetCache = new Map<string, { t: number; v: NextEarningsItem | null }>();
 const NEXT_EARNINGS_ASSET_TTL_MS = 45 * 60 * 1000;
 
 function calendarDateStringFromMs(ms: number): string {
@@ -759,7 +762,7 @@ function calendarDateStringFromMs(ms: number): string {
 }
 
 /** Yahoo quoteSummary — často blokuje bez crumbu; pri úspechu vráti dátum. */
-async function tryYahooNextEarningsDate(tickerUpper: string): Promise<{ date: string } | null> {
+async function tryYahooNextEarningsDate(tickerUpper: string): Promise<NextEarningsItem | null> {
   try {
     const yahooTicker = toYahooTicker(tickerUpper);
     const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(yahooTicker)}?modules=calendarEvents`;
@@ -817,7 +820,7 @@ async function tryYahooNextEarningsDate(tickerUpper: string): Promise<{ date: st
 }
 
 /** Finnhub earnings calendar — spoľahlivejší, ak je nastavený API kľúč. */
-async function tryFinnhubNextEarningsDate(tickerUpper: string): Promise<{ date: string } | null> {
+async function tryFinnhubNextEarningsDate(tickerUpper: string): Promise<NextEarningsItem | null> {
   if (!FINNHUB_API_KEY) return null;
 
   try {
@@ -842,7 +845,7 @@ async function tryFinnhubNextEarningsDate(tickerUpper: string): Promise<{ date: 
     if (!Array.isArray(rows) || rows.length === 0) return null;
 
     const t0 = from.getTime();
-    let best: string | null = null;
+    let best: { date: string; session: EarningsSession } | null = null;
     let bestMs = Infinity;
 
     for (const row of rows) {
@@ -852,24 +855,29 @@ async function tryFinnhubNextEarningsDate(tickerUpper: string): Promise<{ date: 
       if (!Number.isFinite(ms) || ms < t0) continue;
       if (ms < bestMs) {
         bestMs = ms;
-        best = d;
+        const hourRaw = String(row?.hour ?? "")
+          .trim()
+          .toLowerCase();
+        const session: EarningsSession =
+          hourRaw === "bmo" ? "BMO" : hourRaw === "amc" ? "AMC" : null;
+        best = { date: d, session };
       }
     }
 
-    return best ? { date: best } : null;
+    return best ? { date: best.date, session: best.session } : null;
   } catch {
     return null;
   }
 }
 
-async function fetchNextEarningsDateForAsset(ticker: string): Promise<{ date: string } | null> {
+async function fetchNextEarningsDateForAsset(ticker: string): Promise<NextEarningsItem | null> {
   const key = ticker.toUpperCase();
   const cached = nextEarningsAssetCache.get(key);
   if (cached && Date.now() - cached.t < NEXT_EARNINGS_ASSET_TTL_MS) {
     return cached.v;
   }
 
-  let v: { date: string } | null = await tryYahooNextEarningsDate(key);
+  let v: NextEarningsItem | null = await tryYahooNextEarningsDate(key);
   if (!v) {
     v = await tryFinnhubNextEarningsDate(key);
   }
@@ -2585,7 +2593,7 @@ export async function registerRoutes(
       }
 
       const CONCURRENCY = 4;
-      type WithDate = { ticker: string; companyName: string; date: string; ms: number };
+      type WithDate = { ticker: string; companyName: string; date: string; ms: number; session?: EarningsSession };
       const withDates: WithDate[] = [];
 
       for (let i = 0; i < unique.length; i += CONCURRENCY) {
@@ -2597,7 +2605,7 @@ export async function registerRoutes(
               if (!next?.date) return null;
               const ms = new Date(`${next.date}T12:00:00`).getTime();
               if (!Number.isFinite(ms)) return null;
-              return { ...row, date: next.date, ms };
+              return { ...row, date: next.date, ms, session: next.session ?? null };
             } catch {
               return null;
             }
@@ -2619,11 +2627,13 @@ export async function registerRoutes(
           ticker: best.ticker,
           companyName: best.companyName,
           date: best.date,
+          session: best.session ?? null,
         },
         all: withDates.map((e) => ({
           ticker: e.ticker,
           companyName: e.companyName,
           date: e.date,
+          session: e.session ?? null,
         })),
       });
     } catch (error) {

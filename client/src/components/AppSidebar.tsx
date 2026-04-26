@@ -1,4 +1,4 @@
-import { BarChart3, History, LogOut, User, TrendingUp, Settings, Briefcase, ChevronDown, Check, Target, Banknote, Upload, Sun, Moon, Layers, PieChart, Scale, LineChart, CircleHelp } from "lucide-react";
+import { BarChart3, History, LogOut, User, TrendingUp, Settings, Briefcase, ChevronDown, Check, Target, Banknote, Upload, Sun, Moon, Layers, PieChart, Scale, LineChart, CircleHelp, CalendarClock } from "lucide-react";
 import { useLocation } from "wouter";
 import {
   Sidebar,
@@ -64,6 +64,11 @@ const menuItems = [
     title: "Dividendy",
     url: "/dividends",
     icon: Banknote,
+  },
+  {
+    title: "Kalendár udalostí",
+    url: "/events",
+    icon: CalendarClock,
   },
   {
     title: "Daňový asistent",
