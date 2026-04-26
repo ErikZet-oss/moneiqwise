@@ -227,51 +227,41 @@ export default function Landing() {
         </div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center p-8 bg-background">
-        <div className="w-full max-w-md">
-          <div className="lg:hidden flex items-center gap-3 mb-6 justify-center">
+      <div className="flex-1 flex flex-col justify-start items-stretch bg-background px-4 pt-6 pb-12 sm:px-6 sm:pb-14 lg:items-center lg:justify-center lg:py-10 lg:px-8">
+        <div className="w-full max-w-md mx-auto">
+          <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
             <div className="p-2 bg-primary rounded-lg">
               <TrendingUp className="h-6 w-6 text-primary-foreground" />
             </div>
-            <span className="text-2xl font-bold">Moneiqwise</span>
+            <span className="text-2xl font-bold tracking-tight">Moneiqwise</span>
           </div>
 
-          <div className="lg:hidden mb-8 rounded-xl border bg-card/80 p-4 shadow-sm">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground text-center mb-1">
-              Čo aplikácia ponúka
-            </p>
-            <h2 className="text-lg font-semibold text-center mb-4 leading-snug">
-              Komplexný nástroj pre správu investícií
-            </h2>
-            <p className="text-sm text-muted-foreground text-center mb-4">
-              Sledujte portfólio v reálnom čase, dividendy a výkonnosť na jednom mieste.
-            </p>
-            <ul className="grid gap-3 sm:grid-cols-2">
-              {LANDING_BENEFITS.map(({ Icon, title, description }) => (
-                <li key={title} className="flex gap-3 rounded-lg border bg-background/60 p-3">
-                  <div className="shrink-0 p-1.5 rounded-md bg-primary/10">
-                    <Icon className="h-4 w-4 text-primary" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium leading-tight">{title}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{description}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <Card className="border-0 shadow-lg">
+          <Card className="border border-border/60 shadow-md lg:border-0 lg:shadow-lg">
             <CardHeader className="text-center pb-2">
               <CardTitle className="text-2xl">Vitajte späť</CardTitle>
               <CardDescription>Prihláste sa alebo si vytvorte účet</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 pt-4">
               <Tabs defaultValue="login" className="w-full">
-                <TabsList className="grid w-full grid-cols-3">
-                  <TabsTrigger value="login">Prihlasenie</TabsTrigger>
-                  <TabsTrigger value="register">Registracia</TabsTrigger>
-                  <TabsTrigger value="reset">Reset hesla</TabsTrigger>
+                <TabsList className="grid h-auto w-full grid-cols-3 gap-0.5 p-1 sm:gap-1">
+                  <TabsTrigger
+                    value="login"
+                    className="px-1.5 py-2 text-[11px] leading-tight sm:px-3 sm:py-1.5 sm:text-sm sm:leading-normal"
+                  >
+                    Prihlásenie
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="register"
+                    className="px-1.5 py-2 text-[11px] leading-tight sm:px-3 sm:py-1.5 sm:text-sm sm:leading-normal"
+                  >
+                    Registrácia
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="reset"
+                    className="px-1.5 py-2 text-[11px] leading-tight sm:px-3 sm:py-1.5 sm:text-sm sm:leading-normal"
+                  >
+                    Reset hesla
+                  </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="login">
@@ -424,6 +414,30 @@ export default function Landing() {
               </Tabs>
             </CardContent>
           </Card>
+
+          <div className="lg:hidden mt-10 w-full">
+            <div className="overflow-hidden rounded-2xl border border-border/50 bg-muted/25">
+              <div className="border-b border-border/40 bg-muted/20 px-4 py-3.5">
+                <h2 className="text-base font-semibold leading-snug">Čo v aplikácii nájdeš</h2>
+                <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                  Portfólio, dividendy, grafy a ďalšie prehľady na jednom mieste.
+                </p>
+              </div>
+              <ul className="divide-y divide-border/40">
+                {LANDING_BENEFITS.map(({ Icon, title, description }) => (
+                  <li key={title} className="flex gap-3 px-4 py-3.5">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                      <Icon className="h-[18px] w-[18px] text-primary" />
+                    </div>
+                    <div className="min-w-0 pt-0.5">
+                      <p className="text-sm font-medium leading-snug">{title}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">{description}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
         </div>
       </div>
     </div>
