@@ -7,7 +7,55 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useState, type FormEvent } from "react";
-import { TrendingUp, BarChart3, History, PieChart, Banknote, ArrowRightLeft, LineChart, CalendarClock, Target } from "lucide-react";
+import {
+  TrendingUp,
+  BarChart3,
+  PieChart,
+  Banknote,
+  ArrowRightLeft,
+  LineChart,
+  CalendarClock,
+  Target,
+  type LucideIcon,
+} from "lucide-react";
+
+const LANDING_BENEFITS: { Icon: LucideIcon; title: string; description: string }[] = [
+  {
+    Icon: BarChart3,
+    title: "Prehľad portfólia",
+    description: "Celková hodnota, zisk/strata a denná zmena",
+  },
+  {
+    Icon: PieChart,
+    title: "Analýza ziskov",
+    description: "Realizované zisky, YTD a mesačné prehľady",
+  },
+  {
+    Icon: Banknote,
+    title: "Sledovanie dividend",
+    description: "Hrubé, čisté dividendy a zrážková daň",
+  },
+  {
+    Icon: ArrowRightLeft,
+    title: "Import/Export",
+    description: "CSV import a export všetkých transakcií",
+  },
+  {
+    Icon: LineChart,
+    title: "Pokročilé grafy výkonu",
+    description: "Porovnanie portfólia vs. S&P 500 a vývoj v čase",
+  },
+  {
+    Icon: CalendarClock,
+    title: "Trhový kalendár udalostí",
+    description: "Earnings, dividendy a makro dáta s preklikom na detaily",
+  },
+  {
+    Icon: Target,
+    title: "Opcie a daňový asistent",
+    description: "Sledovanie opcií, realizovaného zisku a ročných prehľadov",
+  },
+];
 
 function getPasswordStrength(password: string) {
   const checks = {
@@ -164,94 +212,59 @@ export default function Landing() {
           </p>
 
           <div className="space-y-6">
-            <div className="flex items-start gap-4">
-              <div className="p-2 bg-sidebar-accent rounded-lg">
-                <BarChart3 className="h-5 w-5 text-primary" />
+            {LANDING_BENEFITS.map(({ Icon, title, description }) => (
+              <div key={title} className="flex items-start gap-4">
+                <div className="p-2 bg-sidebar-accent rounded-lg">
+                  <Icon className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-1">{title}</h3>
+                  <p className="text-sm text-sidebar-foreground/60">{description}</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-semibold mb-1">Prehľad portfólia</h3>
-                <p className="text-sm text-sidebar-foreground/60">Celková hodnota, zisk/strata a denná zmena</p>
-              </div>
-            </div>
-            
-            <div className="flex items-start gap-4">
-              <div className="p-2 bg-sidebar-accent rounded-lg">
-                <PieChart className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-semibold mb-1">Analýza ziskov</h3>
-                <p className="text-sm text-sidebar-foreground/60">Realizované zisky, YTD a mesačné prehľady</p>
-              </div>
-            </div>
-            
-            <div className="flex items-start gap-4">
-              <div className="p-2 bg-sidebar-accent rounded-lg">
-                <Banknote className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-semibold mb-1">Sledovanie dividend</h3>
-                <p className="text-sm text-sidebar-foreground/60">Hrubé, čisté dividendy a zrážková daň</p>
-              </div>
-            </div>
-            
-            <div className="flex items-start gap-4">
-              <div className="p-2 bg-sidebar-accent rounded-lg">
-                <ArrowRightLeft className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-semibold mb-1">Import/Export</h3>
-                <p className="text-sm text-sidebar-foreground/60">CSV import a export všetkých transakcií</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4">
-              <div className="p-2 bg-sidebar-accent rounded-lg">
-                <LineChart className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-semibold mb-1">Pokročilé grafy výkonu</h3>
-                <p className="text-sm text-sidebar-foreground/60">Porovnanie portfólia vs. S&P 500 a vývoj v čase</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4">
-              <div className="p-2 bg-sidebar-accent rounded-lg">
-                <CalendarClock className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-semibold mb-1">Trhový kalendár udalostí</h3>
-                <p className="text-sm text-sidebar-foreground/60">Earnings, dividendy a makro dáta s preklikom na detaily</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-4">
-              <div className="p-2 bg-sidebar-accent rounded-lg">
-                <Target className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-semibold mb-1">Opcie a daňový asistent</h3>
-                <p className="text-sm text-sidebar-foreground/60">Sledovanie opcií, realizovaného zisku a ročných prehľadov</p>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       </div>
 
       <div className="flex-1 flex items-center justify-center p-8 bg-background">
         <div className="w-full max-w-md">
-          <div className="lg:hidden flex items-center gap-3 mb-12 justify-center">
+          <div className="lg:hidden flex items-center gap-3 mb-6 justify-center">
             <div className="p-2 bg-primary rounded-lg">
               <TrendingUp className="h-6 w-6 text-primary-foreground" />
             </div>
             <span className="text-2xl font-bold">Moneiqwise</span>
           </div>
 
+          <div className="lg:hidden mb-8 rounded-xl border bg-card/80 p-4 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground text-center mb-1">
+              Čo aplikácia ponúka
+            </p>
+            <h2 className="text-lg font-semibold text-center mb-4 leading-snug">
+              Komplexný nástroj pre správu investícií
+            </h2>
+            <p className="text-sm text-muted-foreground text-center mb-4">
+              Sledujte portfólio v reálnom čase, dividendy a výkonnosť na jednom mieste.
+            </p>
+            <ul className="grid gap-3 sm:grid-cols-2">
+              {LANDING_BENEFITS.map(({ Icon, title, description }) => (
+                <li key={title} className="flex gap-3 rounded-lg border bg-background/60 p-3">
+                  <div className="shrink-0 p-1.5 rounded-md bg-primary/10">
+                    <Icon className="h-4 w-4 text-primary" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium leading-tight">{title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{description}</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+
           <Card className="border-0 shadow-lg">
             <CardHeader className="text-center pb-2">
               <CardTitle className="text-2xl">Vitajte späť</CardTitle>
-              <CardDescription>
-                Prihlaste sa alebo si vytvorte lokalny ucet
-              </CardDescription>
+              <CardDescription>Prihláste sa alebo si vytvorte účet</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 pt-4">
               <Tabs defaultValue="login" className="w-full">
@@ -411,36 +424,6 @@ export default function Landing() {
               </Tabs>
             </CardContent>
           </Card>
-
-          <Card className="mt-6 bg-muted/50 border-dashed">
-            <CardHeader className="pb-2 pt-4">
-              <CardTitle className="text-sm font-medium">Lokálny režim</CardTitle>
-            </CardHeader>
-            <CardContent className="pb-4">
-              <p className="text-xs text-muted-foreground mb-3">
-                Lokalny rezim s email + heslo uctom.
-              </p>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <ArrowRightLeft className="h-4 w-4" />
-                Po registracii sa prihlasenie vykona automaticky.
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-4 text-xs text-muted-foreground">
-            <div className="flex items-center gap-1">
-              <History className="h-3 w-3" />
-              <span>História transakcií</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <TrendingUp className="h-3 w-3" />
-              <span>Real-time ceny</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <Banknote className="h-3 w-3" />
-              <span>Dividendy</span>
-            </div>
-          </div>
         </div>
       </div>
     </div>
