@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useState, type FormEvent } from "react";
-import { TrendingUp, BarChart3, History, PieChart, Banknote, ArrowRightLeft } from "lucide-react";
+import { TrendingUp, BarChart3, History, PieChart, Banknote, ArrowRightLeft, LineChart, CalendarClock, Target } from "lucide-react";
 
 function getPasswordStrength(password: string) {
   const checks = {
@@ -203,11 +203,37 @@ export default function Landing() {
                 <p className="text-sm text-sidebar-foreground/60">CSV import a export všetkých transakcií</p>
               </div>
             </div>
-          </div>
-        </div>
 
-        <div className="text-sm text-sidebar-foreground/50">
-          Tvoje peniaze rastú rýchlejšie ako banán.
+            <div className="flex items-start gap-4">
+              <div className="p-2 bg-sidebar-accent rounded-lg">
+                <LineChart className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold mb-1">Pokročilé grafy výkonu</h3>
+                <p className="text-sm text-sidebar-foreground/60">Porovnanie portfólia vs. S&P 500 a vývoj v čase</p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-4">
+              <div className="p-2 bg-sidebar-accent rounded-lg">
+                <CalendarClock className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold mb-1">Trhový kalendár udalostí</h3>
+                <p className="text-sm text-sidebar-foreground/60">Earnings, dividendy a makro dáta s preklikom na detaily</p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-4">
+              <div className="p-2 bg-sidebar-accent rounded-lg">
+                <Target className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold mb-1">Opcie a daňový asistent</h3>
+                <p className="text-sm text-sidebar-foreground/60">Sledovanie opcií, realizovaného zisku a ročných prehľadov</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
