@@ -16,9 +16,18 @@ import { Activity } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 
 const RANGE_OPTIONS = [
@@ -69,28 +78,48 @@ function RangeToggle({
   className?: string;
 }) {
   return (
-    <ToggleGroup
-      type="single"
-      value={value}
-      onValueChange={(v) => v && onChange(v as RangeVal)}
-      className={cn("flex flex-wrap justify-start gap-1", className)}
+    <div
+      className={cn(
+        "w-full min-w-0 overflow-x-auto overscroll-x-contain pb-0.5 sm:overflow-visible [-webkit-overflow-scrolling:touch]",
+        className,
+      )}
     >
-      {RANGE_OPTIONS.map((o) => (
-        <ToggleGroupItem key={o.v} value={o.v} className="text-xs sm:text-sm px-2.5">
-          {o.label}
-        </ToggleGroupItem>
-      ))}
-    </ToggleGroup>
+      <ToggleGroup
+        type="single"
+        value={value}
+        onValueChange={(v) => v && onChange(v as RangeVal)}
+        className="flex w-max min-w-full flex-nowrap justify-start gap-1 sm:w-full sm:flex-wrap"
+      >
+        {RANGE_OPTIONS.map((o) => (
+          <ToggleGroupItem
+            key={o.v}
+            value={o.v}
+            className="shrink-0 text-xs sm:text-sm px-2.5 data-[state=on]:z-10"
+          >
+            {o.label}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+    </div>
   );
 }
 
 export default function Grafy() {
   const { formatCurrency, currency } = useCurrency();
-  const { getQueryParam, isLoading: pLoading } = usePortfolio();
+  const {
+    portfolios,
+    selectedPortfolioId,
+    setSelectedPortfolioId,
+    getQueryParam,
+    isLoading: pLoading,
+  } = usePortfolio();
   const { hideAmounts } = useChartSettings();
+  const isMobile = useIsMobile();
   const mask = (s: string) => (hideAmounts ? "••••••" : s);
   const chartReady = useChartReady();
   const portfolioParam = getQueryParam();
+
+  const portfolioSelectValue = selectedPortfolioId ?? "all";
 
   const [range, setRange] = useState<RangeVal>("1y");
 
@@ -119,23 +148,63 @@ export default function Grafy() {
     [points],
   );
 
+  const chartMargin = isMobile
+    ? { top: 4, right: 4, left: -12, bottom: 4 }
+    : { top: 8, right: 8, left: 0, bottom: 0 };
+  const xAxisTick = { fontSize: isMobile ? 9 : 11 };
+  const yAxisTick = { fontSize: isMobile ? 9 : 11 };
+  const legendProps = isMobile
+    ? { wrapperStyle: { fontSize: 10, paddingTop: 4 }, iconSize: 8 }
+    : { wrapperStyle: { fontSize: 12 }, iconSize: 10 };
+
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-5 sm:space-y-6 px-3 sm:px-4 md:px-6 pb-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2">
-          <Activity className="h-7 w-7 text-primary" />
+        <h1 className="text-xl sm:text-2xl font-semibold tracking-tight flex items-center gap-2">
+          <Activity className="h-6 w-6 sm:h-7 sm:w-7 shrink-0 text-primary" />
           Grafy
         </h1>
-        <p className="text-muted-foreground text-sm max-w-3xl">
+        <p className="text-muted-foreground text-xs sm:text-sm max-w-3xl leading-relaxed">
           Dáta z toho istého oceňovania a tokov (MTM, vklady/výbery) ako TWR. Benchmark: S&amp;P 500 (^GSPC)
           v rovnakom časovom režime.
         </p>
       </div>
 
-      <div className="space-y-2">
-        <p className="text-sm font-medium text-muted-foreground">Rozsah dátumov</p>
-        <RangeToggle value={range} onChange={setRange} />
-      </div>
+      <Card className="border-border/80 shadow-sm">
+        <CardHeader className="space-y-4 pb-4 pt-4 sm:pt-6">
+          <CardTitle className="text-base sm:text-lg">Zobrazenie</CardTitle>
+          <CardDescription className="text-xs sm:text-sm">
+            Vyberte portfólio a časové obdobie. Nastavenie portfólia je rovnaké ako v bočnom paneli.
+          </CardDescription>
+          <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
+            <div className="space-y-2 w-full sm:w-auto sm:min-w-[200px] sm:flex-1 sm:max-w-xs">
+              <Label htmlFor="grafy-portfolio" className="text-muted-foreground">
+                Portfólio
+              </Label>
+              <Select
+                value={portfolioSelectValue}
+                onValueChange={(id) => setSelectedPortfolioId(id === "all" ? "all" : id)}
+              >
+                <SelectTrigger id="grafy-portfolio" className="w-full">
+                  <SelectValue placeholder="Portfólio" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Všetky portfóliá</SelectItem>
+                  {portfolios.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2 w-full min-w-0 sm:flex-1 sm:min-w-[240px]">
+              <Label className="text-muted-foreground">Obdobie</Label>
+              <RangeToggle value={range} onChange={setRange} />
+            </div>
+          </div>
+        </CardHeader>
+      </Card>
 
       {history?.methodNote && (
         <p className="text-xs text-muted-foreground max-w-4xl">{history.methodNote}</p>
@@ -158,14 +227,14 @@ export default function Grafy() {
             mínus výbery.
           </CardDescription>
         </CardHeader>
-        <CardContent className="h-[320px] w-full min-w-0">
+        <CardContent className="h-[260px] sm:h-[320px] w-full min-w-0 px-3 sm:px-6">
           {histLoading || pLoading || !chartReady ? (
             <Skeleton className="h-full w-full" />
           ) : points.length === 0 ? (
             <p className="text-muted-foreground text-sm">Nedostatok dát (žiadne transakcie v rozsahu alebo ceny).</p>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={successChartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <ComposedChart data={successChartData} margin={chartMargin}>
                 <defs>
                   <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
                     {inProfit ? (
@@ -184,11 +253,14 @@ export default function Grafy() {
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis
                   dataKey="date"
-                  tick={{ fontSize: 11 }}
+                  tick={xAxisTick}
                   tickFormatter={(d) => d.slice(5)}
+                  minTickGap={isMobile ? 28 : 14}
+                  interval="preserveStartEnd"
                 />
                 <YAxis
-                  tick={{ fontSize: 11 }}
+                  tick={yAxisTick}
+                  width={isMobile ? 44 : undefined}
                   tickFormatter={(v) =>
                     mask(
                       new Intl.NumberFormat("sk-SK", {
@@ -224,7 +296,7 @@ export default function Grafy() {
                     );
                   }}
                 />
-                <Legend />
+                <Legend {...legendProps} />
                 <Area
                   type="monotone"
                   dataKey="fillTop"
@@ -259,18 +331,25 @@ export default function Grafy() {
             portfóliu; index výnos (uzávierky) voči tomu istému prvému dňu.
           </CardDescription>
         </CardHeader>
-        <CardContent className="h-[300px] w-full min-w-0">
-          {histLoading || !chartReady ? (
+        <CardContent className="h-[240px] sm:h-[300px] w-full min-w-0 px-3 sm:px-6">
+          {histLoading || pLoading || !chartReady ? (
             <Skeleton className="h-full w-full" />
           ) : points.length < 2 ? (
             <p className="text-muted-foreground text-sm">Nedostatok dát pre porovnanie v %.</p>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={points} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <LineChart data={points} margin={chartMargin}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(d) => d.slice(5)} />
+                <XAxis
+                  dataKey="date"
+                  tick={xAxisTick}
+                  tickFormatter={(d) => d.slice(5)}
+                  minTickGap={isMobile ? 28 : 14}
+                  interval="preserveStartEnd"
+                />
                 <YAxis
-                  tick={{ fontSize: 11 }}
+                  tick={yAxisTick}
+                  width={isMobile ? 40 : undefined}
                   tickFormatter={(v) => `${v.toFixed(0)}%`}
                 />
                 <RTooltip
@@ -286,7 +365,7 @@ export default function Grafy() {
                     );
                   }}
                 />
-                <Legend />
+                <Legend {...legendProps} />
                 <Line
                   dataKey="portfolioCumulativePct"
                   name="Portfólio (kum. % v rozsahu)"
