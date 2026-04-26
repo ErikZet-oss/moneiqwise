@@ -7,13 +7,26 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Banknote, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { addMonths, differenceInCalendarDays, endOfMonth, endOfWeek, format, isSameMonth, isToday, startOfDay, startOfMonth, startOfWeek, subMonths, eachDayOfInterval } from "date-fns";
+import {
+  addMonths,
+  differenceInCalendarDays,
+  endOfMonth,
+  endOfWeek,
+  eachDayOfInterval,
+  format,
+  isSameMonth,
+  isToday,
+  startOfDay,
+  startOfMonth,
+  startOfWeek,
+  subMonths,
+} from "date-fns";
 import { sk } from "date-fns/locale";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { CompanyLogo } from "@/components/CompanyLogo";
 import type { Holding, Transaction } from "@shared/schema";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   Sheet,
   SheetContent,
@@ -61,7 +74,23 @@ type UpcomingDividendItem = {
 };
 
 type FeedStatus = "UPCOMING" | "PENDING" | "PAID" | "REINVESTED";
-type CalendarMode = "ROLLING" | "HISTORY";
+
+type YearMonthBarRow = {
+  monthIndex: number;
+  label: string;
+  paid: number;
+  confirmed: number;
+  estimated: number;
+  total: number;
+};
+
+type MonthChartBreakdownEntry = {
+  ticker: string;
+  companyName: string;
+  amount: number;
+  badge: "Potvrdené" | "Odhad";
+};
+
 type CalendarRow = {
   ticker: string;
   companyName: string;
@@ -78,8 +107,10 @@ export default function Dividends() {
   const { getQueryParam } = usePortfolio();
   const portfolioParam = getQueryParam();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [calendarMode, setCalendarMode] = useState<CalendarMode>("ROLLING");
-  const [windowOffset, setWindowOffset] = useState(0);
+  /** Kalendárny rok pre hlavný stĺpcový graf (Jan–Dec). */
+  const [chartYear, setChartYear] = useState(() => new Date().getFullYear());
+  /** Vybraný mesiac v grafe 0–11 alebo null. */
+  const [selectedBarMonth, setSelectedBarMonth] = useState<number | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()));
   const [calendarDaySheetOpen, setCalendarDaySheetOpen] = useState(false);
   const [calendarSelectedDay, setCalendarSelectedDay] = useState<{
@@ -171,6 +202,7 @@ export default function Dividends() {
     return m;
   }, [holdings]);
 
+  /** Ročná dividenda na akciu z Yahoo (summaryDetail), ak ju API vráti. */
   const annualDivByTicker = useMemo(() => {
     const m = new Map<string, number>();
     for (const ev of upcomingDividends?.all ?? []) {
@@ -182,95 +214,174 @@ export default function Dividends() {
     return m;
   }, [upcomingDividends?.all]);
 
+  /**
+   * Yahoo trailing yield (%) z toho istého zdroja — keď nie je dividendRate, stále vieme odhadnúť ročný cash flow.
+   */
+  const dividendYieldPctByTicker = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const ev of upcomingDividends?.all ?? []) {
+      const t = ev.ticker.toUpperCase();
+      if (ev.dividendYieldCurrent != null && Number.isFinite(ev.dividendYieldCurrent) && ev.dividendYieldCurrent > 0) {
+        m.set(t, Math.max(m.get(t) ?? 0, ev.dividendYieldCurrent));
+      }
+    }
+    return m;
+  }, [upcomingDividends?.all]);
+
+  /**
+   * Súčet čistých dividend za posledných 12 mesiacov podľa tickeru.
+   * Použité keď Yahoo nevráti kalendár / annualDividend (časté u EU titulov alebo keď sú len minulé výplaty).
+   */
+  const trailing12mNetByTicker = useMemo(() => {
+    const cutoff = subMonths(startOfDay(new Date()), 12);
+    const m = new Map<string, number>();
+    for (const t of transactions) {
+      if (t.type !== "DIVIDEND") continue;
+      const d = startOfDay(new Date(t.transactionDate as unknown as string));
+      if (d < cutoff) continue;
+      const ticker = (t.ticker || "N/A").toUpperCase();
+      const gross =
+        parseFloat(String(t.shares ?? "0")) * parseFloat(String(t.pricePerShare ?? "0"));
+      const taxOrFee = parseFloat(String(t.commission ?? "0"));
+      const net = gross - taxOrFee;
+      if (!Number.isFinite(net)) continue;
+      m.set(ticker, (m.get(ticker) ?? 0) + net);
+    }
+    return m;
+  }, [transactions]);
+
   const yieldMetrics = useMemo(() => {
     let totalCurrentValue = 0;
     let totalInvested = 0;
     let annualIncome = 0;
+
     for (const [ticker, h] of Array.from(holdingsByTicker.entries())) {
-      const annual = annualDivByTicker.get(ticker) ?? 0;
-      if (!(annual > 0)) continue;
       const q = quotes[ticker];
-      if (!q || !Number.isFinite(q.price)) continue;
-      const currentValue = q.price * h.shares;
-      totalCurrentValue += currentValue;
-      totalInvested += h.avgCost * h.shares;
-      annualIncome += annual * h.shares;
+      const annPerShare = annualDivByTicker.get(ticker) ?? 0;
+      const yieldPct = dividendYieldPctByTicker.get(ticker);
+      const trailing12m = trailing12mNetByTicker.get(ticker) ?? 0;
+
+      let annualCash = 0;
+      if (annPerShare > 0) {
+        annualCash = annPerShare * h.shares;
+      } else if (yieldPct != null && yieldPct > 0 && q && Number.isFinite(q.price) && q.price > 0) {
+        annualCash = (yieldPct / 100) * q.price * h.shares;
+      } else if (trailing12m > 0) {
+        annualCash = trailing12m;
+      } else {
+        continue;
+      }
+
+      const marketValue = q && Number.isFinite(q.price) && q.price > 0 ? q.price * h.shares : 0;
+      const costBasis = h.avgCost * h.shares;
+
+      totalInvested += Number.isFinite(costBasis) && costBasis > 0 ? costBasis : 0;
+      annualIncome += annualCash;
+
+      if (marketValue > 0) {
+        totalCurrentValue += marketValue;
+      } else if (annualCash > 0 && Number.isFinite(costBasis) && costBasis > 0) {
+        /* Bez live ceny (zlyhanie quote) použijeme cost basis ako hrubý menovateľ pre „aktuálny“ yield. */
+        totalCurrentValue += costBasis;
+      }
     }
+
     return {
       dividendYieldCurrent: totalCurrentValue > 0 ? (annualIncome / totalCurrentValue) * 100 : 0,
       yieldOnCost: totalInvested > 0 ? (annualIncome / totalInvested) * 100 : 0,
       annualIncome,
     };
-  }, [annualDivByTicker, holdingsByTicker, quotes]);
+  }, [annualDivByTicker, dividendYieldPctByTicker, trailing12mNetByTicker, holdingsByTicker, quotes]);
 
-  const windowStart = useMemo(() => {
-    const nowMonth = startOfMonth(new Date());
-    if (calendarMode === "ROLLING") return addMonths(nowMonth, windowOffset);
-    return subMonths(nowMonth, 11 + windowOffset * 12);
-  }, [calendarMode, windowOffset]);
+  const { yearlyBars, yearlyBreakdownByMonth } = useMemo(() => {
+    const y = chartYear;
+    const rows: YearMonthBarRow[] = [];
+    const rawBreakdown: MonthChartBreakdownEntry[][] = Array.from({ length: 12 }, () => []);
 
-  const windowMonths = useMemo(
-    () => Array.from({ length: 12 }).map((_, i) => addMonths(windowStart, i)),
-    [windowStart],
-  );
+    const pushBreakdown = (mi: number, entry: MonthChartBreakdownEntry) => {
+      if (mi < 0 || mi > 11) return;
+      rawBreakdown[mi].push(entry);
+    };
 
-  const forecastBars = useMemo(() => {
-    const monthKey = (d: Date) => format(d, "yyyy-MM");
-    const map = new Map<string, { monthLabel: string; paid: number; confirmed: number; estimated: number; events: number }>();
-    for (const m of windowMonths) {
-      map.set(monthKey(m), {
-        monthLabel: format(m, "LLL yy", { locale: sk }),
+    for (let mi = 0; mi < 12; mi++) {
+      const d = new Date(y, mi, 1);
+      rows.push({
+        monthIndex: mi,
+        label: format(d, "LLL", { locale: sk }),
         paid: 0,
         confirmed: 0,
         estimated: 0,
-        events: 0,
+        total: 0,
       });
     }
 
     for (const t of transactions) {
       if (t.type !== "DIVIDEND") continue;
-      const d = new Date(t.transactionDate as unknown as string);
-      const key = monthKey(startOfMonth(d));
-      const row = map.get(key);
-      if (!row) continue;
+      const dt = new Date(t.transactionDate as unknown as string);
+      if (dt.getFullYear() !== y) continue;
+      const mi = dt.getMonth();
       const net =
         parseFloat(String(t.shares ?? "0")) * parseFloat(String(t.pricePerShare ?? "0")) -
         parseFloat(String(t.commission ?? "0"));
       if (!Number.isFinite(net)) continue;
-      row.paid += Math.max(0, net);
-      row.events += 1;
+      const n = Math.max(0, net);
+      rows[mi].paid += n;
+      pushBreakdown(mi, {
+        ticker: t.ticker || "N/A",
+        companyName: (t.companyName || t.ticker || "N/A").trim(),
+        amount: n,
+        badge: "Potvrdené",
+      });
     }
 
-    if (calendarMode === "ROLLING") {
-      for (const ev of upcomingDividends?.all ?? []) {
-        if (ev.kind !== "payout") continue;
-        const d = new Date(`${ev.date}T12:00:00`);
-        const key = monthKey(startOfMonth(d));
-        const row = map.get(key);
-        if (!row) continue;
-        const amount = ev.estimatedGrossInUserCcy ?? 0;
-        if (ev.confirmed) row.confirmed += amount;
-        else row.estimated += amount;
-        row.events += 1;
-      }
-
-      // fallback estimate from historical payouts projected +12m
-      for (const t of transactions) {
-        if (t.type !== "DIVIDEND") continue;
-        const d = new Date(t.transactionDate as unknown as string);
-        const projected = addMonths(d, 12);
-        const key = monthKey(startOfMonth(projected));
-        const row = map.get(key);
-        if (!row) continue;
-        const net =
-          parseFloat(String(t.shares ?? "0")) * parseFloat(String(t.pricePerShare ?? "0")) -
-          parseFloat(String(t.commission ?? "0"));
-        if (Number.isFinite(net)) row.estimated += Math.max(0, net);
+    for (const ev of upcomingDividends?.all ?? []) {
+      if (ev.kind !== "payout") continue;
+      const payIso = ev.paymentDate || ev.date;
+      if (!payIso) continue;
+      const pd = new Date(`${payIso}T12:00:00`);
+      if (pd.getFullYear() !== y) continue;
+      const mi = pd.getMonth();
+      const amount = ev.estimatedGrossInUserCcy ?? 0;
+      if (!Number.isFinite(amount) || amount <= 0) continue;
+      if (ev.confirmed) {
+        rows[mi].confirmed += amount;
+        pushBreakdown(mi, {
+          ticker: ev.ticker,
+          companyName: ev.companyName,
+          amount,
+          badge: "Potvrdené",
+        });
+      } else {
+        rows[mi].estimated += amount;
+        pushBreakdown(mi, {
+          ticker: ev.ticker,
+          companyName: ev.companyName,
+          amount,
+          badge: "Odhad",
+        });
       }
     }
 
-    return Array.from(map.values());
-  }, [transactions, upcomingDividends?.all, windowMonths, calendarMode]);
+    rows.forEach((r) => {
+      r.total = r.paid + r.confirmed + r.estimated;
+    });
+
+    const mergeBreakdown = (entries: MonthChartBreakdownEntry[]): MonthChartBreakdownEntry[] => {
+      const m = new Map<string, MonthChartBreakdownEntry>();
+      for (const e of entries) {
+        const key = `${e.ticker.toUpperCase()}\0${e.badge}`;
+        const prev = m.get(key);
+        if (prev) prev.amount += e.amount;
+        else m.set(key, { ...e, ticker: e.ticker, amount: e.amount });
+      }
+      return Array.from(m.values()).sort((a, b) => b.amount - a.amount);
+    };
+
+    return {
+      yearlyBars: rows,
+      yearlyBreakdownByMonth: rawBreakdown.map(mergeBreakdown),
+    };
+  }, [chartYear, transactions, upcomingDividends?.all]);
 
   const feedRows = useMemo(() => {
     const now = new Date();
@@ -346,12 +457,10 @@ export default function Dividends() {
       });
     }
 
-    const start = windowMonths[0];
-    const end = addMonths(start, 12);
-    const insideWindow = (iso: string | null) => {
+    const insideYear = (iso: string | null) => {
       if (!iso) return false;
       const d = new Date(`${iso}T12:00:00`);
-      return d >= start && d < end;
+      return d.getFullYear() === chartYear;
     };
 
     rows.sort((a, b) => {
@@ -359,8 +468,8 @@ export default function Dividends() {
       const db = new Date(`${b.exDate || b.paymentDate || "2100-01-01"}T12:00:00`).getTime();
       return da - db;
     });
-    return rows.filter((r) => insideWindow(r.paymentDate || r.exDate));
-  }, [upcomingDividends?.all, holdingsByTicker, transactions, windowMonths]);
+    return rows.filter((r) => insideYear(r.paymentDate || r.exDate));
+  }, [upcomingDividends?.all, holdingsByTicker, transactions, chartYear]);
 
   const statusLabel = (s: FeedStatus) =>
     s === "UPCOMING" ? "Upcoming" : s === "PENDING" ? "Pending" : s === "REINVESTED" ? "Reinvested" : "Paid";
@@ -462,25 +571,38 @@ export default function Dividends() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
-        <Card>
-          <CardContent className="pt-4 sm:pt-5 pb-4">
-            <p className="text-[11px] sm:text-xs text-muted-foreground">Forward 12M príjem</p>
-            <p className="text-lg sm:text-xl font-semibold tabular-nums">{formatCurrency(yieldMetrics.annualIncome)}</p>
+      <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
+        <Card className="shadow-sm">
+          <CardContent className="px-2 py-2 sm:px-6 sm:py-5">
+            <p className="text-[9px] sm:text-xs text-muted-foreground leading-tight line-clamp-2 sm:line-clamp-none">
+              <span className="sm:hidden">12M príjem</span>
+              <span className="hidden sm:inline">Forward 12M príjem</span>
+            </p>
+            <p className="text-[11px] sm:text-xl font-semibold tabular-nums leading-tight mt-0.5 sm:mt-1 break-all sm:break-normal">
+              {formatCurrency(yieldMetrics.annualIncome)}
+            </p>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-4 sm:pt-5 pb-4">
-            <p className="text-[11px] sm:text-xs text-muted-foreground">Dividend Yield (aktuálny)</p>
-            <p className="text-lg sm:text-xl font-semibold tabular-nums">
+        <Card className="shadow-sm">
+          <CardContent className="px-2 py-2 sm:px-6 sm:py-5">
+            <p className="text-[9px] sm:text-xs text-muted-foreground leading-tight line-clamp-2 sm:line-clamp-none">
+              <span className="sm:hidden">Yield</span>
+              <span className="hidden sm:inline">Dividend Yield (aktuálny)</span>
+            </p>
+            <p className="text-[11px] sm:text-xl font-semibold tabular-nums leading-tight mt-0.5 sm:mt-1">
               {yieldMetrics.dividendYieldCurrent.toFixed(2)}%
             </p>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="pt-4 sm:pt-5 pb-4">
-            <p className="text-[11px] sm:text-xs text-muted-foreground">Yield on Cost (YOC)</p>
-            <p className="text-lg sm:text-xl font-semibold tabular-nums">{yieldMetrics.yieldOnCost.toFixed(2)}%</p>
+        <Card className="shadow-sm">
+          <CardContent className="px-2 py-2 sm:px-6 sm:py-5">
+            <p className="text-[9px] sm:text-xs text-muted-foreground leading-tight line-clamp-2 sm:line-clamp-none">
+              <span className="sm:hidden">YOC</span>
+              <span className="hidden sm:inline">Yield on Cost (YOC)</span>
+            </p>
+            <p className="text-[11px] sm:text-xl font-semibold tabular-nums leading-tight mt-0.5 sm:mt-1">
+              {yieldMetrics.yieldOnCost.toFixed(2)}%
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -576,97 +698,222 @@ export default function Dividends() {
 
       <Card>
         <CardHeader className="px-3 sm:px-6 space-y-3">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
-              <CardTitle className="text-base sm:text-lg leading-snug">
-                {calendarMode === "ROLLING" ? "Rolling 12M — graf" : "História 12M — graf"}
-              </CardTitle>
+              <CardTitle className="text-base sm:text-lg leading-snug">Dividendy podľa mesiacov</CardTitle>
               <CardDescription className="text-xs sm:text-sm">
-                {calendarMode === "ROLLING"
-                  ? "Nasledujúcich 12 mesiacov od zvoleného mesiaca."
-                  : "12-mesačné okno z minulosti, posúvateľné po rokoch."}
+                Kalendárny rok (január–december), sumy v EUR. Klikni na stĺpec pre detail.
               </CardDescription>
             </div>
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <Button
-                variant={calendarMode === "ROLLING" ? "default" : "outline"}
-                size="sm"
-                className="text-xs sm:text-sm"
-                onClick={() => {
-                  setCalendarMode("ROLLING");
-                  setWindowOffset(0);
-                }}
-              >
-                Rolling 12M
-              </Button>
-              <Button
-                variant={calendarMode === "HISTORY" ? "default" : "outline"}
-                size="sm"
-                className="text-xs sm:text-sm"
-                onClick={() => {
-                  setCalendarMode("HISTORY");
-                  setWindowOffset(0);
-                }}
-              >
-                História
-              </Button>
-            </div>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 pt-0">
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" onClick={() => setWindowOffset((v) => v + 1)} aria-label="Do minulosti">
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
+            <div className="flex items-center justify-center sm:justify-end gap-1 sm:gap-2 shrink-0">
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => setWindowOffset((v) => Math.max(0, v - 1))}
-                aria-label="Do budúcnosti"
-                disabled={windowOffset === 0}
+                className="h-8 w-8 sm:h-9 sm:w-9"
+                aria-label="Predchádzajúci rok"
+                onClick={() => {
+                  setChartYear((yy) => yy - 1);
+                  setSelectedBarMonth(null);
+                }}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="min-w-[4.5rem] sm:min-w-[5.5rem] text-center text-sm sm:text-base font-semibold tabular-nums">
+                {chartYear}
+              </span>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8 sm:h-9 sm:w-9"
+                aria-label="Nasledujúci rok"
+                onClick={() => {
+                  setChartYear((yy) => yy + 1);
+                  setSelectedBarMonth(null);
+                }}
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs sm:text-sm h-8 px-2 sm:px-3"
+                onClick={() => {
+                  const y = new Date().getFullYear();
+                  setChartYear(y);
+                  setSelectedBarMonth(null);
+                }}
+              >
+                Dnes
+              </Button>
             </div>
-            <span className="text-xs sm:text-sm text-muted-foreground leading-snug">
-              {format(windowMonths[0], "LLLL yyyy", { locale: sk })} –{" "}
-              {format(windowMonths[11], "LLLL yyyy", { locale: sk })}
-            </span>
           </div>
         </CardHeader>
-        <CardContent className="px-3 sm:px-6">
-          <div className="h-[220px] sm:h-[260px] w-full -mx-1 sm:mx-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={forecastBars} margin={{ top: 4, right: 4, left: -18, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis
-                  dataKey="monthLabel"
-                  tick={{ fontSize: 10 }}
-                  interval={0}
-                  angle={-32}
-                  textAnchor="end"
-                  height={58}
-                />
-                <YAxis tick={{ fontSize: 10 }} width={36} />
-                <Tooltip />
-                <Bar dataKey="paid" stackId="a" fill="#2563eb" name="Paid" />
-                <Bar dataKey="confirmed" stackId="a" fill="#16a34a" name="Confirmed" />
-                <Bar dataKey="estimated" stackId="a" fill="#86efac" name="Estimated" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-2 text-[11px] sm:text-xs">
-            {forecastBars.map((m) => (
-              <div key={m.monthLabel} className="rounded-md border p-2 bg-card/50">
-                <div className="font-medium truncate" title={m.monthLabel}>
-                  {m.monthLabel}
+        <CardContent className="px-2 sm:px-6">
+          {(() => {
+            const today = new Date();
+            const isCurrentMonthBar = (monthIndex: number) =>
+              chartYear === today.getFullYear() && monthIndex === today.getMonth();
+            const handleBarClick = (_: unknown, index: number) => {
+              if (typeof index === "number" && index >= 0 && index < 12) {
+                setSelectedBarMonth((prev) => (prev === index ? null : index));
+              }
+            };
+            const axisEur = (v: number) => {
+              if (!Number.isFinite(v)) return "";
+              if (Math.abs(v) >= 1000) return `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k`;
+              return `${Math.round(v)}`;
+            };
+            return (
+              <>
+                <div className="h-[200px] sm:h-[280px] w-full min-w-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={yearlyBars}
+                      margin={{ top: 8, right: 4, left: 0, bottom: 4 }}
+                      barCategoryGap="12%"
+                      barGap={2}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+                      <XAxis
+                        dataKey="label"
+                        tick={{ fontSize: 9 }}
+                        interval={0}
+                        tickMargin={6}
+                        className="text-muted-foreground"
+                      />
+                      <YAxis
+                        tick={{ fontSize: 9 }}
+                        width={32}
+                        tickFormatter={axisEur}
+                        className="text-muted-foreground"
+                        allowDecimals={false}
+                      />
+                      <Tooltip
+                        formatter={(value: number | string, name: string) => [
+                          formatCurrency(Number(value)),
+                          name === "paid"
+                            ? "Vyplatené"
+                            : name === "confirmed"
+                              ? "Potvrdené (čaká)"
+                              : "Odhad",
+                        ]}
+                        labelFormatter={(_, payload) => {
+                          const p = payload?.[0]?.payload as YearMonthBarRow | undefined;
+                          if (!p) return "";
+                          const cap = format(new Date(chartYear, p.monthIndex, 1), "LLLL", { locale: sk });
+                          return cap.charAt(0).toUpperCase() + cap.slice(1);
+                        }}
+                      />
+                      <Bar
+                        dataKey="paid"
+                        stackId="stack"
+                        name="paid"
+                        maxBarSize={48}
+                        onClick={handleBarClick}
+                        style={{ cursor: "pointer" }}
+                      >
+                        {yearlyBars.map((_, i) => (
+                          <Cell
+                            key={`p-${i}`}
+                            fill={isCurrentMonthBar(i) ? "#1d4ed8" : "#2563eb"}
+                            style={
+                              isCurrentMonthBar(i)
+                                ? { filter: "drop-shadow(0 0 6px rgba(37, 99, 235, 0.55))" }
+                                : undefined
+                            }
+                          />
+                        ))}
+                      </Bar>
+                      <Bar
+                        dataKey="confirmed"
+                        stackId="stack"
+                        name="confirmed"
+                        maxBarSize={48}
+                        onClick={handleBarClick}
+                        style={{ cursor: "pointer" }}
+                      >
+                        {yearlyBars.map((_, i) => (
+                          <Cell
+                            key={`c-${i}`}
+                            fill={isCurrentMonthBar(i) ? "#15803d" : "#16a34a"}
+                            style={
+                              isCurrentMonthBar(i)
+                                ? { filter: "drop-shadow(0 0 6px rgba(22, 163, 74, 0.5))" }
+                                : undefined
+                            }
+                          />
+                        ))}
+                      </Bar>
+                      <Bar
+                        dataKey="estimated"
+                        stackId="stack"
+                        name="estimated"
+                        maxBarSize={48}
+                        radius={[6, 6, 0, 0]}
+                        onClick={handleBarClick}
+                        style={{ cursor: "pointer" }}
+                      >
+                        {yearlyBars.map((_, i) => (
+                          <Cell
+                            key={`e-${i}`}
+                            fill={isCurrentMonthBar(i) ? "#4ade80" : "#86efac"}
+                            style={
+                              isCurrentMonthBar(i)
+                                ? { filter: "drop-shadow(0 0 6px rgba(74, 222, 128, 0.55))" }
+                                : undefined
+                            }
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
-                <div className="text-blue-600 dark:text-blue-400 truncate">Paid: {formatCurrency(m.paid)}</div>
-                <div className="text-green-600 dark:text-green-400 truncate">Conf.: {formatCurrency(m.confirmed)}</div>
-                <div className="text-emerald-600 dark:text-emerald-500 truncate">Est.: {formatCurrency(m.estimated)}</div>
-                <div className="text-muted-foreground">Udal.: {m.events}</div>
-              </div>
-            ))}
-          </div>
+                <p className="mt-1 text-[10px] sm:text-xs text-muted-foreground text-center sm:text-left">
+                  Os Y: súčet v EUR (škála sa prispôsobí výške stĺpcov).
+                </p>
+
+                {selectedBarMonth != null && (
+                  <div
+                    className="mt-4 rounded-xl border bg-muted/20 p-3 sm:p-4 animate-in fade-in slide-in-from-top-2 duration-200"
+                    data-testid="dividend-month-detail"
+                  >
+                    <h3 className="text-sm sm:text-base font-semibold capitalize">
+                      {format(new Date(chartYear, selectedBarMonth, 1), "LLLL yyyy", { locale: sk })}: Celkovo{" "}
+                      <span className="tabular-nums">{formatCurrency(yearlyBars[selectedBarMonth]?.total ?? 0)}</span>
+                    </h3>
+                    <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5">
+                      {yearlyBreakdownByMonth[selectedBarMonth]?.length
+                        ? "Rozpis podľa titulu"
+                        : "V tomto mesiaci nie sú žiadne dividendy v dátach."}
+                    </p>
+                    <ul className="mt-3 max-h-[min(50vh,22rem)] overflow-y-auto space-y-2 pr-1">
+                      {yearlyBreakdownByMonth[selectedBarMonth]?.map((row, liIdx) => (
+                        <li
+                          key={`${row.ticker}-${row.badge}-${liIdx}`}
+                          className="flex items-center gap-2 sm:gap-3 rounded-lg border bg-card px-2 py-2 sm:px-3"
+                        >
+                          <CompanyLogo ticker={row.ticker} companyName={row.companyName} size="sm" className="shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <span className="font-medium text-sm">{row.ticker}</span>
+                            <span className="text-xs text-muted-foreground truncate block">{row.companyName}</span>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="text-sm font-semibold tabular-nums">{formatCurrency(row.amount)}</div>
+                            <Badge
+                              variant={row.badge === "Potvrdené" ? "default" : "secondary"}
+                              className="text-[10px] mt-0.5"
+                            >
+                              {row.badge}
+                            </Badge>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </CardContent>
       </Card>
 
