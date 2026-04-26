@@ -70,6 +70,14 @@ function toIcsDateUtc(d: Date): string {
   return `${y}${m}${day}T${hh}${mm}${ss}Z`;
 }
 
+function escapeIcsText(input: string): string {
+  return input
+    .replace(/\\/g, "\\\\")
+    .replace(/\n/g, "\\n")
+    .replace(/,/g, "\\,")
+    .replace(/;/g, "\\;");
+}
+
 function buildCalendarDates(ev: CalendarEvent): { start: Date; end: Date } {
   const base = new Date(`${ev.date}T12:00:00`);
   if (ev.type === "earnings" && ev.session === "BMO") {
@@ -95,12 +103,11 @@ function buildCalendarDates(ev: CalendarEvent): { start: Date; end: Date } {
 function buildGoogleCalendarUrl(ev: CalendarEvent): string {
   const { start, end } = buildCalendarDates(ev);
   const params = new URLSearchParams({
-    action: "TEMPLATE",
     text: ev.title,
-    details: `${ev.subtitle}\n\nZdroj: ${ev.infoUrl}`,
+    details: `${ev.subtitle}\n\nSource: ${ev.infoUrl}`,
     dates: `${toIcsDateUtc(start)}/${toIcsDateUtc(end)}`,
   });
-  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+  return `https://calendar.google.com/calendar/u/0/r/eventedit?${params.toString()}`;
 }
 
 function buildIcsHref(ev: CalendarEvent): string {
@@ -118,8 +125,8 @@ function buildIcsHref(ev: CalendarEvent): string {
     `DTSTAMP:${now}`,
     `DTSTART:${toIcsDateUtc(start)}`,
     `DTEND:${toIcsDateUtc(end)}`,
-    `SUMMARY:${ev.title}`,
-    `DESCRIPTION:${ev.subtitle.replace(/\n/g, " ")}\\n\\nZdroj: ${ev.infoUrl}`,
+    `SUMMARY:${escapeIcsText(ev.title)}`,
+    `DESCRIPTION:${escapeIcsText(`${ev.subtitle}\n\nSource: ${ev.infoUrl}`)}`,
     "END:VEVENT",
     "END:VCALENDAR",
   ].join("\r\n");
@@ -235,7 +242,7 @@ export default function EventsCalendar() {
     }
     map.forEach((arr) => {
       arr.sort((a: CalendarEvent, b: CalendarEvent) => {
-        const w = (t: EventType) => (t === "macro" ? 0 : t === "earnings" ? 1 : 2);
+        const w = (t: EventType) => (t === "macro" ? 0 : t === "dividend" ? 1 : 2);
         return w(a.type) - w(b.type);
       });
     });
