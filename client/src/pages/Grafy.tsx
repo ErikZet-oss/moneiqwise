@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, type ReactNode } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ComposedChart,
@@ -12,7 +12,7 @@ import {
   ResponsiveContainer,
   LineChart,
 } from "recharts";
-import { Activity, HelpCircle } from "lucide-react";
+import { Activity } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -28,22 +28,8 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HelpTip } from "@/components/HelpTip";
 import { cn } from "@/lib/utils";
-
-function HelpTip({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help shrink-0" />
-      </TooltipTrigger>
-      <TooltipContent className="max-w-[280px]">
-        <p className="font-semibold mb-1">{title}</p>
-        <div className="text-xs space-y-1.5">{children}</div>
-      </TooltipContent>
-    </Tooltip>
-  );
-}
 
 const RANGE_OPTIONS = [
   { v: "1m", label: "1M" },

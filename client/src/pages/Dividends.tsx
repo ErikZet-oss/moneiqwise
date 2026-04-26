@@ -1,11 +1,11 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Banknote, ChevronLeft, ChevronRight, HelpCircle } from "lucide-react";
+import { Banknote, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   addMonths,
   endOfMonth,
@@ -30,7 +30,7 @@ import {
   CASH_INTEREST_TICKER,
 } from "@shared/tickerCurrency";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis } from "recharts";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HelpTip } from "@/components/HelpTip";
 import {
   Sheet,
   SheetContent,
@@ -102,20 +102,6 @@ type CalendarRow = {
   /** Skutočná výplata z histórie vs. odhad z kalendára Yahoo */
   source: "paid" | "forecast";
 };
-
-function HelpTip({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help shrink-0" />
-      </TooltipTrigger>
-      <TooltipContent className="max-w-[280px]">
-        <p className="font-semibold mb-1">{title}</p>
-        <div className="text-xs space-y-1.5">{children}</div>
-      </TooltipContent>
-    </Tooltip>
-  );
-}
 
 export default function Dividends() {
   const { formatCurrency } = useCurrency();
