@@ -7,13 +7,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Banknote, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { addMonths, differenceInCalendarDays, format, startOfMonth, subMonths } from "date-fns";
+import { addMonths, differenceInCalendarDays, endOfMonth, endOfWeek, format, isSameMonth, isToday, startOfDay, startOfMonth, startOfWeek, subMonths, eachDayOfInterval } from "date-fns";
 import { sk } from "date-fns/locale";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { CompanyLogo } from "@/components/CompanyLogo";
 import type { Holding, Transaction } from "@shared/schema";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Tooltip as UiTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface DividendSummary {
   totalGross: number;
@@ -55,6 +56,13 @@ type UpcomingDividendItem = {
 
 type FeedStatus = "UPCOMING" | "PENDING" | "PAID" | "REINVESTED";
 type CalendarMode = "ROLLING" | "HISTORY";
+type CalendarRow = {
+  ticker: string;
+  companyName: string;
+  gross: number;
+  tax: number;
+  net: number;
+};
 
 export default function Dividends() {
   const [, setLocation] = useLocation();
@@ -64,6 +72,7 @@ export default function Dividends() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [calendarMode, setCalendarMode] = useState<CalendarMode>("ROLLING");
   const [windowOffset, setWindowOffset] = useState(0);
+  const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()));
 
   const { data: dividends, isLoading: dividendsLoading } = useQuery<DividendSummary>({
     queryKey: ["/api/dividends", portfolioParam],
@@ -343,6 +352,54 @@ export default function Dividends() {
   const statusLabel = (s: FeedStatus) =>
     s === "UPCOMING" ? "Upcoming" : s === "PENDING" ? "Pending" : s === "REINVESTED" ? "Reinvested" : "Paid";
 
+  const calendarByDay = useMemo(() => {
+    const map = new Map<string, { totalNet: number; rows: CalendarRow[] }>();
+    const upsert = (dayIso: string, ticker: string, companyName: string, gross: number, tax: number, net: number) => {
+      const d = map.get(dayIso) ?? { totalNet: 0, rows: [] };
+      let row = d.rows.find((r) => r.ticker === ticker);
+      if (!row) {
+        row = { ticker, companyName, gross: 0, tax: 0, net: 0 };
+        d.rows.push(row);
+      }
+      row.gross += gross;
+      row.tax += tax;
+      row.net += net;
+      d.totalNet += net;
+      map.set(dayIso, d);
+    };
+
+    for (const t of transactions) {
+      const dayIso = format(startOfDay(new Date(t.transactionDate as unknown as string)), "yyyy-MM-dd");
+      const ticker = t.ticker || "N/A";
+      const companyName = t.companyName || ticker;
+      if (t.type === "DIVIDEND") {
+        const shares = parseFloat(String(t.shares ?? "0"));
+        const dps = parseFloat(String(t.pricePerShare ?? "0"));
+        const tax = Math.abs(parseFloat(String(t.commission ?? "0")));
+        const gross = Number.isFinite(shares) && Number.isFinite(dps) ? shares * dps : 0;
+        const net = gross - tax;
+        upsert(dayIso, ticker, companyName, gross, tax, net);
+      } else if (t.type === "TAX") {
+        const shares = parseFloat(String(t.shares ?? "0"));
+        const pps = parseFloat(String(t.pricePerShare ?? "0"));
+        const taxOnly = Math.abs(Number.isFinite(shares) && Number.isFinite(pps) ? shares * pps : 0);
+        upsert(dayIso, ticker, companyName, 0, taxOnly, -taxOnly);
+      }
+    }
+    Array.from(map.values()).forEach((v) => {
+      v.rows.sort((a: CalendarRow, b: CalendarRow) => b.net - a.net);
+    });
+    return map;
+  }, [transactions]);
+
+  const calendarDays = useMemo(() => {
+    const monthStart = startOfMonth(calendarMonth);
+    const monthEnd = endOfMonth(calendarMonth);
+    const calStart = startOfWeek(monthStart, { weekStartsOn: 1 });
+    const calEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
+    return eachDayOfInterval({ start: calStart, end: calEnd });
+  }, [calendarMonth]);
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -368,6 +425,87 @@ export default function Dividends() {
         <Card><CardContent className="pt-5"><p className="text-xs text-muted-foreground">Dividend Yield (aktuálny)</p><p className="text-xl font-semibold">{yieldMetrics.dividendYieldCurrent.toFixed(2)}%</p></CardContent></Card>
         <Card><CardContent className="pt-5"><p className="text-xs text-muted-foreground">Yield on Cost (YOC)</p><p className="text-xl font-semibold">{yieldMetrics.yieldOnCost.toFixed(2)}%</p></CardContent></Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle>Dividendový kalendár (interaktívny)</CardTitle>
+              <CardDescription>Klikni na deň a uvidíš presne: logo firmy, brutto, daň, netto.</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" onClick={() => setCalendarMonth((m) => subMonths(m, 1))} aria-label="Predchádzajúci mesiac">
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="min-w-[11rem] text-center text-sm font-medium capitalize">
+                {format(calendarMonth, "LLLL yyyy", { locale: sk })}
+              </span>
+              <Button variant="outline" size="icon" onClick={() => setCalendarMonth((m) => addMonths(m, 1))} aria-label="Nasledujúci mesiac">
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-lg border overflow-hidden">
+            <div className="grid grid-cols-7 gap-px bg-border">
+              {["Po", "Ut", "St", "Št", "Pi", "So", "Ne"].map((d) => (
+                <div key={d} className="bg-muted/50 px-1 py-2 text-center text-xs font-medium text-muted-foreground">
+                  {d}
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 gap-px bg-border">
+              {calendarDays.map((day) => {
+                const dayIso = format(startOfDay(day), "yyyy-MM-dd");
+                const bucket = calendarByDay.get(dayIso);
+                const inMonth = isSameMonth(day, calendarMonth);
+                const cell = (
+                  <div
+                    className={`min-h-[4.8rem] p-1.5 flex flex-col bg-card ${!inMonth ? "opacity-40" : ""} ${isToday(day) ? "ring-1 ring-inset ring-primary/40" : ""}`}
+                  >
+                    <span className={`text-xs font-medium ${inMonth ? "text-foreground" : "text-muted-foreground"}`}>
+                      {format(day, "d")}
+                    </span>
+                    {bucket && (
+                      <span className={`mt-auto text-[11px] font-semibold truncate ${bucket.totalNet >= 0 ? "text-blue-600" : "text-red-600"}`}>
+                        {bucket.totalNet >= 0 ? "+" : ""}{formatCurrency(bucket.totalNet)}
+                      </span>
+                    )}
+                  </div>
+                );
+                if (!bucket) return <div key={dayIso}>{cell}</div>;
+                return (
+                  <UiTooltip key={dayIso}>
+                    <TooltipTrigger asChild>
+                      <button type="button" className="w-full text-left">{cell}</button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-[340px] p-3">
+                      <p className="font-medium mb-2">{format(day, "d. MMMM yyyy", { locale: sk })}</p>
+                      <div className="space-y-2">
+                        {bucket.rows.map((r) => (
+                          <div key={`${dayIso}-${r.ticker}`} className="rounded-md border px-2 py-1.5">
+                            <div className="flex items-center gap-2">
+                              <CompanyLogo ticker={r.ticker} companyName={r.companyName} size="xs" />
+                              <span className="text-sm font-medium">{r.ticker}</span>
+                              <span className="text-xs text-muted-foreground truncate">{r.companyName}</span>
+                            </div>
+                            <div className="mt-1 grid grid-cols-3 gap-2 text-xs">
+                              <span>Brutto: <span className="font-medium">{formatCurrency(r.gross)}</span></span>
+                              <span>Daň: <span className="font-medium text-red-600">-{formatCurrency(r.tax)}</span></span>
+                              <span>Netto: <span className={`font-medium ${r.net >= 0 ? "text-blue-600" : "text-red-600"}`}>{r.net >= 0 ? "+" : ""}{formatCurrency(r.net)}</span></span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </TooltipContent>
+                  </UiTooltip>
+                );
+              })}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
