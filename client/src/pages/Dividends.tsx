@@ -14,7 +14,13 @@ import { usePortfolio } from "@/hooks/usePortfolio";
 import { CompanyLogo } from "@/components/CompanyLogo";
 import type { Holding, Transaction } from "@shared/schema";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Tooltip as UiTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 
 interface DividendSummary {
   totalGross: number;
@@ -62,6 +68,8 @@ type CalendarRow = {
   gross: number;
   tax: number;
   net: number;
+  /** Skutočná výplata z histórie vs. odhad z kalendára Yahoo */
+  source: "paid" | "forecast";
 };
 
 export default function Dividends() {
@@ -73,6 +81,11 @@ export default function Dividends() {
   const [calendarMode, setCalendarMode] = useState<CalendarMode>("ROLLING");
   const [windowOffset, setWindowOffset] = useState(0);
   const [calendarMonth, setCalendarMonth] = useState(() => startOfMonth(new Date()));
+  const [calendarDaySheetOpen, setCalendarDaySheetOpen] = useState(false);
+  const [calendarSelectedDay, setCalendarSelectedDay] = useState<{
+    day: Date;
+    bucket: { totalNet: number; rows: CalendarRow[] } | null;
+  } | null>(null);
 
   const { data: dividends, isLoading: dividendsLoading } = useQuery<DividendSummary>({
     queryKey: ["/api/dividends", portfolioParam],
@@ -354,11 +367,19 @@ export default function Dividends() {
 
   const calendarByDay = useMemo(() => {
     const map = new Map<string, { totalNet: number; rows: CalendarRow[] }>();
-    const upsert = (dayIso: string, ticker: string, companyName: string, gross: number, tax: number, net: number) => {
+    const upsert = (
+      dayIso: string,
+      ticker: string,
+      companyName: string,
+      gross: number,
+      tax: number,
+      net: number,
+      source: CalendarRow["source"],
+    ) => {
       const d = map.get(dayIso) ?? { totalNet: 0, rows: [] };
-      let row = d.rows.find((r) => r.ticker === ticker);
+      let row = d.rows.find((r) => r.ticker === ticker && r.source === source);
       if (!row) {
-        row = { ticker, companyName, gross: 0, tax: 0, net: 0 };
+        row = { ticker, companyName, gross: 0, tax: 0, net: 0, source };
         d.rows.push(row);
       }
       row.gross += gross;
@@ -378,19 +399,29 @@ export default function Dividends() {
         const tax = Math.abs(parseFloat(String(t.commission ?? "0")));
         const gross = Number.isFinite(shares) && Number.isFinite(dps) ? shares * dps : 0;
         const net = gross - tax;
-        upsert(dayIso, ticker, companyName, gross, tax, net);
+        upsert(dayIso, ticker, companyName, gross, tax, net, "paid");
       } else if (t.type === "TAX") {
         const shares = parseFloat(String(t.shares ?? "0"));
         const pps = parseFloat(String(t.pricePerShare ?? "0"));
         const taxOnly = Math.abs(Number.isFinite(shares) && Number.isFinite(pps) ? shares * pps : 0);
-        upsert(dayIso, ticker, companyName, 0, taxOnly, -taxOnly);
+        upsert(dayIso, ticker, companyName, 0, taxOnly, -taxOnly, "paid");
       }
     }
+
+    const todayIso = format(startOfDay(new Date()), "yyyy-MM-dd");
+    for (const ev of upcomingDividends?.all ?? []) {
+      if (ev.kind !== "payout" || !ev.paymentDate) continue;
+      if (ev.paymentDate < todayIso) continue;
+      const est = ev.estimatedGrossInUserCcy;
+      if (est == null || !Number.isFinite(est) || est <= 0) continue;
+      upsert(ev.paymentDate, ev.ticker, ev.companyName, est, 0, est, "forecast");
+    }
+
     Array.from(map.values()).forEach((v) => {
       v.rows.sort((a: CalendarRow, b: CalendarRow) => b.net - a.net);
     });
     return map;
-  }, [transactions]);
+  }, [transactions, upcomingDividends?.all]);
 
   const calendarDays = useMemo(() => {
     const monthStart = startOfMonth(calendarMonth);
@@ -399,6 +430,12 @@ export default function Dividends() {
     const calEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
     return eachDayOfInterval({ start: calStart, end: calEnd });
   }, [calendarMonth]);
+
+  const openCalendarDayDetail = (day: Date) => {
+    const dayIso = format(startOfDay(day), "yyyy-MM-dd");
+    setCalendarSelectedDay({ day, bucket: calendarByDay.get(dayIso) ?? null });
+    setCalendarDaySheetOpen(true);
+  };
 
   if (isLoading) {
     return (
@@ -411,27 +448,51 @@ export default function Dividends() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 md:space-y-6 pb-6 md:pb-8 px-0 sm:px-0">
       <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-page-title">
-          <Banknote className="h-6 w-6 text-primary" />
+        <h1
+          className="text-xl sm:text-2xl font-bold flex items-center gap-2 flex-wrap"
+          data-testid="text-page-title"
+        >
+          <Banknote className="h-5 w-5 sm:h-6 sm:w-6 text-primary shrink-0" />
           Dividendy
         </h1>
-        <p className="text-muted-foreground">Dividend timeline, výplatný feed a yield analytika</p>
+        <p className="text-sm sm:text-base text-muted-foreground mt-1">
+          Dividend timeline, výplatný feed a yield analytika
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <Card><CardContent className="pt-5"><p className="text-xs text-muted-foreground">Forward 12M príjem</p><p className="text-xl font-semibold">{formatCurrency(yieldMetrics.annualIncome)}</p></CardContent></Card>
-        <Card><CardContent className="pt-5"><p className="text-xs text-muted-foreground">Dividend Yield (aktuálny)</p><p className="text-xl font-semibold">{yieldMetrics.dividendYieldCurrent.toFixed(2)}%</p></CardContent></Card>
-        <Card><CardContent className="pt-5"><p className="text-xs text-muted-foreground">Yield on Cost (YOC)</p><p className="text-xl font-semibold">{yieldMetrics.yieldOnCost.toFixed(2)}%</p></CardContent></Card>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
+        <Card>
+          <CardContent className="pt-4 sm:pt-5 pb-4">
+            <p className="text-[11px] sm:text-xs text-muted-foreground">Forward 12M príjem</p>
+            <p className="text-lg sm:text-xl font-semibold tabular-nums">{formatCurrency(yieldMetrics.annualIncome)}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 sm:pt-5 pb-4">
+            <p className="text-[11px] sm:text-xs text-muted-foreground">Dividend Yield (aktuálny)</p>
+            <p className="text-lg sm:text-xl font-semibold tabular-nums">
+              {yieldMetrics.dividendYieldCurrent.toFixed(2)}%
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-4 sm:pt-5 pb-4">
+            <p className="text-[11px] sm:text-xs text-muted-foreground">Yield on Cost (YOC)</p>
+            <p className="text-lg sm:text-xl font-semibold tabular-nums">{yieldMetrics.yieldOnCost.toFixed(2)}%</p>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="px-3 sm:px-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle>Dividendový kalendár (interaktívny)</CardTitle>
-              <CardDescription>Klikni na deň a uvidíš presne: logo firmy, brutto, daň, netto.</CardDescription>
+              <CardTitle className="text-base sm:text-lg">Dividendový kalendár (interaktívny)</CardTitle>
+              <CardDescription className="text-xs sm:text-sm">
+                Klikni na deň — zobrazia sa logá, sumy a plánované výplaty (odhad).
+              </CardDescription>
             </div>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="icon" onClick={() => setCalendarMonth((m) => subMonths(m, 1))} aria-label="Predchádzajúci mesiac">
@@ -446,11 +507,14 @@ export default function Dividends() {
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="rounded-lg border overflow-hidden">
+        <CardContent className="px-3 sm:px-6">
+          <div className="rounded-lg border overflow-hidden touch-manipulation">
             <div className="grid grid-cols-7 gap-px bg-border">
               {["Po", "Ut", "St", "Št", "Pi", "So", "Ne"].map((d) => (
-                <div key={d} className="bg-muted/50 px-1 py-2 text-center text-xs font-medium text-muted-foreground">
+                <div
+                  key={d}
+                  className="bg-muted/50 px-0.5 py-1.5 sm:py-2 text-center text-[10px] sm:text-xs font-medium text-muted-foreground"
+                >
                   {d}
                 </div>
               ))}
@@ -460,46 +524,49 @@ export default function Dividends() {
                 const dayIso = format(startOfDay(day), "yyyy-MM-dd");
                 const bucket = calendarByDay.get(dayIso);
                 const inMonth = isSameMonth(day, calendarMonth);
-                const cell = (
-                  <div
-                    className={`min-h-[4.8rem] p-1.5 flex flex-col bg-card ${!inMonth ? "opacity-40" : ""} ${isToday(day) ? "ring-1 ring-inset ring-primary/40" : ""}`}
+                const logoRows = bucket?.rows ?? [];
+                const showLogos = logoRows.length > 0;
+                return (
+                  <button
+                    key={dayIso}
+                    type="button"
+                    onClick={() => openCalendarDayDetail(day)}
+                    className={`w-full min-h-[4rem] sm:min-h-[5rem] p-1 sm:p-1.5 flex flex-col items-stretch text-left bg-card active:bg-muted/60 transition-colors ${!inMonth ? "opacity-40" : ""} ${isToday(day) ? "ring-1 ring-inset ring-primary/50 z-[1]" : ""}`}
                   >
-                    <span className={`text-xs font-medium ${inMonth ? "text-foreground" : "text-muted-foreground"}`}>
+                    <span
+                      className={`text-[11px] sm:text-xs font-medium leading-none ${inMonth ? "text-foreground" : "text-muted-foreground"}`}
+                    >
                       {format(day, "d")}
                     </span>
+                    {showLogos && (
+                      <div className="flex items-center mt-0.5 min-h-[1.25rem]">
+                        <div className="flex items-center pl-0.5">
+                          {logoRows.slice(0, 3).map((r, idx) => (
+                            <span
+                              key={`${dayIso}-${r.ticker}-${r.source}-${idx}`}
+                              className="-ml-1 first:ml-0 ring-2 ring-card rounded-full bg-card shrink-0"
+                              style={{ zIndex: 3 - idx }}
+                            >
+                              <CompanyLogo ticker={r.ticker} companyName={r.companyName} size="xs" />
+                            </span>
+                          ))}
+                        </div>
+                        {logoRows.length > 3 && (
+                          <span className="text-[9px] sm:text-[10px] text-muted-foreground font-medium ml-0.5 shrink-0">
+                            +{logoRows.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     {bucket && (
-                      <span className={`mt-auto text-[11px] font-semibold truncate ${bucket.totalNet >= 0 ? "text-blue-600" : "text-red-600"}`}>
-                        {bucket.totalNet >= 0 ? "+" : ""}{formatCurrency(bucket.totalNet)}
+                      <span
+                        className={`mt-auto text-[9px] sm:text-[11px] font-semibold truncate leading-tight ${bucket.totalNet >= 0 ? "text-blue-600 dark:text-blue-400" : "text-red-600"}`}
+                      >
+                        {bucket.totalNet >= 0 ? "+" : ""}
+                        {formatCurrency(bucket.totalNet)}
                       </span>
                     )}
-                  </div>
-                );
-                if (!bucket) return <div key={dayIso}>{cell}</div>;
-                return (
-                  <UiTooltip key={dayIso}>
-                    <TooltipTrigger asChild>
-                      <button type="button" className="w-full text-left">{cell}</button>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-[340px] p-3">
-                      <p className="font-medium mb-2">{format(day, "d. MMMM yyyy", { locale: sk })}</p>
-                      <div className="space-y-2">
-                        {bucket.rows.map((r) => (
-                          <div key={`${dayIso}-${r.ticker}`} className="rounded-md border px-2 py-1.5">
-                            <div className="flex items-center gap-2">
-                              <CompanyLogo ticker={r.ticker} companyName={r.companyName} size="xs" />
-                              <span className="text-sm font-medium">{r.ticker}</span>
-                              <span className="text-xs text-muted-foreground truncate">{r.companyName}</span>
-                            </div>
-                            <div className="mt-1 grid grid-cols-3 gap-2 text-xs">
-                              <span>Brutto: <span className="font-medium">{formatCurrency(r.gross)}</span></span>
-                              <span>Daň: <span className="font-medium text-red-600">-{formatCurrency(r.tax)}</span></span>
-                              <span>Netto: <span className={`font-medium ${r.net >= 0 ? "text-blue-600" : "text-red-600"}`}>{r.net >= 0 ? "+" : ""}{formatCurrency(r.net)}</span></span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </TooltipContent>
-                  </UiTooltip>
+                  </button>
                 );
               })}
             </div>
@@ -508,52 +575,78 @@ export default function Dividends() {
       </Card>
 
       <Card>
-        <CardHeader>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle>
-                {calendarMode === "ROLLING" ? "Dividendový kalendár (Rolling 12M)" : "Dividendový kalendár (História 12M)"}
+        <CardHeader className="px-3 sm:px-6 space-y-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <CardTitle className="text-base sm:text-lg leading-snug">
+                {calendarMode === "ROLLING" ? "Rolling 12M — graf" : "História 12M — graf"}
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-xs sm:text-sm">
                 {calendarMode === "ROLLING"
                   ? "Nasledujúcich 12 mesiacov od zvoleného mesiaca."
                   : "12-mesačné okno z minulosti, posúvateľné po rokoch."}
               </CardDescription>
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant={calendarMode === "ROLLING" ? "default" : "outline"} size="sm" onClick={() => { setCalendarMode("ROLLING"); setWindowOffset(0); }}>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <Button
+                variant={calendarMode === "ROLLING" ? "default" : "outline"}
+                size="sm"
+                className="text-xs sm:text-sm"
+                onClick={() => {
+                  setCalendarMode("ROLLING");
+                  setWindowOffset(0);
+                }}
+              >
                 Rolling 12M
               </Button>
-              <Button variant={calendarMode === "HISTORY" ? "default" : "outline"} size="sm" onClick={() => { setCalendarMode("HISTORY"); setWindowOffset(0); }}>
+              <Button
+                variant={calendarMode === "HISTORY" ? "default" : "outline"}
+                size="sm"
+                className="text-xs sm:text-sm"
+                onClick={() => {
+                  setCalendarMode("HISTORY");
+                  setWindowOffset(0);
+                }}
+              >
                 História
               </Button>
             </div>
           </div>
-          <div className="flex items-center gap-2 pt-1">
-            <Button variant="outline" size="icon" onClick={() => setWindowOffset((v) => v + 1)} aria-label="Do minulosti">
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setWindowOffset((v) => Math.max(0, v - 1))}
-              aria-label="Do budúcnosti"
-              disabled={windowOffset === 0}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-            <span className="text-sm text-muted-foreground">
-              {format(windowMonths[0], "LLLL yyyy", { locale: sk })} - {format(windowMonths[11], "LLLL yyyy", { locale: sk })}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 pt-0">
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="icon" onClick={() => setWindowOffset((v) => v + 1)} aria-label="Do minulosti">
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setWindowOffset((v) => Math.max(0, v - 1))}
+                aria-label="Do budúcnosti"
+                disabled={windowOffset === 0}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+            <span className="text-xs sm:text-sm text-muted-foreground leading-snug">
+              {format(windowMonths[0], "LLLL yyyy", { locale: sk })} –{" "}
+              {format(windowMonths[11], "LLLL yyyy", { locale: sk })}
             </span>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="h-[260px] w-full">
+        <CardContent className="px-3 sm:px-6">
+          <div className="h-[220px] sm:h-[260px] w-full -mx-1 sm:mx-0">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={forecastBars}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="monthLabel" />
-                <YAxis />
+              <BarChart data={forecastBars} margin={{ top: 4, right: 4, left: -18, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis
+                  dataKey="monthLabel"
+                  tick={{ fontSize: 10 }}
+                  interval={0}
+                  angle={-32}
+                  textAnchor="end"
+                  height={58}
+                />
+                <YAxis tick={{ fontSize: 10 }} width={36} />
                 <Tooltip />
                 <Bar dataKey="paid" stackId="a" fill="#2563eb" name="Paid" />
                 <Bar dataKey="confirmed" stackId="a" fill="#16a34a" name="Confirmed" />
@@ -561,37 +654,41 @@ export default function Dividends() {
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <div className="mt-4 overflow-x-auto">
-            <div className="min-w-[720px] grid grid-cols-12 gap-2 text-xs">
-              {forecastBars.map((m) => (
-                <div key={m.monthLabel} className="rounded-md border p-2">
-                  <div className="font-medium">{m.monthLabel}</div>
-                  <div className="text-blue-600">Paid: {formatCurrency(m.paid)}</div>
-                  <div className="text-green-600">Confirmed: {formatCurrency(m.confirmed)}</div>
-                  <div className="text-emerald-500">Estimated: {formatCurrency(m.estimated)}</div>
-                  <div className="text-muted-foreground">Events: {m.events}</div>
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-2 text-[11px] sm:text-xs">
+            {forecastBars.map((m) => (
+              <div key={m.monthLabel} className="rounded-md border p-2 bg-card/50">
+                <div className="font-medium truncate" title={m.monthLabel}>
+                  {m.monthLabel}
                 </div>
-              ))}
-            </div>
+                <div className="text-blue-600 dark:text-blue-400 truncate">Paid: {formatCurrency(m.paid)}</div>
+                <div className="text-green-600 dark:text-green-400 truncate">Conf.: {formatCurrency(m.confirmed)}</div>
+                <div className="text-emerald-600 dark:text-emerald-500 truncate">Est.: {formatCurrency(m.estimated)}</div>
+                <div className="text-muted-foreground">Udal.: {m.events}</div>
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Dividend Feed</CardTitle>
-          <CardDescription>Ex-date countdown, status a čistá očakávaná suma</CardDescription>
+        <CardHeader className="px-3 sm:px-6">
+          <CardTitle className="text-base sm:text-lg">Dividend Feed</CardTitle>
+          <CardDescription className="text-xs sm:text-sm">
+            Ex-date countdown, status a čistá / očakávaná suma
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-2">
-          {feedRows.length === 0 && <p className="text-sm text-muted-foreground">Zatiaľ nie sú dostupné dividendové udalosti.</p>}
+        <CardContent className="space-y-2 px-3 sm:px-6">
+          {feedRows.length === 0 && (
+            <p className="text-sm text-muted-foreground">Zatiaľ nie sú dostupné dividendové udalosti.</p>
+          )}
           {feedRows.map((r) => {
             const isOpen = expanded.has(r.id);
             const exDelta = r.exDate ? differenceInCalendarDays(new Date(`${r.exDate}T12:00:00`), new Date()) : null;
             return (
-              <div key={r.id} className="rounded-lg border p-3">
+              <div key={r.id} className="rounded-lg border p-2.5 sm:p-3">
                 <button
                   type="button"
-                  className="w-full flex items-center gap-3 text-left"
+                  className="w-full flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 text-left"
                   onClick={() => {
                     const n = new Set(expanded);
                     if (n.has(r.id)) n.delete(r.id);
@@ -599,19 +696,43 @@ export default function Dividends() {
                     setExpanded(n);
                   }}
                 >
-                  <CompanyLogo ticker={r.ticker} companyName={r.companyName} size="sm" />
-                  <div className="min-w-0 flex-1">
-                    <div className="font-medium">{r.ticker}</div>
-                    <div className="text-xs text-muted-foreground truncate">{r.companyName}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-xs text-amber-600">
-                      {exDelta == null ? "Ex-date neznámy" : exDelta >= 0 ? `Ex-date za ${exDelta} dní` : `Ex-date pred ${Math.abs(exDelta)} d`}
+                  <div className="flex items-start gap-2 sm:gap-3 min-w-0 flex-1">
+                    <CompanyLogo ticker={r.ticker} companyName={r.companyName} size="sm" className="shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-medium text-sm sm:text-base">{r.ticker}</div>
+                      <div className="text-[11px] sm:text-xs text-muted-foreground line-clamp-2">{r.companyName}</div>
+                      <div className="text-[11px] sm:text-xs text-amber-600 mt-1 sm:hidden">
+                        {exDelta == null
+                          ? "Ex-date neznámy"
+                          : exDelta >= 0
+                            ? `Ex-date za ${exDelta} dní`
+                            : `Ex-date pred ${Math.abs(exDelta)} d`}
+                      </div>
                     </div>
-                    <div className="font-medium">{formatCurrency(r.amount)}</div>
                   </div>
-                  <Badge variant="outline">{statusLabel(r.status)}</Badge>
-                  {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  <div className="flex items-center justify-between gap-2 sm:justify-end sm:text-right sm:flex-nowrap pl-[2.25rem] sm:pl-0">
+                    <div className="hidden sm:block text-right shrink-0">
+                      <div className="text-xs text-amber-600">
+                        {exDelta == null
+                          ? "Ex-date neznámy"
+                          : exDelta >= 0
+                            ? `Ex-date za ${exDelta} dní`
+                            : `Ex-date pred ${Math.abs(exDelta)} d`}
+                      </div>
+                      <div className="font-medium tabular-nums">{formatCurrency(r.amount)}</div>
+                    </div>
+                    <div className="sm:hidden font-medium tabular-nums">{formatCurrency(r.amount)}</div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Badge variant="outline" className="text-[10px] sm:text-xs whitespace-nowrap">
+                        {statusLabel(r.status)}
+                      </Badge>
+                      {isOpen ? (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </div>
+                  </div>
                 </button>
                 {isOpen && (
                   <div className="mt-3 pt-3 border-t grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
@@ -643,43 +764,134 @@ export default function Dividends() {
 
       {dividends && dividends.byTicker.length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle>Dividendy podľa spoločností</CardTitle>
-            <CardDescription>Historický prehľad vyplatených dividend</CardDescription>
+          <CardHeader className="px-3 sm:px-6">
+            <CardTitle className="text-base sm:text-lg">Dividendy podľa spoločností</CardTitle>
+            <CardDescription className="text-xs sm:text-sm">Historický prehľad vyplatených dividend</CardDescription>
           </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Ticker</TableHead>
-                  <TableHead>Spoločnosť</TableHead>
-                  <TableHead className="text-right">Výplat</TableHead>
-                  <TableHead className="text-right">Hrubé</TableHead>
-                  <TableHead className="text-right">Daň</TableHead>
-                  <TableHead className="text-right">Čisté</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {dividends.byTicker.map((item) => (
-                  <TableRow key={item.ticker}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <CompanyLogo ticker={item.ticker} companyName={item.companyName} size="sm" />
-                        <span className="font-medium">{item.ticker}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>{item.companyName}</TableCell>
-                    <TableCell className="text-right">{item.transactions}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(item.totalGross)}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(item.totalTax)}</TableCell>
-                    <TableCell className="text-right font-medium">{formatCurrency(item.totalNet)}</TableCell>
+          <CardContent className="px-3 sm:px-6">
+            <div className="md:hidden space-y-2">
+              {dividends.byTicker.map((item) => (
+                <div key={item.ticker} className="rounded-lg border p-3 space-y-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <CompanyLogo ticker={item.ticker} companyName={item.companyName} size="sm" />
+                    <div className="min-w-0">
+                      <div className="font-medium text-sm">{item.ticker}</div>
+                      <div className="text-xs text-muted-foreground line-clamp-2">{item.companyName}</div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                    <span className="text-muted-foreground">Výplat</span>
+                    <span className="text-right tabular-nums">{item.transactions}</span>
+                    <span className="text-muted-foreground">Hrubé</span>
+                    <span className="text-right tabular-nums">{formatCurrency(item.totalGross)}</span>
+                    <span className="text-muted-foreground">Daň</span>
+                    <span className="text-right tabular-nums">{formatCurrency(item.totalTax)}</span>
+                    <span className="text-muted-foreground">Čisté</span>
+                    <span className="text-right font-medium tabular-nums">{formatCurrency(item.totalNet)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden md:block overflow-x-auto rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Ticker</TableHead>
+                    <TableHead>Spoločnosť</TableHead>
+                    <TableHead className="text-right">Výplat</TableHead>
+                    <TableHead className="text-right">Hrubé</TableHead>
+                    <TableHead className="text-right">Daň</TableHead>
+                    <TableHead className="text-right">Čisté</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {dividends.byTicker.map((item) => (
+                    <TableRow key={item.ticker}>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <CompanyLogo ticker={item.ticker} companyName={item.companyName} size="sm" />
+                          <span className="font-medium">{item.ticker}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>{item.companyName}</TableCell>
+                      <TableCell className="text-right">{item.transactions}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(item.totalGross)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(item.totalTax)}</TableCell>
+                      <TableCell className="text-right font-medium">{formatCurrency(item.totalNet)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       )}
+
+      <Sheet open={calendarDaySheetOpen} onOpenChange={setCalendarDaySheetOpen}>
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[90vh] overflow-y-auto px-4 pb-6">
+          <SheetHeader className="text-left space-y-1 pr-6">
+            <SheetTitle className="text-base sm:text-lg">
+              {calendarSelectedDay
+                ? format(calendarSelectedDay.day, "EEEE d. MMMM yyyy", { locale: sk })
+                : ""}
+            </SheetTitle>
+            <SheetDescription className="text-xs sm:text-sm text-left">
+              {calendarSelectedDay?.bucket && calendarSelectedDay.bucket.rows.length > 0
+                ? `Celkom netto v tento deň: ${formatCurrency(calendarSelectedDay.bucket.totalNet)}`
+                : "V tento deň nemáš v kalendári žiadne výplaty ani plánované dividendy."}
+            </SheetDescription>
+          </SheetHeader>
+          {calendarSelectedDay?.bucket && calendarSelectedDay.bucket.rows.length > 0 && (
+            <div className="mt-4 space-y-3">
+              {calendarSelectedDay.bucket.rows.map((r, idx) => (
+                <div
+                  key={`${r.ticker}-${r.source}-${idx}`}
+                  className="rounded-lg border p-3 space-y-2 bg-card"
+                >
+                  <div className="flex items-start gap-2">
+                    <CompanyLogo ticker={r.ticker} companyName={r.companyName} size="sm" className="shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-sm">{r.ticker}</span>
+                        <Badge variant="secondary" className="text-[10px]">
+                          {r.source === "forecast" ? "Odhad výplaty" : "Skutočná výplata"}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground line-clamp-2">{r.companyName}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs sm:text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Brutto</span>
+                      <div className="font-medium tabular-nums">{formatCurrency(r.gross)}</div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Daň</span>
+                      <div className="font-medium tabular-nums text-red-600">
+                        {r.tax > 0 ? `-${formatCurrency(r.tax)}` : "—"}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Netto</span>
+                      <div
+                        className={`font-medium tabular-nums ${r.net >= 0 ? "text-blue-600 dark:text-blue-400" : "text-red-600"}`}
+                      >
+                        {r.net >= 0 ? "+" : ""}
+                        {formatCurrency(r.net)}
+                      </div>
+                    </div>
+                  </div>
+                  {r.source === "forecast" && r.tax <= 0 && (
+                    <p className="text-[11px] text-muted-foreground border-t pt-2">
+                      Odhad bez rozdelenia na daň — po výplate upravíme podľa skutočnej transakcie.
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
