@@ -1,4 +1,5 @@
 import type { Transaction } from "./schema";
+import { isCloseTradeCashRow } from "./sellCloseTradeFallback";
 
 type CashLineLike = Pick<
   Transaction,
@@ -36,10 +37,7 @@ type CashWithName = CashLineLike & { companyName?: string | null };
 export function sumCloseTradeCashFlowEurFromRows(rows: CashWithName[]): number {
   const only = rows.filter(
     (t) =>
-      (t.type === "DEPOSIT" || t.type === "WITHDRAWAL") &&
-      String(t.companyName ?? "")
-        .toLowerCase()
-        .includes("close trade"),
+      (t.type === "DEPOSIT" || t.type === "WITHDRAWAL") && isCloseTradeCashRow(t as Transaction),
   );
   return sumCashFlowEurFromRows(only);
 }

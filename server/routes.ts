@@ -3706,10 +3706,11 @@ export async function registerRoutes(
       const portfolioId = req.query.portfolio as string | undefined;
       const userTransactions = await storage.getTransactionsByUser(userId, portfolioId);
 
-      const computed = await computeRealizedGainsFromTransactionsAsync(
-        userTransactions,
-      );
-      const closeTradeNetEur = sumCloseTradeCashFlowEurFromRows(userTransactions);
+      const { summary: computed, mergedPairedCloseTradeEur } =
+        await computeRealizedGainsFromTransactionsAsync(userTransactions);
+      const closeTradeGross = sumCloseTradeCashFlowEurFromRows(userTransactions);
+      /** Close trade riadky mínus EUR už zarátané pri predajoch (párovanie ako v Histórii). */
+      const closeTradeNetEur = closeTradeGross - mergedPairedCloseTradeEur;
       const realizedGainTotal = computed.totalRealized + closeTradeNetEur;
 
       res.json({

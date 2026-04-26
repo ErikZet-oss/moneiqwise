@@ -36,6 +36,8 @@ export function computeFifoRealizedGainsFromTransactions(
   realizedEurByCalendarYear: Record<number, number>;
   /** Kľúč YYYY-MM (UTC) → realizovaný zisk v EUR. */
   realizedEurByYearMonth: Record<string, number>;
+  /** SELL, ktoré FIFO spracovalo (má platný výnos v EUR). */
+  fifoProcessedSellIds: Set<string>;
 } {
   const txnTypeOrder = (t: Transaction) => {
     const k = String(t.type ?? "")
@@ -70,6 +72,7 @@ export function computeFifoRealizedGainsFromTransactions(
   const lots: Record<string, OpenFifoLot[]> = {};
   const realizedEurByCalendarYear: Record<number, number> = {};
   const realizedEurByYearMonth: Record<string, number> = {};
+  const fifoProcessedSellIds = new Set<string>();
 
   const getKey = (txn: Transaction) => transactionLotKey(txn);
 
@@ -103,6 +106,7 @@ export function computeFifoRealizedGainsFromTransactions(
       // Bez platného EUR výnosu neukončujeme FIFO riadok — inak by sa zvýšil transactionCount
       // s gain = 0 a zablokovala sa záloha zo `realizedGain`.
       if (!(shSell > 0) || !Number.isFinite(proceedsEur) || Math.abs(proceedsEur) < 1e-9) continue;
+      fifoProcessedSellIds.add(txn.id);
       transactionCount++;
 
       const queue = lots[key] ?? [];
@@ -165,5 +169,6 @@ export function computeFifoRealizedGainsFromTransactions(
     openLots: lots,
     realizedEurByCalendarYear,
     realizedEurByYearMonth,
+    fifoProcessedSellIds,
   };
 }
