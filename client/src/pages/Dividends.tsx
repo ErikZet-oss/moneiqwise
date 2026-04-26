@@ -1,11 +1,11 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Banknote, ChevronLeft, ChevronRight } from "lucide-react";
+import { Banknote, ChevronLeft, ChevronRight, HelpCircle } from "lucide-react";
 import {
   addMonths,
   endOfMonth,
@@ -29,7 +29,8 @@ import {
   CASH_INTEREST_TAX_DISPLAY_NAME,
   CASH_INTEREST_TICKER,
 } from "@shared/tickerCurrency";
-import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis } from "recharts";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Sheet,
   SheetContent,
@@ -101,6 +102,20 @@ type CalendarRow = {
   /** Skutočná výplata z histórie vs. odhad z kalendára Yahoo */
   source: "paid" | "forecast";
 };
+
+function HelpTip({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help shrink-0" />
+      </TooltipTrigger>
+      <TooltipContent className="max-w-[280px]">
+        <p className="font-semibold mb-1">{title}</p>
+        <div className="text-xs space-y-1.5">{children}</div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 export default function Dividends() {
   const { formatCurrency } = useCurrency();
@@ -587,6 +602,12 @@ export default function Dividends() {
         >
           <Banknote className="h-5 w-5 sm:h-6 sm:w-6 text-primary shrink-0" />
           Dividendy
+          <HelpTip title="Stránka Dividendy">
+            <p>
+              Prehľad dividend podľa zvoleného portfólia: interaktívny kalendár, ročný graf, odhad príjmu a
+              výnosové metriky. Čerpá sa z vašich transakcií a z verejných údajov o plánovaných výplatách.
+            </p>
+          </HelpTip>
         </h1>
         <p className="text-sm sm:text-base text-muted-foreground mt-1">
           Kalendár, ročný prehľad a yield analytika
@@ -596,9 +617,17 @@ export default function Dividends() {
       <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
         <Card className="shadow-sm">
           <CardContent className="px-2 py-2 sm:px-6 sm:py-5">
-            <p className="text-[9px] sm:text-xs text-muted-foreground leading-tight line-clamp-2 sm:line-clamp-none">
-              <span className="sm:hidden">12M príjem</span>
-              <span className="hidden sm:inline">Forward 12M príjem</span>
+            <p className="text-[9px] sm:text-xs text-muted-foreground leading-tight line-clamp-2 sm:line-clamp-none flex items-center gap-1">
+              <span className="min-w-0">
+                <span className="sm:hidden">12M príjem</span>
+                <span className="hidden sm:inline">Forward 12M príjem</span>
+              </span>
+              <HelpTip title="Forward 12M príjem">
+                <p>
+                  Orientačný ročný čistý príjem z dividend na základe aktuálnych pozícií: údaje z Yahoo (sadzba
+                  alebo výnos), prípadne posledných 12 mesiacov skutočných výplat, ak kalendár chýba.
+                </p>
+              </HelpTip>
             </p>
             <p className="text-[11px] sm:text-xl font-semibold tabular-nums leading-tight mt-0.5 sm:mt-1 break-all sm:break-normal">
               {formatCurrency(yieldMetrics.annualIncome)}
@@ -607,9 +636,17 @@ export default function Dividends() {
         </Card>
         <Card className="shadow-sm">
           <CardContent className="px-2 py-2 sm:px-6 sm:py-5">
-            <p className="text-[9px] sm:text-xs text-muted-foreground leading-tight line-clamp-2 sm:line-clamp-none">
-              <span className="sm:hidden">Yield</span>
-              <span className="hidden sm:inline">Dividend Yield (aktuálny)</span>
+            <p className="text-[9px] sm:text-xs text-muted-foreground leading-tight line-clamp-2 sm:line-clamp-none flex items-center gap-1">
+              <span className="min-w-0">
+                <span className="sm:hidden">Yield</span>
+                <span className="hidden sm:inline">Dividend Yield (aktuálny)</span>
+              </span>
+              <HelpTip title="Dividend yield (aktuálny)">
+                <p>
+                  Pomer očakávaného ročného dividendového príjmu k aktuálnej trhovej hodnote držaných akcií. Ak
+                  nie je dostupná live cena, použije sa približne nákladová hodnota.
+                </p>
+              </HelpTip>
             </p>
             <p className="text-[11px] sm:text-xl font-semibold tabular-nums leading-tight mt-0.5 sm:mt-1">
               {yieldMetrics.dividendYieldCurrent.toFixed(2)}%
@@ -618,9 +655,17 @@ export default function Dividends() {
         </Card>
         <Card className="shadow-sm">
           <CardContent className="px-2 py-2 sm:px-6 sm:py-5">
-            <p className="text-[9px] sm:text-xs text-muted-foreground leading-tight line-clamp-2 sm:line-clamp-none">
-              <span className="sm:hidden">YOC</span>
-              <span className="hidden sm:inline">Yield on Cost (YOC)</span>
+            <p className="text-[9px] sm:text-xs text-muted-foreground leading-tight line-clamp-2 sm:line-clamp-none flex items-center gap-1">
+              <span className="min-w-0">
+                <span className="sm:hidden">YOC</span>
+                <span className="hidden sm:inline">Yield on Cost (YOC)</span>
+              </span>
+              <HelpTip title="Yield on Cost (YOC)">
+                <p>
+                  Výnos voči pôvodným investovaným nákladom (priemerná cena × počet akcií), nie voči dnešnej
+                  trhovej cene. Ukáže, aký „úrok“ z pôvodnej investície dividendy predstavujú.
+                </p>
+              </HelpTip>
             </p>
             <p className="text-[11px] sm:text-xl font-semibold tabular-nums leading-tight mt-0.5 sm:mt-1">
               {yieldMetrics.yieldOnCost.toFixed(2)}%
@@ -633,7 +678,15 @@ export default function Dividends() {
         <CardHeader className="px-3 sm:px-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle className="text-base sm:text-lg">Dividendový kalendár (interaktívny)</CardTitle>
+              <CardTitle className="text-base sm:text-lg flex items-center gap-1 flex-wrap">
+                Dividendový kalendár (interaktívny)
+                <HelpTip title="Dividendový kalendár">
+                  <p>
+                    Mesačný pohľad na dni so skutočnými výplatami z histórie a plánovanými udalosťami (vrátane
+                    odhadov). Kliknutím na deň zobrazíte detail podľa titulu.
+                  </p>
+                </HelpTip>
+              </CardTitle>
               <CardDescription className="text-xs sm:text-sm">
                 Klikni na deň — zobrazia sa logá, sumy a plánované výplaty (odhad).
               </CardDescription>
@@ -722,7 +775,15 @@ export default function Dividends() {
         <CardHeader className="px-3 sm:px-6 space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
-              <CardTitle className="text-base sm:text-lg leading-snug">Dividendy podľa mesiacov</CardTitle>
+              <CardTitle className="text-base sm:text-lg leading-snug flex items-center gap-1 flex-wrap">
+                Dividendy podľa mesiacov
+                <HelpTip title="Graf podľa mesiacov">
+                  <p>
+                    Stĺce za kalendárny rok: modrá — už vyplatené z transakcií, zelená — potvrdené budúce výplaty,
+                    svetlozelená — odhad. Kliknutím na mesiac rozbalíte zoznam podľa spoločností.
+                  </p>
+                </HelpTip>
+              </CardTitle>
               <CardDescription className="text-xs sm:text-sm">
                 Kalendárny rok (január–december), sumy v EUR. Klikni na stĺpec pre detail.
               </CardDescription>
@@ -810,7 +871,7 @@ export default function Dividends() {
                         className="text-muted-foreground"
                         allowDecimals={false}
                       />
-                      <Tooltip
+                      <RTooltip
                         formatter={(value: number | string, name: string) => [
                           formatCurrency(Number(value)),
                           name === "paid"
@@ -890,8 +951,11 @@ export default function Dividends() {
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
-                <p className="mt-1 text-[10px] sm:text-xs text-muted-foreground text-center sm:text-left">
-                  Os Y: súčet v EUR (škála sa prispôsobí výške stĺpcov).
+                <p className="mt-1 text-[10px] sm:text-xs text-muted-foreground text-center sm:text-left flex items-center justify-center sm:justify-start gap-1 flex-wrap">
+                  <span>Os Y: súčet v EUR (škála sa prispôsobí výške stĺpcov).</span>
+                  <HelpTip title="Os Y v grafe">
+                    <p>Hodnoty sú v meny používateľa (EUR). Osa sa škáluje podľa maxima v danom roku.</p>
+                  </HelpTip>
                 </p>
 
                 <div
@@ -900,9 +964,15 @@ export default function Dividends() {
                 >
                   {selectedBarMonth == null ? (
                     <>
-                      <h3 className="text-sm sm:text-base font-semibold">
+                      <h3 className="text-sm sm:text-base font-semibold flex items-center gap-1 flex-wrap">
                         Rok {chartYear}: Celkovo{" "}
                         <span className="tabular-nums">{formatCurrency(yearlyGrandTotal)}</span>
+                        <HelpTip title="Súhrn za rok">
+                          <p>
+                            Spojenie všetkých mesiacov roka: rovnaký ticker a typ (potvrdené vs. odhad) sa v zozname
+                            zlučuje do jedného riadku so sčítanou sumou.
+                          </p>
+                        </HelpTip>
                       </h3>
                       <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5">
                         Súhrn za celý vybraný rok. Klikni na stĺpec v grafe pre detail konkrétneho mesiaca.
@@ -937,9 +1007,12 @@ export default function Dividends() {
                     </>
                   ) : (
                     <>
-                      <h3 className="text-sm sm:text-base font-semibold capitalize">
+                      <h3 className="text-sm sm:text-base font-semibold capitalize flex items-center gap-1 flex-wrap">
                         {format(new Date(chartYear, selectedBarMonth, 1), "LLLL yyyy", { locale: sk })}: Celkovo{" "}
                         <span className="tabular-nums">{formatCurrency(yearlyBars[selectedBarMonth]?.total ?? 0)}</span>
+                        <HelpTip title="Detail mesiaca">
+                          <p>Zoznam dividend v danom mesiaci podľa zdroja v grafe (vyplatené, potvrdené, odhad).</p>
+                        </HelpTip>
                       </h3>
                       <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5">
                         {yearlyBreakdownByMonth[selectedBarMonth]?.length
@@ -981,7 +1054,15 @@ export default function Dividends() {
       {dividends && dividends.byTicker.length > 0 && (
         <Card>
           <CardHeader className="px-3 sm:px-6">
-            <CardTitle className="text-base sm:text-lg">Dividendy podľa spoločností</CardTitle>
+            <CardTitle className="text-base sm:text-lg flex items-center gap-1 flex-wrap">
+              Dividendy podľa spoločností
+              <HelpTip title="Tabuľka podľa spoločností">
+                <p>
+                  Súhrn všetkých dividendových výplat v histórii: počet výplat, hrubá suma, zrazená daň a čistá
+                  čiastka podľa tickeru. Respektuje aktuálny výber portfólia.
+                </p>
+              </HelpTip>
+            </CardTitle>
             <CardDescription className="text-xs sm:text-sm">Historický prehľad vyplatených dividend</CardDescription>
           </CardHeader>
           <CardContent className="px-3 sm:px-6">
@@ -1046,10 +1127,18 @@ export default function Dividends() {
       <Sheet open={calendarDaySheetOpen} onOpenChange={setCalendarDaySheetOpen}>
         <SheetContent side="bottom" className="rounded-t-2xl max-h-[90vh] overflow-y-auto px-4 pb-6">
           <SheetHeader className="text-left space-y-1 pr-6">
-            <SheetTitle className="text-base sm:text-lg">
+            <SheetTitle className="text-base sm:text-lg flex items-center gap-1 flex-wrap">
               {calendarSelectedDay
                 ? format(calendarSelectedDay.day, "EEEE d. MMMM yyyy", { locale: sk })
                 : ""}
+              {calendarSelectedDay && (
+                <HelpTip title="Detail dňa v kalendári">
+                  <p>
+                    Zoznam udalostí v daný deň: skutočné výplaty z účtu alebo odhad plánovanej dividendy. Pri odhadoch
+                    môže chýbať rozdelenie na daň do skutočnej výplaty.
+                  </p>
+                </HelpTip>
+              )}
             </SheetTitle>
             <SheetDescription className="text-xs sm:text-sm text-left">
               {calendarSelectedDay?.bucket && calendarSelectedDay.bucket.rows.length > 0

@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ComposedChart,
@@ -12,7 +12,7 @@ import {
   ResponsiveContainer,
   LineChart,
 } from "recharts";
-import { Activity } from "lucide-react";
+import { Activity, HelpCircle } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -28,7 +28,22 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+
+function HelpTip({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help shrink-0" />
+      </TooltipTrigger>
+      <TooltipContent className="max-w-[280px]">
+        <p className="font-semibold mb-1">{title}</p>
+        <div className="text-xs space-y-1.5">{children}</div>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 const RANGE_OPTIONS = [
   { v: "1m", label: "1M" },
@@ -160,9 +175,15 @@ export default function Grafy() {
   return (
     <div className="max-w-6xl mx-auto space-y-5 sm:space-y-6 px-3 sm:px-4 md:px-6 pb-6">
       <div className="space-y-1">
-        <h1 className="text-xl sm:text-2xl font-semibold tracking-tight flex items-center gap-2">
+        <h1 className="text-xl sm:text-2xl font-semibold tracking-tight flex items-center gap-2 flex-wrap">
           <Activity className="h-6 w-6 sm:h-7 sm:w-7 shrink-0 text-primary" />
           Grafy
+          <HelpTip title="Stránka Grafy">
+            <p>
+              Časové série hodnoty portfólia a porovnanie výkonu s indexom S&amp;P 500. Metodika zodpovedá TWR na
+              dashboarde (oceňovanie MTM, vklady a výbery ako toky).
+            </p>
+          </HelpTip>
         </h1>
         <p className="text-muted-foreground text-xs sm:text-sm max-w-3xl leading-relaxed">
           Dáta z toho istého oceňovania a tokov (MTM, vklady/výbery) ako TWR. Benchmark: S&amp;P 500 (^GSPC)
@@ -172,15 +193,26 @@ export default function Grafy() {
 
       <Card className="border-border/80 shadow-sm">
         <CardHeader className="space-y-4 pb-4 pt-4 sm:pt-6">
-          <CardTitle className="text-base sm:text-lg">Zobrazenie</CardTitle>
+          <CardTitle className="text-base sm:text-lg flex items-center gap-1 flex-wrap">
+            Zobrazenie
+            <HelpTip title="Filtre grafu">
+              <p>
+                Portfólio určuje, ktoré transakcie sa zarátajú do série (alebo všetky naraz). Obdobie skracuje časovú
+                os; výber portfólia je zdieľaný s bočným panelom.
+              </p>
+            </HelpTip>
+          </CardTitle>
           <CardDescription className="text-xs sm:text-sm">
             Vyberte portfólio a časové obdobie. Nastavenie portfólia je rovnaké ako v bočnom paneli.
           </CardDescription>
           <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
             <div className="space-y-2 w-full sm:w-auto sm:min-w-[200px] sm:flex-1 sm:max-w-xs">
-              <Label htmlFor="grafy-portfolio" className="text-muted-foreground">
-                Portfólio
-              </Label>
+              <div className="flex items-center gap-1 text-sm font-medium leading-none text-muted-foreground">
+                <Label htmlFor="grafy-portfolio">Portfólio</Label>
+                <HelpTip title="Výber portfólia">
+                  <p>Jedno portfólio alebo agregácia „všetky“. Rovnaká voľba ako v navigácii vľavo.</p>
+                </HelpTip>
+              </div>
               <Select
                 value={portfolioSelectValue}
                 onValueChange={(id) => setSelectedPortfolioId(id === "all" ? "all" : id)}
@@ -199,7 +231,14 @@ export default function Grafy() {
               </Select>
             </div>
             <div className="space-y-2 w-full min-w-0 sm:flex-1 sm:min-w-[240px]">
-              <Label className="text-muted-foreground">Obdobie</Label>
+              <div className="flex items-center gap-1 text-sm font-medium leading-none text-muted-foreground">
+                <span id="grafy-range-label">Obdobie</span>
+                <HelpTip title="Časové obdobie">
+                  <p>
+                    Rozsah dát na osi X: od posledného mesiaca po celú históriu. YTD = od 1. januára bežného roka.
+                  </p>
+                </HelpTip>
+              </div>
               <RangeToggle value={range} onChange={setRange} />
             </div>
           </div>
@@ -207,7 +246,12 @@ export default function Grafy() {
       </Card>
 
       {history?.methodNote && (
-        <p className="text-xs text-muted-foreground max-w-4xl">{history.methodNote}</p>
+        <p className="text-xs text-muted-foreground max-w-4xl flex items-start gap-1.5">
+          <span className="min-w-0 flex-1">{history.methodNote}</span>
+          <HelpTip title="Poznámka k metodike">
+            <p>Stručné vysvetlenie výpočtu z backendu pre zobrazenú sériu a menu.</p>
+          </HelpTip>
+        </p>
       )}
 
       {histErr && (
@@ -221,7 +265,15 @@ export default function Grafy() {
       {/* 1) Success chart */}
       <Card>
         <CardHeader>
-          <CardTitle>Celková hodnota vs. investované</CardTitle>
+          <CardTitle className="flex items-center gap-1 flex-wrap">
+            Celková hodnota vs. investované
+            <HelpTip title="Hodnota vs. čisté vklady">
+              <p>
+                Modrá krivka: denná trhová hodnota (MTM + hotovosť). Sivý schodík: kumulatívne čisté vklady mínus
+                výbery. Farba výplne pod krivkou: zelená ak je hodnota na konci rozsahu nad touto čiarou, inak červená.
+              </p>
+            </HelpTip>
+          </CardTitle>
           <CardDescription>
             Plocha pod trhovou krivkou: farba podľa zisku oproti tokom na konci rozsahu. Schodíky = čisté vklady
             mínus výbery.
@@ -325,7 +377,15 @@ export default function Grafy() {
       {/* 2) TWR vs S&P % */}
       <Card>
         <CardHeader>
-          <CardTitle>Výkon v % oproti S&amp;P 500</CardTitle>
+          <CardTitle className="flex items-center gap-1 flex-wrap">
+            Výkon v % oproti S&amp;P 500
+            <HelpTip title="Kumulatívny výnos v %">
+              <p>
+                Obe krivky začínajú na 0 % v prvý deň zobrazeného rozsahu. Portfólio: reťazenie denných výnosov po
+                odpočítaní tokov (TWR). Index: vývoj uzávierok ^GSPC voči tomu istému prvému dňu.
+              </p>
+            </HelpTip>
+          </CardTitle>
           <CardDescription>
             Kumulatívny % od prvého zobrazeného dňa v rozsahu: reťazenie segmentov výnosu (po odpoč. tokov) v
             portfóliu; index výnos (uzávierky) voči tomu istému prvému dňu.
