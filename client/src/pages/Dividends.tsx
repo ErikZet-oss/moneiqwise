@@ -1,15 +1,13 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Banknote, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { Banknote, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   addMonths,
-  differenceInCalendarDays,
   endOfMonth,
   endOfWeek,
   eachDayOfInterval,
@@ -78,8 +76,6 @@ type UpcomingDividendItem = {
   confirmed: boolean;
 };
 
-type FeedStatus = "UPCOMING" | "PENDING" | "PAID" | "REINVESTED";
-
 type YearMonthBarRow = {
   monthIndex: number;
   label: string;
@@ -107,11 +103,9 @@ type CalendarRow = {
 };
 
 export default function Dividends() {
-  const [, setLocation] = useLocation();
   const { formatCurrency } = useCurrency();
   const { getQueryParam } = usePortfolio();
   const portfolioParam = getQueryParam();
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   /** Kalendárny rok pre hlavný stĺpcový graf (Jan–Dec). */
   const [chartYear, setChartYear] = useState(() => new Date().getFullYear());
   /** Vybraný mesiac v grafe 0–11 alebo null. */
@@ -300,6 +294,7 @@ export default function Dividends() {
 
   const { yearlyBars, yearlyBreakdownByMonth } = useMemo(() => {
     const y = chartYear;
+    const todayStart = startOfDay(new Date());
     const rows: YearMonthBarRow[] = [];
     const rawBreakdown: MonthChartBreakdownEntry[][] = Array.from({ length: 12 }, () => []);
 
@@ -361,6 +356,13 @@ export default function Dividends() {
       const pd = new Date(`${dateIso}T12:00:00`);
       if (pd.getFullYear() !== y) continue;
       const mi = pd.getMonth();
+      const eventDay = startOfDay(pd);
+      /**
+       * Odhad len pre budúcnosť (vrátane dnes). V minulosti už buď máš výplatu v transakciách (paid),
+       * alebo nechceme „Odhad“ za skutočne uplynulé obdobie.
+       */
+      if (!ev.confirmed && eventDay < todayStart) continue;
+
       upcomingMonthTicker.add(`${ev.ticker.toUpperCase()}-${mi}`);
 
       if (ev.confirmed) {
@@ -387,6 +389,7 @@ export default function Dividends() {
       if (t.type !== "DIVIDEND") continue;
       const d0 = new Date(t.transactionDate as unknown as string);
       const projected = addMonths(startOfDay(d0), 12);
+      if (projected < todayStart) continue;
       if (projected.getFullYear() !== y) continue;
       const mi = projected.getMonth();
       const tickerU = (t.ticker || "N/A").toUpperCase();
@@ -451,97 +454,6 @@ export default function Dividends() {
     }
     return Array.from(m.values()).sort((a, b) => b.amount - a.amount);
   }, [yearlyBreakdownByMonth]);
-
-  const feedRows = useMemo(() => {
-    const now = new Date();
-    const rows: Array<{
-      id: string;
-      ticker: string;
-      companyName: string;
-      exDate: string | null;
-      paymentDate: string | null;
-      declarationDate: string | null;
-      recordDate: string | null;
-      amount: number;
-      status: FeedStatus;
-      payoutRatio: number | null;
-      dividendGrowth5yPct: number | null;
-      dividendStreakYears: number | null;
-      dividendYieldCurrent: number | null;
-      yoc: number | null;
-    }> = [];
-
-    for (const t of transactions) {
-      if (t.type !== "DIVIDEND") continue;
-      const d = new Date(t.transactionDate as unknown as string);
-      const iso = format(d, "yyyy-MM-dd");
-      const amount =
-        parseFloat(String(t.shares ?? "0")) * parseFloat(String(t.pricePerShare ?? "0")) -
-        parseFloat(String(t.commission ?? "0"));
-      rows.push({
-        id: `paid-${t.id}`,
-        ticker: t.ticker,
-        companyName: t.companyName,
-        exDate: null,
-        paymentDate: iso,
-        declarationDate: null,
-        recordDate: null,
-        amount: Number.isFinite(amount) ? amount : 0,
-        status: "PAID",
-        payoutRatio: null,
-        dividendGrowth5yPct: null,
-        dividendStreakYears: null,
-        dividendYieldCurrent: null,
-        yoc: null,
-      });
-    }
-
-    for (const ev of upcomingDividends?.all ?? []) {
-      const t = ev.ticker.toUpperCase();
-      const hold = holdingsByTicker.get(t);
-      const exDate = ev.exDate ? new Date(`${ev.exDate}T12:00:00`) : null;
-      const payDate = ev.paymentDate ? new Date(`${ev.paymentDate}T12:00:00`) : null;
-      let status: FeedStatus = "UPCOMING";
-      if (payDate && payDate < now) status = "PAID";
-      else if (exDate && exDate < now) status = "PENDING";
-      const yoc =
-        ev.annualDividendPerShare != null && hold && hold.avgCost > 0
-          ? (ev.annualDividendPerShare / hold.avgCost) * 100
-          : null;
-      rows.push({
-        id: `${ev.ticker}-${ev.kind}-${ev.date}`,
-        ticker: ev.ticker,
-        companyName: ev.companyName,
-        exDate: ev.exDate,
-        paymentDate: ev.paymentDate,
-        declarationDate: ev.declarationDate,
-        recordDate: ev.recordDate,
-        amount: ev.estimatedGrossInUserCcy ?? 0,
-        status,
-        payoutRatio: ev.payoutRatio,
-        dividendGrowth5yPct: ev.dividendGrowth5yPct,
-        dividendStreakYears: ev.dividendStreakYears,
-        dividendYieldCurrent: ev.dividendYieldCurrent,
-        yoc,
-      });
-    }
-
-    const insideYear = (iso: string | null) => {
-      if (!iso) return false;
-      const d = new Date(`${iso}T12:00:00`);
-      return d.getFullYear() === chartYear;
-    };
-
-    rows.sort((a, b) => {
-      const da = new Date(`${a.exDate || a.paymentDate || "2100-01-01"}T12:00:00`).getTime();
-      const db = new Date(`${b.exDate || b.paymentDate || "2100-01-01"}T12:00:00`).getTime();
-      return da - db;
-    });
-    return rows.filter((r) => insideYear(r.paymentDate || r.exDate));
-  }, [upcomingDividends?.all, holdingsByTicker, transactions, chartYear]);
-
-  const statusLabel = (s: FeedStatus) =>
-    s === "UPCOMING" ? "Upcoming" : s === "PENDING" ? "Pending" : s === "REINVESTED" ? "Reinvested" : "Paid";
 
   const calendarByDay = useMemo(() => {
     const map = new Map<string, { totalNet: number; rows: CalendarRow[] }>();
@@ -677,7 +589,7 @@ export default function Dividends() {
           Dividendy
         </h1>
         <p className="text-sm sm:text-base text-muted-foreground mt-1">
-          Dividend timeline, výplatný feed a yield analytika
+          Kalendár, ročný prehľad a yield analytika
         </p>
       </div>
 
@@ -1063,98 +975,6 @@ export default function Dividends() {
               </>
             );
           })()}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="px-3 sm:px-6">
-          <CardTitle className="text-base sm:text-lg">Dividend Feed</CardTitle>
-          <CardDescription className="text-xs sm:text-sm">
-            Ex-date countdown, status a čistá / očakávaná suma
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2 px-3 sm:px-6">
-          {feedRows.length === 0 && (
-            <p className="text-sm text-muted-foreground">Zatiaľ nie sú dostupné dividendové udalosti.</p>
-          )}
-          {feedRows.map((r) => {
-            const isOpen = expanded.has(r.id);
-            const exDelta = r.exDate ? differenceInCalendarDays(new Date(`${r.exDate}T12:00:00`), new Date()) : null;
-            return (
-              <div key={r.id} className="rounded-lg border p-2.5 sm:p-3">
-                <button
-                  type="button"
-                  className="w-full flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 text-left"
-                  onClick={() => {
-                    const n = new Set(expanded);
-                    if (n.has(r.id)) n.delete(r.id);
-                    else n.add(r.id);
-                    setExpanded(n);
-                  }}
-                >
-                  <div className="flex items-start gap-2 sm:gap-3 min-w-0 flex-1">
-                    <CompanyLogo ticker={r.ticker} companyName={r.companyName} size="sm" className="shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium text-sm sm:text-base">{r.ticker}</div>
-                      <div className="text-[11px] sm:text-xs text-muted-foreground line-clamp-2">{r.companyName}</div>
-                      <div className="text-[11px] sm:text-xs text-amber-600 mt-1 sm:hidden">
-                        {exDelta == null
-                          ? "Ex-date neznámy"
-                          : exDelta >= 0
-                            ? `Ex-date za ${exDelta} dní`
-                            : `Ex-date pred ${Math.abs(exDelta)} d`}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between gap-2 sm:justify-end sm:text-right sm:flex-nowrap pl-[2.25rem] sm:pl-0">
-                    <div className="hidden sm:block text-right shrink-0">
-                      <div className="text-xs text-amber-600">
-                        {exDelta == null
-                          ? "Ex-date neznámy"
-                          : exDelta >= 0
-                            ? `Ex-date za ${exDelta} dní`
-                            : `Ex-date pred ${Math.abs(exDelta)} d`}
-                      </div>
-                      <div className="font-medium tabular-nums">{formatCurrency(r.amount)}</div>
-                    </div>
-                    <div className="sm:hidden font-medium tabular-nums">{formatCurrency(r.amount)}</div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <Badge variant="outline" className="text-[10px] sm:text-xs whitespace-nowrap">
-                        {statusLabel(r.status)}
-                      </Badge>
-                      {isOpen ? (
-                        <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                      ) : (
-                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                      )}
-                    </div>
-                  </div>
-                </button>
-                {isOpen && (
-                  <div className="mt-3 pt-3 border-t grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
-                    <div><span className="text-muted-foreground">Declaration:</span> {r.declarationDate ?? "N/A"}</div>
-                    <div><span className="text-muted-foreground">Ex-Date:</span> {r.exDate ?? "N/A"}</div>
-                    <div><span className="text-muted-foreground">Record Date:</span> {r.recordDate ?? "N/A"}</div>
-                    <div><span className="text-muted-foreground">Payment:</span> {r.paymentDate ?? "N/A"}</div>
-                    <div><span className="text-muted-foreground">Yield:</span> {r.dividendYieldCurrent != null ? `${r.dividendYieldCurrent.toFixed(2)}%` : "N/A"}</div>
-                    <div><span className="text-muted-foreground">YOC:</span> {r.yoc != null ? `${r.yoc.toFixed(2)}%` : "N/A"}</div>
-                    <div><span className="text-muted-foreground">Payout Ratio:</span> {r.payoutRatio != null ? `${r.payoutRatio.toFixed(1)}%` : "N/A"}</div>
-                    <div><span className="text-muted-foreground">Dividend Growth (5Y):</span> {r.dividendGrowth5yPct != null ? `${r.dividendGrowth5yPct.toFixed(1)}%` : "N/A"}</div>
-                    <div><span className="text-muted-foreground">Dividend Streak:</span> {r.dividendStreakYears != null ? `${r.dividendStreakYears} rokov` : "N/A"}</div>
-                    <div>
-                      <Button
-                        variant="ghost"
-                        className="px-0 h-auto text-xs underline"
-                        onClick={() => setLocation(`/asset/${encodeURIComponent(r.ticker)}`)}
-                      >
-                        Otvoriť detail aktíva
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
         </CardContent>
       </Card>
 
