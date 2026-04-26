@@ -5,37 +5,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Banknote, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
-import {
-  format,
-  startOfMonth,
-  endOfMonth,
-  startOfWeek,
-  endOfWeek,
-  eachDayOfInterval,
-  isSameMonth,
-  isToday,
-  addMonths,
-  subMonths,
-  startOfDay,
-} from "date-fns";
+import { Badge } from "@/components/ui/badge";
+import { Banknote, ChevronDown, ChevronRight } from "lucide-react";
+import { addMonths, differenceInCalendarDays, format, startOfMonth } from "date-fns";
 import { sk } from "date-fns/locale";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { CompanyLogo } from "@/components/CompanyLogo";
-import type { Transaction } from "@shared/schema";
+import type { Holding, Transaction } from "@shared/schema";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 interface DividendSummary {
   totalGross: number;
   totalTax: number;
   totalNet: number;
-  grossYTD: number;
-  netYTD: number;
-  grossThisMonth: number;
-  netThisMonth: number;
-  grossToday: number;
-  netToday: number;
   byTicker: {
     ticker: string;
     companyName: string;
@@ -47,49 +30,37 @@ interface DividendSummary {
   transactionCount: number;
 }
 
-type ExpectedDividendItem = {
+interface StockQuote {
+  ticker: string;
+  price: number;
+}
+
+type UpcomingDividendItem = {
   ticker: string;
   companyName: string;
+  date: string;
   kind: "ex_dividend" | "payout";
   estimatedGrossInUserCcy: number | null;
+  exDate: string | null;
+  paymentDate: string | null;
+  declarationDate: string | null;
+  recordDate: string | null;
+  payoutRatio: number | null;
+  dividendYieldCurrent: number | null;
+  annualDividendPerShare: number | null;
+  dividendGrowth5yPct: number | null;
+  dividendStreakYears: number | null;
+  confirmed: boolean;
 };
 
-type DayBucket = {
-  net: number;
-  items: { ticker: string; companyName: string; net: number; kind: "DIVIDEND" | "TAX" }[];
-  expected?: ExpectedDividendItem[];
-};
-
-function transactionNetImpact(t: Transaction): number | null {
-  if (t.type === "DIVIDEND") {
-    const shares = parseFloat(t.shares);
-    const dividendPerShare = parseFloat(t.pricePerShare);
-    const withhold = parseFloat(t.commission || "0");
-    const gross = shares * dividendPerShare;
-    return gross - withhold;
-  }
-  if (t.type === "TAX") {
-    const shares = parseFloat(t.shares);
-    const pricePerShare = parseFloat(t.pricePerShare);
-    return shares * pricePerShare;
-  }
-  return null;
-}
-
-function dayKeyFromTransaction(d: Date | string): string {
-  const date = typeof d === "string" ? new Date(d) : d;
-  return format(startOfDay(date), "yyyy-MM-dd");
-}
-
-const WEEKDAYS_SK = ["Po", "Ut", "St", "Št", "Pi", "So", "Ne"];
+type FeedStatus = "UPCOMING" | "PENDING" | "PAID" | "REINVESTED";
 
 export default function Dividends() {
   const [, setLocation] = useLocation();
   const { formatCurrency } = useCurrency();
   const { getQueryParam } = usePortfolio();
-  const [viewMonth, setViewMonth] = useState(() => startOfMonth(new Date()));
-
   const portfolioParam = getQueryParam();
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const { data: dividends, isLoading: dividendsLoading } = useQuery<DividendSummary>({
     queryKey: ["/api/dividends", portfolioParam],
@@ -109,16 +80,16 @@ export default function Dividends() {
     },
   });
 
-  const { data: upcomingDividends } = useQuery<{
-    next: unknown;
-    all?: Array<{
-      ticker: string;
-      companyName: string;
-      date: string;
-      kind: "ex_dividend" | "payout";
-      estimatedGrossInUserCcy: number | null;
-    }>;
-  }>({
+  const { data: holdings = [] } = useQuery<Holding[]>({
+    queryKey: ["/api/holdings", portfolioParam],
+    queryFn: async () => {
+      const res = await fetch(`/api/holdings?portfolio=${portfolioParam}`);
+      if (!res.ok) throw new Error("Failed to fetch holdings");
+      return res.json();
+    },
+  });
+
+  const { data: upcomingDividends } = useQuery<{ next: unknown; all?: UpcomingDividendItem[] }>({
     queryKey: ["/api/dividends/upcoming", portfolioParam],
     queryFn: async () => {
       const res = await fetch(
@@ -131,83 +102,190 @@ export default function Dividends() {
     staleTime: 45 * 60 * 1000,
   });
 
+  const quoteTickers = useMemo(
+    () => Array.from(new Set(holdings.map((h) => h.ticker).filter(Boolean))).sort(),
+    [holdings],
+  );
+
+  const { data: quotes = {} } = useQuery<Record<string, StockQuote>>({
+    queryKey: ["/api/stocks/quotes/batch", quoteTickers.join(","), "dividends"],
+    enabled: quoteTickers.length > 0,
+    queryFn: async () => {
+      const res = await fetch("/api/stocks/quotes/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ tickers: quoteTickers, refresh: false }),
+      });
+      if (!res.ok) throw new Error("quotes");
+      const data = await res.json();
+      return (data?.quotes ?? {}) as Record<string, StockQuote>;
+    },
+    staleTime: 60 * 1000,
+  });
+
   const isLoading = dividendsLoading || transactionsLoading;
 
-  const payoutsByDay = useMemo(() => {
-    const map = new Map<string, DayBucket>();
-    for (const t of transactions) {
-      const net = transactionNetImpact(t);
-      if (net === null) continue;
-      const key = dayKeyFromTransaction(t.transactionDate as unknown as string);
-      let b = map.get(key);
-      if (!b) {
-        b = { net: 0, items: [] };
-        map.set(key, b);
-      }
-      b.net += net;
-      b.items.push({
-        ticker: t.ticker,
-        companyName: t.companyName,
-        net,
-        kind: t.type === "TAX" ? "TAX" : "DIVIDEND",
+  const holdingsByTicker = useMemo(() => {
+    const m = new Map<string, { shares: number; avgCost: number; invested: number; companyName: string }>();
+    for (const h of holdings) {
+      const t = h.ticker.toUpperCase();
+      const shares = parseFloat(String(h.shares ?? "0"));
+      const invested = parseFloat(String(h.totalInvested ?? "0"));
+      if (!Number.isFinite(shares) || shares <= 0) continue;
+      const prev = m.get(t);
+      const mergedShares = (prev?.shares ?? 0) + shares;
+      const mergedInvested = (prev?.invested ?? 0) + (Number.isFinite(invested) ? invested : 0);
+      m.set(t, {
+        shares: mergedShares,
+        invested: mergedInvested,
+        avgCost: mergedShares > 0 ? mergedInvested / mergedShares : 0,
+        companyName: prev?.companyName || h.companyName || t,
       });
     }
-    return map;
-  }, [transactions]);
+    return m;
+  }, [holdings]);
 
-  const calendarByDay = useMemo(() => {
-    const map = new Map<string, DayBucket>();
-    for (const [k, v] of Array.from(payoutsByDay.entries())) {
-      map.set(k, { net: v.net, items: [...v.items] });
-    }
+  const annualDivByTicker = useMemo(() => {
+    const m = new Map<string, number>();
     for (const ev of upcomingDividends?.all ?? []) {
-      const key = ev.date;
-      let b = map.get(key);
-      if (!b) {
-        b = { net: 0, items: [], expected: [] };
-        map.set(key, b);
+      const t = ev.ticker.toUpperCase();
+      if (ev.annualDividendPerShare != null && Number.isFinite(ev.annualDividendPerShare)) {
+        m.set(t, Math.max(m.get(t) ?? 0, ev.annualDividendPerShare));
       }
-      if (!b.expected) b.expected = [];
-      b.expected.push({
+    }
+    return m;
+  }, [upcomingDividends?.all]);
+
+  const yieldMetrics = useMemo(() => {
+    let totalCurrentValue = 0;
+    let totalInvested = 0;
+    let annualIncome = 0;
+    for (const [ticker, h] of Array.from(holdingsByTicker.entries())) {
+      const annual = annualDivByTicker.get(ticker) ?? 0;
+      if (!(annual > 0)) continue;
+      const q = quotes[ticker];
+      if (!q || !Number.isFinite(q.price)) continue;
+      const currentValue = q.price * h.shares;
+      totalCurrentValue += currentValue;
+      totalInvested += h.avgCost * h.shares;
+      annualIncome += annual * h.shares;
+    }
+    return {
+      dividendYieldCurrent: totalCurrentValue > 0 ? (annualIncome / totalCurrentValue) * 100 : 0,
+      yieldOnCost: totalInvested > 0 ? (annualIncome / totalInvested) * 100 : 0,
+      annualIncome,
+    };
+  }, [annualDivByTicker, holdingsByTicker, quotes]);
+
+  const forecastBars = useMemo(() => {
+    const now = new Date();
+    const months = Array.from({ length: 12 }).map((_, i) => startOfMonth(addMonths(now, i)));
+    const monthKey = (d: Date) => format(d, "yyyy-MM");
+    const map = new Map<string, { monthLabel: string; confirmed: number; estimated: number }>();
+    for (const m of months) {
+      map.set(monthKey(m), {
+        monthLabel: format(m, "LLL", { locale: sk }),
+        confirmed: 0,
+        estimated: 0,
+      });
+    }
+
+    for (const ev of upcomingDividends?.all ?? []) {
+      if (ev.kind !== "payout") continue;
+      const d = new Date(`${ev.date}T12:00:00`);
+      const key = monthKey(startOfMonth(d));
+      const row = map.get(key);
+      if (!row) continue;
+      const amount = ev.estimatedGrossInUserCcy ?? 0;
+      if (ev.confirmed) row.confirmed += amount;
+      else row.estimated += amount;
+    }
+
+    // fallback estimate from last 12M realized dividends projected one year ahead
+    for (const t of transactions) {
+      if (t.type !== "DIVIDEND") continue;
+      const d = new Date(t.transactionDate as unknown as string);
+      const projected = addMonths(d, 12);
+      const key = monthKey(startOfMonth(projected));
+      const row = map.get(key);
+      if (!row) continue;
+      const net = parseFloat(String(t.shares ?? "0")) * parseFloat(String(t.pricePerShare ?? "0")) - parseFloat(String(t.commission ?? "0"));
+      if (Number.isFinite(net)) row.estimated += Math.max(0, net);
+    }
+
+    return Array.from(map.values());
+  }, [transactions, upcomingDividends?.all]);
+
+  const feedRows = useMemo(() => {
+    const now = new Date();
+    const rows: Array<{
+      id: string;
+      ticker: string;
+      companyName: string;
+      exDate: string | null;
+      paymentDate: string | null;
+      declarationDate: string | null;
+      recordDate: string | null;
+      amount: number;
+      status: FeedStatus;
+      payoutRatio: number | null;
+      dividendGrowth5yPct: number | null;
+      dividendStreakYears: number | null;
+      dividendYieldCurrent: number | null;
+      yoc: number | null;
+    }> = [];
+
+    for (const ev of upcomingDividends?.all ?? []) {
+      const t = ev.ticker.toUpperCase();
+      const hold = holdingsByTicker.get(t);
+      const exDate = ev.exDate ? new Date(`${ev.exDate}T12:00:00`) : null;
+      const payDate = ev.paymentDate ? new Date(`${ev.paymentDate}T12:00:00`) : null;
+      let status: FeedStatus = "UPCOMING";
+      if (payDate && payDate < now) status = "PAID";
+      else if (exDate && exDate < now) status = "PENDING";
+      const yoc =
+        ev.annualDividendPerShare != null && hold && hold.avgCost > 0
+          ? (ev.annualDividendPerShare / hold.avgCost) * 100
+          : null;
+      rows.push({
+        id: `${ev.ticker}-${ev.kind}-${ev.date}`,
         ticker: ev.ticker,
         companyName: ev.companyName,
-        kind: ev.kind,
-        estimatedGrossInUserCcy: ev.estimatedGrossInUserCcy,
+        exDate: ev.exDate,
+        paymentDate: ev.paymentDate,
+        declarationDate: ev.declarationDate,
+        recordDate: ev.recordDate,
+        amount: ev.estimatedGrossInUserCcy ?? 0,
+        status,
+        payoutRatio: ev.payoutRatio,
+        dividendGrowth5yPct: ev.dividendGrowth5yPct,
+        dividendStreakYears: ev.dividendStreakYears,
+        dividendYieldCurrent: ev.dividendYieldCurrent,
+        yoc,
       });
     }
-    return map;
-  }, [payoutsByDay, upcomingDividends?.all]);
 
-  const calendarDays = useMemo(() => {
-    const monthStart = startOfMonth(viewMonth);
-    const monthEnd = endOfMonth(viewMonth);
-    const calStart = startOfWeek(monthStart, { weekStartsOn: 1 });
-    const calEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
-    return eachDayOfInterval({ start: calStart, end: calEnd });
-  }, [viewMonth]);
+    rows.sort((a, b) => {
+      const da = new Date(`${a.exDate || a.paymentDate || "2100-01-01"}T12:00:00`).getTime();
+      const db = new Date(`${b.exDate || b.paymentDate || "2100-01-01"}T12:00:00`).getTime();
+      return da - db;
+    });
+    return rows;
+  }, [upcomingDividends?.all, holdingsByTicker]);
+
+  const statusLabel = (s: FeedStatus) =>
+    s === "UPCOMING" ? "Upcoming" : s === "PENDING" ? "Pending" : s === "REINVESTED" ? "Reinvested" : "Paid";
 
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <div>
-          <Skeleton className="h-8 w-48 mb-2" />
-          <Skeleton className="h-4 w-64" />
-        </div>
-        <Card>
-          <CardHeader>
-            <Skeleton className="h-6 w-56" />
-            <Skeleton className="h-4 w-96" />
-          </CardHeader>
-          <CardContent>
-            <Skeleton className="h-[340px] w-full rounded-lg" />
-          </CardContent>
-        </Card>
-        <Skeleton className="h-64" />
+        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-80 w-full" />
+        <Skeleton className="h-96 w-full" />
       </div>
     );
   }
-
-  const hasDividends = dividends && dividends.transactionCount > 0;
 
   return (
     <div className="space-y-6">
@@ -216,197 +294,107 @@ export default function Dividends() {
           <Banknote className="h-6 w-6 text-primary" />
           Dividendy
         </h1>
-        <p className="text-muted-foreground">Prehľad príjmov z dividend</p>
+        <p className="text-muted-foreground">Dividend timeline, výplatný feed a yield analytika</p>
       </div>
 
-      <Card data-testid="dividend-calendar">
-        <CardHeader className="pb-2">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <CalendarIcon className="h-5 w-5 text-primary" />
-                Kalendár výplat
-              </CardTitle>
-              <CardDescription>
-                Skutočné výplaty z histórie (čistá suma za deň). Odhady z Yahoo (ex-dividend / výplata) sú oranžovo — orientačné,
-                nie záväzné; závisí od toho, či broker hlási dátum v kalendári.
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                aria-label="Predchádzajúci mesiac"
-                onClick={() => setViewMonth((m) => subMonths(m, 1))}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="min-w-[11rem] text-center font-medium capitalize">
-                {format(viewMonth, "LLLL yyyy", { locale: sk })}
-              </span>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                aria-label="Ďalší mesiac"
-                onClick={() => setViewMonth((m) => addMonths(m, 1))}
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <Card><CardContent className="pt-5"><p className="text-xs text-muted-foreground">Forward 12M príjem</p><p className="text-xl font-semibold">{formatCurrency(yieldMetrics.annualIncome)}</p></CardContent></Card>
+        <Card><CardContent className="pt-5"><p className="text-xs text-muted-foreground">Dividend Yield (aktuálny)</p><p className="text-xl font-semibold">{yieldMetrics.dividendYieldCurrent.toFixed(2)}%</p></CardContent></Card>
+        <Card><CardContent className="pt-5"><p className="text-xs text-muted-foreground">Yield on Cost (YOC)</p><p className="text-xl font-semibold">{yieldMetrics.yieldOnCost.toFixed(2)}%</p></CardContent></Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Forward Income Timeline (12M)</CardTitle>
+          <CardDescription>Zelené = confirmed, svetlé = estimated</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-lg border overflow-hidden">
-            <div className="grid grid-cols-7 gap-px bg-border">
-              {WEEKDAYS_SK.map((d) => (
-                <div key={d} className="bg-muted/50 px-1 py-2 text-center text-xs font-medium text-muted-foreground">
-                  {d}
-                </div>
-              ))}
-            </div>
-            <div className="grid grid-cols-7 gap-px bg-border">
-              {calendarDays.map((day) => {
-                  const key = format(startOfDay(day), "yyyy-MM-dd");
-                  const bucket = calendarByDay.get(key);
-                  const inMonth = isSameMonth(day, viewMonth);
-                  const today = isToday(day);
-                  const hasActual = bucket && bucket.items.length > 0;
-                  const hasExpected = bucket && bucket.expected && bucket.expected.length > 0;
-                  const showTooltip = hasActual || hasExpected;
-
-                  const cellInner = (
-                    <div
-                      className={`min-h-[4.25rem] p-1.5 flex flex-col bg-card ${
-                        today ? "ring-1 ring-inset ring-primary/40" : ""
-                      } ${!inMonth ? "opacity-40" : ""}`}
-                    >
-                      <span
-                        className={`text-xs font-medium tabular-nums ${inMonth ? "text-foreground" : "text-muted-foreground"}`}
-                      >
-                        {format(day, "d")}
-                      </span>
-                      {hasActual && (
-                        <span
-                          className={`mt-auto text-[11px] font-semibold leading-tight truncate ${
-                            bucket!.net >= 0 ? "text-blue-600 dark:text-blue-400" : "text-red-600 dark:text-red-400"
-                          }`}
-                        >
-                          {bucket!.net >= 0 ? "+" : ""}
-                          {formatCurrency(bucket!.net)}
-                        </span>
-                      )}
-                      {hasExpected && (
-                        <span
-                          className={`${hasActual ? "mt-0.5" : "mt-auto"} text-[10px] font-medium leading-tight text-amber-700 dark:text-amber-500 truncate`}
-                        >
-                          {bucket!.expected!.length === 1 &&
-                          bucket!.expected![0].estimatedGrossInUserCcy != null &&
-                          bucket!.expected![0].estimatedGrossInUserCcy! > 0
-                            ? `~ ${formatCurrency(bucket!.expected![0].estimatedGrossInUserCcy!)}`
-                            : `~ ${bucket!.expected!.length} očak.`}
-                        </span>
-                      )}
-                    </div>
-                  );
-
-                  if (showTooltip) {
-                    return (
-                      <Tooltip key={key}>
-                        <TooltipTrigger asChild>
-                          <button type="button" className="text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm">
-                            {cellInner}
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-[300px] p-3">
-                          <p className="font-medium mb-2">{format(day, "d. MMMM yyyy", { locale: sk })}</p>
-                          {hasActual && (
-                            <>
-                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Skutočné</p>
-                              <ul className="space-y-1.5 text-sm mb-2">
-                                {bucket!.items.map((it, idx) => (
-                                  <li key={`${it.ticker}-${idx}`} className="flex justify-between gap-4">
-                                    <span className="text-muted-foreground truncate">
-                                      {it.kind === "TAX" ? "Daň" : it.ticker}
-                                      {it.kind === "DIVIDEND" ? ` · ${it.companyName}` : ""}
-                                    </span>
-                                    <span
-                                      className={`tabular-nums shrink-0 ${it.net >= 0 ? "text-blue-600" : "text-red-600"}`}
-                                    >
-                                      {it.net >= 0 ? "+" : ""}
-                                      {formatCurrency(it.net)}
-                                    </span>
-                                  </li>
-                                ))}
-                              </ul>
-                              <p className="mb-2 pt-2 border-t text-sm font-medium">
-                                Spolu: {bucket!.net >= 0 ? "+" : ""}
-                                {formatCurrency(bucket!.net)}
-                              </p>
-                            </>
-                          )}
-                          {hasExpected && (
-                            <>
-                              <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Odhad (Yahoo)</p>
-                              <ul className="space-y-2 text-sm">
-                                {bucket!.expected!.map((ex, idx) => (
-                                  <li key={`${ex.ticker}-${ex.kind}-${idx}`}>
-                                    <button
-                                      type="button"
-                                      className="flex w-full items-center gap-2 text-left rounded-sm hover:bg-muted/60 -mx-1 px-1 py-0.5"
-                                      onClick={() => setLocation(`/asset/${encodeURIComponent(ex.ticker)}`)}
-                                    >
-                                      <CompanyLogo ticker={ex.ticker} companyName={ex.companyName} size="xs" />
-                                      <span className="flex-1 min-w-0">
-                                        <span className="font-medium">{ex.ticker}</span>
-                                        <span className="text-muted-foreground text-xs block truncate">
-                                          {ex.kind === "ex_dividend" ? "Ex-dividend" : "Výplata"} · {ex.companyName}
-                                        </span>
-                                      </span>
-                                      {ex.estimatedGrossInUserCcy != null && ex.estimatedGrossInUserCcy > 0 && (
-                                        <span className="tabular-nums text-amber-700 dark:text-amber-500 shrink-0">
-                                          ~{formatCurrency(ex.estimatedGrossInUserCcy)}
-                                        </span>
-                                      )}
-                                    </button>
-                                  </li>
-                                ))}
-                              </ul>
-                            </>
-                          )}
-                        </TooltipContent>
-                      </Tooltip>
-                    );
-                  }
-
-                  return (
-                    <div key={key} className="w-full">
-                      {cellInner}
-                    </div>
-                  );
-                })}
-            </div>
+          <div className="h-[260px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={forecastBars}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="monthLabel" />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="confirmed" stackId="a" fill="#16a34a" name="Confirmed" />
+                <Bar dataKey="estimated" stackId="a" fill="#86efac" name="Estimated" />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
-          {!hasDividends &&
-            (!upcomingDividends?.all || upcomingDividends.all.length === 0) && (
-            <p className="mt-4 text-sm text-muted-foreground text-center">
-              Po pridaní dividend alebo daňových položiek sa v kalendári zobrazí skutočná výplata. Odhady vyžadujú aspoň jednu
-              držanú akciu s dátumom v kalendári Yahoo.
-            </p>
-          )}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Dividendy podľa spoločností</CardTitle>
-          <CardDescription>
-            Prehľad dividend od jednotlivých spoločností
-          </CardDescription>
+          <CardTitle>Dividend Feed</CardTitle>
+          <CardDescription>Ex-date countdown, status a čistá očakávaná suma</CardDescription>
         </CardHeader>
-        <CardContent>
-          {hasDividends && dividends.byTicker.length > 0 ? (
+        <CardContent className="space-y-2">
+          {feedRows.length === 0 && <p className="text-sm text-muted-foreground">Zatiaľ nie sú dostupné dividendové udalosti.</p>}
+          {feedRows.map((r) => {
+            const isOpen = expanded.has(r.id);
+            const exDelta = r.exDate ? differenceInCalendarDays(new Date(`${r.exDate}T12:00:00`), new Date()) : null;
+            return (
+              <div key={r.id} className="rounded-lg border p-3">
+                <button
+                  type="button"
+                  className="w-full flex items-center gap-3 text-left"
+                  onClick={() => {
+                    const n = new Set(expanded);
+                    if (n.has(r.id)) n.delete(r.id);
+                    else n.add(r.id);
+                    setExpanded(n);
+                  }}
+                >
+                  <CompanyLogo ticker={r.ticker} companyName={r.companyName} size="sm" />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium">{r.ticker}</div>
+                    <div className="text-xs text-muted-foreground truncate">{r.companyName}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-amber-600">
+                      {exDelta == null ? "Ex-date neznámy" : exDelta >= 0 ? `Ex-date za ${exDelta} dní` : `Ex-date pred ${Math.abs(exDelta)} d`}
+                    </div>
+                    <div className="font-medium">{formatCurrency(r.amount)}</div>
+                  </div>
+                  <Badge variant="outline">{statusLabel(r.status)}</Badge>
+                  {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </button>
+                {isOpen && (
+                  <div className="mt-3 pt-3 border-t grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
+                    <div><span className="text-muted-foreground">Declaration:</span> {r.declarationDate ?? "N/A"}</div>
+                    <div><span className="text-muted-foreground">Ex-Date:</span> {r.exDate ?? "N/A"}</div>
+                    <div><span className="text-muted-foreground">Record Date:</span> {r.recordDate ?? "N/A"}</div>
+                    <div><span className="text-muted-foreground">Payment:</span> {r.paymentDate ?? "N/A"}</div>
+                    <div><span className="text-muted-foreground">Yield:</span> {r.dividendYieldCurrent != null ? `${r.dividendYieldCurrent.toFixed(2)}%` : "N/A"}</div>
+                    <div><span className="text-muted-foreground">YOC:</span> {r.yoc != null ? `${r.yoc.toFixed(2)}%` : "N/A"}</div>
+                    <div><span className="text-muted-foreground">Payout Ratio:</span> {r.payoutRatio != null ? `${r.payoutRatio.toFixed(1)}%` : "N/A"}</div>
+                    <div><span className="text-muted-foreground">Dividend Growth (5Y):</span> {r.dividendGrowth5yPct != null ? `${r.dividendGrowth5yPct.toFixed(1)}%` : "N/A"}</div>
+                    <div><span className="text-muted-foreground">Dividend Streak:</span> {r.dividendStreakYears != null ? `${r.dividendStreakYears} rokov` : "N/A"}</div>
+                    <div>
+                      <Button
+                        variant="ghost"
+                        className="px-0 h-auto text-xs underline"
+                        onClick={() => setLocation(`/asset/${encodeURIComponent(r.ticker)}`)}
+                      >
+                        Otvoriť detail aktíva
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
+
+      {dividends && dividends.byTicker.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Dividendy podľa spoločností</CardTitle>
+            <CardDescription>Historický prehľad vyplatených dividend</CardDescription>
+          </CardHeader>
+          <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -420,63 +408,22 @@ export default function Dividends() {
               </TableHeader>
               <TableBody>
                 {dividends.byTicker.map((item) => (
-                  <TableRow key={item.ticker} data-testid={`row-dividend-${item.ticker}`}>
+                  <TableRow key={item.ticker}>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <CompanyLogo ticker={item.ticker} companyName={item.companyName} size="sm" />
                         <span className="font-medium">{item.ticker}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-muted-foreground max-w-[200px] truncate">{item.companyName}</TableCell>
+                    <TableCell>{item.companyName}</TableCell>
                     <TableCell className="text-right">{item.transactions}</TableCell>
                     <TableCell className="text-right">{formatCurrency(item.totalGross)}</TableCell>
-                    <TableCell className="text-right text-muted-foreground">{formatCurrency(item.totalTax)}</TableCell>
-                    <TableCell className="text-right font-medium text-blue-500">
-                      +{formatCurrency(item.totalNet)}
-                    </TableCell>
+                    <TableCell className="text-right">{formatCurrency(item.totalTax)}</TableCell>
+                    <TableCell className="text-right font-medium">{formatCurrency(item.totalNet)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
-          ) : (
-            <div className="text-center py-12 text-muted-foreground">
-              <Banknote className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p className="text-lg">Zatiaľ nemáte zaznamenané žiadne dividendy</p>
-              <p className="text-sm mt-2">
-                Po zadaní dividend v sekcii História tu uvidíte prehľad vašich príjmov.
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {hasDividends && dividends && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Súhrn</CardTitle>
-            <CardDescription>Celkový prehľad dividendových príjmov</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">Celkové hrubé dividendy</p>
-                <p className="text-xl font-semibold">{formatCurrency(dividends.totalGross)}</p>
-              </div>
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">Zrazená daň</p>
-                <p className="text-xl font-semibold text-red-500">-{formatCurrency(dividends.totalTax)}</p>
-              </div>
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">Čisté dividendy</p>
-                <p className="text-xl font-semibold text-blue-500">+{formatCurrency(dividends.totalNet)}</p>
-              </div>
-            </div>
-            <div className="mt-6 pt-6 border-t">
-              <p className="text-sm text-muted-foreground">
-                Celkový počet dividendových výplat:{" "}
-                <span className="font-medium text-foreground">{dividends.transactionCount}</span>
-              </p>
-            </div>
           </CardContent>
         </Card>
       )}

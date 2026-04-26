@@ -533,6 +533,16 @@ interface UpcomingDividendYahooParsed {
   eventMs: number;
   kind: "ex_dividend" | "payout";
   lastDividendPerShare: number | null;
+  exDateIso: string | null;
+  paymentDateIso: string | null;
+  declarationDateIso: string | null;
+  recordDateIso: string | null;
+  payoutRatio: number | null;
+  dividendYieldCurrent: number | null;
+  annualDividendPerShare: number | null;
+  dividendGrowth5yPct: number | null;
+  dividendStreakYears: number | null;
+  confirmed: boolean;
 }
 
 const upcomingDividendYahooCache = new Map<
@@ -561,7 +571,7 @@ async function fetchYahooUpcomingDividendEvents(
 
   try {
     const yahooTicker = toYahooTicker(key);
-    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(yahooTicker)}?modules=calendarEvents,defaultKeyStatistics`;
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(yahooTicker)}?modules=calendarEvents,defaultKeyStatistics,summaryDetail`;
 
     const response = await fetch(url, {
       headers: {
@@ -587,14 +597,40 @@ async function fetchYahooUpcomingDividendEvents(
 
     const exRaw = ce?.exDividendDate?.raw;
     const payRaw = ce?.dividendDate?.raw;
+    const declarationRaw = ce?.dividendDate?.fmt ? undefined : ce?.earnings?.earningsDate?.[0]?.raw;
+    const recordRaw = ce?.exDividendDate?.raw ? ce?.exDividendDate?.raw + 86400 : undefined;
     const lastDivRaw = dks?.lastDividendValue?.raw;
+    const payoutRatioRaw = result?.summaryDetail?.payoutRatio?.raw;
+    const annualDividendRaw =
+      result?.summaryDetail?.dividendRate?.raw ??
+      dks?.lastDividendValue?.raw;
+    const yieldRaw = result?.summaryDetail?.dividendYield?.raw;
 
     const exMs = typeof exRaw === "number" ? yahooRawTsToMs(exRaw) : NaN;
     const payMs = typeof payRaw === "number" ? yahooRawTsToMs(payRaw) : NaN;
+    const declarationMs =
+      typeof declarationRaw === "number" ? yahooRawTsToMs(declarationRaw) : NaN;
+    const recordMs = typeof recordRaw === "number" ? yahooRawTsToMs(recordRaw) : NaN;
     const lastDividendPerShare =
       typeof lastDivRaw === "number" && Number.isFinite(lastDivRaw)
         ? lastDivRaw
         : null;
+    const payoutRatio =
+      typeof payoutRatioRaw === "number" && Number.isFinite(payoutRatioRaw)
+        ? payoutRatioRaw * 100
+        : null;
+    const annualDividendPerShare =
+      typeof annualDividendRaw === "number" && Number.isFinite(annualDividendRaw)
+        ? annualDividendRaw
+        : null;
+    const dividendYieldCurrent =
+      typeof yieldRaw === "number" && Number.isFinite(yieldRaw) ? yieldRaw * 100 : null;
+    const exDateIso = Number.isFinite(exMs) ? calendarDateStringFromMs(exMs) : null;
+    const paymentDateIso = Number.isFinite(payMs) ? calendarDateStringFromMs(payMs) : null;
+    const declarationDateIso = Number.isFinite(declarationMs)
+      ? calendarDateStringFromMs(declarationMs)
+      : null;
+    const recordDateIso = Number.isFinite(recordMs) ? calendarDateStringFromMs(recordMs) : null;
 
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
@@ -607,17 +643,87 @@ async function fetchYahooUpcomingDividendEvents(
       const exDay = new Date(exMs).toISOString().slice(0, 10);
       const payDay = new Date(payMs).toISOString().slice(0, 10);
       if (exDay === payDay) {
-        events.push({ eventMs: payMs, kind: "payout", lastDividendPerShare });
+        events.push({
+          eventMs: payMs,
+          kind: "payout",
+          lastDividendPerShare,
+          exDateIso,
+          paymentDateIso,
+          declarationDateIso,
+          recordDateIso,
+          payoutRatio,
+          dividendYieldCurrent,
+          annualDividendPerShare,
+          dividendGrowth5yPct: null,
+          dividendStreakYears: null,
+          confirmed: true,
+        });
       } else {
-        events.push({ eventMs: exMs, kind: "ex_dividend", lastDividendPerShare });
-        events.push({ eventMs: payMs, kind: "payout", lastDividendPerShare });
+        events.push({
+          eventMs: exMs,
+          kind: "ex_dividend",
+          lastDividendPerShare,
+          exDateIso,
+          paymentDateIso,
+          declarationDateIso,
+          recordDateIso,
+          payoutRatio,
+          dividendYieldCurrent,
+          annualDividendPerShare,
+          dividendGrowth5yPct: null,
+          dividendStreakYears: null,
+          confirmed: true,
+        });
+        events.push({
+          eventMs: payMs,
+          kind: "payout",
+          lastDividendPerShare,
+          exDateIso,
+          paymentDateIso,
+          declarationDateIso,
+          recordDateIso,
+          payoutRatio,
+          dividendYieldCurrent,
+          annualDividendPerShare,
+          dividendGrowth5yPct: null,
+          dividendStreakYears: null,
+          confirmed: true,
+        });
       }
     } else {
       if (exOk) {
-        events.push({ eventMs: exMs, kind: "ex_dividend", lastDividendPerShare });
+        events.push({
+          eventMs: exMs,
+          kind: "ex_dividend",
+          lastDividendPerShare,
+          exDateIso,
+          paymentDateIso,
+          declarationDateIso,
+          recordDateIso,
+          payoutRatio,
+          dividendYieldCurrent,
+          annualDividendPerShare,
+          dividendGrowth5yPct: null,
+          dividendStreakYears: null,
+          confirmed: true,
+        });
       }
       if (payOk) {
-        events.push({ eventMs: payMs, kind: "payout", lastDividendPerShare });
+        events.push({
+          eventMs: payMs,
+          kind: "payout",
+          lastDividendPerShare,
+          exDateIso,
+          paymentDateIso,
+          declarationDateIso,
+          recordDateIso,
+          payoutRatio,
+          dividendYieldCurrent,
+          annualDividendPerShare,
+          dividendGrowth5yPct: null,
+          dividendStreakYears: null,
+          confirmed: true,
+        });
       }
     }
 
@@ -3778,6 +3884,16 @@ export async function registerRoutes(
         kind: "ex_dividend" | "payout";
         estimatedGrossInUserCcy: number | null;
         eventMs: number;
+        exDate: string | null;
+        paymentDate: string | null;
+        declarationDate: string | null;
+        recordDate: string | null;
+        payoutRatio: number | null;
+        dividendYieldCurrent: number | null;
+        annualDividendPerShare: number | null;
+        dividendGrowth5yPct: number | null;
+        dividendStreakYears: number | null;
+        confirmed: boolean;
       };
       const all: Best[] = [];
 
@@ -3814,6 +3930,16 @@ export async function registerRoutes(
               kind: hint.kind,
               estimatedGrossInUserCcy: est,
               eventMs: hint.eventMs,
+              exDate: hint.exDateIso,
+              paymentDate: hint.paymentDateIso,
+              declarationDate: hint.declarationDateIso,
+              recordDate: hint.recordDateIso,
+              payoutRatio: hint.payoutRatio,
+              dividendYieldCurrent: hint.dividendYieldCurrent,
+              annualDividendPerShare: hint.annualDividendPerShare,
+              dividendGrowth5yPct: hint.dividendGrowth5yPct,
+              dividendStreakYears: hint.dividendStreakYears,
+              confirmed: hint.confirmed,
             });
           }
         }
