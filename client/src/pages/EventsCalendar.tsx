@@ -1,8 +1,20 @@
-import { useMemo, useState } from "react";
+Ôªøimport { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { addMonths, endOfMonth, endOfWeek, eachDayOfInterval, format, isSameMonth, isToday, startOfDay, startOfMonth, startOfWeek, subMonths } from "date-fns";
+import {
+  addMonths,
+  endOfMonth,
+  endOfWeek,
+  eachDayOfInterval,
+  format,
+  isSameMonth,
+  isToday,
+  startOfDay,
+  startOfMonth,
+  startOfWeek,
+  subMonths,
+} from "date-fns";
 import { sk } from "date-fns/locale";
-import { CalendarClock, ChevronLeft, ChevronRight, Moon, Sun } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, ExternalLink, Moon, Sun } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -45,6 +57,7 @@ type CalendarEvent = {
   ticker?: string;
   session?: EarningsSession;
   impact: "normal" | "high";
+  infoUrl: string;
 };
 
 export default function EventsCalendar() {
@@ -61,7 +74,10 @@ export default function EventsCalendar() {
   const { data: earnings, isLoading: earningsLoading } = useQuery<EarningsRes>({
     queryKey: ["/api/holdings/next-earnings", portfolioParam],
     queryFn: async () => {
-      const res = await fetch(`/api/holdings/next-earnings?portfolio=${encodeURIComponent(portfolioParam)}`, { credentials: "include" });
+      const res = await fetch(
+        `/api/holdings/next-earnings?portfolio=${encodeURIComponent(portfolioParam)}`,
+        { credentials: "include" },
+      );
       if (!res.ok) throw new Error("earnings");
       return res.json();
     },
@@ -71,7 +87,10 @@ export default function EventsCalendar() {
   const { data: dividends, isLoading: dividendsLoading } = useQuery<DivRes>({
     queryKey: ["/api/dividends/upcoming", portfolioParam],
     queryFn: async () => {
-      const res = await fetch(`/api/dividends/upcoming?portfolio=${encodeURIComponent(portfolioParam)}`, { credentials: "include" });
+      const res = await fetch(
+        `/api/dividends/upcoming?portfolio=${encodeURIComponent(portfolioParam)}`,
+        { credentials: "include" },
+      );
       if (!res.ok) throw new Error("dividends");
       return res.json();
     },
@@ -101,6 +120,7 @@ export default function EventsCalendar() {
         ticker: t,
         session: e.session ?? null,
         impact: "normal",
+        infoUrl: `https://finance.yahoo.com/quote/${encodeURIComponent(t)}`,
       });
     }
 
@@ -110,9 +130,10 @@ export default function EventsCalendar() {
         type: "dividend",
         date: d.date,
         title: d.kind === "ex_dividend" ? `${t} ex-dividend` : `${t} payout`,
-        subtitle: d.kind === "ex_dividend" ? "Posledn· öanca k˙più pred ex-date" : "Payment date",
+        subtitle: d.kind === "ex_dividend" ? "Last chance before ex-date" : "Payment date",
         ticker: t,
         impact: "normal",
+        infoUrl: `https://finance.yahoo.com/quote/${encodeURIComponent(t)}`,
       });
     }
 
@@ -123,6 +144,7 @@ export default function EventsCalendar() {
         title: `${m.shortLabel}`,
         subtitle: m.title,
         impact: "high",
+        infoUrl: "https://finance.yahoo.com/calendar/economic",
       });
     }
 
@@ -186,8 +208,8 @@ export default function EventsCalendar() {
 
   const typeBadge = (type: EventType) => {
     if (type === "earnings") return <Badge className="bg-blue-600 hover:bg-blue-600">Earnings</Badge>;
-    if (type === "dividend") return <Badge className="bg-green-600 hover:bg-green-600">Dividendy</Badge>;
-    return <Badge className="bg-orange-600 hover:bg-orange-600">Makro</Badge>;
+    if (type === "dividend") return <Badge className="bg-green-600 hover:bg-green-600">Dividends</Badge>;
+    return <Badge className="bg-orange-600 hover:bg-orange-600">Macro</Badge>;
   };
 
   return (
@@ -195,31 +217,31 @@ export default function EventsCalendar() {
       <div>
         <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2 flex-wrap">
           <CalendarClock className="h-5 w-5 sm:h-6 sm:w-6 text-primary shrink-0" />
-          Trhov˝ kalend·r
-          <HelpTip title="InteraktÌvny kalend·r udalostÌ">
-            <p>Earnings, dividendovÈ udalosti a makro d·ta na jednom mieste. Kliknite na deÚ pre detail.</p>
+          Trhovy kalendar
+          <HelpTip title="Interaktivny kalendar udalosti">
+            <p>Earnings, dividend events a macro data na jednom mieste. Kliknite na den pre detail.</p>
           </HelpTip>
         </h1>
         <p className="text-sm sm:text-base text-muted-foreground mt-1">
-          {isAllPortfolios ? "Vöetky portfÛli·" : `PortfÛlio: ${selectedPortfolio?.name ?? "VybranÈ"}`}
+          {isAllPortfolios ? "Vsetky portfolia" : `Portfolio: ${selectedPortfolio?.name ?? "Vybrane"}`}
         </p>
       </div>
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base sm:text-lg">Filtre udalostÌ</CardTitle>
-          <CardDescription>Vyberte, ktorÈ typy udalostÌ sa maj˙ zobrazovaù v kalend·ri.</CardDescription>
+          <CardTitle className="text-base sm:text-lg">Filtre udalosti</CardTitle>
+          <CardDescription>Vyberte, ktore typy udalosti sa maju zobrazovat v kalendari.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex flex-wrap gap-2">
             <Button variant={showEarnings ? "default" : "outline"} size="sm" onClick={() => setShowEarnings((v) => !v)}>
-              <span className="mr-1">??</span> Earnings
+              <span className="mr-1">E</span> Earnings
             </Button>
             <Button variant={showDividends ? "default" : "outline"} size="sm" onClick={() => setShowDividends((v) => !v)}>
-              <span className="mr-1">??</span> Dividendy
+              <span className="mr-1">D</span> Dividends
             </Button>
             <Button variant={showMacro ? "default" : "outline"} size="sm" onClick={() => setShowMacro((v) => !v)}>
-              <span className="mr-1">??</span> Makro
+              <span className="mr-1">M</span> Macro
             </Button>
           </div>
         </CardContent>
@@ -229,17 +251,17 @@ export default function EventsCalendar() {
         <CardHeader className="px-3 sm:px-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle className="text-base sm:text-lg">Kalend·r udalostÌ</CardTitle>
-              <CardDescription>Klikni na deÚ pre detail udalostÌ.</CardDescription>
+              <CardTitle className="text-base sm:text-lg">Kalendar udalosti</CardTitle>
+              <CardDescription>Klikni na den pre detail udalosti.</CardDescription>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" onClick={() => setCalendarMonth((m) => subMonths(m, 1))} aria-label="Predch·dzaj˙ci mesiac">
+              <Button variant="outline" size="icon" onClick={() => setCalendarMonth((m) => subMonths(m, 1))} aria-label="Predchadzajuci mesiac">
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               <span className="min-w-[11rem] text-center text-sm font-medium capitalize">
                 {format(calendarMonth, "LLLL yyyy", { locale: sk })}
               </span>
-              <Button variant="outline" size="icon" onClick={() => setCalendarMonth((m) => addMonths(m, 1))} aria-label="Nasleduj˙ci mesiac">
+              <Button variant="outline" size="icon" onClick={() => setCalendarMonth((m) => addMonths(m, 1))} aria-label="Nasledujuci mesiac">
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
@@ -251,8 +273,8 @@ export default function EventsCalendar() {
           ) : (
             <div className="rounded-lg border overflow-hidden touch-manipulation">
               <div className="grid grid-cols-7 gap-px bg-border">
-                {["Po", "Ut", "St", "ät", "Pi", "So", "Ne"].map((d) => (
-                  <div key={d} className="bg-muted/50 px-0.5 py-1.5 sm:py-2 text-center text-[10px] sm:text-xs font-medium text-muted-foreground">
+                {["Po", "Ut", "St", "St", "Pi", "So", "Ne"].map((d, idx) => (
+                  <div key={`${d}-${idx}`} className="bg-muted/50 px-0.5 py-1.5 sm:py-2 text-center text-[10px] sm:text-xs font-medium text-muted-foreground">
                     {d}
                   </div>
                 ))}
@@ -290,7 +312,7 @@ export default function EventsCalendar() {
                       </div>
                       {items.length > 0 && (
                         <span className="mt-auto text-[9px] sm:text-[11px] font-semibold text-muted-foreground">
-                          {items.length} udal.
+                          {items.length} events
                         </span>
                       )}
                     </button>
@@ -310,8 +332,8 @@ export default function EventsCalendar() {
             </SheetTitle>
             <SheetDescription className="text-xs sm:text-sm text-left">
               {selectedDay && selectedDay.events.length > 0
-                ? `Napl·novanÈ udalosti: ${selectedDay.events.length}`
-                : "V tento deÚ nie s˙ udalosti podæa aktu·lnych filtrov."}
+                ? `Planned events: ${selectedDay.events.length}`
+                : "No events in this day for active filters."}
             </SheetDescription>
           </SheetHeader>
           {selectedDay && selectedDay.events.length > 0 && (
@@ -343,6 +365,15 @@ export default function EventsCalendar() {
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">{ev.subtitle}</p>
+                      <a
+                        href={ev.infoUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                      >
+                        More info
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
                     </div>
                   </div>
                 </div>
