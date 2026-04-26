@@ -155,7 +155,7 @@ export default function Dashboard() {
   const [, setLocation] = useLocation();
   const { currency, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
   const { getQueryParam, selectedPortfolio, isAllPortfolios, portfolios } = usePortfolio();
-  const { hideAmounts, showNews, showDailyMovers } = useChartSettings();
+  const { hideAmounts, showNews, showDailyMovers, dailyMoversCount } = useChartSettings();
   const [sortField, setSortField] = useState<SortField>("ticker");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [mobileEarningsIndex, setMobileEarningsIndex] = useState(0);
@@ -335,11 +335,11 @@ export default function Dashboard() {
     const gainers = [...rows]
       .filter((r) => r.pct > 0)
       .sort((a, b) => b.pct - a.pct)
-      .slice(0, 5);
+      .slice(0, dailyMoversCount);
     const losers = [...rows]
       .filter((r) => r.pct < 0)
       .sort((a, b) => a.pct - b.pct)
-      .slice(0, 5);
+      .slice(0, dailyMoversCount);
 
     return { gainers, losers };
   }, [
@@ -351,6 +351,7 @@ export default function Dashboard() {
     getTickerCurrency,
     usSessionState,
     moversUseExtendedQuotes,
+    dailyMoversCount,
   ]);
 
   const formatSignedDayPct = (value: number) => {
@@ -1616,7 +1617,7 @@ export default function Dashboard() {
             <CardContent className="space-y-2 pt-0">
               {quotesFetching && !quotesData ? (
                 <>
-                  {[1, 2, 3, 4, 5].map((i) => (
+                  {Array.from({ length: dailyMoversCount }, (_, i) => (
                     <Skeleton key={i} className="h-10 w-full" />
                   ))}
                 </>
@@ -1706,7 +1707,7 @@ export default function Dashboard() {
             <CardContent className="space-y-2 pt-0">
               {quotesFetching && !quotesData ? (
                 <>
-                  {[1, 2, 3, 4, 5].map((i) => (
+                  {Array.from({ length: dailyMoversCount }, (_, i) => (
                     <Skeleton key={i} className="h-10 w-full" />
                   ))}
                 </>

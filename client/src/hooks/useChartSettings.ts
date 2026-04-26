@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 
+/** Počet riadkov v rebríčkoch „Najlepšie / Najhoršie“ na Dashboarde. */
+export type DailyMoversDisplayCount = 1 | 3 | 5;
+
 interface ChartSettings {
   showChart: boolean;
   showTooltip: boolean;
@@ -7,6 +10,8 @@ interface ChartSettings {
   showNews: boolean;
   /** Najsilnejšie / najslabšie dnes na hlavnom Prehľade (Dashboard `/`), nie na „Všetky portfóliá“. */
   showDailyMovers: boolean;
+  /** Koľko pozícií zobraziť v každom z oboch rebríčkov (najlepšie / najhoršie). */
+  dailyMoversCount: DailyMoversDisplayCount;
 }
 
 const STORAGE_KEY = "portfolio-chart-settings";
@@ -17,13 +22,25 @@ const defaultSettings: ChartSettings = {
   hideAmounts: false,
   showNews: true,
   showDailyMovers: true,
+  dailyMoversCount: 5,
 };
+
+function normalizeDailyMoversCount(raw: unknown): DailyMoversDisplayCount {
+  const n = typeof raw === "number" ? raw : parseInt(String(raw ?? ""), 10);
+  if (n === 1 || n === 3 || n === 5) return n;
+  return defaultSettings.dailyMoversCount;
+}
 
 function loadSettings(): ChartSettings {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
-      return { ...defaultSettings, ...JSON.parse(stored) };
+      const parsed = JSON.parse(stored) as Partial<ChartSettings>;
+      return {
+        ...defaultSettings,
+        ...parsed,
+        dailyMoversCount: normalizeDailyMoversCount(parsed.dailyMoversCount),
+      };
     }
   } catch {
     // Ignore errors
@@ -70,11 +87,14 @@ export function useChartSettings() {
     hideAmounts: settings.hideAmounts,
     showNews: settings.showNews,
     showDailyMovers: settings.showDailyMovers !== false,
+    dailyMoversCount: normalizeDailyMoversCount(settings.dailyMoversCount),
     setShowChart: (value: boolean) => updateSettings({ showChart: value }),
     setShowTooltip: (value: boolean) => updateSettings({ showTooltip: value }),
     setHideAmounts: (value: boolean) => updateSettings({ hideAmounts: value }),
     setShowNews: (value: boolean) => updateSettings({ showNews: value }),
     setShowDailyMovers: (value: boolean) => updateSettings({ showDailyMovers: value }),
+    setDailyMoversCount: (value: DailyMoversDisplayCount) =>
+      updateSettings({ dailyMoversCount: normalizeDailyMoversCount(value) }),
     toggleHideAmounts: () => updateSettings({ hideAmounts: !settings.hideAmounts }),
   };
 }

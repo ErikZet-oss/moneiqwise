@@ -47,11 +47,13 @@ export default function Settings() {
     hideAmounts,
     showNews,
     showDailyMovers,
+    dailyMoversCount,
     setShowChart,
     setShowTooltip,
     setHideAmounts,
     setShowNews,
     setShowDailyMovers,
+    setDailyMoversCount,
   } = useChartSettings();
   const [newPortfolioName, setNewPortfolioName] = useState("");
   const [newPortfolioBroker, setNewPortfolioBroker] = useState<BrokerCode | undefined>(undefined);
@@ -758,6 +760,30 @@ export default function Settings() {
               data-testid="switch-show-daily-movers"
             />
           </div>
+
+          {showDailyMovers && (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-2 border-t border-dashed">
+              <div className="space-y-0.5 min-w-0">
+                <div className="text-sm font-medium">Počet pozícií v rebríčku</div>
+                <div className="text-xs text-muted-foreground">
+                  Koľko titulov zobraziť v stĺpci najsilnejších a v stĺpci najslabších (každý zvlášť).
+                </div>
+              </div>
+              <Select
+                value={String(dailyMoversCount)}
+                onValueChange={(v) => setDailyMoversCount(parseInt(v, 10) as 1 | 3 | 5)}
+              >
+                <SelectTrigger className="w-[100px] shrink-0" data-testid="select-daily-movers-count">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1</SelectItem>
+                  <SelectItem value="3">3</SelectItem>
+                  <SelectItem value="5">5</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <div className="flex items-center justify-between pt-2 border-t">
             <div className="space-y-0.5">
