@@ -28,6 +28,11 @@ import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrency";
 import type { Portfolio } from "@shared/schema";
+import {
+  CASH_INTEREST_DISPLAY_NAME,
+  CASH_INTEREST_TAX_DISPLAY_NAME,
+  CASH_INTEREST_TICKER,
+} from "@shared/tickerCurrency";
 import { formatShareQuantity } from "@/lib/utils";
 
 interface ParsedTransaction {
@@ -578,7 +583,13 @@ export default function Import() {
                               <TableCell>
                                 {format(new Date(tx.date), "d.M.yyyy", { locale: sk })}
                               </TableCell>
-                              <TableCell className="font-medium">{tx.ticker}</TableCell>
+                              <TableCell className="font-medium">
+                                {tx.ticker === CASH_INTEREST_TICKER
+                                  ? tx.type === "TAX"
+                                    ? CASH_INTEREST_TAX_DISPLAY_NAME
+                                    : CASH_INTEREST_DISPLAY_NAME
+                                  : tx.ticker}
+                              </TableCell>
                               <TableCell>
                                 <Badge variant={getTypeBadgeVariant(tx.type)}>
                                   {getTypeLabel(tx.type)}

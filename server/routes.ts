@@ -18,6 +18,11 @@ import {
   type Transaction,
 } from "@shared/schema";
 import { sumCloseTradeCashFlowEurFromRows } from "@shared/cashFromTransactions";
+import {
+  CASH_INTEREST_DISPLAY_NAME,
+  CASH_INTEREST_TAX_DISPLAY_NAME,
+  CASH_INTEREST_TICKER,
+} from "@shared/tickerCurrency";
 import { parseXTBFile, type XTBImportResult } from "./xtbParser";
 import {
   computeRealizedGainsFromTransactionsAsync,
@@ -176,12 +181,12 @@ function responseForDbUniqueViolation(err: unknown): { status: number; message: 
   };
 }
 
-/** Burzové symboly pre fetch kurzov/histórie (nie CASH, cash-flow bucket, úrok z hotovosti). */
+/** Burzové symboly pre fetch kurzov/histórie (nie CASH, cash-flow bucket, Úrok z cash XTB / CASH_INTEREST). */
 function isMarketDataTicker(u: string): boolean {
   if (!u) return false;
   if (u === "CASH") return false;
   if (u === CASH_FLOW_TICKER) return false;
-  if (u === "CASH_INTEREST") return false;
+  if (u === CASH_INTEREST_TICKER) return false;
   return true;
 }
 
@@ -5529,11 +5534,11 @@ export async function registerRoutes(
                     : tx.type === "WITHDRAWAL"
                       ? "Výber"
                       : CASH_FLOW_TICKER;
-              } else if (tickerUpper === "CASH_INTEREST") {
+              } else if (tickerUpper === CASH_INTEREST_TICKER) {
                 resolved =
                   tx.type === "TAX"
-                    ? "Daň z úroku voľných prostriedkov"
-                    : "Úrok z voľných prostriedkov";
+                    ? CASH_INTEREST_TAX_DISPLAY_NAME
+                    : CASH_INTEREST_DISPLAY_NAME;
               } else {
                 resolved = effectiveTicker;
                 try {

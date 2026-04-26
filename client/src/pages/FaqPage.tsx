@@ -119,7 +119,7 @@ export default function FaqPage() {
             <section>
               <h3 className="text-base font-semibold mb-2">Započítavajú sa do zisku aj úroky z hotovosti?</h3>
               <p>
-                <strong>Áno.</strong> Úroky z voľnej hotovosti (napr. záznamy viažuce sa na <code>CASH_INTEREST</code> / úrok z free cash z importu XTB) sa evidujú ako peňažné toky zvyšujúce hotovosť. Zvyšujú celkovú hodnotu portfólia a tým aj celkový výnos (P&amp;L) v čase, keď sú pripísané — rovnako ako iné cash toky, ktoré zvyšujú disponibilnú sumu.
+                <strong>Áno.</strong> Položky <strong>Úrok z cash XTB</strong> (v dátach ticker <code>CASH_INTEREST</code>, úrok z free cash z importu XTB) sa evidujú ako peňažné toky zvyšujúce hotovosť. Zvyšujú celkovú hodnotu portfólia a tým aj celkový výnos (P&amp;L) v čase, keď sú pripísané — rovnako ako iné cash toky, ktoré zvyšujú disponibilnú sumu.
               </p>
             </section>
 

@@ -1,3 +1,11 @@
+/** Syntetický ticker z XTB importu (úrok z free cash). */
+export const CASH_INTEREST_TICKER = "CASH_INTEREST" as const;
+
+/** Zobrazenie v UI namiesto „cash-interest“ / CASH_INTEREST. */
+export const CASH_INTEREST_DISPLAY_NAME = "Úrok z cash XTB";
+
+export const CASH_INTEREST_TAX_DISPLAY_NAME = "Daň z úroku z cash XTB";
+
 /**
  * Mena obchodnej jednotky podľa sufixu (rovnaká heuristika ako na serveri).
  * Používa sa pre náklad, ak chýba originalCurrency.
@@ -6,7 +14,7 @@ export function getTickerCurrency(
   ticker: string,
 ): "EUR" | "USD" | "GBP" | "CZK" | "PLN" {
   const u = ticker.toUpperCase();
-  if (u === "CASH_INTEREST" || u === "PORTFOLIO_CASH_FLOW" || u === "CASH") {
+  if (u === CASH_INTEREST_TICKER || u === "PORTFOLIO_CASH_FLOW" || u === "CASH") {
     return "EUR";
   }
   if (

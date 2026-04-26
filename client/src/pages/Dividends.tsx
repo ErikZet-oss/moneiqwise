@@ -26,6 +26,11 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { CompanyLogo } from "@/components/CompanyLogo";
 import type { Holding, Transaction } from "@shared/schema";
+import {
+  CASH_INTEREST_DISPLAY_NAME,
+  CASH_INTEREST_TAX_DISPLAY_NAME,
+  CASH_INTEREST_TICKER,
+} from "@shared/tickerCurrency";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   Sheet,
@@ -315,6 +320,8 @@ export default function Dividends() {
       });
     }
 
+    /** ticker UPPER + "-" + mesiac 0–11 — už vyplatené v danom roku (skutočná transakcia). */
+    const paidMonthTicker = new Set<string>();
     for (const t of transactions) {
       if (t.type !== "DIVIDEND") continue;
       const dt = new Date(t.transactionDate as unknown as string);
@@ -326,23 +333,36 @@ export default function Dividends() {
       if (!Number.isFinite(net)) continue;
       const n = Math.max(0, net);
       rows[mi].paid += n;
+      paidMonthTicker.add(`${(t.ticker || "N/A").toUpperCase()}-${mi}`);
+      const tkr = t.ticker || "N/A";
+      const isXtbCashInt = tkr.toUpperCase() === CASH_INTEREST_TICKER;
       pushBreakdown(mi, {
-        ticker: t.ticker || "N/A",
-        companyName: (t.companyName || t.ticker || "N/A").trim(),
+        ticker: tkr,
+        companyName: isXtbCashInt
+          ? CASH_INTEREST_DISPLAY_NAME
+          : (t.companyName || tkr || "N/A").trim(),
         amount: n,
         badge: "Potvrdené",
       });
     }
 
+    /** Mesiac už pokrytý Yahoo udalosťou (aby sme nepričítali +12m odhad navyše). */
+    const upcomingMonthTicker = new Set<string>();
+
     for (const ev of upcomingDividends?.all ?? []) {
-      if (ev.kind !== "payout") continue;
-      const payIso = ev.paymentDate || ev.date;
-      if (!payIso) continue;
-      const pd = new Date(`${payIso}T12:00:00`);
-      if (pd.getFullYear() !== y) continue;
-      const mi = pd.getMonth();
       const amount = ev.estimatedGrossInUserCcy ?? 0;
       if (!Number.isFinite(amount) || amount <= 0) continue;
+
+      const dateIso =
+        ev.kind === "payout"
+          ? ev.paymentDate || ev.date
+          : ev.paymentDate || ev.exDate || ev.date;
+      if (!dateIso) continue;
+      const pd = new Date(`${dateIso}T12:00:00`);
+      if (pd.getFullYear() !== y) continue;
+      const mi = pd.getMonth();
+      upcomingMonthTicker.add(`${ev.ticker.toUpperCase()}-${mi}`);
+
       if (ev.confirmed) {
         rows[mi].confirmed += amount;
         pushBreakdown(mi, {
@@ -360,6 +380,36 @@ export default function Dividends() {
           badge: "Odhad",
         });
       }
+    }
+
+    /* Odhad z histórie: rovnaký mesiac o +12 mesiacov, ak v tom mesiaci už nie je výplata ani Yahoo. */
+    for (const t of transactions) {
+      if (t.type !== "DIVIDEND") continue;
+      const d0 = new Date(t.transactionDate as unknown as string);
+      const projected = addMonths(startOfDay(d0), 12);
+      if (projected.getFullYear() !== y) continue;
+      const mi = projected.getMonth();
+      const tickerU = (t.ticker || "N/A").toUpperCase();
+      const mtKey = `${tickerU}-${mi}`;
+      if (paidMonthTicker.has(mtKey) || upcomingMonthTicker.has(mtKey)) continue;
+      const net =
+        parseFloat(String(t.shares ?? "0")) * parseFloat(String(t.pricePerShare ?? "0")) -
+        parseFloat(String(t.commission ?? "0"));
+      if (!Number.isFinite(net)) continue;
+      const n = Math.max(0, net);
+      if (n <= 0) continue;
+      rows[mi].estimated += n;
+      upcomingMonthTicker.add(mtKey);
+      const tkrP = t.ticker || "N/A";
+      const isXtbCiP = tkrP.toUpperCase() === CASH_INTEREST_TICKER;
+      pushBreakdown(mi, {
+        ticker: tkrP,
+        companyName: isXtbCiP
+          ? CASH_INTEREST_DISPLAY_NAME
+          : (t.companyName || tkrP || "N/A").trim(),
+        amount: n,
+        badge: "Odhad",
+      });
     }
 
     rows.forEach((r) => {
@@ -382,6 +432,25 @@ export default function Dividends() {
       yearlyBreakdownByMonth: rawBreakdown.map(mergeBreakdown),
     };
   }, [chartYear, transactions, upcomingDividends?.all]);
+
+  const yearlyGrandTotal = useMemo(
+    () => yearlyBars.reduce((sum, r) => sum + r.total, 0),
+    [yearlyBars],
+  );
+
+  /** Spojenie všetkých mesiacov roka: rovnaký ticker + badge → jeden riadok so sčítanou sumou. */
+  const yearlyBreakdownFullYear = useMemo(() => {
+    const m = new Map<string, MonthChartBreakdownEntry>();
+    for (const monthEntries of yearlyBreakdownByMonth) {
+      for (const e of monthEntries) {
+        const key = `${e.ticker.toUpperCase()}\0${e.badge}`;
+        const prev = m.get(key);
+        if (prev) prev.amount += e.amount;
+        else m.set(key, { ...e, ticker: e.ticker, amount: e.amount });
+      }
+    }
+    return Array.from(m.values()).sort((a, b) => b.amount - a.amount);
+  }, [yearlyBreakdownByMonth]);
 
   const feedRows = useMemo(() => {
     const now = new Date();
@@ -501,7 +570,12 @@ export default function Dividends() {
     for (const t of transactions) {
       const dayIso = format(startOfDay(new Date(t.transactionDate as unknown as string)), "yyyy-MM-dd");
       const ticker = t.ticker || "N/A";
-      const companyName = t.companyName || ticker;
+      const companyName =
+        ticker.toUpperCase() === CASH_INTEREST_TICKER
+          ? t.type === "TAX"
+            ? CASH_INTEREST_TAX_DISPLAY_NAME
+            : CASH_INTEREST_DISPLAY_NAME
+          : t.companyName || ticker;
       if (t.type === "DIVIDEND") {
         const shares = parseFloat(String(t.shares ?? "0"));
         const dps = parseFloat(String(t.pricePerShare ?? "0"));
@@ -518,12 +592,48 @@ export default function Dividends() {
     }
 
     const todayIso = format(startOfDay(new Date()), "yyyy-MM-dd");
+    const forecastDayTicker = new Set<string>();
+
     for (const ev of upcomingDividends?.all ?? []) {
-      if (ev.kind !== "payout" || !ev.paymentDate) continue;
-      if (ev.paymentDate < todayIso) continue;
       const est = ev.estimatedGrossInUserCcy;
       if (est == null || !Number.isFinite(est) || est <= 0) continue;
-      upsert(ev.paymentDate, ev.ticker, ev.companyName, est, 0, est, "forecast");
+      const dayIso =
+        ev.kind === "payout"
+          ? ev.paymentDate || ev.date
+          : ev.paymentDate || ev.exDate || ev.date;
+      if (!dayIso || dayIso < todayIso) continue;
+      const k = `${ev.ticker.toUpperCase()}-${dayIso}`;
+      forecastDayTicker.add(k);
+      upsert(dayIso, ev.ticker, ev.companyName, est, 0, est, "forecast");
+    }
+
+    for (const t of transactions) {
+      if (t.type !== "DIVIDEND") continue;
+      const d0 = startOfDay(new Date(t.transactionDate as unknown as string));
+      const projected = addMonths(d0, 12);
+      const dayIso = format(projected, "yyyy-MM-dd");
+      if (dayIso < todayIso) continue;
+      const ticker = t.ticker || "N/A";
+      const tickerU = ticker.toUpperCase();
+      const k = `${tickerU}-${dayIso}`;
+      if (forecastDayTicker.has(k)) continue;
+      const bucket = map.get(dayIso);
+      const hasPaidSameTicker = bucket?.rows.some(
+        (r) => r.ticker.toUpperCase() === tickerU && r.source === "paid",
+      );
+      if (hasPaidSameTicker) continue;
+      forecastDayTicker.add(k);
+      const shares = parseFloat(String(t.shares ?? "0"));
+      const dps = parseFloat(String(t.pricePerShare ?? "0"));
+      const tax = Math.abs(parseFloat(String(t.commission ?? "0")));
+      const gross = Number.isFinite(shares) && Number.isFinite(dps) ? shares * dps : 0;
+      const net = gross - tax;
+      if (!Number.isFinite(net) || net <= 0) continue;
+      const fcName =
+        ticker.toUpperCase() === CASH_INTEREST_TICKER
+          ? CASH_INTEREST_DISPLAY_NAME
+          : t.companyName || ticker;
+      upsert(dayIso, ticker, fcName, gross, tax, net, "forecast");
     }
 
     Array.from(map.values()).forEach((v) => {
@@ -872,45 +982,84 @@ export default function Dividends() {
                   Os Y: súčet v EUR (škála sa prispôsobí výške stĺpcov).
                 </p>
 
-                {selectedBarMonth != null && (
-                  <div
-                    className="mt-4 rounded-xl border bg-muted/20 p-3 sm:p-4 animate-in fade-in slide-in-from-top-2 duration-200"
-                    data-testid="dividend-month-detail"
-                  >
-                    <h3 className="text-sm sm:text-base font-semibold capitalize">
-                      {format(new Date(chartYear, selectedBarMonth, 1), "LLLL yyyy", { locale: sk })}: Celkovo{" "}
-                      <span className="tabular-nums">{formatCurrency(yearlyBars[selectedBarMonth]?.total ?? 0)}</span>
-                    </h3>
-                    <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5">
-                      {yearlyBreakdownByMonth[selectedBarMonth]?.length
-                        ? "Rozpis podľa titulu"
-                        : "V tomto mesiaci nie sú žiadne dividendy v dátach."}
-                    </p>
-                    <ul className="mt-3 max-h-[min(50vh,22rem)] overflow-y-auto space-y-2 pr-1">
-                      {yearlyBreakdownByMonth[selectedBarMonth]?.map((row, liIdx) => (
-                        <li
-                          key={`${row.ticker}-${row.badge}-${liIdx}`}
-                          className="flex items-center gap-2 sm:gap-3 rounded-lg border bg-card px-2 py-2 sm:px-3"
-                        >
-                          <CompanyLogo ticker={row.ticker} companyName={row.companyName} size="sm" className="shrink-0" />
-                          <div className="min-w-0 flex-1">
-                            <span className="font-medium text-sm">{row.ticker}</span>
-                            <span className="text-xs text-muted-foreground truncate block">{row.companyName}</span>
-                          </div>
-                          <div className="text-right shrink-0">
-                            <div className="text-sm font-semibold tabular-nums">{formatCurrency(row.amount)}</div>
-                            <Badge
-                              variant={row.badge === "Potvrdené" ? "default" : "secondary"}
-                              className="text-[10px] mt-0.5"
+                <div
+                  className="mt-4 rounded-xl border bg-muted/20 p-3 sm:p-4 animate-in fade-in slide-in-from-top-2 duration-200"
+                  data-testid="dividend-month-detail"
+                >
+                  {selectedBarMonth == null ? (
+                    <>
+                      <h3 className="text-sm sm:text-base font-semibold">
+                        Rok {chartYear}: Celkovo{" "}
+                        <span className="tabular-nums">{formatCurrency(yearlyGrandTotal)}</span>
+                      </h3>
+                      <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5">
+                        Súhrn za celý vybraný rok. Klikni na stĺpec v grafe pre detail konkrétneho mesiaca.
+                      </p>
+                      <ul className="mt-3 max-h-[min(50vh,22rem)] overflow-y-auto space-y-2 pr-1">
+                        {yearlyBreakdownFullYear.length === 0 ? (
+                          <li className="text-sm text-muted-foreground py-2">V tomto roku nie sú v dátach žiadne dividendy.</li>
+                        ) : (
+                          yearlyBreakdownFullYear.map((row, liIdx) => (
+                            <li
+                              key={`yr-${row.ticker}-${row.badge}-${liIdx}`}
+                              className="flex items-center gap-2 sm:gap-3 rounded-lg border bg-card px-2 py-2 sm:px-3"
                             >
-                              {row.badge}
-                            </Badge>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                              <CompanyLogo ticker={row.ticker} companyName={row.companyName} size="sm" className="shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <span className="font-medium text-sm">{row.ticker}</span>
+                                <span className="text-xs text-muted-foreground truncate block">{row.companyName}</span>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <div className="text-sm font-semibold tabular-nums">{formatCurrency(row.amount)}</div>
+                                <Badge
+                                  variant={row.badge === "Potvrdené" ? "default" : "secondary"}
+                                  className="text-[10px] mt-0.5"
+                                >
+                                  {row.badge}
+                                </Badge>
+                              </div>
+                            </li>
+                          ))
+                        )}
+                      </ul>
+                    </>
+                  ) : (
+                    <>
+                      <h3 className="text-sm sm:text-base font-semibold capitalize">
+                        {format(new Date(chartYear, selectedBarMonth, 1), "LLLL yyyy", { locale: sk })}: Celkovo{" "}
+                        <span className="tabular-nums">{formatCurrency(yearlyBars[selectedBarMonth]?.total ?? 0)}</span>
+                      </h3>
+                      <p className="text-[11px] sm:text-xs text-muted-foreground mt-0.5">
+                        {yearlyBreakdownByMonth[selectedBarMonth]?.length
+                          ? "Detail mesiaca. Klikni znova na rovnaký stĺpec pre návrat na celý rok."
+                          : "V tomto mesiaci nie sú žiadne dividendy v dátach."}
+                      </p>
+                      <ul className="mt-3 max-h-[min(50vh,22rem)] overflow-y-auto space-y-2 pr-1">
+                        {yearlyBreakdownByMonth[selectedBarMonth]?.map((row, liIdx) => (
+                          <li
+                            key={`mo-${row.ticker}-${row.badge}-${liIdx}`}
+                            className="flex items-center gap-2 sm:gap-3 rounded-lg border bg-card px-2 py-2 sm:px-3"
+                          >
+                            <CompanyLogo ticker={row.ticker} companyName={row.companyName} size="sm" className="shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <span className="font-medium text-sm">{row.ticker}</span>
+                              <span className="text-xs text-muted-foreground truncate block">{row.companyName}</span>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <div className="text-sm font-semibold tabular-nums">{formatCurrency(row.amount)}</div>
+                              <Badge
+                                variant={row.badge === "Potvrdené" ? "default" : "secondary"}
+                                className="text-[10px] mt-0.5"
+                              >
+                                {row.badge}
+                              </Badge>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
+                </div>
               </>
             );
           })()}

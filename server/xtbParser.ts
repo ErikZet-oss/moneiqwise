@@ -1,5 +1,10 @@
 import * as XLSX from 'xlsx';
 import { CASH_FLOW_TICKER } from '@shared/schema';
+import {
+  CASH_INTEREST_DISPLAY_NAME,
+  CASH_INTEREST_TAX_DISPLAY_NAME,
+  CASH_INTEREST_TICKER,
+} from '@shared/tickerCurrency';
 
 /** Odstráni kombinujúce znaky (diakritiku); nepoužívame \p{M} kvôli kompatibilite s runtime/TS. */
 function stripDiacritics(s: string): string {
@@ -895,7 +900,7 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
     
     const isFreeFundsInterest = isFreeFundsInterestLine(typeStr, typePlain, comment);
     const isFreeFundsInterestTax = isFreeFundsInterestTaxLine(typeStr, typePlain, comment);
-    const resolvedDividendTicker = isFreeFundsInterest ? "CASH_INTEREST" : ticker;
+    const resolvedDividendTicker = isFreeFundsInterest ? CASH_INTEREST_TICKER : ticker;
     // Determine transaction type
     
     // STOCK PURCHASE - BUY (vrátane „Stocks/ETF purchase“ z anglického exportu)
@@ -1059,7 +1064,7 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
         originalCurrency: divFx.originalCurrency,
         exchangeRateAtTransaction: divFx.exchangeRateAtTransaction,
         baseCurrencyAmount: divFx.baseCurrencyAmount,
-        companyName: isFreeFundsInterest ? "Úrok z voľných prostriedkov" : undefined,
+        companyName: isFreeFundsInterest ? CASH_INTEREST_DISPLAY_NAME : undefined,
       });
       
       log.push({
@@ -1077,7 +1082,7 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
       isFreeFundsInterestTax
     ) {
       // TAX - stored as negative
-      const taxTicker = ticker || (isFreeFundsInterestTax || isFreeFundsInterest ? "CASH_INTEREST" : "");
+      const taxTicker = ticker || (isFreeFundsInterestTax || isFreeFundsInterest ? CASH_INTEREST_TICKER : "");
       
       if (taxTicker) {
         // Find the most recent DIVIDEND transaction for the same ticker to link
@@ -1110,7 +1115,7 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
           originalCurrency: taxFx.originalCurrency,
           exchangeRateAtTransaction: taxFx.exchangeRateAtTransaction,
           baseCurrencyAmount: taxFx.baseCurrencyAmount,
-          companyName: taxTicker === "CASH_INTEREST" ? "Daň z úroku voľných prostriedkov" : undefined,
+          companyName: taxTicker === CASH_INTEREST_TICKER ? CASH_INTEREST_TAX_DISPLAY_NAME : undefined,
         });
         
         const linkInfo = linkedDividendId ? ` (k dividende ${linkedDividendId})` : '';
@@ -1139,7 +1144,7 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
         const intFx = buildForexForXtBLine(accountCurrency, row, fxCols, intAm, 1);
         transactions.push({
           date: time,
-          ticker: "CASH_INTEREST",
+          ticker: CASH_INTEREST_TICKER,
           type: "DIVIDEND",
           quantity: 0,
           priceEur: 0,
@@ -1149,12 +1154,12 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
           originalCurrency: intFx.originalCurrency,
           exchangeRateAtTransaction: intFx.exchangeRateAtTransaction,
           baseCurrencyAmount: intFx.baseCurrencyAmount,
-          companyName: "Úrok z voľných prostriedkov",
+          companyName: CASH_INTEREST_DISPLAY_NAME,
         });
         log.push({
           row: i + 1,
           status: "success",
-          message: `[${operationId}] DIVIDEND CASH_INTEREST: +${intAm.toFixed(2)} EUR`,
+          message: `[${operationId}] ${CASH_INTEREST_DISPLAY_NAME}: +${intAm.toFixed(2)} EUR`,
         });
       } else {
         // Other interest lines remain skipped.

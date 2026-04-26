@@ -1,6 +1,7 @@
 import { mtmValueAtEod } from "./gipsMtmValue";
 import { storage } from "./storage";
 import type { AllExchangeRates } from "./convertAmountBetween";
+import { CASH_INTEREST_TICKER } from "@shared/tickerCurrency";
 
 type HistoricalFn = (ticker: string) => Promise<Record<string, number>>;
 
@@ -72,7 +73,7 @@ export async function computeGipsTwr(
       u &&
       u !== "CASH" &&
       u !== "PORTFOLIO_CASH_FLOW" &&
-      u !== "CASH_INTEREST"
+      u !== CASH_INTEREST_TICKER
     ) {
       tickerSet.add(u);
     }

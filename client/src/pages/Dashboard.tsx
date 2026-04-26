@@ -20,6 +20,7 @@ import { CompanyLogo } from "@/components/CompanyLogo";
 import { MobilePortfolioChart } from "@/components/MobilePortfolioChart";
 import { DesktopPortfolioChart } from "@/components/DesktopPortfolioChart";
 import type { Holding } from "@shared/schema";
+import { CASH_INTEREST_DISPLAY_NAME, CASH_INTEREST_TICKER } from "@shared/tickerCurrency";
 import { formatShareQuantity } from "@/lib/utils";
 
 interface RealizedGainSummary {
@@ -231,7 +232,11 @@ export default function Dashboard() {
     if (!holdings) return map;
     for (const h of holdings) {
       if (!map.has(h.ticker)) {
-        map.set(h.ticker, (h.companyName || h.ticker).trim() || h.ticker);
+        const label =
+          h.ticker.toUpperCase() === CASH_INTEREST_TICKER
+            ? CASH_INTEREST_DISPLAY_NAME
+            : (h.companyName || h.ticker).trim() || h.ticker;
+        map.set(h.ticker, label);
       }
     }
     return map;

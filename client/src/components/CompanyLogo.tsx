@@ -10,6 +10,8 @@ interface CompanyLogoProps {
 }
 
 const tickerToDomain: Record<string, string> = {
+  /** Úrok z free cash (XTB) — logo brokera */
+  "CASH_INTEREST": "xtb.com",
   "AAPL": "apple.com",
   "MSFT": "microsoft.com",
   "GOOGL": "google.com",
@@ -228,6 +230,7 @@ export function CompanyLogo({ ticker, companyName, size = "md", className = "" }
   const hasMoreLogos = logoIndex < logoUrls.length - 1;
   
   const getFallbackInitials = (): string => {
+    if (cleanTicker === "CASH_INTEREST") return "XT";
     if (companyName) {
       const words = companyName.split(" ").filter(w => w.length > 0);
       if (words.length >= 2) {

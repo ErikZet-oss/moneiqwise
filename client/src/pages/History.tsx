@@ -21,7 +21,12 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { CompanyLogo } from "@/components/CompanyLogo";
 import { CASH_FLOW_TICKER, type Transaction } from "@shared/schema";
-import { getTickerCurrency } from "@shared/tickerCurrency";
+import {
+  CASH_INTEREST_DISPLAY_NAME,
+  CASH_INTEREST_TAX_DISPLAY_NAME,
+  CASH_INTEREST_TICKER,
+  getTickerCurrency,
+} from "@shared/tickerCurrency";
 import { AddTransactionForm } from "@/components/AddTransactionForm";
 import { formatShareQuantity } from "@/lib/utils";
 
@@ -30,6 +35,23 @@ function realizedGainSourceCurrency(tx: Transaction): "EUR" | "USD" | "GBP" | "C
   const c = (tx.currency || "").trim().toUpperCase();
   if (c === "USD" || c === "EUR" || c === "GBP" || c === "CZK" || c === "PLN") return c;
   return getTickerCurrency(tx.ticker);
+}
+
+function isCashInterestTicker(ticker: string): boolean {
+  return ticker.toUpperCase() === CASH_INTEREST_TICKER;
+}
+
+function transactionTickerDisplay(tx: Transaction, isCash: boolean): string {
+  if (tx.ticker === CASH_FLOW_TICKER || isCash) return "Hotovosť";
+  if (isCashInterestTicker(tx.ticker)) {
+    return tx.type === "TAX" ? CASH_INTEREST_TAX_DISPLAY_NAME : CASH_INTEREST_DISPLAY_NAME;
+  }
+  return tx.ticker;
+}
+
+function transactionCompanySubline(tx: Transaction): string | null {
+  if (isCashInterestTicker(tx.ticker)) return null;
+  return tx.companyName?.trim() ? tx.companyName : null;
 }
 
 function isCloseTradeCashRow(tx: Transaction): boolean {
@@ -352,8 +374,11 @@ export default function History() {
     ? Array.from(new Set(transactions.map(t => t.ticker))).sort()
     : [];
 
-  const tickerFilterLabel = (ticker: string) =>
-    ticker === CASH_FLOW_TICKER ? "Hotovosť (vklady/výbery)" : ticker;
+  const tickerFilterLabel = (ticker: string) => {
+    if (ticker === CASH_FLOW_TICKER) return "Hotovosť (vklady/výbery)";
+    if (ticker.toUpperCase() === CASH_INTEREST_TICKER) return CASH_INTEREST_DISPLAY_NAME;
+    return ticker;
+  };
 
   const filteredTransactions = useMemo(
     () =>
@@ -964,10 +989,8 @@ export default function History() {
                     transaction.type === "SELL" &&
                     Number.isFinite(sellRealizedGain) &&
                     Math.abs(sellRealizedGain) > 1e-9;
-                  const tickerLabel =
-                    transaction.ticker === CASH_FLOW_TICKER || isCash
-                      ? "Hotovosť"
-                      : transaction.ticker;
+                  const tickerLabel = transactionTickerDisplay(transaction, isCash);
+                  const companySub = transactionCompanySubline(transaction);
                   const typeLabel =
                     transaction.type === "BUY"
                       ? "Nákup"
@@ -1000,7 +1023,14 @@ export default function History() {
                         <div className="flex-1 min-w-0 space-y-3">
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex items-start gap-3 min-w-0 flex-1">
-                              <CompanyLogo ticker={transaction.ticker} companyName={transaction.companyName} size="sm" className="shrink-0" />
+                              <CompanyLogo
+                                ticker={transaction.ticker}
+                                companyName={
+                                  isCashInterestTicker(transaction.ticker) ? tickerLabel : transaction.companyName
+                                }
+                                size="sm"
+                                className="shrink-0"
+                              />
                               <div className="min-w-0 flex-1 space-y-1">
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="font-semibold text-sm">{tickerLabel}</span>
@@ -1021,7 +1051,9 @@ export default function History() {
                                     {typeLabel}
                                   </Badge>
                                 </div>
-                                <p className="text-xs text-muted-foreground leading-snug line-clamp-2">{transaction.companyName}</p>
+                                {companySub ? (
+                                  <p className="text-xs text-muted-foreground leading-snug line-clamp-2">{companySub}</p>
+                                ) : null}
                               </div>
                             </div>
                             <div className="text-right shrink-0 space-y-0.5">
@@ -1161,10 +1193,8 @@ export default function History() {
                     transaction.type === "SELL" &&
                     Number.isFinite(sellRealizedGain) &&
                     Math.abs(sellRealizedGain) > 1e-9;
-                  const tickerLabel =
-                    transaction.ticker === CASH_FLOW_TICKER || isCash
-                      ? "Hotovosť"
-                      : transaction.ticker;
+                  const tickerLabel = transactionTickerDisplay(transaction, isCash);
+                  const companySub = transactionCompanySubline(transaction);
                   const typeLabel =
                     transaction.type === "BUY"
                       ? "Nákup"
@@ -1218,10 +1248,18 @@ export default function History() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-3">
-                          <CompanyLogo ticker={transaction.ticker} companyName={transaction.companyName} size="sm" />
+                          <CompanyLogo
+                            ticker={transaction.ticker}
+                            companyName={
+                              isCashInterestTicker(transaction.ticker) ? tickerLabel : transaction.companyName
+                            }
+                            size="sm"
+                          />
                           <div className="flex flex-col">
                             <span className="font-medium">{tickerLabel}</span>
-                            <span className="text-xs text-muted-foreground">{transaction.companyName}</span>
+                            {companySub ? (
+                              <span className="text-xs text-muted-foreground">{companySub}</span>
+                            ) : null}
                           </div>
                         </div>
                       </TableCell>
