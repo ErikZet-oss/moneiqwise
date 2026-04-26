@@ -6,8 +6,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Banknote, ChevronDown, ChevronRight } from "lucide-react";
-import { addMonths, differenceInCalendarDays, format, startOfMonth } from "date-fns";
+import { Banknote, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { addMonths, differenceInCalendarDays, format, startOfMonth, subMonths } from "date-fns";
 import { sk } from "date-fns/locale";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
@@ -54,6 +54,7 @@ type UpcomingDividendItem = {
 };
 
 type FeedStatus = "UPCOMING" | "PENDING" | "PAID" | "REINVESTED";
+type CalendarMode = "ROLLING" | "HISTORY";
 
 export default function Dividends() {
   const [, setLocation] = useLocation();
@@ -61,6 +62,8 @@ export default function Dividends() {
   const { getQueryParam } = usePortfolio();
   const portfolioParam = getQueryParam();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [calendarMode, setCalendarMode] = useState<CalendarMode>("ROLLING");
+  const [windowOffset, setWindowOffset] = useState(0);
 
   const { data: dividends, isLoading: dividendsLoading } = useQuery<DividendSummary>({
     queryKey: ["/api/dividends", portfolioParam],
@@ -178,44 +181,74 @@ export default function Dividends() {
     };
   }, [annualDivByTicker, holdingsByTicker, quotes]);
 
+  const windowStart = useMemo(() => {
+    const nowMonth = startOfMonth(new Date());
+    if (calendarMode === "ROLLING") return addMonths(nowMonth, windowOffset);
+    return subMonths(nowMonth, 11 + windowOffset * 12);
+  }, [calendarMode, windowOffset]);
+
+  const windowMonths = useMemo(
+    () => Array.from({ length: 12 }).map((_, i) => addMonths(windowStart, i)),
+    [windowStart],
+  );
+
   const forecastBars = useMemo(() => {
-    const now = new Date();
-    const months = Array.from({ length: 12 }).map((_, i) => startOfMonth(addMonths(now, i)));
     const monthKey = (d: Date) => format(d, "yyyy-MM");
-    const map = new Map<string, { monthLabel: string; confirmed: number; estimated: number }>();
-    for (const m of months) {
+    const map = new Map<string, { monthLabel: string; paid: number; confirmed: number; estimated: number; events: number }>();
+    for (const m of windowMonths) {
       map.set(monthKey(m), {
-        monthLabel: format(m, "LLL", { locale: sk }),
+        monthLabel: format(m, "LLL yy", { locale: sk }),
+        paid: 0,
         confirmed: 0,
         estimated: 0,
+        events: 0,
       });
     }
 
-    for (const ev of upcomingDividends?.all ?? []) {
-      if (ev.kind !== "payout") continue;
-      const d = new Date(`${ev.date}T12:00:00`);
-      const key = monthKey(startOfMonth(d));
-      const row = map.get(key);
-      if (!row) continue;
-      const amount = ev.estimatedGrossInUserCcy ?? 0;
-      if (ev.confirmed) row.confirmed += amount;
-      else row.estimated += amount;
-    }
-
-    // fallback estimate from last 12M realized dividends projected one year ahead
     for (const t of transactions) {
       if (t.type !== "DIVIDEND") continue;
       const d = new Date(t.transactionDate as unknown as string);
-      const projected = addMonths(d, 12);
-      const key = monthKey(startOfMonth(projected));
+      const key = monthKey(startOfMonth(d));
       const row = map.get(key);
       if (!row) continue;
-      const net = parseFloat(String(t.shares ?? "0")) * parseFloat(String(t.pricePerShare ?? "0")) - parseFloat(String(t.commission ?? "0"));
-      if (Number.isFinite(net)) row.estimated += Math.max(0, net);
+      const net =
+        parseFloat(String(t.shares ?? "0")) * parseFloat(String(t.pricePerShare ?? "0")) -
+        parseFloat(String(t.commission ?? "0"));
+      if (!Number.isFinite(net)) continue;
+      row.paid += Math.max(0, net);
+      row.events += 1;
+    }
+
+    if (calendarMode === "ROLLING") {
+      for (const ev of upcomingDividends?.all ?? []) {
+        if (ev.kind !== "payout") continue;
+        const d = new Date(`${ev.date}T12:00:00`);
+        const key = monthKey(startOfMonth(d));
+        const row = map.get(key);
+        if (!row) continue;
+        const amount = ev.estimatedGrossInUserCcy ?? 0;
+        if (ev.confirmed) row.confirmed += amount;
+        else row.estimated += amount;
+        row.events += 1;
+      }
+
+      // fallback estimate from historical payouts projected +12m
+      for (const t of transactions) {
+        if (t.type !== "DIVIDEND") continue;
+        const d = new Date(t.transactionDate as unknown as string);
+        const projected = addMonths(d, 12);
+        const key = monthKey(startOfMonth(projected));
+        const row = map.get(key);
+        if (!row) continue;
+        const net =
+          parseFloat(String(t.shares ?? "0")) * parseFloat(String(t.pricePerShare ?? "0")) -
+          parseFloat(String(t.commission ?? "0"));
+        if (Number.isFinite(net)) row.estimated += Math.max(0, net);
+      }
     }
 
     return Array.from(map.values());
-  }, [transactions, upcomingDividends?.all]);
+  }, [transactions, upcomingDividends?.all, windowMonths, calendarMode]);
 
   const feedRows = useMemo(() => {
     const now = new Date();
@@ -235,6 +268,31 @@ export default function Dividends() {
       dividendYieldCurrent: number | null;
       yoc: number | null;
     }> = [];
+
+    for (const t of transactions) {
+      if (t.type !== "DIVIDEND") continue;
+      const d = new Date(t.transactionDate as unknown as string);
+      const iso = format(d, "yyyy-MM-dd");
+      const amount =
+        parseFloat(String(t.shares ?? "0")) * parseFloat(String(t.pricePerShare ?? "0")) -
+        parseFloat(String(t.commission ?? "0"));
+      rows.push({
+        id: `paid-${t.id}`,
+        ticker: t.ticker,
+        companyName: t.companyName,
+        exDate: null,
+        paymentDate: iso,
+        declarationDate: null,
+        recordDate: null,
+        amount: Number.isFinite(amount) ? amount : 0,
+        status: "PAID",
+        payoutRatio: null,
+        dividendGrowth5yPct: null,
+        dividendStreakYears: null,
+        dividendYieldCurrent: null,
+        yoc: null,
+      });
+    }
 
     for (const ev of upcomingDividends?.all ?? []) {
       const t = ev.ticker.toUpperCase();
@@ -266,13 +324,21 @@ export default function Dividends() {
       });
     }
 
+    const start = windowMonths[0];
+    const end = addMonths(start, 12);
+    const insideWindow = (iso: string | null) => {
+      if (!iso) return false;
+      const d = new Date(`${iso}T12:00:00`);
+      return d >= start && d < end;
+    };
+
     rows.sort((a, b) => {
       const da = new Date(`${a.exDate || a.paymentDate || "2100-01-01"}T12:00:00`).getTime();
       const db = new Date(`${b.exDate || b.paymentDate || "2100-01-01"}T12:00:00`).getTime();
       return da - db;
     });
-    return rows;
-  }, [upcomingDividends?.all, holdingsByTicker]);
+    return rows.filter((r) => insideWindow(r.paymentDate || r.exDate));
+  }, [upcomingDividends?.all, holdingsByTicker, transactions, windowMonths]);
 
   const statusLabel = (s: FeedStatus) =>
     s === "UPCOMING" ? "Upcoming" : s === "PENDING" ? "Pending" : s === "REINVESTED" ? "Reinvested" : "Paid";
@@ -305,8 +371,43 @@ export default function Dividends() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Forward Income Timeline (12M)</CardTitle>
-          <CardDescription>Zelené = confirmed, svetlé = estimated</CardDescription>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle>
+                {calendarMode === "ROLLING" ? "Dividendový kalendár (Rolling 12M)" : "Dividendový kalendár (História 12M)"}
+              </CardTitle>
+              <CardDescription>
+                {calendarMode === "ROLLING"
+                  ? "Nasledujúcich 12 mesiacov od zvoleného mesiaca."
+                  : "12-mesačné okno z minulosti, posúvateľné po rokoch."}
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant={calendarMode === "ROLLING" ? "default" : "outline"} size="sm" onClick={() => { setCalendarMode("ROLLING"); setWindowOffset(0); }}>
+                Rolling 12M
+              </Button>
+              <Button variant={calendarMode === "HISTORY" ? "default" : "outline"} size="sm" onClick={() => { setCalendarMode("HISTORY"); setWindowOffset(0); }}>
+                História
+              </Button>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 pt-1">
+            <Button variant="outline" size="icon" onClick={() => setWindowOffset((v) => v + 1)} aria-label="Do minulosti">
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setWindowOffset((v) => Math.max(0, v - 1))}
+              aria-label="Do budúcnosti"
+              disabled={windowOffset === 0}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              {format(windowMonths[0], "LLLL yyyy", { locale: sk })} - {format(windowMonths[11], "LLLL yyyy", { locale: sk })}
+            </span>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="h-[260px] w-full">
@@ -316,10 +417,24 @@ export default function Dividends() {
                 <XAxis dataKey="monthLabel" />
                 <YAxis />
                 <Tooltip />
+                <Bar dataKey="paid" stackId="a" fill="#2563eb" name="Paid" />
                 <Bar dataKey="confirmed" stackId="a" fill="#16a34a" name="Confirmed" />
                 <Bar dataKey="estimated" stackId="a" fill="#86efac" name="Estimated" />
               </BarChart>
             </ResponsiveContainer>
+          </div>
+          <div className="mt-4 overflow-x-auto">
+            <div className="min-w-[720px] grid grid-cols-12 gap-2 text-xs">
+              {forecastBars.map((m) => (
+                <div key={m.monthLabel} className="rounded-md border p-2">
+                  <div className="font-medium">{m.monthLabel}</div>
+                  <div className="text-blue-600">Paid: {formatCurrency(m.paid)}</div>
+                  <div className="text-green-600">Confirmed: {formatCurrency(m.confirmed)}</div>
+                  <div className="text-emerald-500">Estimated: {formatCurrency(m.estimated)}</div>
+                  <div className="text-muted-foreground">Events: {m.events}</div>
+                </div>
+              ))}
+            </div>
           </div>
         </CardContent>
       </Card>
