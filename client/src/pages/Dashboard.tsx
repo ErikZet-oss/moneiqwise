@@ -13,6 +13,8 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Wallet, Banknote, Newspaper, ExternalLink, HelpCircle, Loader2, RefreshCw, Moon, Calendar, ChevronRight, Sparkles } from "lucide-react";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
@@ -204,6 +206,7 @@ export default function Dashboard() {
   const [calendarTodayDialogOpen, setCalendarTodayDialogOpen] = useState(false);
   const [todayCalendarEvents, setTodayCalendarEvents] = useState<DashboardCalendarEvent[]>([]);
   const calendarPopupHandledRef = useRef(false);
+  const [athDontShowAgainToday, setAthDontShowAgainToday] = useState(false);
 
   const maskAmount = (amount: string) => hideAmounts ? "••••••" : amount;
   const premarketMoonClass = "text-amber-600 dark:text-amber-400";
@@ -699,6 +702,15 @@ export default function Dashboard() {
       if (last > prevMax + eps) reachedAth.push(p.name);
     }
     if (reachedAth.length > 0) {
+      let allowAthDialog = true;
+      try {
+        const suppressKey = `mw-dash-ath-suppress-${todayIso}`;
+        if (typeof sessionStorage !== "undefined" && sessionStorage.getItem(suppressKey)) {
+          allowAthDialog = false;
+        }
+      } catch {
+        /* ignore */
+      }
       const lines = [
         "Trh dnes posiela virtuálne šampanské. Nezabudni, že bublinky sú super, ale risk manažment ešte lepší.",
         "ATH potvrdené. Portfólio ide bomby a kalkulačka má dnes sviatok.",
@@ -707,10 +719,33 @@ export default function Dashboard() {
       const idx = reachedAth.join("|").length % lines.length;
       setAthPortfolioNames(reachedAth);
       setAthFunnyLine(lines[idx]);
-      setAthDialogOpen(true);
+      if (allowAthDialog) setAthDialogOpen(true);
     }
     setAthPopupEvaluated(true);
   }, [athHistoryByPortfolio, athPopupEvaluated, portfolios, showAthPopup]);
+
+  const prevAthDialogOpenRef = useRef(false);
+  useEffect(() => {
+    if (athDialogOpen && !prevAthDialogOpenRef.current) {
+      setAthDontShowAgainToday(false);
+    }
+    prevAthDialogOpenRef.current = athDialogOpen;
+  }, [athDialogOpen]);
+
+  const handleAthDialogOpenChange = useCallback((open: boolean) => {
+    if (!open) {
+      if (athDontShowAgainToday) {
+        try {
+          const todayIso = format(startOfDay(new Date()), "yyyy-MM-dd");
+          sessionStorage.setItem(`mw-dash-ath-suppress-${todayIso}`, "1");
+        } catch {
+          /* ignore */
+        }
+      }
+      setAthDontShowAgainToday(false);
+    }
+    setAthDialogOpen(open);
+  }, [athDontShowAgainToday]);
 
   useEffect(() => {
     if (!showCalendarEventsPopup) {
@@ -1157,7 +1192,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4 md:space-y-6">
-      <Dialog open={showAthPopup && athDialogOpen} onOpenChange={setAthDialogOpen}>
+      <Dialog open={showAthPopup && athDialogOpen} onOpenChange={handleAthDialogOpenChange}>
         <DialogContent className="max-w-md overflow-hidden">
           <div className="pointer-events-none absolute inset-0">
             <span className="absolute left-4 top-3 text-lg motion-safe:animate-bounce">🎉</span>
@@ -1192,6 +1227,20 @@ export default function Dashboard() {
               ))}
             </div>
             <p className="text-sm leading-relaxed text-muted-foreground">{athFunnyLine}</p>
+          </div>
+          <div className="flex items-start gap-2 pt-2 border-t border-border/60">
+            <Checkbox
+              id="ath-popup-dont-show-today"
+              checked={athDontShowAgainToday}
+              onCheckedChange={(v) => setAthDontShowAgainToday(v === true)}
+              data-testid="checkbox-ath-dont-show-today"
+            />
+            <Label
+              htmlFor="ath-popup-dont-show-today"
+              className="text-xs text-muted-foreground font-normal leading-snug cursor-pointer"
+            >
+              Dnes už nezobrazovať (do polnoci v tomto okne prehliadača)
+            </Label>
           </div>
         </DialogContent>
       </Dialog>
