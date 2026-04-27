@@ -32,6 +32,12 @@ interface StockQuote {
   annualDividendPerShare?: number;
 }
 
+type UpcomingDividendItem = {
+  ticker: string;
+  annualDividendPerShare: number | null;
+  dividendYieldCurrent: number | null;
+};
+
 interface OverviewBundle {
   byPortfolioId: Record<
     string,
@@ -153,6 +159,33 @@ export default function Overview() {
     staleTime: 2 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
     refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
+
+  const { data: upcomingDividendsByPortfolio = {} } = useQuery<
+    Record<string, UpcomingDividendItem[]>
+  >({
+    queryKey: ["/api/dividends/upcoming", "overview-by-portfolio", portfolios.map((p) => p.id).join(",")],
+    enabled: portfolios.length > 0,
+    queryFn: async () => {
+      const out: Record<string, UpcomingDividendItem[]> = {};
+      await Promise.all(
+        portfolios.map(async (p) => {
+          const res = await fetch(
+            `/api/dividends/upcoming?portfolio=${encodeURIComponent(p.id)}`,
+            { credentials: "include" },
+          );
+          if (!res.ok) {
+            out[p.id] = [];
+            return;
+          }
+          const data = (await res.json()) as { all?: UpcomingDividendItem[] };
+          out[p.id] = Array.isArray(data?.all) ? data.all : [];
+        }),
+      );
+      return out;
+    },
+    staleTime: 45 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
@@ -367,22 +400,65 @@ export default function Overview() {
       const dividendNetEur = row?.dividendNet ?? 0;
       const trailing12mDividendNetEur = row?.trailing12mDividendNet ?? 0;
       const cashEur = row?.cashEur ?? 0;
+      const annualDivByTicker = new Map<string, number>();
+      const yieldPctByTicker = new Map<string, number>();
+      for (const ev of upcomingDividendsByPortfolio[p.id] ?? []) {
+        const t = (ev.ticker || "").toUpperCase();
+        if (!t) continue;
+        if (ev.annualDividendPerShare != null && Number.isFinite(ev.annualDividendPerShare)) {
+          annualDivByTicker.set(t, Math.max(annualDivByTicker.get(t) ?? 0, ev.annualDividendPerShare));
+        }
+        if (ev.dividendYieldCurrent != null && Number.isFinite(ev.dividendYieldCurrent) && ev.dividendYieldCurrent > 0) {
+          yieldPctByTicker.set(t, Math.max(yieldPctByTicker.get(t) ?? 0, ev.dividendYieldCurrent));
+        }
+      }
+      let passiveIncomeFromDividendsSection = 0;
+      for (const h of holdings) {
+        const shares = parseFloat(String(h.shares ?? "0"));
+        if (!(Number.isFinite(shares) && shares > 0)) continue;
+        const ticker = (h.ticker || "").toUpperCase();
+        if (!ticker) continue;
+        const tickerCurrency = getTickerCurrency(ticker);
+        const annPerShare = annualDivByTicker.get(ticker) ?? 0;
+        const yieldPct = yieldPctByTicker.get(ticker);
+        if (annPerShare > 0) {
+          passiveIncomeFromDividendsSection += shares * convertPrice(annPerShare, tickerCurrency);
+          continue;
+        }
+        const q = quotes?.[ticker];
+        if (yieldPct != null && yieldPct > 0 && q && Number.isFinite(q.price) && q.price > 0) {
+          passiveIncomeFromDividendsSection +=
+            (yieldPct / 100) * shares * convertPrice(q.price, tickerCurrency);
+        }
+      }
       map.set(
         p.id,
-        computeMetrics(
-          holdings,
-          options,
-          totalRealizedFifoEur,
-          closeTradeNetEur,
-          dividendNetEur,
-          trailing12mDividendNetEur,
-          cashEur,
-        ),
+        (() => {
+          const m = computeMetrics(
+            holdings,
+            options,
+            totalRealizedFifoEur,
+            closeTradeNetEur,
+            dividendNetEur,
+            trailing12mDividendNetEur,
+            cashEur,
+          );
+          if (passiveIncomeFromDividendsSection > 0) {
+            const passiveIncomePercent =
+              m.stockValue > 0 ? (passiveIncomeFromDividendsSection / m.stockValue) * 100 : 0;
+            return {
+              ...m,
+              passiveIncome: passiveIncomeFromDividendsSection,
+              passiveIncomePercent,
+            };
+          }
+          return m;
+        })(),
       );
     }
     return map;
     // quotes / currency helpers must trigger recompute when quotes arrive
-  }, [overview, portfolios, quotes, convertPrice, getTickerCurrency, optionsByPortfolioId]);
+  }, [overview, portfolios, quotes, convertPrice, getTickerCurrency, optionsByPortfolioId, upcomingDividendsByPortfolio]);
 
   const grandTotal = useMemo(() => {
     let total = 0;
