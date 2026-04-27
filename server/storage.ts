@@ -844,6 +844,8 @@ export class DatabaseStorage implements IStorage {
         closeTradeNetEur: number;
         /** Čisté dividendy v EUR — dividendNetEur(list), nie súčet v pôvodných menách. */
         dividendNet: number;
+        /** Posledných 12 mesiacov čistých dividend (rovnaký princíp ako na stránke Dividendy). */
+        trailing12mDividendNet: number;
         cashEur: number;
       }
     >;
@@ -918,6 +920,22 @@ export class DatabaseStorage implements IStorage {
         const closeTradeNetEur = sumCloseTradeCashFlowEurFromRows(list);
 
         const dividendNet = dividendNetEur(list, rates);
+        const cutoff = new Date(now);
+        cutoff.setHours(0, 0, 0, 0);
+        cutoff.setMonth(cutoff.getMonth() - 12);
+        let trailing12mDividendNet = 0;
+        for (const t of list) {
+          if (t.type !== "DIVIDEND") continue;
+          const txDate = new Date(t.transactionDate as unknown as string);
+          txDate.setHours(0, 0, 0, 0);
+          if (txDate < cutoff) continue;
+          const gross =
+            parseFloat(String(t.shares ?? "0")) * parseFloat(String(t.pricePerShare ?? "0"));
+          const taxOrFee = parseFloat(String(t.commission ?? "0"));
+          const net = gross - taxOrFee;
+          if (!Number.isFinite(net)) continue;
+          trailing12mDividendNet += net;
+        }
 
         const cashEur = await netLedgerCashEur(list, rates, eurM);
 
@@ -928,6 +946,7 @@ export class DatabaseStorage implements IStorage {
             totalRealized,
             closeTradeNetEur,
             dividendNet,
+            trailing12mDividendNet,
             cashEur,
           },
         ] as const;

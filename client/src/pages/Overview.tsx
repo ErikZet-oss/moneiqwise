@@ -43,6 +43,8 @@ interface OverviewBundle {
       closeTradeNetEur: number;
       /** Čisté dividendy v EUR (server: dividendNetEur). */
       dividendNet: number;
+      /** Posledných 12 mesiacov čistých dividend (fallback pre pasívny príjem). */
+      trailing12mDividendNet: number;
       /** Čistá hotovosť (EUR) z vkladov a výberov */
       cashEur: number;
     }
@@ -176,6 +178,7 @@ export default function Overview() {
     totalRealizedFifoEur: number,
     closeTradeNetEur: number,
     dividendNetEur: number,
+    trailing12mDividendNetEur: number,
     cashEur: number,
   ): PortfolioMetrics => {
     let stockValue = 0;
@@ -265,8 +268,13 @@ export default function Overview() {
     const totalProfitPercent = totalInvested > 0 ? (totalProfit / totalInvested) * 100 : 0;
     const baseValue = stockValue - dailyChange;
     const dailyChangePercent = baseValue > 0 ? (dailyChange / baseValue) * 100 : 0;
-    const passiveIncomePercent =
-      stockValue > 0 ? (forwardDividendIncome / stockValue) * 100 : 0;
+    const trailing12mFallback = convertPrice(
+      Number.isFinite(trailing12mDividendNetEur) ? trailing12mDividendNetEur : 0,
+      "EUR",
+    );
+    const passiveIncomeDisplay = forwardDividendIncome > 0 ? forwardDividendIncome : trailing12mFallback;
+    const passiveIncomePercentDisplay =
+      stockValue > 0 ? (passiveIncomeDisplay / stockValue) * 100 : 0;
 
     return {
       totalValue,
@@ -278,8 +286,8 @@ export default function Overview() {
       totalProfitPercent,
       dailyChange,
       dailyChangePercent,
-      passiveIncome: forwardDividendIncome,
-      passiveIncomePercent,
+      passiveIncome: passiveIncomeDisplay,
+      passiveIncomePercent: passiveIncomePercentDisplay,
       hasQuotes: anyQuote,
     };
   };
@@ -357,6 +365,7 @@ export default function Overview() {
       const totalRealizedFifoEur = row?.totalRealized ?? 0;
       const closeTradeNetEur = row?.closeTradeNetEur ?? 0;
       const dividendNetEur = row?.dividendNet ?? 0;
+      const trailing12mDividendNetEur = row?.trailing12mDividendNet ?? 0;
       const cashEur = row?.cashEur ?? 0;
       map.set(
         p.id,
@@ -366,6 +375,7 @@ export default function Overview() {
           totalRealizedFifoEur,
           closeTradeNetEur,
           dividendNetEur,
+          trailing12mDividendNetEur,
           cashEur,
         ),
       );
