@@ -1315,8 +1315,13 @@ async function fetchStockQuote(ticker: string, skipCache = false): Promise<any> 
   // Check cache first (unless user explicitly refreshes quotes)
   const cached = priceCache.get(ticker);
   if (!skipCache && cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    // Backward compatibility: older cache entries may miss preMarket fields.
-    if (cached.data && Object.prototype.hasOwnProperty.call(cached.data, "preMarketPrice")) {
+    // Backward compatibility: older cache entries may miss newer fields.
+    // If any required field is missing, force fresh fetch to avoid stale/zero metrics.
+    if (
+      cached.data &&
+      Object.prototype.hasOwnProperty.call(cached.data, "preMarketPrice") &&
+      Object.prototype.hasOwnProperty.call(cached.data, "annualDividendPerShare")
+    ) {
       return cached.data;
     }
   }
