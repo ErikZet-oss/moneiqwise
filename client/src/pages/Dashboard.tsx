@@ -790,6 +790,13 @@ export default function Dashboard() {
 
   const displayedDailyChange = usSessionState === "LIVE" ? metrics.dailyChange : 0;
   const displayedDailyChangePercent = usSessionState === "LIVE" ? metrics.dailyChangePercent : 0;
+  const moversContextText = moversUseExtendedQuotes
+    ? isAllPortfolios
+      ? "Mimo hlavnej relácie US: pred/po obchode z držaných akcií vo všetkých portfóliách (zobrazia sa len tituly s dostupnou pred/po-obchodnou kotáciou)."
+      : `Mimo hlavnej relácie US: pred/po obchode z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ (zobrazia sa len tituly s dostupnou pred/po-obchodnou kotáciou).`
+    : isAllPortfolios
+      ? "Počas hlavnej relácie US: denná zmena RTH z držaných akcií vo všetkých portfóliách."
+      : `Počas hlavnej relácie US: denná zmena RTH z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“.`;
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -1604,6 +1611,20 @@ export default function Dashboard() {
               <CardTitle className="text-base flex items-center gap-2 flex-wrap">
                 <TrendingUp className="h-4 w-4 text-green-500" />
                 Najlepšie (%)
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex items-center rounded-sm p-0.5 text-muted-foreground hover:bg-muted"
+                      aria-label="Info: denné najsilnejšie"
+                    >
+                      <HelpCircle className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-[300px]">
+                    <p className="text-xs">{moversContextText}</p>
+                  </TooltipContent>
+                </Tooltip>
                 {moversUseExtendedQuotes && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -1624,15 +1645,7 @@ export default function Dashboard() {
                   </Tooltip>
                 )}
               </CardTitle>
-              <p className="text-xs text-muted-foreground">
-                {moversUseExtendedQuotes
-                  ? isAllPortfolios
-                    ? "Mimo hlavnej relácie US: pred/po obchode z držaných akcií vo všetkých portfóliách (zobrazia sa len tituly s dostupnou pred/po-obchodnou kotáciou)."
-                    : `Mimo hlavnej relácie US: pred/po obchode z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ (zobrazia sa len tituly s dostupnou pred/po-obchodnou kotáciou).`
-                  : isAllPortfolios
-                    ? "Počas hlavnej relácie US: denná zmena RTH z držaných akcií vo všetkých portfóliách."
-                    : `Počas hlavnej relácie US: denná zmena RTH z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“.`}
-              </p>
+              <p className="text-xs text-muted-foreground">Zmena podľa režimu trhu (RTH vs pre/post market).</p>
             </CardHeader>
             <CardContent className="space-y-2 pt-0">
               {quotesFetching && !quotesData ? (
@@ -1694,6 +1707,20 @@ export default function Dashboard() {
               <CardTitle className="text-base flex items-center gap-2 flex-wrap">
                 <TrendingDown className="h-4 w-4 text-red-500" />
                 Najhoršie (%)
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex items-center rounded-sm p-0.5 text-muted-foreground hover:bg-muted"
+                      aria-label="Info: denné najslabšie"
+                    >
+                      <HelpCircle className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-[300px]">
+                    <p className="text-xs">{moversContextText}</p>
+                  </TooltipContent>
+                </Tooltip>
                 {moversUseExtendedQuotes && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -1714,15 +1741,7 @@ export default function Dashboard() {
                   </Tooltip>
                 )}
               </CardTitle>
-              <p className="text-xs text-muted-foreground">
-                {moversUseExtendedQuotes
-                  ? isAllPortfolios
-                    ? "Mimo hlavnej relácie US: pred/po obchode z držaných akcií vo všetkých portfóliách (zobrazia sa len tituly s dostupnou pred/po-obchodnou kotáciou)."
-                    : `Mimo hlavnej relácie US: pred/po obchode z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“ (zobrazia sa len tituly s dostupnou pred/po-obchodnou kotáciou).`
-                  : isAllPortfolios
-                    ? "Počas hlavnej relácie US: denná zmena RTH z držaných akcií vo všetkých portfóliách."
-                    : `Počas hlavnej relácie US: denná zmena RTH z držaných akcií v portfóliu „${selectedPortfolio?.name ?? "vybrané"}“.`}
-              </p>
+              <p className="text-xs text-muted-foreground">Zmena podľa režimu trhu (RTH vs pre/post market).</p>
             </CardHeader>
             <CardContent className="space-y-2 pt-0">
               {quotesFetching && !quotesData ? (
