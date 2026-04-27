@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
 import { format, parse, parseISO } from "date-fns";
@@ -125,6 +125,7 @@ export default function AssetDetail() {
   const [, setLocation] = useLocation();
   const { currency, convertPrice, getTickerCurrency, formatCurrency, formatWithConversion } = useCurrency();
   const { hideAmounts } = useChartSettings();
+  const [tradePortfolioFilter, setTradePortfolioFilter] = useState<string>("all");
 
   const mask = (s: string) => (hideAmounts ? "••••••" : s);
 
@@ -198,6 +199,13 @@ export default function AssetDetail() {
     }> = [];
     for (const tx of data.marketTransactions) {
       if (tx.type !== "BUY" && tx.type !== "SELL") continue;
+      if (tradePortfolioFilter !== "all") {
+        if (tradePortfolioFilter === "unassigned") {
+          if (tx.portfolioId != null) continue;
+        } else if (tx.portfolioId !== tradePortfolioFilter) {
+          continue;
+        }
+      }
       const d = parseISO(typeof tx.transactionDate === "string" ? tx.transactionDate : String(tx.transactionDate));
       const aligned = alignMarkerToChart(d, sortedAscDates, data.prices);
       if (!aligned) continue;
@@ -208,7 +216,7 @@ export default function AssetDetail() {
       });
     }
     return out;
-  }, [data?.marketTransactions, data?.prices, sortedAscDates]);
+  }, [data?.marketTransactions, data?.prices, sortedAscDates, tradePortfolioFilter]);
 
   const sortedTxDesc = useMemo(() => {
     if (!data?.transactions) return [];
@@ -222,6 +230,28 @@ export default function AssetDetail() {
     data?.portfolios?.forEach((p) => m.set(p.id, p.name));
     return m;
   }, [data?.portfolios]);
+
+  const tradePortfolioOptions = useMemo(() => {
+    const out: Array<{ value: string; label: string }> = [];
+    const used = new Set<string>();
+    let hasUnassigned = false;
+    for (const tx of data?.marketTransactions ?? []) {
+      if (tx.type !== "BUY" && tx.type !== "SELL") continue;
+      if (!tx.portfolioId) {
+        hasUnassigned = true;
+        continue;
+      }
+      if (used.has(tx.portfolioId)) continue;
+      used.add(tx.portfolioId);
+      out.push({
+        value: tx.portfolioId,
+        label: portfolioNameById.get(tx.portfolioId) ?? tx.portfolioId,
+      });
+    }
+    out.sort((a, b) => a.label.localeCompare(b.label, "sk"));
+    if (hasUnassigned) out.push({ value: "unassigned", label: "Nezaradené" });
+    return out;
+  }, [data?.marketTransactions, portfolioNameById]);
 
   const formatTxnValue = (tx: Transaction): string => {
     const cur = txnCurrency(tx);
@@ -733,10 +763,36 @@ export default function AssetDetail() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Vývoj ceny a obchody</CardTitle>
-          <CardDescription>
-            Čiara je uzatváracia cena (historické dáta). Zelené body: nákup, červené: predaj (deň obchodu).
-          </CardDescription>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <CardTitle>Vývoj ceny a obchody</CardTitle>
+              <CardDescription>
+                Čiara je uzatváracia cena (historické dáta). Zelené body: nákup, červené: predaj (deň obchodu).
+              </CardDescription>
+            </div>
+            <div className="w-full sm:w-auto">
+              <label
+                htmlFor="asset-trade-portfolio-filter"
+                className="block text-[11px] text-muted-foreground mb-1"
+              >
+                Obchody podľa portfólia
+              </label>
+              <select
+                id="asset-trade-portfolio-filter"
+                value={tradePortfolioFilter}
+                onChange={(e) => setTradePortfolioFilter(e.target.value)}
+                className="h-8 w-full sm:w-[220px] rounded-md border bg-background px-2 text-xs"
+                data-testid="select-asset-trade-portfolio-filter"
+              >
+                <option value="all">Všetky portfóliá</option>
+                {tradePortfolioOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {chartData.length === 0 ? (
