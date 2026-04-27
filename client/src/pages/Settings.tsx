@@ -14,6 +14,7 @@ import { Loader2, Eye, EyeOff, Coins, Calculator, RefreshCw, Briefcase, Plus, Pe
 import { Badge } from "@/components/ui/badge";
 import { BrokerLogo, BrokerSelectItem, BROKER_CATALOG } from "@/components/BrokerLogo";
 import { BROKER_CODES, type Currency, type BrokerCode } from "@shared/schema";
+import { HelpTip } from "@/components/HelpTip";
 
 interface ApiSettings {
   preferredCurrency: Currency;
@@ -986,7 +987,34 @@ export default function Settings() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="rounded-lg border border-dashed bg-muted/20 p-3 space-y-2">
-            <p className="text-sm font-medium">Audit výpočtov (Excel)</p>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <p className="text-sm font-medium">Audit výpočtov (Excel)</p>
+              <HelpTip title="Čo obsahuje auditný Excel">
+                <ul className="list-disc pl-4 space-y-2">
+                  <li>
+                    <span className="font-medium">Meta</span> – portfólio, mena z nastavení, čas generovania, stručná
+                    metodika.
+                  </li>
+                  <li>
+                    <span className="font-medium">Kurzy_ECB_snapshot</span> – kurzy použité pri exporte (Frankfurter/ECB
+                    logika ako pri prepočtoch).
+                  </li>
+                  <li>
+                    <span className="font-medium">Transakcie</span> – kompletný výpis z DB (dátum, typ, ticker,
+                    množstvo, cena, provízia, meny, kurz, baseCurrencyAmount, vypočítaný eurPerUnit, realizedGain z DB,
+                    externé ID…).
+                  </li>
+                  <li>
+                    <span className="font-medium">Denne_MTMTWR</span> – deň po dni: celková hodnota a čisté vklady v
+                    tvojej zvolenej mene, denný rozdiel, kumulatívne % portfólia a S&amp;P (rovnaký motor ako grafy).
+                  </li>
+                  <li>
+                    <span className="font-medium">FIFO_*</span> – realizácia podľa roka/mesiaca, súhrn podľa tickeru,
+                    otvorené loty, celkový súhrn v EUR.
+                  </li>
+                </ul>
+              </HelpTip>
+            </div>
             <p className="text-xs text-muted-foreground leading-relaxed">
               Vygeneruje XLSX so všetkými transakciami, denným priebehom MTM a TWR (rovnaký motor ako grafy) v zvolenej mene, snapshotom kurzov ECB a FIFO súhrnmi (rok, mesiac, ticker, otvorené loty).
               Môže chvíľu trvať pri veľa tituloch a dlhej histórii.
