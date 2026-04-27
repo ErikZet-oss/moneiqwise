@@ -13,7 +13,7 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Wallet, Banknote, Newspaper, ExternalLink, HelpCircle, Loader2, RefreshCw, Moon, Calendar, ChevronRight } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Wallet, Banknote, Newspaper, ExternalLink, HelpCircle, Loader2, RefreshCw, Moon, Calendar, ChevronRight, Sparkles } from "lucide-react";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
@@ -1158,16 +1158,41 @@ export default function Dashboard() {
   return (
     <div className="space-y-4 md:space-y-6">
       <Dialog open={showAthPopup && athDialogOpen} onOpenChange={setAthDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md overflow-hidden">
+          <div className="pointer-events-none absolute inset-0">
+            <span className="absolute left-4 top-3 text-lg motion-safe:animate-bounce">🎉</span>
+            <span className="absolute right-5 top-4 text-base motion-safe:animate-pulse">✨</span>
+            <span className="absolute left-10 bottom-4 text-sm motion-safe:animate-pulse">🎊</span>
+            <span className="absolute right-12 bottom-3 text-base motion-safe:animate-bounce">✨</span>
+          </div>
+          <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-emerald-500/15 to-transparent" />
           <DialogHeader>
-            <DialogTitle>Portfolio ATH alert</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600">
+                <Sparkles className="h-4 w-4" />
+              </span>
+              Nové ATH portfólia
+            </DialogTitle>
             <DialogDescription>
               {athPortfolioNames.length === 1
                 ? `Portfólio ${athPortfolioNames[0]} dosiahlo nové ATH. Gratulujem!`
                 : `Portfóliá ${athPortfolioNames.join(", ")} dosiahli nové ATH. Gratulujem!`}
             </DialogDescription>
           </DialogHeader>
-          <p className="text-sm leading-relaxed">{athFunnyLine}</p>
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-1.5">
+              {athPortfolioNames.map((name) => (
+                <Badge
+                  key={name}
+                  className="bg-emerald-600/90 hover:bg-emerald-600 text-white"
+                  data-testid="badge-ath-portfolio-name"
+                >
+                  {name}
+                </Badge>
+              ))}
+            </div>
+            <p className="text-sm leading-relaxed text-muted-foreground">{athFunnyLine}</p>
+          </div>
         </DialogContent>
       </Dialog>
 
