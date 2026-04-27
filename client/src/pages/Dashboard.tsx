@@ -507,8 +507,9 @@ export default function Dashboard() {
       );
       return out;
     },
-    staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
+    staleTime: 30 * 1000,
+    refetchOnWindowFocus: true,
+    refetchOnMount: "always",
   });
 
   const { data: news, isLoading: newsLoading } = useQuery<NewsArticle[]>({
@@ -680,11 +681,14 @@ export default function Dashboard() {
     }
     if (!athHistoryByPortfolio || athPopupEvaluated) return;
     const eps = 1e-6;
+    const todayIso = format(startOfDay(new Date()), "yyyy-MM-dd");
     const reachedAth: string[] = [];
     for (const p of portfolios) {
       const points = athHistoryByPortfolio[p.id]?.points ?? [];
       if (points.length < 2) continue;
-      const last = points[points.length - 1]?.totalValue;
+      const lastPoint = points[points.length - 1];
+      if (!lastPoint?.date || !String(lastPoint.date).startsWith(todayIso)) continue;
+      const last = lastPoint.totalValue;
       if (!Number.isFinite(last)) continue;
       let prevMax = Number.NEGATIVE_INFINITY;
       for (let i = 0; i < points.length - 1; i++) {
