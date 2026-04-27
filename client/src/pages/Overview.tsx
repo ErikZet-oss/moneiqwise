@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useState, type MouseEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { startOfDay, subMonths } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -33,18 +32,8 @@ interface StockQuote {
   annualDividendPerShare?: number;
 }
 
-type UpcomingDividendItem = {
-  ticker: string;
-  annualDividendPerShare: number | null;
-  dividendYieldCurrent: number | null;
-};
-type DividendTxLike = {
-  type: string;
-  ticker: string | null;
-  transactionDate: string;
-  shares: string;
-  pricePerShare: string;
-  commission: string | null;
+type ForwardIncomeResponse = {
+  annualIncome: number;
 };
 
 interface OverviewBundle {
@@ -171,61 +160,23 @@ export default function Overview() {
     refetchOnWindowFocus: false,
   });
 
-  const { data: upcomingDividendsByPortfolio = {} } = useQuery<
-    Record<string, UpcomingDividendItem[]>
-  >({
-    queryKey: ["/api/dividends/upcoming", "overview-by-portfolio", portfolios.map((p) => p.id).join(",")],
-    enabled: portfolios.length > 0,
-    queryFn: async () => {
-      const out: Record<string, UpcomingDividendItem[]> = {};
-      await Promise.all(
-        portfolios.map(async (p) => {
-          const res = await fetch(
-            `/api/dividends/upcoming?portfolio=${encodeURIComponent(p.id)}`,
-            { credentials: "include" },
-          );
-          if (!res.ok) {
-            out[p.id] = [];
-            return;
-          }
-          const data = (await res.json()) as { all?: UpcomingDividendItem[] };
-          out[p.id] = Array.isArray(data?.all) ? data.all : [];
-        }),
-      );
-      return out;
-    },
-    staleTime: 45 * 60 * 1000,
-    refetchOnWindowFocus: false,
-  });
-
-  const { data: trailing12mFromDividendsByPortfolio = {} } = useQuery<Record<string, number>>({
-    queryKey: ["/api/transactions", "overview-trailing-12m-by-portfolio", portfolios.map((p) => p.id).join(",")],
+  const { data: forwardIncomeByPortfolio = {} } = useQuery<Record<string, number>>({
+    queryKey: ["/api/dividends/forward-income", "overview-by-portfolio", portfolios.map((p) => p.id).join(",")],
     enabled: portfolios.length > 0,
     queryFn: async () => {
       const out: Record<string, number> = {};
-      const cutoff = subMonths(startOfDay(new Date()), 12);
       await Promise.all(
         portfolios.map(async (p) => {
-          const res = await fetch(`/api/transactions?portfolio=${encodeURIComponent(p.id)}`, {
-            credentials: "include",
-          });
+          const res = await fetch(
+            `/api/dividends/forward-income?portfolio=${encodeURIComponent(p.id)}`,
+            { credentials: "include" },
+          );
           if (!res.ok) {
             out[p.id] = 0;
             return;
           }
-          const txs = (await res.json()) as DividendTxLike[];
-          let sum = 0;
-          for (const t of txs) {
-            if (t.type !== "DIVIDEND") continue;
-            const d = startOfDay(new Date(t.transactionDate as unknown as string));
-            if (d < cutoff) continue;
-            const gross = parseFloat(String(t.shares ?? "0")) * parseFloat(String(t.pricePerShare ?? "0"));
-            const taxOrFee = parseFloat(String(t.commission ?? "0"));
-            const net = gross - taxOrFee;
-            if (!Number.isFinite(net)) continue;
-            sum += net;
-          }
-          out[p.id] = sum;
+          const data = (await res.json()) as ForwardIncomeResponse;
+          out[p.id] = Number.isFinite(data?.annualIncome) ? data.annualIncome : 0;
         }),
       );
       return out;
@@ -445,37 +396,6 @@ export default function Overview() {
       const dividendNetEur = row?.dividendNet ?? 0;
       const trailing12mDividendNetEur = row?.trailing12mDividendNet ?? 0;
       const cashEur = row?.cashEur ?? 0;
-      const annualDivByTicker = new Map<string, number>();
-      const yieldPctByTicker = new Map<string, number>();
-      for (const ev of upcomingDividendsByPortfolio[p.id] ?? []) {
-        const t = (ev.ticker || "").toUpperCase();
-        if (!t) continue;
-        if (ev.annualDividendPerShare != null && Number.isFinite(ev.annualDividendPerShare)) {
-          annualDivByTicker.set(t, Math.max(annualDivByTicker.get(t) ?? 0, ev.annualDividendPerShare));
-        }
-        if (ev.dividendYieldCurrent != null && Number.isFinite(ev.dividendYieldCurrent) && ev.dividendYieldCurrent > 0) {
-          yieldPctByTicker.set(t, Math.max(yieldPctByTicker.get(t) ?? 0, ev.dividendYieldCurrent));
-        }
-      }
-      let passiveIncomeFromDividendsSection = 0;
-      for (const h of holdings) {
-        const shares = parseFloat(String(h.shares ?? "0"));
-        if (!(Number.isFinite(shares) && shares > 0)) continue;
-        const ticker = (h.ticker || "").toUpperCase();
-        if (!ticker) continue;
-        const annPerShare = annualDivByTicker.get(ticker) ?? 0;
-        const yieldPct = yieldPctByTicker.get(ticker);
-        if (annPerShare > 0) {
-          // Keep identical behavior with Dividends page metrics.
-          passiveIncomeFromDividendsSection += annPerShare * shares;
-          continue;
-        }
-        const q = quotes?.[ticker];
-        if (yieldPct != null && yieldPct > 0 && q && Number.isFinite(q.price) && q.price > 0) {
-          // Keep identical behavior with Dividends page metrics.
-          passiveIncomeFromDividendsSection += (yieldPct / 100) * q.price * shares;
-        }
-      }
       map.set(
         p.id,
         (() => {
@@ -488,6 +408,7 @@ export default function Overview() {
             trailing12mDividendNetEur,
             cashEur,
           );
+          const passiveIncomeFromDividendsSection = forwardIncomeByPortfolio[p.id] ?? 0;
           if (passiveIncomeFromDividendsSection > 0) {
             const passiveIncomePercent =
               m.stockValue > 0 ? (passiveIncomeFromDividendsSection / m.stockValue) * 100 : 0;
@@ -497,24 +418,13 @@ export default function Overview() {
               passiveIncomePercent,
             };
           }
-          const trailingFromDividendsPage = trailing12mFromDividendsByPortfolio[p.id] ?? 0;
-          if (trailingFromDividendsPage > 0) {
-            const trailingDisplay = convertPrice(trailingFromDividendsPage, "EUR");
-            const passiveIncomePercent =
-              m.stockValue > 0 ? (trailingDisplay / m.stockValue) * 100 : 0;
-            return {
-              ...m,
-              passiveIncome: trailingDisplay,
-              passiveIncomePercent,
-            };
-          }
           return m;
         })(),
       );
     }
     return map;
     // quotes / currency helpers must trigger recompute when quotes arrive
-  }, [overview, portfolios, quotes, convertPrice, getTickerCurrency, optionsByPortfolioId, upcomingDividendsByPortfolio, trailing12mFromDividendsByPortfolio]);
+  }, [overview, portfolios, quotes, convertPrice, getTickerCurrency, optionsByPortfolioId, forwardIncomeByPortfolio]);
 
   const grandTotal = useMemo(() => {
     let total = 0;

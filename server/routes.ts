@@ -4036,6 +4036,147 @@ export async function registerRoutes(
     }
   });
 
+  /** Forward 12M príjem z dividend (rovnaký princíp ako karta v sekcii Dividendy). */
+  app.get("/api/dividends/forward-income", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const portfolioParam = (req.query.portfolio as string) || "all";
+      const pf = portfolioParam === "all" ? undefined : portfolioParam;
+
+      const holdings = await storage.getHoldingsByUser(userId, pf);
+      const transactions = await storage.getTransactionsByUser(userId, pf);
+
+      const holdingsByTicker = new Map<
+        string,
+        { shares: number; invested: number; avgCost: number }
+      >();
+      for (const h of holdings) {
+        const t = (h.ticker || "").toUpperCase();
+        if (!t || !isMarketDataTicker(t)) continue;
+        const shares = parseFloat(String(h.shares ?? "0"));
+        const invested = parseFloat(String(h.totalInvested ?? "0"));
+        if (!Number.isFinite(shares) || shares <= 0) continue;
+        const prev = holdingsByTicker.get(t);
+        const mergedShares = (prev?.shares ?? 0) + shares;
+        const mergedInvested = (prev?.invested ?? 0) + (Number.isFinite(invested) ? invested : 0);
+        holdingsByTicker.set(t, {
+          shares: mergedShares,
+          invested: mergedInvested,
+          avgCost: mergedShares > 0 ? mergedInvested / mergedShares : 0,
+        });
+      }
+
+      const annualDivByTicker = new Map<string, number>();
+      const dividendYieldPctByTicker = new Map<string, number>();
+      const tickerList = Array.from(holdingsByTicker.keys());
+      const CONCURRENCY = 4;
+      for (let i = 0; i < tickerList.length; i += CONCURRENCY) {
+        const chunk = tickerList.slice(i, i + CONCURRENCY);
+        const rows = await Promise.all(
+          chunk.map(async (ticker) => {
+            const events = await fetchYahooUpcomingDividendEvents(ticker);
+            return { ticker, events };
+          }),
+        );
+        for (const { ticker, events } of rows) {
+          if (!events?.length) continue;
+          for (const ev of events) {
+            if (ev.annualDividendPerShare != null && Number.isFinite(ev.annualDividendPerShare)) {
+              annualDivByTicker.set(
+                ticker,
+                Math.max(annualDivByTicker.get(ticker) ?? 0, ev.annualDividendPerShare),
+              );
+            }
+            if (
+              ev.dividendYieldCurrent != null &&
+              Number.isFinite(ev.dividendYieldCurrent) &&
+              ev.dividendYieldCurrent > 0
+            ) {
+              dividendYieldPctByTicker.set(
+                ticker,
+                Math.max(dividendYieldPctByTicker.get(ticker) ?? 0, ev.dividendYieldCurrent),
+              );
+            }
+          }
+        }
+      }
+
+      const cutoff = new Date();
+      cutoff.setHours(0, 0, 0, 0);
+      cutoff.setMonth(cutoff.getMonth() - 12);
+      const trailing12mNetByTicker = new Map<string, number>();
+      for (const t of transactions) {
+        if (t.type !== "DIVIDEND") continue;
+        const d = new Date(t.transactionDate as unknown as string);
+        d.setHours(0, 0, 0, 0);
+        if (d < cutoff) continue;
+        const ticker = (t.ticker || "N/A").toUpperCase();
+        const gross =
+          parseFloat(String(t.shares ?? "0")) * parseFloat(String(t.pricePerShare ?? "0"));
+        const taxOrFee = parseFloat(String(t.commission ?? "0"));
+        const net = gross - taxOrFee;
+        if (!Number.isFinite(net)) continue;
+        trailing12mNetByTicker.set(ticker, (trailing12mNetByTicker.get(ticker) ?? 0) + net);
+      }
+
+      const quotes: Record<string, { price: number }> = {};
+      const quotePairs = await Promise.all(
+        tickerList.map(async (ticker) => {
+          try {
+            const q = await fetchStockQuote(ticker);
+            return [
+              ticker,
+              q && Number.isFinite(Number(q.price)) ? { price: Number(q.price) } : undefined,
+            ] as const;
+          } catch {
+            return [ticker, undefined] as const;
+          }
+        }),
+      );
+      for (const [ticker, q] of quotePairs) {
+        if (q) quotes[ticker] = q;
+      }
+
+      let totalCurrentValue = 0;
+      let totalInvested = 0;
+      let annualIncome = 0;
+      holdingsByTicker.forEach((h, ticker) => {
+        const q = quotes[ticker];
+        const annPerShare = annualDivByTicker.get(ticker) ?? 0;
+        const yieldPct = dividendYieldPctByTicker.get(ticker);
+        const trailing12m = trailing12mNetByTicker.get(ticker) ?? 0;
+        let annualCash = 0;
+        if (annPerShare > 0) {
+          annualCash = annPerShare * h.shares;
+        } else if (yieldPct != null && yieldPct > 0 && q && Number.isFinite(q.price) && q.price > 0) {
+          annualCash = (yieldPct / 100) * q.price * h.shares;
+        } else if (trailing12m > 0) {
+          annualCash = trailing12m;
+        } else {
+          return;
+        }
+
+        const marketValue = q && Number.isFinite(q.price) && q.price > 0 ? q.price * h.shares : 0;
+        const costBasis = h.avgCost * h.shares;
+        totalInvested += Number.isFinite(costBasis) && costBasis > 0 ? costBasis : 0;
+        annualIncome += annualCash;
+        if (marketValue > 0) totalCurrentValue += marketValue;
+        else if (annualCash > 0 && Number.isFinite(costBasis) && costBasis > 0) {
+          totalCurrentValue += costBasis;
+        }
+      });
+
+      res.json({
+        annualIncome,
+        dividendYieldCurrent: totalCurrentValue > 0 ? (annualIncome / totalCurrentValue) * 100 : 0,
+        yieldOnCost: totalInvested > 0 ? (annualIncome / totalInvested) * 100 : 0,
+      });
+    } catch (error) {
+      console.error("Error computing forward dividend income:", error);
+      res.status(500).json({ message: "Nepodarilo sa vypočítať forward dividend income." });
+    }
+  });
+
   /** Denné body: celková MTM + čisté vklady/výbery, kum. % (segment TWR) vs. S&amp;P 500. */
   function parsePortfolioHistoryRange(q: string | undefined): PortfolioHistoryRange {
     const u = (q || "1y").trim().toLowerCase();
