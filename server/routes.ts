@@ -1129,6 +1129,13 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
           regularMarketTimeRaw,
           typeof q?.exchangeTimezoneName === "string" ? q.exchangeTimezoneName : null,
         );
+        const annualDividendPerShareRaw = Number(
+          q?.trailingAnnualDividendRate ?? q?.dividendRate,
+        );
+        const annualDividendPerShare =
+          Number.isFinite(annualDividendPerShareRaw) && annualDividendPerShareRaw > 0
+            ? annualDividendPerShareRaw
+            : 0;
 
         return {
           ticker,
@@ -1143,6 +1150,7 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
           preMarketChangePercent,
           high52: Number(q?.fiftyTwoWeekHigh) || 0,
           low52: Number(q?.fiftyTwoWeekLow) || 0,
+          annualDividendPerShare,
         };
       }
     }
@@ -1213,6 +1221,7 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
           preMarketChangePercent,
           high52: meta.fiftyTwoWeekHigh || 0,
           low52: meta.fiftyTwoWeekLow || 0,
+          annualDividendPerShare: 0,
         };
       }
     }
@@ -1291,6 +1300,7 @@ async function fetchFinnhubQuote(ticker: string): Promise<any> {
         preMarketChangePercent: null,
         high52: data.h || 0, // high of day (not 52w)
         low52: data.l || 0, // low of day (not 52w)
+        annualDividendPerShare: 0,
       };
     }
 
@@ -1348,6 +1358,7 @@ async function fetchStockQuote(ticker: string, skipCache = false): Promise<any> 
           preMarketChangePercent: null,
           high52: parseFloat(quote["52w High"]) || 0,
           low52: parseFloat(quote["52w Low"]) || 0,
+          annualDividendPerShare: 0,
         };
         
         // Cache the result
@@ -3230,6 +3241,7 @@ export async function registerRoutes(
                   preMarketChangePercent: null,
                   high52: 1.00,
                   low52: 1.00,
+                  annualDividendPerShare: 0,
                 }
               };
             }

@@ -1131,13 +1131,76 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
           message: `[${operationId}] Daň bez tickera: ${comment}`,
         });
       }
-    } else if (typeStr.includes('sec fee') || typeStr.includes('fee')) {
-      // Fees - skip or log
-      log.push({
-        row: i + 1,
-        status: 'skipped',
-        message: `[${operationId}] Poplatok: ${typeStr} ${amount.toFixed(2)} EUR`,
-      });
+    } else if (
+      typeStr.includes('sec fee') ||
+      typeStr.includes('fee') ||
+      typeStr.includes('commission') ||
+      typePlain.includes('poplatok') ||
+      typePlain.includes('provizia') ||
+      typePlain.includes('provízia')
+    ) {
+      // Poplatky z XTB:
+      // - ak je ticker, viažeme ich na daný titul (TAX),
+      // - bez tickera ostáva všeobecný cash-flow.
+      const absAmt = Math.abs(amount);
+      if (!(absAmt > 0)) {
+        log.push({
+          row: i + 1,
+          status: 'warning',
+          message: `[${operationId}] Poplatok: nulová alebo neplatná suma (preskočené)`,
+        });
+        continue;
+      }
+
+      const isRebate = amount > 0;
+      const lineSign: 1 | -1 = isRebate ? 1 : -1;
+      const forex = buildForexForXtBLine(accountCurrency, row, fxCols, absAmt, lineSign);
+      const base = Number.isFinite(forex.baseCurrencyAmount) ? forex.baseCurrencyAmount : lineSign * absAmt;
+      if (ticker) {
+        transactions.push({
+          date: time,
+          ticker,
+          type: 'TAX',
+          quantity: 0,
+          priceEur: 0,
+          totalAmountEur: base,
+          originalComment: comment,
+          externalId: operationId,
+          transactionId: operationId || undefined,
+          originalCurrency: forex.originalCurrency,
+          exchangeRateAtTransaction: forex.exchangeRateAtTransaction,
+          baseCurrencyAmount: base,
+          companyName: 'Poplatok brokera (XTB)',
+        });
+
+        log.push({
+          row: i + 1,
+          status: 'success',
+          message: `[${operationId}] TAX ${ticker} (fee) ${base >= 0 ? '+' : ''}${base.toFixed(2)} EUR`,
+        });
+      } else {
+        transactions.push({
+          date: time,
+          ticker: CASH_FLOW_TICKER,
+          type: isRebate ? 'DEPOSIT' : 'WITHDRAWAL',
+          quantity: 0,
+          priceEur: 0,
+          totalAmountEur: base,
+          originalComment: comment,
+          externalId: operationId,
+          transactionId: operationId || undefined,
+          originalCurrency: forex.originalCurrency,
+          exchangeRateAtTransaction: forex.exchangeRateAtTransaction,
+          baseCurrencyAmount: base,
+          companyName: 'Poplatok brokera (XTB)',
+        });
+
+        log.push({
+          row: i + 1,
+          status: 'success',
+          message: `[${operationId}] ${isRebate ? 'DEPOSIT' : 'WITHDRAWAL'} (fee) ${base >= 0 ? '+' : ''}${base.toFixed(2)} EUR`,
+        });
+      }
     } else if (typeStr.includes('interest')) {
       if (isFreeFundsInterest) {
         const intAm = Math.abs(amount);

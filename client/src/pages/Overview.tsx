@@ -28,6 +28,8 @@ interface StockQuote {
   price: number;
   change: number;
   changePercent: number;
+  /** Očakávaná ročná dividenda na akciu v mene tickera. */
+  annualDividendPerShare?: number;
 }
 
 interface OverviewBundle {
@@ -58,9 +60,9 @@ interface PortfolioMetrics {
   totalProfitPercent: number;
   dailyChange: number;
   dailyChangePercent: number;
-  /** Čisté dividendy (po dani z riadkov) v mene zobrazenia — z API v EUR. */
+  /** Očakávaný ročný príjem z dividend (forward) v mene zobrazenia. */
   passiveIncome: number;
-  /** Kumulatívne dividendy / aktuálna hodnota akcií — nie ročný dividend yield. */
+  /** Očakávaný ročný dividendový výnos voči aktuálnej hodnote akcií. */
   passiveIncomePercent: number;
   hasQuotes: boolean;
 }
@@ -179,6 +181,7 @@ export default function Overview() {
     let stockValue = 0;
     let totalInvested = 0;
     let dailyChange = 0;
+    let forwardDividendIncome = 0;
     let anyQuote = false;
 
     holdings.forEach((h) => {
@@ -190,6 +193,10 @@ export default function Overview() {
 
       const quote = quotes?.[h.ticker];
       if (quote) {
+        const annualDividendPerShare = Number(quote.annualDividendPerShare ?? 0);
+        if (Number.isFinite(annualDividendPerShare) && annualDividendPerShare > 0) {
+          forwardDividendIncome += shares * convertPrice(annualDividendPerShare, tickerCurrency);
+        }
         anyQuote = true;
         stockValue += shares * convertPrice(quote.price, tickerCurrency);
         dailyChange += shares * convertPrice(quote.change, tickerCurrency);
@@ -203,7 +210,7 @@ export default function Overview() {
       "EUR",
     );
 
-    const dividendsDisplay = convertPrice(
+    const historicalDividendsDisplay = convertPrice(
       Number.isFinite(dividendNetEur) ? dividendNetEur : 0,
       "EUR",
     );
@@ -254,12 +261,12 @@ export default function Overview() {
     );
     const realizedGain = rFifo + rClose;
     const optionsRealizedDisplay = convertPrice(optionsRealizedGain, "EUR");
-    const totalProfit = unrealized + realizedGain + optionsRealizedDisplay + dividendsDisplay;
+    const totalProfit = unrealized + realizedGain + optionsRealizedDisplay + historicalDividendsDisplay;
     const totalProfitPercent = totalInvested > 0 ? (totalProfit / totalInvested) * 100 : 0;
     const baseValue = stockValue - dailyChange;
     const dailyChangePercent = baseValue > 0 ? (dailyChange / baseValue) * 100 : 0;
     const passiveIncomePercent =
-      stockValue > 0 ? (dividendsDisplay / stockValue) * 100 : 0;
+      stockValue > 0 ? (forwardDividendIncome / stockValue) * 100 : 0;
 
     return {
       totalValue,
@@ -271,7 +278,7 @@ export default function Overview() {
       totalProfitPercent,
       dailyChange,
       dailyChangePercent,
-      passiveIncome: dividendsDisplay,
+      passiveIncome: forwardDividendIncome,
       passiveIncomePercent,
       hasQuotes: anyQuote,
     };
@@ -577,9 +584,9 @@ export default function Overview() {
                             <TooltipContent className="max-w-[280px] text-xs">
                               <p className="font-medium mb-1">Čo znamenajú čísla</p>
                               <p>
-                                Suma = čisté dividendy z histórie transakcií (DIVIDEND + TAX), prepočítané do
-                                vašej meny. Percentá = tento kumulatívny súčet voči aktuálnej trhovej hodnote
-                                akcií — nie ročný dividend yield z kotácie.
+                                Suma = očakávaný ročný príjem (Forward Dividend): počet držaných kusov × ročná
+                                dividenda na akciu z aktuálnej kotácie, prepočítaná FX kurzom do vašej meny.
+                                Percentá = očakávaný ročný dividendový výnos voči aktuálnej hodnote akcií.
                               </p>
                             </TooltipContent>
                           </Tooltip>
