@@ -266,12 +266,8 @@ export default function Dashboard() {
       state = "LIVE";
     } else state = "CLOSED";
 
-    /**
-     * Rebríček najlepšie/najhoršie:
-     * - LIVE: denná RTH zmena
-     * - mimo LIVE: pred/po-obchodná zmena (ak existuje), bez fallbacku na starú RTH zmenu
-     */
-    const moversUseExtendedQuotes = state !== "LIVE";
+    // Rebríček držíme na regular daily zmene (RTH), aby sedel s Yahoo default.
+    const moversUseExtendedQuotes = false;
 
     return { usSessionState: state, moversUseExtendedQuotes };
   })();
@@ -300,28 +296,10 @@ export default function Dashboard() {
         let pct: number;
         let dayValueEur: number | null = null;
 
-        if (usSessionState === "LIVE") {
-          pct = num(q?.changePercent);
-          const ch = num(q?.change);
-          if (shares > 0 && Number.isFinite(ch)) {
-            dayValueEur = shares * convertPrice(ch, getTickerCurrency(t));
-          }
-        } else if (moversUseExtendedQuotes) {
-          const extPct = num(q?.preMarketChangePercent);
-          const useExt = Number.isFinite(extPct);
-          pct = useExt ? extPct : NaN;
-          if (useExt) {
-            const ch = num(q?.preMarketChange);
-            if (shares > 0 && Number.isFinite(ch)) {
-              dayValueEur = shares * convertPrice(ch, getTickerCurrency(t));
-            }
-          }
-        } else {
-          pct = num(q?.changePercent);
-          const ch = num(q?.change);
-          if (shares > 0 && Number.isFinite(ch)) {
-            dayValueEur = shares * convertPrice(ch, getTickerCurrency(t));
-          }
+        pct = num(q?.changePercent);
+        const ch = num(q?.change);
+        if (shares > 0 && Number.isFinite(ch)) {
+          dayValueEur = shares * convertPrice(ch, getTickerCurrency(t));
         }
 
         return {
