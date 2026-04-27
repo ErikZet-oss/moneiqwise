@@ -218,6 +218,22 @@ export default function Dashboard() {
   }, [portfolioParam]);
 
   useEffect(() => {
+    try {
+      const todayIso = format(startOfDay(new Date()), "yyyy-MM-dd");
+      const raw = sessionStorage.getItem(`mw-dash-ath-celebrate-${todayIso}`);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as unknown;
+      if (!Array.isArray(parsed)) return;
+      const names = parsed
+        .map((v) => (typeof v === "string" ? v.trim() : ""))
+        .filter((v) => v.length > 0);
+      if (names.length > 0) setAthPortfolioNames(names);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
     if (showAthPopup) {
       setAthPopupEvaluated(false);
     }
@@ -703,6 +719,11 @@ export default function Dashboard() {
     }
     if (reachedAth.length > 0) {
       let allowAthDialog = true;
+      try {
+        sessionStorage.setItem(`mw-dash-ath-celebrate-${todayIso}`, JSON.stringify(reachedAth));
+      } catch {
+        /* ignore */
+      }
       try {
         const suppressKey = `mw-dash-ath-suppress-${todayIso}`;
         if (typeof sessionStorage !== "undefined" && sessionStorage.getItem(suppressKey)) {
