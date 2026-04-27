@@ -555,10 +555,49 @@ const upcomingDividendYahooCache = new Map<
   { t: number; v: UpcomingDividendYahooParsed[] | null }
 >();
 const UPCOMING_DIV_YAHOO_TTL_MS = 45 * 60 * 1000;
+const annualDividendPerShareCache = new Map<string, { t: number; v: number }>();
+const ANNUAL_DIVIDEND_PER_SHARE_TTL_MS = 12 * 60 * 60 * 1000;
 
 function yahooRawTsToMs(raw: number): number {
   if (!Number.isFinite(raw)) return NaN;
   return raw > 1e12 ? raw : raw * 1000;
+}
+
+async function fetchYahooAnnualDividendPerShare(ticker: string): Promise<number> {
+  const key = ticker.toUpperCase();
+  const cached = annualDividendPerShareCache.get(key);
+  if (cached && Date.now() - cached.t < ANNUAL_DIVIDEND_PER_SHARE_TTL_MS) {
+    return cached.v;
+  }
+
+  try {
+    const yahooTicker = toYahooTicker(key);
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(
+      yahooTicker,
+    )}?modules=summaryDetail,defaultKeyStatistics`;
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      },
+    });
+    if (!response.ok) {
+      annualDividendPerShareCache.set(key, { t: Date.now(), v: 0 });
+      return 0;
+    }
+
+    const data = await response.json();
+    const result = data?.quoteSummary?.result?.[0];
+    const raw =
+      Number(result?.summaryDetail?.dividendRate?.raw) ||
+      Number(result?.defaultKeyStatistics?.lastDividendValue?.raw) ||
+      0;
+    const out = Number.isFinite(raw) && raw > 0 ? raw : 0;
+    annualDividendPerShareCache.set(key, { t: Date.now(), v: out });
+    return out;
+  } catch {
+    annualDividendPerShareCache.set(key, { t: Date.now(), v: 0 });
+    return 0;
+  }
 }
 
 /**
@@ -1132,10 +1171,13 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
         const annualDividendPerShareRaw = Number(
           q?.trailingAnnualDividendRate ?? q?.dividendRate,
         );
-        const annualDividendPerShare =
+        let annualDividendPerShare =
           Number.isFinite(annualDividendPerShareRaw) && annualDividendPerShareRaw > 0
             ? annualDividendPerShareRaw
             : 0;
+        if (annualDividendPerShare <= 0) {
+          annualDividendPerShare = await fetchYahooAnnualDividendPerShare(ticker);
+        }
 
         return {
           ticker,
@@ -1203,6 +1245,10 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
           typeof meta?.exchangeTimezoneName === "string" ? meta.exchangeTimezoneName : null,
         );
 
+        let annualDividendPerShare = 0;
+        if (currentPrice > 0) {
+          annualDividendPerShare = await fetchYahooAnnualDividendPerShare(ticker);
+        }
         return {
           ticker,
           price: currentPrice,
@@ -1221,7 +1267,7 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
           preMarketChangePercent,
           high52: meta.fiftyTwoWeekHigh || 0,
           low52: meta.fiftyTwoWeekLow || 0,
-          annualDividendPerShare: 0,
+          annualDividendPerShare,
         };
       }
     }
