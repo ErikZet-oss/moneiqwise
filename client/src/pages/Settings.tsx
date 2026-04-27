@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
-import { Loader2, Eye, EyeOff, Coins, Calculator, RefreshCw, Briefcase, Plus, Pencil, Trash2, LineChart, Newspaper, AlertTriangle, ChevronUp, ChevronDown, Eraser, TrendingUp, Code2 } from "lucide-react";
+import { Loader2, Eye, EyeOff, Coins, Calculator, RefreshCw, Briefcase, Plus, Pencil, Trash2, LineChart, Newspaper, AlertTriangle, ChevronUp, ChevronDown, Eraser, TrendingUp, Code2, Download } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { BrokerLogo, BrokerSelectItem, BROKER_CATALOG } from "@/components/BrokerLogo";
 import { BROKER_CODES, type Currency, type BrokerCode } from "@shared/schema";
@@ -71,6 +71,7 @@ export default function Settings() {
   const [wipeDialogOpen, setWipeDialogOpen] = useState(false);
   const [wipeConfirmText, setWipeConfirmText] = useState("");
   const [devSnapshotScope, setDevSnapshotScope] = useState<string>("all");
+  const [auditDownloadLoading, setAuditDownloadLoading] = useState(false);
 
   const { data: settings, isLoading } = useQuery<ApiSettings>({
     queryKey: ["/api/settings"],
@@ -259,6 +260,43 @@ export default function Settings() {
       });
     },
   });
+
+  const downloadCalculationAudit = async () => {
+    setAuditDownloadLoading(true);
+    try {
+      const res = await fetch(
+        `/api/dev/calculation-audit?portfolio=${encodeURIComponent(devSnapshotScope)}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { message?: string }).message || "Nepodarilo sa stiahnuť audit.");
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get("Content-Disposition");
+      let filename = "moneiqwise-vypocet-audit.xlsx";
+      const m = cd?.match(/filename="([^"]+)"/);
+      if (m?.[1]) filename = m[1];
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({
+        title: "Stiahnuté",
+        description: "Auditný Excel je pripravený na kontrolu výpočtov.",
+      });
+    } catch (e) {
+      toast({
+        title: "Chyba",
+        description: e instanceof Error ? e.message : "Nepodarilo sa stiahnuť súbor.",
+        variant: "destructive",
+      });
+    } finally {
+      setAuditDownloadLoading(false);
+    }
+  };
 
   const handleMovePortfolio = async (index: number, direction: "up" | "down") => {
     const target = direction === "up" ? index - 1 : index + 1;
@@ -943,10 +981,38 @@ export default function Settings() {
             <CardTitle>Developer</CardTitle>
           </div>
           <CardDescription>
-            Dočasný debug náhľad snapshotov histórie portfólia (čo sa ukladá do `portfolio_snapshots`).
+            Dočasný debug náhľad snapshotov histórie portfólia (čo sa ukladá do `portfolio_snapshots`) a export výpočtov do Excelu.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
+          <div className="rounded-lg border border-dashed bg-muted/20 p-3 space-y-2">
+            <p className="text-sm font-medium">Audit výpočtov (Excel)</p>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Vygeneruje XLSX so všetkými transakciami, denným priebehom MTM a TWR (rovnaký motor ako grafy) v zvolenej mene, snapshotom kurzov ECB a FIFO súhrnmi (rok, mesiac, ticker, otvorené loty).
+              Môže chvíľu trvať pri veľa tituloch a dlhej histórii.
+            </p>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={auditDownloadLoading}
+              onClick={() => void downloadCalculationAudit()}
+              data-testid="button-dev-download-calculation-audit"
+            >
+              {auditDownloadLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Generujem…
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4 mr-2" />
+                  Stiahnuť audit výpočtov
+                </>
+              )}
+            </Button>
+          </div>
+
           <div className="flex flex-wrap items-center gap-2">
             <Select value={devSnapshotScope} onValueChange={setDevSnapshotScope}>
               <SelectTrigger className="w-[260px]" data-testid="select-dev-snapshot-scope">

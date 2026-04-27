@@ -37,6 +37,7 @@ import {
   computePortfolioHistorySeries,
   type PortfolioHistoryRange,
 } from "./portfolioHistorySeries";
+import { buildCalculationAuditWorkbook } from "./calculationAuditXlsx";
 import { buildOpenFifoLotRowList, loadTradeTransactionsForAssetLots } from "./assetFifoLots";
 import { buildTaxSummary } from "./taxSummary";
 import { db } from "./db";
@@ -4247,15 +4248,28 @@ export async function registerRoutes(
   async function computeSnapshotSeriesForScope(
     userId: string,
     portfolioParam: string,
+    opts?: { userCcy?: string; maxHistoryPoints?: number },
   ) {
+    const userCcy = opts?.userCcy ?? "EUR";
+    const maxHistoryPoints = opts?.maxHistoryPoints ?? 12000;
+    const todayIso = new Date().toISOString().slice(0, 10);
     const tx = await storage.getTransactionsByUser(
       userId,
       portfolioParam === "all" ? null : portfolioParam,
     );
     if (tx.length === 0) {
       return {
-        points: [] as Array<{ date: string; totalValue: number; netInvested: number }>,
-        endIso: new Date().toISOString().slice(0, 10),
+        points: [] as Array<{
+          date: string;
+          totalValue: number;
+          netInvested: number;
+          portfolioCumulativePct: number;
+          sp500CumulativePct: number;
+        }>,
+        startIso: todayIso,
+        endIso: todayIso,
+        currency: userCcy,
+        methodNote: "Žiadne transakcie v zvolenom rozsahu.",
       };
     }
 
@@ -4271,7 +4285,6 @@ export async function registerRoutes(
     }
     const tickerArr = Array.from(tickers);
     const rates = await fetchAllExchangeRates();
-    const todayIso = new Date().toISOString().slice(0, 10);
     const currencies = new Set<string>();
     for (const t of tickerArr) {
       const c = getTickerCurrency(t);
@@ -4337,10 +4350,10 @@ export async function registerRoutes(
       historicalFxEurPerUnitByCurrency,
       currentPrices,
       rates,
-      "EUR",
+      userCcy,
       todayIso,
       "all",
-      12000,
+      maxHistoryPoints,
     );
     return out;
   }
@@ -4431,6 +4444,77 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error backfilling portfolio snapshots:", error);
       res.status(500).json({ message: "Nepodarilo sa spraviť backfill snapshotov." });
+    }
+  });
+
+  /** Developer: kompletný audit výpočtov (transakcie, denný MTM/TWR, FIFO) do Excelu. */
+  app.get("/api/dev/calculation-audit", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const portfolioParam = ((req.query.portfolio as string) || "all").trim() || "all";
+      const userSettings = await storage.getUserSettings(userId);
+      const userCcy = (userSettings?.preferredCurrency || "EUR").toUpperCase();
+
+      const series = await computeSnapshotSeriesForScope(userId, portfolioParam, {
+        userCcy,
+        maxHistoryPoints: 12000,
+      });
+
+      const tx = await storage.getTransactionsByUser(
+        userId,
+        portfolioParam === "all" ? null : portfolioParam,
+      );
+      const sorted = [...tx].sort(
+        (a, b) =>
+          new Date(a.transactionDate as unknown as string).getTime() -
+          new Date(b.transactionDate as unknown as string).getTime(),
+      );
+
+      const rates = await fetchAllExchangeRates();
+      const eurM = await buildEurPerUnitByTxnIdForTransactions(sorted);
+      const fifo = computeFifoRealizedGainsFromTransactions(sorted, eurM, new Date());
+
+      let portfolioLabel = portfolioParam === "all" ? "Všetky portfóliá" : portfolioParam;
+      if (portfolioParam !== "all") {
+        const plist = await storage.getPortfoliosByUser(userId);
+        const found = plist.find((p) => p.id === portfolioParam);
+        if (found?.name) portfolioLabel = found.name;
+      }
+
+      const buf = buildCalculationAuditWorkbook({
+        portfolioParam,
+        portfolioLabel,
+        userCurrency: userCcy,
+        generatedAtIso: new Date().toISOString(),
+        methodNote: series.methodNote ?? "",
+        rates,
+        transactions: sorted,
+        eurPerUnitByTxnId: eurM,
+        historyPoints: series.points,
+        fifoSummary: fifo.summary,
+        fifoRealizedByYear: fifo.realizedEurByCalendarYear,
+        fifoRealizedByYearMonth: fifo.realizedEurByYearMonth,
+        openLots: fifo.openLots,
+      });
+
+      const safeName =
+        portfolioLabel
+          .replace(/[^a-zA-Z0-9\s\-áäčďéíĺľňóôŕšťúýžÁÄČĎÉÍĹĽŇÓÔŔŠŤÚÝŽ]/g, "")
+          .replace(/\s+/g, "_")
+          .slice(0, 48) || "audit";
+      const dateStr = new Date().toISOString().slice(0, 10);
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="moneiqwise-vypocet-${safeName}-${dateStr}.xlsx"`,
+      );
+      res.send(buf);
+    } catch (error) {
+      console.error("Error building calculation audit xlsx:", error);
+      res.status(500).json({ message: "Nepodarilo sa vygenerovať auditný Excel." });
     }
   });
 
