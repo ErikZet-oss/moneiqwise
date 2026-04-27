@@ -48,12 +48,16 @@ export default function Settings() {
     showNews,
     showDailyMovers,
     dailyMoversCount,
+    showAthPopup,
+    showCalendarEventsPopup,
     setShowChart,
     setShowTooltip,
     setHideAmounts,
     setShowNews,
     setShowDailyMovers,
     setDailyMoversCount,
+    setShowAthPopup,
+    setShowCalendarEventsPopup,
   } = useChartSettings();
   const [newPortfolioName, setNewPortfolioName] = useState("");
   const [newPortfolioBroker, setNewPortfolioBroker] = useState<BrokerCode | undefined>(undefined);
@@ -796,6 +800,34 @@ export default function Settings() {
               checked={hideAmounts}
               onCheckedChange={setHideAmounts}
               data-testid="switch-hide-amounts"
+            />
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t">
+            <div className="space-y-0.5">
+              <div className="text-sm font-medium">ATH popup po prihlásení</div>
+              <div className="text-xs text-muted-foreground">
+                Zobraziť gratulačné okno, keď portfólio dosiahne nové ATH
+              </div>
+            </div>
+            <Switch
+              checked={showAthPopup}
+              onCheckedChange={setShowAthPopup}
+              data-testid="switch-show-ath-popup"
+            />
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t">
+            <div className="space-y-0.5">
+              <div className="text-sm font-medium">Popup dnešných udalostí</div>
+              <div className="text-xs text-muted-foreground">
+                Zobraziť okno s dnešnými udalosťami z trhového kalendára
+              </div>
+            </div>
+            <Switch
+              checked={showCalendarEventsPopup}
+              onCheckedChange={setShowCalendarEventsPopup}
+              data-testid="switch-show-calendar-events-popup"
             />
           </div>
         </CardContent>

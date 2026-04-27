@@ -1,7 +1,7 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { format, parse } from "date-fns";
+import { format, parse, startOfDay } from "date-fns";
 import { sk } from "date-fns/locale";
 import { queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Wallet, Banknote, Newspaper, ExternalLink, HelpCircle, Loader2, RefreshCw, Moon, Calendar, ChevronRight } from "lucide-react";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
@@ -142,9 +143,36 @@ interface PortfolioHistoryYtdRes {
   startIso?: string;
 }
 
+interface PortfolioHistoryAllRes {
+  points: Array<{ date: string; totalValue: number }>;
+}
+
 interface HoldingsNextEarningsRes {
-  next: { ticker: string; companyName: string; date: string } | null;
-  all: Array<{ ticker: string; companyName: string; date: string }>;
+  next: { ticker: string; companyName: string; date: string; session?: "BMO" | "AMC" } | null;
+  all: Array<{ ticker: string; companyName: string; date: string; session?: "BMO" | "AMC" }>;
+}
+
+type DashboardCalendarEventType = "earnings" | "dividend" | "macro";
+
+interface DashboardCalendarEvent {
+  type: DashboardCalendarEventType;
+  date: string;
+  title: string;
+  subtitle: string;
+  ticker?: string;
+  session?: "BMO" | "AMC" | null;
+  infoUrl: string;
+}
+
+interface UpcomingDividendsCalendarRes {
+  next: unknown;
+  all?: Array<{
+    ticker: string;
+    companyName: string;
+    date: string;
+    kind: "ex_dividend" | "payout";
+    confirmed: boolean;
+  }>;
 }
 
 interface UpcomingMacroEventsRes {
@@ -156,17 +184,47 @@ export default function Dashboard() {
   const [, setLocation] = useLocation();
   const { currency, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
   const { getQueryParam, selectedPortfolio, isAllPortfolios, portfolios } = usePortfolio();
-  const { hideAmounts, showNews, showDailyMovers, dailyMoversCount } = useChartSettings();
+  const {
+    hideAmounts,
+    showNews,
+    showDailyMovers,
+    dailyMoversCount,
+    showAthPopup,
+    showCalendarEventsPopup,
+  } = useChartSettings();
   const [sortField, setSortField] = useState<SortField>("ticker");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [mobileEarningsIndex, setMobileEarningsIndex] = useState(0);
   const [mobileTopPositionIndex, setMobileTopPositionIndex] = useState(0);
   const [mobileMacroEventIndex, setMobileMacroEventIndex] = useState(0);
-  
+  const [athDialogOpen, setAthDialogOpen] = useState(false);
+  const [athPortfolioNames, setAthPortfolioNames] = useState<string[]>([]);
+  const [athFunnyLine, setAthFunnyLine] = useState("");
+  const [athPopupEvaluated, setAthPopupEvaluated] = useState(false);
+  const [calendarTodayDialogOpen, setCalendarTodayDialogOpen] = useState(false);
+  const [todayCalendarEvents, setTodayCalendarEvents] = useState<DashboardCalendarEvent[]>([]);
+  const calendarPopupHandledRef = useRef(false);
+
   const maskAmount = (amount: string) => hideAmounts ? "••••••" : amount;
   const premarketMoonClass = "text-amber-600 dark:text-amber-400";
-  
+
   const portfolioParam = getQueryParam();
+
+  useEffect(() => {
+    calendarPopupHandledRef.current = false;
+  }, [portfolioParam]);
+
+  useEffect(() => {
+    if (showAthPopup) {
+      setAthPopupEvaluated(false);
+    }
+  }, [showAthPopup]);
+
+  useEffect(() => {
+    if (showCalendarEventsPopup) {
+      calendarPopupHandledRef.current = false;
+    }
+  }, [showCalendarEventsPopup]);
 
   /** Drží ťažké dotazy (P&L, poplatky, …) až po idle — menej paralelných requestov pri prvom načítaní, menej „stránka nereaguje“. */
   const [dashboardSecondaryReady, setDashboardSecondaryReady] = useState(false);
@@ -335,7 +393,7 @@ export default function Dashboard() {
 
   const formatSignedDayPct = (value: number) => {
     const sign = value > 0 ? "+" : "";
-    return `${sign}${Math.abs(value).toFixed(2)}%`;
+    return `${sign}${value.toFixed(2)}%`;
   };
 
   const refreshDashboardQuotes = useCallback(async () => {
@@ -427,6 +485,32 @@ export default function Dashboard() {
     enabled: dashboardSecondaryReady,
   });
 
+  const { data: athHistoryByPortfolio } = useQuery<Record<string, PortfolioHistoryAllRes>>({
+    queryKey: ["/api/portfolio-history", "ath-check", portfolios.map((p) => p.id).join(",")],
+    enabled: showAthPopup && portfolios.length > 0 && !athPopupEvaluated,
+    queryFn: async () => {
+      const out: Record<string, PortfolioHistoryAllRes> = {};
+      await Promise.all(
+        portfolios.map(async (p) => {
+          const params = new URLSearchParams();
+          params.set("portfolio", p.id);
+          params.set("range", "all");
+          const res = await fetch(`/api/portfolio-history?${params.toString()}`, {
+            credentials: "include",
+          });
+          if (!res.ok) {
+            out[p.id] = { points: [] };
+            return;
+          }
+          out[p.id] = (await res.json()) as PortfolioHistoryAllRes;
+        }),
+      );
+      return out;
+    },
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
   const { data: news, isLoading: newsLoading } = useQuery<NewsArticle[]>({
     queryKey: ["/api/news", portfolioParam],
     queryFn: async () => {
@@ -438,7 +522,11 @@ export default function Dashboard() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: holdingsNextEarnings, dataUpdatedAt: earningsUpdatedAt } = useQuery<HoldingsNextEarningsRes>({
+  const {
+    data: holdingsNextEarnings,
+    dataUpdatedAt: earningsUpdatedAt,
+    isFetched: earningsCalendarFetched,
+  } = useQuery<HoldingsNextEarningsRes>({
     queryKey: ["/api/holdings/next-earnings", portfolioParam],
     queryFn: async () => {
       const res = await fetch(
@@ -449,10 +537,29 @@ export default function Dashboard() {
       return res.json();
     },
     staleTime: 45 * 60 * 1000,
-    enabled: dashboardSecondaryReady && !!holdings && holdings.length > 0,
+    enabled: dashboardSecondaryReady,
   });
 
-  const { data: upcomingMacroEvents, dataUpdatedAt: macroEventsUpdatedAt } = useQuery<UpcomingMacroEventsRes>({
+  const { data: upcomingDividendsCalendar, isFetched: dividendsCalendarFetched } =
+    useQuery<UpcomingDividendsCalendarRes>({
+      queryKey: ["/api/dividends/upcoming", portfolioParam, "dashboard-popup"],
+      queryFn: async () => {
+        const res = await fetch(
+          `/api/dividends/upcoming?portfolio=${encodeURIComponent(portfolioParam)}`,
+          { credentials: "include" },
+        );
+        if (!res.ok) throw new Error("upcoming dividends");
+        return res.json();
+      },
+      staleTime: 45 * 60 * 1000,
+      enabled: dashboardSecondaryReady,
+    });
+
+  const {
+    data: upcomingMacroEvents,
+    dataUpdatedAt: macroEventsUpdatedAt,
+    isFetched: macroCalendarFetched,
+  } = useQuery<UpcomingMacroEventsRes>({
     queryKey: ["/api/macro-events/upcoming"],
     queryFn: async () => {
       const res = await fetch("/api/macro-events/upcoming", { credentials: "include" });
@@ -462,6 +569,43 @@ export default function Dashboard() {
     staleTime: 12 * 60 * 60 * 1000,
     enabled: dashboardSecondaryReady,
   });
+
+  const mergedDashboardCalendarEvents = useMemo(() => {
+    const out: DashboardCalendarEvent[] = [];
+    for (const e of holdingsNextEarnings?.all ?? []) {
+      const t = e.ticker.toUpperCase();
+      out.push({
+        type: "earnings",
+        date: e.date,
+        title: `${t} — výsledky`,
+        subtitle: e.companyName || t,
+        ticker: t,
+        session: e.session ?? null,
+        infoUrl: `https://finance.yahoo.com/quote/${encodeURIComponent(t)}`,
+      });
+    }
+    for (const d of upcomingDividendsCalendar?.all ?? []) {
+      const t = d.ticker.toUpperCase();
+      out.push({
+        type: "dividend",
+        date: d.date,
+        title: d.kind === "ex_dividend" ? `${t} — ex-dividend` : `${t} — výplata dividendy`,
+        subtitle: d.kind === "ex_dividend" ? "Posledná šanca pred ex-dátumom" : "Dátum výplaty",
+        ticker: t,
+        infoUrl: `https://finance.yahoo.com/quote/${encodeURIComponent(t)}`,
+      });
+    }
+    for (const m of upcomingMacroEvents?.all ?? []) {
+      out.push({
+        type: "macro",
+        date: m.date,
+        title: m.shortLabel,
+        subtitle: m.title,
+        infoUrl: "https://finance.yahoo.com/calendar/economic",
+      });
+    }
+    return out.sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title));
+  }, [holdingsNextEarnings?.all, upcomingDividendsCalendar?.all, upcomingMacroEvents?.all]);
 
   useEffect(() => {
     setMobileEarningsIndex(0);
@@ -528,6 +672,95 @@ export default function Dashboard() {
     setMobileMacroEventIndex(0);
   }, [macroEventsUpdatedAt]);
 
+  useEffect(() => {
+    if (!showAthPopup) {
+      setAthDialogOpen(false);
+      setAthPopupEvaluated(true);
+      return;
+    }
+    if (!athHistoryByPortfolio || athPopupEvaluated) return;
+    const eps = 1e-6;
+    const reachedAth: string[] = [];
+    for (const p of portfolios) {
+      const points = athHistoryByPortfolio[p.id]?.points ?? [];
+      if (points.length < 2) continue;
+      const last = points[points.length - 1]?.totalValue;
+      if (!Number.isFinite(last)) continue;
+      let prevMax = Number.NEGATIVE_INFINITY;
+      for (let i = 0; i < points.length - 1; i++) {
+        const v = points[i]?.totalValue;
+        if (Number.isFinite(v)) prevMax = Math.max(prevMax, v);
+      }
+      if (!Number.isFinite(prevMax)) continue;
+      if (last > prevMax + eps) reachedAth.push(p.name);
+    }
+    if (reachedAth.length > 0) {
+      const lines = [
+        "Trh dnes posiela virtuálne šampanské. Nezabudni, že bublinky sú super, ale risk manažment ešte lepší.",
+        "ATH potvrdené. Portfólio ide bomby a kalkulačka má dnes sviatok.",
+        "Nové maximum! Graf sa usmieva, ale stop-loss stále nezaspáva.",
+      ];
+      const idx = reachedAth.join("|").length % lines.length;
+      setAthPortfolioNames(reachedAth);
+      setAthFunnyLine(lines[idx]);
+      setAthDialogOpen(true);
+    }
+    setAthPopupEvaluated(true);
+  }, [athHistoryByPortfolio, athPopupEvaluated, portfolios, showAthPopup]);
+
+  useEffect(() => {
+    if (!showCalendarEventsPopup) {
+      setCalendarTodayDialogOpen(false);
+      calendarPopupHandledRef.current = true;
+      return;
+    }
+    if (portfolios.length > 0 && !athPopupEvaluated) return;
+    if (!earningsCalendarFetched || !dividendsCalendarFetched || !macroCalendarFetched) return;
+    if (calendarPopupHandledRef.current) return;
+
+    const todayIso = format(startOfDay(new Date()), "yyyy-MM-dd");
+    const todayEvents = mergedDashboardCalendarEvents.filter((e) => e.date === todayIso);
+    if (todayEvents.length === 0) {
+      calendarPopupHandledRef.current = true;
+      return;
+    }
+
+    const storageKey = `mw-dash-cal-popup-${todayIso}-${portfolioParam}`;
+    try {
+      if (typeof sessionStorage !== "undefined" && sessionStorage.getItem(storageKey)) {
+        calendarPopupHandledRef.current = true;
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+
+    if (athDialogOpen) return;
+
+    calendarPopupHandledRef.current = true;
+    const sortedToday = [...todayEvents].sort((a, b) => {
+      const w = (t: DashboardCalendarEventType) => (t === "macro" ? 0 : t === "dividend" ? 1 : 2);
+      return w(a.type) - w(b.type) || a.title.localeCompare(b.title);
+    });
+    setTodayCalendarEvents(sortedToday);
+    setCalendarTodayDialogOpen(true);
+    try {
+      if (typeof sessionStorage !== "undefined") sessionStorage.setItem(storageKey, "1");
+    } catch {
+      /* ignore */
+    }
+  }, [
+    athDialogOpen,
+    athPopupEvaluated,
+    portfolios.length,
+    earningsCalendarFetched,
+    dividendsCalendarFetched,
+    macroCalendarFetched,
+    mergedDashboardCalendarEvents,
+    portfolioParam,
+    showCalendarEventsPopup,
+  ]);
+
   const formatRelativeTime = (timestamp: number) => {
     const now = Math.floor(Date.now() / 1000);
     const diff = now - timestamp;
@@ -538,6 +771,14 @@ export default function Dashboard() {
     if (diff < 604800) return `pred ${Math.floor(diff / 86400)} d`;
     return new Date(timestamp * 1000).toLocaleDateString("sk-SK");
   };
+
+  const athForCurrentSelection = useMemo(() => {
+    if (athPortfolioNames.length === 0) return false;
+    if (isAllPortfolios) return true;
+    const currentName = selectedPortfolio?.name;
+    if (!currentName) return false;
+    return athPortfolioNames.includes(currentName);
+  }, [athPortfolioNames, isAllPortfolios, selectedPortfolio?.name]);
 
   const calculateOpenOptionsValue = () => {
     if (!optionTrades || !isAllPortfolios) return { 
@@ -912,6 +1153,74 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4 md:space-y-6">
+      <Dialog open={showAthPopup && athDialogOpen} onOpenChange={setAthDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Portfolio ATH alert</DialogTitle>
+            <DialogDescription>
+              {athPortfolioNames.length === 1
+                ? `Portfólio ${athPortfolioNames[0]} dosiahlo nové ATH. Gratulujem!`
+                : `Portfóliá ${athPortfolioNames.join(", ")} dosiahli nové ATH. Gratulujem!`}
+            </DialogDescription>
+          </DialogHeader>
+          <p className="text-sm leading-relaxed">{athFunnyLine}</p>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showCalendarEventsPopup && calendarTodayDialogOpen}
+        onOpenChange={setCalendarTodayDialogOpen}
+      >
+        <DialogContent className="max-w-md max-h-[min(85vh,520px)] flex flex-col gap-0">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 shrink-0 text-primary" />
+              Dnešné udalosti v kalendári
+            </DialogTitle>
+            <DialogDescription>
+              Na dnes máte v trhovom kalendári tieto udalosti (podľa zvoleného portfólia a makro dát).
+            </DialogDescription>
+          </DialogHeader>
+          <ul className="mt-3 space-y-3 overflow-y-auto pr-1 text-sm" data-testid="list-dashboard-calendar-today">
+            {todayCalendarEvents.map((ev, idx) => (
+              <li
+                key={`${ev.date}-${ev.type}-${ev.title}-${idx}`}
+                className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5"
+              >
+                <div className="flex flex-wrap items-center gap-2 mb-1">
+                  {ev.type === "earnings" && (
+                    <Badge className="bg-blue-600 hover:bg-blue-600 text-[10px]">Earnings</Badge>
+                  )}
+                  {ev.type === "dividend" && (
+                    <Badge className="bg-green-600 hover:bg-green-600 text-[10px]">Dividendy</Badge>
+                  )}
+                  {ev.type === "macro" && (
+                    <Badge className="bg-orange-600 hover:bg-orange-600 text-[10px]">Makro</Badge>
+                  )}
+                  {ev.session === "BMO" && (
+                    <span className="text-[10px] text-muted-foreground">Pred otvorením (BMO)</span>
+                  )}
+                  {ev.session === "AMC" && (
+                    <span className="text-[10px] text-muted-foreground">Po zatvorení (AMC)</span>
+                  )}
+                </div>
+                <p className="font-medium leading-snug">{ev.title}</p>
+                <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{ev.subtitle}</p>
+                <a
+                  href={ev.infoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-primary mt-2 hover:underline"
+                >
+                  Otvoriť zdroj
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </li>
+            ))}
+          </ul>
+        </DialogContent>
+      </Dialog>
+
       <MobilePortfolioChart 
         totalValue={metrics.totalValue}
         totalInvested={metrics.totalInvested}
@@ -922,6 +1231,7 @@ export default function Dashboard() {
         unrealizedGain={metrics.unrealizedGain}
         onRefreshQuotes={refreshDashboardQuotes}
         quotesRefreshing={quotesFetching}
+        athCelebrationActive={athForCurrentSelection}
       />
 
       <div className="hidden md:grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">

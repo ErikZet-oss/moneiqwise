@@ -12,6 +12,8 @@ interface ChartSettings {
   showDailyMovers: boolean;
   /** Koľko pozícií zobraziť v každom z oboch rebríčkov (najlepšie / najhoršie). */
   dailyMoversCount: DailyMoversDisplayCount;
+  showAthPopup: boolean;
+  showCalendarEventsPopup: boolean;
 }
 
 const STORAGE_KEY = "portfolio-chart-settings";
@@ -23,6 +25,8 @@ const defaultSettings: ChartSettings = {
   showNews: true,
   showDailyMovers: true,
   dailyMoversCount: 5,
+  showAthPopup: true,
+  showCalendarEventsPopup: true,
 };
 
 function normalizeDailyMoversCount(raw: unknown): DailyMoversDisplayCount {
@@ -88,6 +92,8 @@ export function useChartSettings() {
     showNews: settings.showNews,
     showDailyMovers: settings.showDailyMovers !== false,
     dailyMoversCount: normalizeDailyMoversCount(settings.dailyMoversCount),
+    showAthPopup: settings.showAthPopup !== false,
+    showCalendarEventsPopup: settings.showCalendarEventsPopup !== false,
     setShowChart: (value: boolean) => updateSettings({ showChart: value }),
     setShowTooltip: (value: boolean) => updateSettings({ showTooltip: value }),
     setHideAmounts: (value: boolean) => updateSettings({ hideAmounts: value }),
@@ -95,6 +101,9 @@ export function useChartSettings() {
     setShowDailyMovers: (value: boolean) => updateSettings({ showDailyMovers: value }),
     setDailyMoversCount: (value: DailyMoversDisplayCount) =>
       updateSettings({ dailyMoversCount: normalizeDailyMoversCount(value) }),
+    setShowAthPopup: (value: boolean) => updateSettings({ showAthPopup: value }),
+    setShowCalendarEventsPopup: (value: boolean) =>
+      updateSettings({ showCalendarEventsPopup: value }),
     toggleHideAmounts: () => updateSettings({ hideAmounts: !settings.hideAmounts }),
   };
 }

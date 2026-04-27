@@ -43,6 +43,7 @@ interface MobilePortfolioChartProps {
   unrealizedGain?: number;
   onRefreshQuotes?: () => void | Promise<void>;
   quotesRefreshing?: boolean;
+  athCelebrationActive?: boolean;
 }
 
 export function MobilePortfolioChart({ 
@@ -55,6 +56,7 @@ export function MobilePortfolioChart({
   unrealizedGain = 0,
   onRefreshQuotes,
   quotesRefreshing = false,
+  athCelebrationActive = false,
 }: MobilePortfolioChartProps) {
   const premarketMoonClass = "text-amber-600 dark:text-amber-400";
   const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>("ALL");
@@ -322,6 +324,16 @@ export function MobilePortfolioChart({
           >
             {portfolioLabel}
           </div>
+          {athCelebrationActive && (
+            <span
+              className="shrink-0 inline-flex items-center gap-0.5 text-sm motion-safe:animate-bounce"
+              title="ATH dnes"
+              data-testid="badge-mobile-portfolio-ath-confetti"
+            >
+              <span aria-hidden>🎉</span>
+              <span aria-hidden>✨</span>
+            </span>
+          )}
         </div>
       )}
       <div className="flex items-center justify-between mb-1">
