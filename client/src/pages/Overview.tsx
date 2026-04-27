@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState, type MouseEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { startOfDay, subMonths } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -36,6 +37,14 @@ type UpcomingDividendItem = {
   ticker: string;
   annualDividendPerShare: number | null;
   dividendYieldCurrent: number | null;
+};
+type DividendTxLike = {
+  type: string;
+  ticker: string | null;
+  transactionDate: string;
+  shares: string;
+  pricePerShare: string;
+  commission: string | null;
 };
 
 interface OverviewBundle {
@@ -186,6 +195,42 @@ export default function Overview() {
       return out;
     },
     staleTime: 45 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  const { data: trailing12mFromDividendsByPortfolio = {} } = useQuery<Record<string, number>>({
+    queryKey: ["/api/transactions", "overview-trailing-12m-by-portfolio", portfolios.map((p) => p.id).join(",")],
+    enabled: portfolios.length > 0,
+    queryFn: async () => {
+      const out: Record<string, number> = {};
+      const cutoff = subMonths(startOfDay(new Date()), 12);
+      await Promise.all(
+        portfolios.map(async (p) => {
+          const res = await fetch(`/api/transactions?portfolio=${encodeURIComponent(p.id)}`, {
+            credentials: "include",
+          });
+          if (!res.ok) {
+            out[p.id] = 0;
+            return;
+          }
+          const txs = (await res.json()) as DividendTxLike[];
+          let sum = 0;
+          for (const t of txs) {
+            if (t.type !== "DIVIDEND") continue;
+            const d = startOfDay(new Date(t.transactionDate as unknown as string));
+            if (d < cutoff) continue;
+            const gross = parseFloat(String(t.shares ?? "0")) * parseFloat(String(t.pricePerShare ?? "0"));
+            const taxOrFee = parseFloat(String(t.commission ?? "0"));
+            const net = gross - taxOrFee;
+            if (!Number.isFinite(net)) continue;
+            sum += net;
+          }
+          out[p.id] = sum;
+        }),
+      );
+      return out;
+    },
+    staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
@@ -452,13 +497,24 @@ export default function Overview() {
               passiveIncomePercent,
             };
           }
+          const trailingFromDividendsPage = trailing12mFromDividendsByPortfolio[p.id] ?? 0;
+          if (trailingFromDividendsPage > 0) {
+            const trailingDisplay = convertPrice(trailingFromDividendsPage, "EUR");
+            const passiveIncomePercent =
+              m.stockValue > 0 ? (trailingDisplay / m.stockValue) * 100 : 0;
+            return {
+              ...m,
+              passiveIncome: trailingDisplay,
+              passiveIncomePercent,
+            };
+          }
           return m;
         })(),
       );
     }
     return map;
     // quotes / currency helpers must trigger recompute when quotes arrive
-  }, [overview, portfolios, quotes, convertPrice, getTickerCurrency, optionsByPortfolioId, upcomingDividendsByPortfolio]);
+  }, [overview, portfolios, quotes, convertPrice, getTickerCurrency, optionsByPortfolioId, upcomingDividendsByPortfolio, trailing12mFromDividendsByPortfolio]);
 
   const grandTotal = useMemo(() => {
     let total = 0;
