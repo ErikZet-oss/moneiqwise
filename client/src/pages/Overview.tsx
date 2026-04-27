@@ -463,17 +463,17 @@ export default function Overview() {
         if (!(Number.isFinite(shares) && shares > 0)) continue;
         const ticker = (h.ticker || "").toUpperCase();
         if (!ticker) continue;
-        const tickerCurrency = getTickerCurrency(ticker);
         const annPerShare = annualDivByTicker.get(ticker) ?? 0;
         const yieldPct = yieldPctByTicker.get(ticker);
         if (annPerShare > 0) {
-          passiveIncomeFromDividendsSection += shares * convertPrice(annPerShare, tickerCurrency);
+          // Keep identical behavior with Dividends page metrics.
+          passiveIncomeFromDividendsSection += annPerShare * shares;
           continue;
         }
         const q = quotes?.[ticker];
         if (yieldPct != null && yieldPct > 0 && q && Number.isFinite(q.price) && q.price > 0) {
-          passiveIncomeFromDividendsSection +=
-            (yieldPct / 100) * shares * convertPrice(q.price, tickerCurrency);
+          // Keep identical behavior with Dividends page metrics.
+          passiveIncomeFromDividendsSection += (yieldPct / 100) * q.price * shares;
         }
       }
       map.set(
