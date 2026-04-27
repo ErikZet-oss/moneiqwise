@@ -137,7 +137,32 @@ export default function Grafy() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const { data: athHistory } = useQuery<PortfolioHistoryRes>({
+    queryKey: ["/api/portfolio-history", portfolioParam, "all", currency, "ath-info"],
+    queryFn: async () => {
+      const u = new URLSearchParams();
+      u.set("portfolio", portfolioParam);
+      u.set("range", "all");
+      const res = await fetch(`/api/portfolio-history?${u.toString()}`, { credentials: "include" });
+      if (!res.ok) throw new Error("ATH história zlyhala");
+      return res.json();
+    },
+    staleTime: 10 * 60 * 1000,
+  });
+
   const points = history?.points ?? [];
+  const athPoint = useMemo(() => {
+    const src = athHistory?.points ?? [];
+    if (src.length === 0) return null;
+    let best = src[0];
+    for (let i = 1; i < src.length; i++) {
+      const p = src[i];
+      if ((p?.totalValue ?? Number.NEGATIVE_INFINITY) > (best?.totalValue ?? Number.NEGATIVE_INFINITY)) {
+        best = p;
+      }
+    }
+    return best ?? null;
+  }, [athHistory?.points]);
   const last = points[points.length - 1];
   const inProfit = last
     ? last.totalValue + 1e-6 >= last.netInvested
@@ -264,6 +289,12 @@ export default function Grafy() {
             Plocha pod trhovou krivkou: farba podľa zisku oproti tokom na konci rozsahu. Schodíky = čisté vklady
             mínus výbery.
           </CardDescription>
+          <p className="text-[11px] text-muted-foreground">
+            ATH portfólia:{" "}
+            {athPoint
+              ? `${mask(formatCurrency(athPoint.totalValue))} (${new Date(athPoint.date).toLocaleDateString("sk-SK")})`
+              : "Nedostatok dát"}
+          </p>
         </CardHeader>
         <CardContent className="h-[260px] sm:h-[320px] w-full min-w-0 px-3 sm:px-6">
           {histLoading || pLoading || !chartReady ? (
