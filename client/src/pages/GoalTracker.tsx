@@ -122,6 +122,7 @@ export default function GoalTracker() {
     const out: ProjectionPoint[] = [];
     const rMonthly = annualReturn / 100 / 12;
     const monthCount = 12 * 100;
+    const minRenderMonths = 12;
     let balance = effectiveInitialAmount;
     let contributionOnly = effectiveInitialAmount;
     const finiteGoal = goalAmount > 0 ? goalAmount : Number.POSITIVE_INFINITY;
@@ -144,7 +145,8 @@ export default function GoalTracker() {
         contributionOnlyValue: contributionOnly,
         actualValue: actual,
       });
-      if (balance >= finiteGoal) break;
+      // Keep at least one visible year so the chart is readable even when target is already hit at start.
+      if (balance >= finiteGoal && i >= minRenderMonths) break;
     }
     return out;
   }, [annualReturn, effectiveInitialAmount, monthlyDeposit, monthlyActualMap, simulationStart, goalAmount]);
