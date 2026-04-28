@@ -20,6 +20,7 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
 import { CompanyLogo } from "@/components/CompanyLogo";
+import { BrokerLogo } from "@/components/BrokerLogo";
 import { MobilePortfolioChart } from "@/components/MobilePortfolioChart";
 import { DesktopPortfolioChart } from "@/components/DesktopPortfolioChart";
 import type { Holding } from "@shared/schema";
@@ -199,6 +200,7 @@ export default function Dashboard() {
   const [mobileEarningsIndex, setMobileEarningsIndex] = useState(0);
   const [mobileTopPositionIndex, setMobileTopPositionIndex] = useState(0);
   const [mobileMacroEventIndex, setMobileMacroEventIndex] = useState(0);
+  const [desktopInsightIndex, setDesktopInsightIndex] = useState(0);
   const [athDialogOpen, setAthDialogOpen] = useState(false);
   const [athPortfolioNames, setAthPortfolioNames] = useState<string[]>([]);
   const [athFunnyLine, setAthFunnyLine] = useState("");
@@ -343,8 +345,8 @@ export default function Dashboard() {
       state = "LIVE";
     } else state = "CLOSED";
 
-    // Rebríček držíme na regular daily zmene (RTH), aby sedel s Yahoo default.
-    const moversUseExtendedQuotes = false;
+    // Mimo live režimu používame pre/post-market zmenu, s fallbackom na RTH.
+    const moversUseExtendedQuotes = state !== "LIVE";
 
     return { usSessionState: state, moversUseExtendedQuotes };
   })();
@@ -373,8 +375,18 @@ export default function Dashboard() {
         let pct: number;
         let dayValueEur: number | null = null;
 
-        pct = num(q?.changePercent);
-        const ch = num(q?.change);
+        const extPct = num(q?.preMarketChangePercent);
+        const extCh = num(q?.preMarketChange);
+        const regPct = num(q?.changePercent);
+        const regCh = num(q?.change);
+        pct =
+          moversUseExtendedQuotes && Number.isFinite(extPct)
+            ? extPct
+            : regPct;
+        const ch =
+          moversUseExtendedQuotes && Number.isFinite(extCh)
+            ? extCh
+            : regCh;
         if (shares > 0 && Number.isFinite(ch)) {
           dayValueEur = shares * convertPrice(ch, getTickerCurrency(t));
         }
@@ -839,6 +851,9 @@ export default function Dashboard() {
     if (!currentName) return false;
     return athPortfolioNames.includes(currentName);
   }, [athPortfolioNames, isAllPortfolios, selectedPortfolio?.name]);
+  const dashboardPortfolioLabel = isAllPortfolios
+    ? "Všetky portfóliá"
+    : selectedPortfolio?.name ?? "Vybrané portfólio";
 
   const calculateOpenOptionsValue = () => {
     if (!optionTrades || !isAllPortfolios) return { 
@@ -1213,6 +1228,26 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4 md:space-y-6">
+      <div className="hidden md:flex items-center gap-2 min-w-0" data-testid="desktop-portfolio-header">
+        {!isAllPortfolios && <BrokerLogo brokerCode={selectedPortfolio?.brokerCode} size="sm" />}
+        <h1
+          className="text-lg font-semibold text-foreground truncate min-w-0"
+          data-testid="text-desktop-portfolio-name"
+        >
+          {dashboardPortfolioLabel}
+        </h1>
+        {athForCurrentSelection && (
+          <span
+            className="shrink-0 inline-flex items-center gap-0.5 text-sm motion-safe:animate-bounce"
+            title="ATH dnes"
+            data-testid="badge-desktop-portfolio-ath-confetti"
+          >
+            <span aria-hidden>🎉</span>
+            <span aria-hidden>✨</span>
+          </span>
+        )}
+      </div>
+
       <Dialog open={showAthPopup && athDialogOpen} onOpenChange={handleAthDialogOpenChange}>
         <DialogContent className="max-w-md overflow-hidden">
           <div className="pointer-events-none absolute inset-0">
@@ -1592,87 +1627,122 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="h-full border-border/70 bg-card/95 shadow-sm" data-testid="card-realized-dividends">
+        <Card className="h-full border-border/70 bg-card/95 shadow-sm" data-testid="card-desktop-insights-carousel">
           <CardHeader className="min-h-[68px] border-b border-border/40 p-4 pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">
-              Uzavreté
+              Rýchly prehľad
               <Tooltip>
                 <TooltipTrigger asChild>
                   <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
                 </TooltipTrigger>
                 <TooltipContent className="max-w-[300px]">
-                  <p className="font-semibold mb-1">Uzavreté obchody</p>
-                  <ul className="text-xs space-y-1 list-disc pl-3">
-                    <li><span className="font-medium">Realizovaný zisk:</span> Zisk/strata z predaných akcií (FIFO) a prípadne z hotovostných riadkov XTB „close trade“ (netto v EUR)</li>
-                    <li><span className="font-medium">Dividendy:</span> Čisté dividendy po zrážkovej dani</li>
-                    <li><span className="font-medium">Opcie:</span> Zisk/strata z uzavretých opčných obchodov</li>
-                  </ul>
+                  <p className="font-semibold mb-1">Desktop quick slider</p>
+                  <p className="text-xs">
+                    Posuvný prehľad: najbližší earnings, najbližšia ekonomická udalosť a najväčšie zastúpenie aktíva.
+                  </p>
                 </TooltipContent>
               </Tooltip>
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 p-4 pt-3">
-            <div className="flex items-center justify-between gap-1" data-testid="text-dashboard-realized">
-              <span className="text-xs text-muted-foreground flex items-center gap-0.5">
-                <Wallet className="h-3 w-3" />
-                Realizovaný zisk
-              </span>
-              {realizedGains &&
-              (realizedGains.transactionCount > 0 ||
-                Math.abs(realizedGains.closeTradeNetEur ?? 0) > 1e-9) ? (
-                <span
-                  className={`text-sm font-semibold truncate ${getChangeColor(
-                    realizedGains.realizedGainTotal ?? realizedGains.totalRealized,
-                  )}`}
-                >
-                  {maskAmount(
-                    formatCurrency(
-                      realizedGains.realizedGainTotal ?? realizedGains.totalRealized,
-                    ),
-                  )}
-                </span>
-              ) : (
-                <span className="text-sm text-muted-foreground">—</span>
-              )}
-            </div>
-            <div className="flex items-center justify-between gap-1" data-testid="text-dashboard-dividends">
-              <span className="text-xs text-muted-foreground flex items-center gap-0.5">
-                <Banknote className="h-3 w-3" />
-                Dividendy
-              </span>
-              {dividends && dividends.transactionCount > 0 ? (
-                <span className="text-sm font-semibold text-blue-500 truncate">
-                  +{maskAmount(formatCurrency(dividends.totalNet))}
-                </span>
-              ) : (
-                <span className="text-sm text-muted-foreground">—</span>
-              )}
-            </div>
-            <div className="flex items-center justify-between gap-1" data-testid="text-dashboard-dividends-tax">
-              <span className="text-[11px] text-muted-foreground">Daň</span>
-              {dividends && dividends.transactionCount > 0 ? (
-                <span className="text-[11px] text-muted-foreground truncate">
-                  -{maskAmount(formatCurrency(dividends.totalTax || 0))}
-                </span>
-              ) : (
-                <span className="text-[11px] text-muted-foreground">—</span>
-              )}
-            </div>
-            {metrics.optionsIncluded && (
-              <div className="flex items-center justify-between gap-1" data-testid="text-dashboard-options">
-                <span className="text-xs text-muted-foreground flex items-center gap-0.5">
-                  <TrendingUp className="h-3 w-3" />
-                  Opcie
-                </span>
-                {metrics.optionsRealizedGain !== 0 ? (
-                  <span className={`text-sm font-semibold truncate ${getChangeColor(metrics.optionsRealizedGain)}`}>
-                    {maskAmount(formatCurrency(metrics.optionsRealizedGain))}
-                  </span>
-                ) : (
-                  <span className="text-sm text-muted-foreground">—</span>
-                )}
+          <CardContent className="space-y-3 p-4 pt-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-[11px] text-muted-foreground">
+                {desktopInsightIndex === 0 && "Najbližší earnings"}
+                {desktopInsightIndex === 1 && "Najbližšia makro udalosť"}
+                {desktopInsightIndex === 2 && "Najväčšie zastúpenie aktíva"}
               </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => setDesktopInsightIndex((v) => (v + 2) % 3)}
+                  data-testid="button-desktop-insight-prev"
+                >
+                  <ChevronRight className="h-3.5 w-3.5 rotate-180" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => setDesktopInsightIndex((v) => (v + 1) % 3)}
+                  data-testid="button-desktop-insight-next"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+
+            {desktopInsightIndex === 0 && (
+              currentMobileEarnings ? (
+                <button
+                  type="button"
+                  className="w-full rounded-lg border border-amber-500/25 bg-amber-500/[0.08] p-3 text-left hover:bg-amber-500/[0.12]"
+                  onClick={() => setLocation(`/asset/${encodeURIComponent(currentMobileEarnings.ticker)}`)}
+                  data-testid="card-desktop-next-earnings"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <CompanyLogo ticker={currentMobileEarnings.ticker} companyName={currentMobileEarnings.companyName} size="sm" />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold truncate">{currentMobileEarnings.ticker}</p>
+                      <p className="text-xs text-muted-foreground truncate">{currentMobileEarnings.companyName}</p>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {new Date(currentMobileEarnings.date).toLocaleDateString("sk-SK")}
+                  </p>
+                </button>
+              ) : (
+                <p className="text-xs text-muted-foreground">Žiadny najbližší earnings pre zvolený výber.</p>
+              )
             )}
+
+            {desktopInsightIndex === 1 && (
+              currentMobileMacroEvent ? (
+                <div className="w-full rounded-lg border border-orange-500/25 bg-orange-500/[0.08] p-3" data-testid="card-desktop-next-macro">
+                  <p className="text-sm font-semibold">{currentMobileMacroEvent.shortLabel}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{currentMobileMacroEvent.title}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {new Date(currentMobileMacroEvent.date).toLocaleDateString("sk-SK")}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">Žiadna najbližšia makro udalosť.</p>
+              )
+            )}
+
+            {desktopInsightIndex === 2 && (
+              currentMobileTopPosition ? (
+                <button
+                  type="button"
+                  className="w-full rounded-lg border border-primary/25 bg-primary/[0.06] p-3 text-left hover:bg-primary/[0.1]"
+                  onClick={() => setLocation(`/asset/${encodeURIComponent(currentMobileTopPosition.ticker)}`)}
+                  data-testid="card-desktop-top-position"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold truncate">{currentMobileTopPosition.ticker}</p>
+                    <span className="text-xs font-medium text-primary">{currentMobileTopPositionPct.toFixed(1)}%</span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-muted-foreground truncate">{currentMobileTopPosition.companyName || "Bez názvu"}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Hodnota: {maskAmount(formatCurrency(currentMobileTopPosition.value))}
+                  </p>
+                </button>
+              ) : (
+                <p className="text-xs text-muted-foreground">Nie je dostupná žiadna top pozícia.</p>
+              )
+            )}
+
+            <div className="flex items-center justify-center gap-1 pt-1">
+              {[0, 1, 2].map((idx) => (
+                <span
+                  key={idx}
+                  className={`h-1.5 w-1.5 rounded-full ${desktopInsightIndex === idx ? "bg-primary" : "bg-muted-foreground/40"}`}
+                />
+              ))}
+            </div>
           </CardContent>
         </Card>
       </div>
