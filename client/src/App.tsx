@@ -21,6 +21,7 @@ import Settings from "@/pages/Settings";
 import Import from "@/pages/Import";
 import Allocation from "@/pages/Allocation";
 import Grafy from "@/pages/Grafy";
+import GoalTracker from "@/pages/GoalTracker";
 import EventsCalendar from "@/pages/EventsCalendar";
 import AssetDetail from "@/pages/AssetDetail";
 import TaxSummaryPage from "@/pages/TaxSummaryPage";
@@ -66,6 +67,7 @@ function Router() {
       <Route path="/import" component={Import} />
       <Route path="/allocation" component={Allocation} />
       <Route path="/grafy" component={Grafy} />
+      <Route path="/goal" component={GoalTracker} />
       <Route path="/events" component={EventsCalendar} />
       <Route path="/settings" component={Settings} />
       <Route path="/faq" component={FaqPage} />

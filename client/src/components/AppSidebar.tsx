@@ -51,6 +51,11 @@ const menuItems = [
     icon: LineChart,
   },
   {
+    title: "Môj cieľ",
+    url: "/goal",
+    icon: Target,
+  },
+  {
     title: "História",
     url: "/history",
     icon: History,
