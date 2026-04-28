@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Area, AreaChart, CartesianGrid, Line, ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, CartesianGrid, Line, ReferenceLine, ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis } from "recharts";
 import { Target } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -60,9 +60,9 @@ export default function GoalTracker() {
   const isMobile = useIsMobile();
 
   const [initialAmountInput, setInitialAmountInput] = useState("10000");
+  const [goalAmountInput, setGoalAmountInput] = useState("50000");
   const [monthlyDepositInput, setMonthlyDepositInput] = useState("300");
   const [annualReturnInput, setAnnualReturnInput] = useState("8");
-  const [yearsInput, setYearsInput] = useState("10");
   const [useCurrentPortfolioAsInitial, setUseCurrentPortfolioAsInitial] = useState(true);
   const [selectedYear, setSelectedYear] = useState<string>("");
   const [selectedMonthKey, setSelectedMonthKey] = useState<string>("");
@@ -101,25 +101,30 @@ export default function GoalTracker() {
   }, [points]);
 
   const simulationStart = useMemo(() => {
+    if (useCurrentPortfolioAsInitial) {
+      const now = new Date();
+      return new Date(now.getFullYear(), now.getMonth(), 1);
+    }
     const base = firstActualDate ?? new Date();
     return new Date(base.getFullYear(), base.getMonth(), 1);
-  }, [firstActualDate]);
+  }, [firstActualDate, useCurrentPortfolioAsInitial]);
 
   const initialAmount = Math.max(0, parseNumberInput(initialAmountInput, 0));
+  const goalAmount = Math.max(0, parseNumberInput(goalAmountInput, 0));
   const effectiveInitialAmount =
     useCurrentPortfolioAsInitial && latestActualValue != null && Number.isFinite(latestActualValue)
       ? Math.max(0, latestActualValue)
       : initialAmount;
   const monthlyDeposit = parseNumberInput(monthlyDepositInput, 0);
   const annualReturn = parseNumberInput(annualReturnInput, 0);
-  const years = Math.min(60, Math.max(1, Math.round(parseNumberInput(yearsInput, 10))));
 
   const projection = useMemo(() => {
     const out: ProjectionPoint[] = [];
     const rMonthly = annualReturn / 100 / 12;
-    const monthCount = years * 12;
+    const monthCount = 12 * 100;
     let balance = effectiveInitialAmount;
     let contributionOnly = effectiveInitialAmount;
+    const finiteGoal = goalAmount > 0 ? goalAmount : Number.POSITIVE_INFINITY;
     for (let i = 0; i <= monthCount; i++) {
       const d = new Date(simulationStart.getFullYear(), simulationStart.getMonth() + i, 1);
       if (i > 0) {
@@ -139,13 +144,19 @@ export default function GoalTracker() {
         contributionOnlyValue: contributionOnly,
         actualValue: actual,
       });
+      if (balance >= finiteGoal) break;
     }
     return out;
-  }, [annualReturn, effectiveInitialAmount, monthlyDeposit, monthlyActualMap, simulationStart, years]);
+  }, [annualReturn, effectiveInitialAmount, monthlyDeposit, monthlyActualMap, simulationStart, goalAmount]);
+
+  const goalHitPoint = useMemo(() => {
+    if (!(goalAmount > 0)) return null;
+    return projection.find((p) => p.targetValue >= goalAmount) ?? null;
+  }, [projection, goalAmount]);
 
   const projectionSummary = useMemo(() => {
-    const last = projection[projection.length - 1] ?? null;
-    const plannedMonths = years * 12;
+    const last = goalHitPoint ?? projection[projection.length - 1] ?? null;
+    const plannedMonths = goalHitPoint?.idx ?? projection.length - 1;
     const totalPlannedDeposits = monthlyDeposit * plannedMonths;
     const totalOwnContributions = effectiveInitialAmount + totalPlannedDeposits;
     const projectedFinalValue = last?.targetValue ?? effectiveInitialAmount;
@@ -158,8 +169,10 @@ export default function GoalTracker() {
       totalOwnContributions,
       projectedGrowth,
       projectedGrowthPct,
+      monthsToGoal: goalHitPoint?.idx ?? null,
+      goalHitDate: goalHitPoint?.date ?? null,
     };
-  }, [projection, years, monthlyDeposit, effectiveInitialAmount]);
+  }, [projection, goalHitPoint, monthlyDeposit, effectiveInitialAmount]);
 
   const yearsList = useMemo(() => {
     const set = new Set<number>();
@@ -206,10 +219,11 @@ export default function GoalTracker() {
               <p>Počiatočná suma = štartový kapitál.</p>
               <p>Mesačný vklad = pravidelné dokladanie každý mesiac.</p>
               <p>Cieľový úrok je ročné zhodnotenie, ktoré sa prepočítava na mesiace.</p>
+              <p>Cieľová suma je hodnota, ktorú chceš dosiahnuť; appka vypočíta odhadovaný mesiac dosiahnutia.</p>
             </HelpTip>
           </CardTitle>
           <CardDescription>
-            Zložené úročenie mesačne: zostatok = (predošlý zostatok × (1 + ročný úrok / 12)) + mesačný vklad.
+            Zadaj cieľovú hodnotu, mesačný vklad a ročný výnos. Výpočet určí kedy (mesiac/rok) by si mal cieľ dosiahnuť.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
@@ -223,6 +237,17 @@ export default function GoalTracker() {
               inputMode="decimal"
               disabled={useCurrentPortfolioAsInitial}
               data-testid="input-goal-initial-amount"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="goal-target" className="text-xs sm:text-sm">Cieľová suma</Label>
+            <Input
+              id="goal-target"
+              value={goalAmountInput}
+              onChange={(e) => setGoalAmountInput(e.target.value)}
+              className="h-9 sm:h-10"
+              inputMode="decimal"
+              data-testid="input-goal-target-amount"
             />
           </div>
           <div className="space-y-2">
@@ -245,17 +270,6 @@ export default function GoalTracker() {
               className="h-9 sm:h-10"
               inputMode="decimal"
               data-testid="input-goal-annual-return"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="goal-years" className="text-xs sm:text-sm">Doba (roky)</Label>
-            <Input
-              id="goal-years"
-              value={yearsInput}
-              onChange={(e) => setYearsInput(e.target.value)}
-              className="h-9 sm:h-10"
-              inputMode="numeric"
-              data-testid="input-goal-years"
             />
           </div>
           <div className="sm:col-span-2 lg:col-span-4 rounded-md border p-2.5 sm:p-3">
@@ -292,8 +306,7 @@ export default function GoalTracker() {
             Odhad na konci cieľa
             <HelpTip title="Ako čítať tento odhad">
               <p>
-                Toto je výsledná cieľová hodnota z plánovanej čiary (target), ak dodržíš všetky
-                vstupy simulácie.
+                Toto je odhad dátumu a sumy, kedy by mala cieľová krivka prvýkrát dosiahnuť tvoj cieľ.
               </p>
               <p>
                 „Zhodnotenie“ je rozdiel medzi odhadovanou hodnotou a tvojimi vlastnými vkladmi.
@@ -304,6 +317,11 @@ export default function GoalTracker() {
         <CardContent className="space-y-2">
           <p className="text-2xl sm:text-3xl font-bold tracking-tight" data-testid="text-goal-projected-final-value">
             {formatCurrency(projectionSummary.projectedFinalValue)}
+          </p>
+          <p className="text-xs sm:text-sm text-muted-foreground" data-testid="text-goal-hit-date">
+            {projectionSummary.goalHitDate
+              ? `Odhad dosiahnutia cieľa: ${new Date(projectionSummary.goalHitDate).toLocaleDateString("sk-SK")} (${projectionSummary.monthsToGoal ?? 0} mesiacov)`
+              : "Cieľ pri týchto vstupoch zatiaľ nie je dosiahnutý v horizonte simulácie."}
           </p>
           <div className="grid gap-2 sm:grid-cols-3 text-xs sm:text-sm">
             <div className="rounded-md border p-2.5">
@@ -334,6 +352,7 @@ export default function GoalTracker() {
             Cieľ vs realita
             <HelpTip title="Graf cieľ vs realita">
               <p>Prerušovaná čiara je plán (target), plocha je skutočný stav portfólia (actual).</p>
+              <p>Vodorovná zelená čiara je tvoja cieľová suma.</p>
               <p>Sivá čiara ukazuje len tvoje čisté vklady bez zhodnotenia.</p>
               <p>V tooltipe vidíš rozdiel: či si nad plánom alebo zaostávaš.</p>
             </HelpTip>
@@ -377,6 +396,15 @@ export default function GoalTracker() {
                     );
                   }}
                 />
+                {goalAmount > 0 && (
+                  <ReferenceLine
+                    y={goalAmount}
+                    stroke="hsl(142 60% 40%)"
+                    strokeDasharray="4 4"
+                    ifOverflow="extendDomain"
+                    label={{ value: "Cieľ", position: "insideTopRight", fill: "hsl(142 60% 40%)", fontSize: 11 }}
+                  />
+                )}
                 <Area
                   type="monotone"
                   dataKey="actualValue"
@@ -416,8 +444,8 @@ export default function GoalTracker() {
               <CardTitle className="text-base flex items-center gap-1">
                 Mesačný kalendár (4 × 3)
                 <HelpTip title="Ako čítať mesačný grid">
-                  <p>Zelený mesiac = realita je nad cieľom.</p>
-                  <p>Červený mesiac = realita je pod cieľom. Sivý = zatiaľ bez dát.</p>
+                  <p>Zelený mesiac = v danom mesiaci tvoja realita dosiahla alebo prekonala cieľovú sumu.</p>
+                  <p>Červený mesiac = cieľová suma ešte nebola dosiahnutá. Sivý = zatiaľ bez dát.</p>
                   <p>Po kliknutí na mesiac sa dole zobrazí detailný rozpis.</p>
                 </HelpTip>
               </CardTitle>
@@ -443,8 +471,8 @@ export default function GoalTracker() {
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
             {Array.from({ length: 12 }, (_, m) => {
               const row = yearRows.find((p) => p.month === m) ?? null;
-              const diff = row && row.actualValue != null ? row.actualValue - row.targetValue : null;
-              const bg = diff == null ? "bg-slate-100 dark:bg-slate-900" : diff >= 0 ? "bg-emerald-100 dark:bg-emerald-900/30" : "bg-rose-100 dark:bg-rose-900/25";
+              const diffToGoal = row && row.actualValue != null ? row.actualValue - goalAmount : null;
+              const bg = diffToGoal == null ? "bg-slate-100 dark:bg-slate-900" : diffToGoal >= 0 ? "bg-emerald-100 dark:bg-emerald-900/30" : "bg-rose-100 dark:bg-rose-900/25";
               const active = selectedDetail?.monthKey === row?.monthKey;
               return (
                 <button
@@ -457,10 +485,10 @@ export default function GoalTracker() {
                   <p className="text-xs sm:text-sm font-medium">{MONTHS_SK[m]}</p>
                   <p className="text-[11px] sm:text-xs text-muted-foreground mt-1 leading-tight">
                     {row?.actualValue != null
-                      ? diff != null && diff >= 0
-                        ? `+${formatCurrency(diff)}`
-                        : diff != null
-                          ? `-${formatCurrency(Math.abs(diff))}`
+                      ? diffToGoal != null && diffToGoal >= 0
+                        ? `✓ +${formatCurrency(diffToGoal)}`
+                        : diffToGoal != null
+                          ? `✕ -${formatCurrency(Math.abs(diffToGoal))}`
                           : "—"
                       : "Bez reality"}
                   </p>
@@ -474,16 +502,17 @@ export default function GoalTracker() {
               <p className="font-medium">
                 {MONTHS_SK[selectedDetail.month]} {selectedDetail.year}
               </p>
+              <p>Cieľová suma: {formatCurrency(goalAmount)}</p>
               <p>Potrebná hodnota pre cieľ: {formatCurrency(selectedDetail.targetValue)}</p>
               <p>
                 Tvoja reálna hodnota:{" "}
                 {selectedDetail.actualValue != null ? formatCurrency(selectedDetail.actualValue) : "Bez dát"}
               </p>
-              <p className={(selectedDetail.actualValue ?? 0) - selectedDetail.targetValue >= 0 ? "text-emerald-600" : "text-rose-600"}>
-                Chýba/Nadbytok:{" "}
+              <p className={(selectedDetail.actualValue ?? 0) - goalAmount >= 0 ? "text-emerald-600" : "text-rose-600"}>
+                Stav voči cieľu:{" "}
                 {selectedDetail.actualValue != null
-                  ? `${(selectedDetail.actualValue - selectedDetail.targetValue) >= 0 ? "+" : "-"}${formatCurrency(
-                      Math.abs(selectedDetail.actualValue - selectedDetail.targetValue),
+                  ? `${(selectedDetail.actualValue - goalAmount) >= 0 ? "+" : "-"}${formatCurrency(
+                      Math.abs(selectedDetail.actualValue - goalAmount),
                     )}`
                   : "—"}
               </p>
