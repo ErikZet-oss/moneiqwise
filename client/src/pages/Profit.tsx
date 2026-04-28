@@ -12,25 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { CompanyLogo } from "@/components/CompanyLogo";
-import type { Transaction, Holding } from "@shared/schema";
-
-interface StockQuote {
-  ticker: string;
-  price: number;
-  change: number;
-  changePercent: number;
-}
-
-interface HistoricalPrices {
-  [ticker: string]: Record<string, number>;
-}
-
-interface HistoricalResponse {
-  prices: HistoricalPrices;
-  errors: Record<string, string>;
-  fetchedCount: number;
-  totalRequested: number;
-}
+import type { Transaction } from "@shared/schema";
 
 interface RealizedGainSummary {
   totalRealized: number;
@@ -94,8 +76,18 @@ interface PerformanceResponse {
   computedAt: number;
 }
 
+interface PortfolioHistoryPoint {
+  date: string;
+  totalValue: number;
+  netInvested: number;
+}
+
+interface PortfolioHistoryResponse {
+  points: PortfolioHistoryPoint[];
+}
+
 export default function Profit() {
-  const { currency, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
+  const { formatCurrency } = useCurrency();
   const { getQueryParam } = usePortfolio();
   const [narrowViewport, setNarrowViewport] = useState(false);
 
@@ -116,60 +108,7 @@ export default function Profit() {
       if (!res.ok) throw new Error("Failed to fetch transactions");
       return res.json();
     },
-  });
-
-  const { data: holdings, isLoading: holdingsLoading } = useQuery<Holding[]>({
-    queryKey: ["/api/holdings", portfolioParam],
-    queryFn: async () => {
-      const res = await fetch(`/api/holdings?portfolio=${portfolioParam}`);
-      if (!res.ok) throw new Error("Failed to fetch holdings");
-      return res.json();
-    },
-  });
-
-  const { data: quotes, isLoading: quotesLoading } = useQuery<Record<string, StockQuote>>({
-    queryKey: ["/api/quotes", holdings?.map(h => h.ticker)],
-    enabled: !!holdings && holdings.length > 0,
-    staleTime: 60 * 1000,
-    queryFn: async () => {
-      if (!holdings || holdings.length === 0) return {};
-      
-      const tickers = holdings.map(h => h.ticker);
-      const res = await fetch("/api/stocks/quotes/batch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ tickers }),
-      });
-      
-      if (!res.ok) throw new Error("Failed to fetch quotes");
-      
-      const data = await res.json();
-      
-      if (data.errors && Object.keys(data.errors).length > 0) {
-        console.warn("Some quotes failed to fetch:", data.errors);
-      }
-      
-      return data.quotes as Record<string, StockQuote>;
-    },
-  });
-
-  const allTickers = useMemo(() => {
-    if (!transactions) return [];
-    const tickers = new Set<string>();
-    transactions.forEach(t => tickers.add(t.ticker.toUpperCase()));
-    return Array.from(tickers);
-  }, [transactions]);
-
-  const { data: historicalData, isLoading: historicalLoading } = useQuery<HistoricalResponse>({
-    queryKey: ["/api/stocks/history/batch", allTickers],
-    enabled: allTickers.length > 0,
-    queryFn: async () => {
-      if (allTickers.length === 0) return { prices: {}, errors: {}, fetchedCount: 0, totalRequested: 0 };
-      const response = await apiRequest("POST", "/api/stocks/history/batch", { tickers: allTickers });
-      return response.json();
-    },
-    staleTime: 12 * 60 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
   });
 
   const { data: realizedGains } = useQuery<RealizedGainSummary>({
@@ -195,223 +134,68 @@ export default function Profit() {
     staleTime: 5 * 60 * 1000,
   });
 
-
-  const historicalPrices = historicalData?.prices || {};
-  const historicalErrors = historicalData?.errors || {};
-  const hasHistoricalData = Object.keys(historicalPrices).length > 0 && 
-    Object.values(historicalPrices).some(prices => Object.keys(prices).length > 0);
-
-  const getPrice = (ticker: string, date: Date): number | null => {
-    const upperTicker = ticker.toUpperCase();
-    const dateStr = format(date, "yyyy-MM-dd");
-    const tickerCurrency = getTickerCurrency(ticker);
-    
-    let price: number | null = null;
-    
-    if (historicalPrices[upperTicker]?.[dateStr]) {
-      price = historicalPrices[upperTicker][dateStr];
-    }
-    
-    if (!price) {
-      for (let i = 1; i <= 7; i++) {
-        const prevDateStr = format(subDays(date, i), "yyyy-MM-dd");
-        if (historicalPrices[upperTicker]?.[prevDateStr]) {
-          price = historicalPrices[upperTicker][prevDateStr];
-          break;
-        }
-      }
-    }
-    
-    if (!price) {
-      if (quotes?.[upperTicker]) price = quotes[upperTicker].price;
-      else if (quotes?.[ticker]) price = quotes[ticker].price;
-    }
-    
-    if (price !== null) {
-      return convertPrice(price, tickerCurrency);
-    }
-    
-    return null;
-  };
-
-  const getCurrentPrice = (ticker: string): number | null => {
-    const upperTicker = ticker.toUpperCase();
-    const tickerCurrency = getTickerCurrency(ticker);
-    let price: number | null = null;
-    
-    if (quotes?.[upperTicker]) price = quotes[upperTicker].price;
-    else if (quotes?.[ticker]) price = quotes[ticker].price;
-    
-    if (price !== null) {
-      return convertPrice(price, tickerCurrency);
-    }
-    return null;
-  };
-
-  const calculateHoldingsAtDate = (targetDate: Date) => {
-    if (!transactions) return {};
-    
-    const holdingsAtDate: Record<string, { shares: number; avgCost: number; totalCost: number }> = {};
-    
-    const txnsUpToDate = transactions
-      .filter(t => {
-        const txnDate = parseISO(t.transactionDate as unknown as string);
-        return !isAfter(startOfDay(txnDate), startOfDay(targetDate));
-      })
-      .sort((a, b) => {
-        const dateA = parseISO(a.transactionDate as unknown as string);
-        const dateB = parseISO(b.transactionDate as unknown as string);
-        return dateA.getTime() - dateB.getTime();
-      });
-
-    txnsUpToDate.forEach(txn => {
-      const shares = parseFloat(txn.shares);
-      const price = parseFloat(txn.pricePerShare);
-      const commission = parseFloat(txn.commission || "0");
-
-      if (txn.type === "BUY") {
-        if (!holdingsAtDate[txn.ticker]) {
-          holdingsAtDate[txn.ticker] = { shares: 0, avgCost: 0, totalCost: 0 };
-        }
-        const existing = holdingsAtDate[txn.ticker];
-        const totalCost = shares * price + commission;
-        const newShares = existing.shares + shares;
-        existing.totalCost += totalCost;
-        existing.avgCost = existing.totalCost / newShares;
-        existing.shares = newShares;
-      } else if (txn.type === "SELL") {
-        if (holdingsAtDate[txn.ticker]) {
-          const existing = holdingsAtDate[txn.ticker];
-          const soldCost = shares * existing.avgCost;
-          existing.shares = Math.max(0, existing.shares - shares);
-          existing.totalCost = Math.max(0, existing.totalCost - soldCost);
-        }
-      }
-    });
-
-    return holdingsAtDate;
-  };
-
-  const calculatePortfolioValueAtDate = (targetDate: Date, useCurrentPrices: boolean = false): { value: number; cost: number } => {
-    const holdingsAtDate = calculateHoldingsAtDate(targetDate);
-    let totalValue = 0;
-    let totalCost = 0;
-
-    Object.entries(holdingsAtDate).forEach(([ticker, holding]) => {
-      if (holding.shares > 0) {
-        totalCost += holding.totalCost;
-        
-        let price: number | null = null;
-        
-        if (useCurrentPrices) {
-          price = getCurrentPrice(ticker);
-        } else {
-          price = getPrice(ticker, targetDate);
-        }
-        
-        if (price) {
-          totalValue += holding.shares * price;
-        } else {
-          totalValue += holding.totalCost;
-        }
-      }
-    });
-
-    return { value: totalValue, cost: totalCost };
-  };
+  const { data: historySeries, isLoading: historySeriesLoading } = useQuery<PortfolioHistoryResponse>({
+    queryKey: ["/api/portfolio-history", portfolioParam, "all", "profit"],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.set("portfolio", portfolioParam);
+      params.set("range", "all");
+      const res = await fetch(`/api/portfolio-history?${params.toString()}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch portfolio history");
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
   const dailyData = useMemo(() => {
-    if (!transactions || transactions.length === 0) {
+    const points = historySeries?.points ?? [];
+    if (points.length === 0) {
       return [];
     }
-
-    const dates = transactions.map(t => parseISO(t.transactionDate as unknown as string));
-    const minDate = startOfDay(new Date(Math.min(...dates.map(d => d.getTime()))));
-    const maxDate = startOfDay(new Date());
-
-    const allDays = eachDayOfInterval({ start: minDate, end: maxDate });
-    
-    const tradingDays = allDays.filter(day => !isWeekend(day));
-
     const dailyValues: DailyValue[] = [];
     let previousCumulativeProfit = 0;
-
-    tradingDays.forEach((day, index) => {
-      const isToday = isSameDay(day, new Date());
-      const { value, cost } = calculatePortfolioValueAtDate(day, isToday);
-      
-      const cumulativeProfit = value - cost;
-      const dailyProfit = index === 0 ? cumulativeProfit : (cumulativeProfit - previousCumulativeProfit);
-
-      if (value > 0 || cost > 0) {
-        dailyValues.push({
-          date: day,
-          dateStr: format(day, "yyyy-MM-dd"),
-          portfolioValue: value,
-          totalCost: cost,
-          dailyProfit,
-          cumulativeProfit,
-        });
-        previousCumulativeProfit = cumulativeProfit;
-      }
+    points.forEach((p, index) => {
+      const day = parseISO(`${p.date}T00:00:00`);
+      const cumulativeProfit = p.totalValue - p.netInvested;
+      const dailyProfit = index === 0 ? cumulativeProfit : cumulativeProfit - previousCumulativeProfit;
+      dailyValues.push({
+        date: day,
+        dateStr: p.date,
+        portfolioValue: p.totalValue,
+        totalCost: p.netInvested,
+        dailyProfit,
+        cumulativeProfit,
+      });
+      previousCumulativeProfit = cumulativeProfit;
     });
-
     return dailyValues;
-  }, [transactions, historicalPrices, quotes]);
+  }, [historySeries?.points]);
 
   const periodStats = useMemo(() => {
-    if (dailyData.length === 0) return [];
-
-    const firstDate = dailyData[0].date;
-    const lastDate = dailyData[dailyData.length - 1].date;
-
-    const months = eachMonthOfInterval({ start: startOfMonth(firstDate), end: endOfMonth(lastDate) });
-    const periods = months.map((month) => ({
-      start: startOfMonth(month),
-      end: endOfMonth(month),
-      label: format(month, "MMM yyyy", { locale: sk }),
-    }));
-
-    return periods.map(period => {
-      const daysInPeriod = dailyData.filter(d => 
-        !isBefore(d.date, period.start) && !isAfter(d.date, period.end)
-      );
-
-      if (daysInPeriod.length === 0) {
-        return {
-          period: period.label,
-          periodDate: period.start,
-          startValue: 0,
-          endValue: 0,
-          periodProfit: 0,
-          percentReturn: 0,
-        };
+    if (!performanceData?.years?.length) return [];
+    const months: PeriodStats[] = [];
+    for (const y of performanceData.years) {
+      for (const m of y.months) {
+        const d = parseISO(`${m.startDate}T00:00:00`);
+        months.push({
+          period: format(d, "MMM yyyy", { locale: sk }),
+          periodDate: d,
+          startValue: m.startValue,
+          endValue: m.endValue,
+          periodProfit: m.profit,
+          percentReturn: m.percentReturn,
+        });
       }
-
-      const firstDayIndex = dailyData.findIndex(d => isSameDay(d.date, daysInPeriod[0].date));
-      const startValue = firstDayIndex > 0 ? dailyData[firstDayIndex - 1].portfolioValue : daysInPeriod[0].totalCost;
-      const endValue = daysInPeriod[daysInPeriod.length - 1].portfolioValue;
-      
-      const periodProfit = daysInPeriod.reduce((sum, day) => sum + day.dailyProfit, 0);
-      const percentReturn = startValue > 0 ? (periodProfit / startValue) * 100 : 0;
-
-      return {
-        period: period.label,
-        periodDate: period.start,
-        startValue,
-        endValue,
-        periodProfit,
-        percentReturn,
-      };
-    }).filter(p => p.startValue > 0 || p.endValue > 0 || p.periodProfit !== 0);
-  }, [dailyData]);
+    }
+    return months.sort((a, b) => a.periodDate.getTime() - b.periodDate.getTime());
+  }, [performanceData]);
 
   const formatPercent = (value: number) => {
     const sign = value >= 0 ? "+" : "";
     return `${sign}${value.toFixed(2)}%`;
   };
 
-  const isLoading = transactionsLoading || holdingsLoading || quotesLoading || historicalLoading;
+  const isLoading = transactionsLoading || historySeriesLoading;
 
   if (isLoading) {
     return (
@@ -458,20 +242,11 @@ export default function Profit() {
 
   return (
     <div className="max-w-full space-y-3 overflow-x-hidden pb-6 md:space-y-6 md:pb-10">
-      {!hasHistoricalData && (
+      {dailyData.length === 0 && (
         <Alert className="px-3 py-2 text-xs md:px-4 md:py-3 md:text-sm">
           <AlertCircle className="h-3.5 w-3.5 md:h-4 md:w-4" />
           <AlertDescription>
-            Historické ceny nie sú úplne k dispozícii. Niektoré výpočty môžu používať aktuálne ceny.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {Object.keys(historicalErrors).length > 0 && (
-        <Alert className="px-3 py-2 text-xs md:px-4 md:py-3 md:text-sm">
-          <AlertCircle className="h-3.5 w-3.5 md:h-4 md:w-4" />
-          <AlertDescription className="break-words">
-            Historické ceny nie sú dostupné pre: {Object.keys(historicalErrors).join(", ")}
+            Historické body pre graf zatiaľ nie sú k dispozícii.
           </AlertDescription>
         </Alert>
       )}
