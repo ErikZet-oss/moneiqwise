@@ -132,6 +132,24 @@ export default function GoalTracker() {
     return out;
   }, [annualReturn, initialAmount, monthlyDeposit, monthlyActualMap, simulationStart, years]);
 
+  const projectionSummary = useMemo(() => {
+    const last = projection[projection.length - 1] ?? null;
+    const plannedMonths = years * 12;
+    const totalPlannedDeposits = monthlyDeposit * plannedMonths;
+    const totalOwnContributions = initialAmount + totalPlannedDeposits;
+    const projectedFinalValue = last?.targetValue ?? initialAmount;
+    const projectedGrowth = projectedFinalValue - totalOwnContributions;
+    const projectedGrowthPct =
+      totalOwnContributions > 0 ? (projectedGrowth / totalOwnContributions) * 100 : 0;
+    return {
+      projectedFinalValue,
+      totalPlannedDeposits,
+      totalOwnContributions,
+      projectedGrowth,
+      projectedGrowthPct,
+    };
+  }, [projection, years, monthlyDeposit, initialAmount]);
+
   const yearsList = useMemo(() => {
     const set = new Set<number>();
     for (const p of projection) set.add(p.year);
@@ -227,6 +245,48 @@ export default function GoalTracker() {
               inputMode="numeric"
               data-testid="input-goal-years"
             />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-1">
+            Odhad na konci cieľa
+            <HelpTip title="Ako čítať tento odhad">
+              <p>
+                Toto je výsledná cieľová hodnota z plánovanej čiary (target), ak dodržíš všetky
+                vstupy simulácie.
+              </p>
+              <p>
+                „Zhodnotenie“ je rozdiel medzi odhadovanou hodnotou a tvojimi vlastnými vkladmi.
+              </p>
+            </HelpTip>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <p className="text-2xl sm:text-3xl font-bold tracking-tight" data-testid="text-goal-projected-final-value">
+            {formatCurrency(projectionSummary.projectedFinalValue)}
+          </p>
+          <div className="grid gap-2 sm:grid-cols-3 text-xs sm:text-sm">
+            <div className="rounded-md border p-2.5">
+              <p className="text-muted-foreground text-[11px] sm:text-xs">Vklady spolu</p>
+              <p className="font-semibold mt-0.5">{formatCurrency(projectionSummary.totalOwnContributions)}</p>
+            </div>
+            <div className="rounded-md border p-2.5">
+              <p className="text-muted-foreground text-[11px] sm:text-xs">Mesačné vklady spolu</p>
+              <p className="font-semibold mt-0.5">{formatCurrency(projectionSummary.totalPlannedDeposits)}</p>
+            </div>
+            <div className="rounded-md border p-2.5">
+              <p className="text-muted-foreground text-[11px] sm:text-xs">Zhodnotenie</p>
+              <p
+                className={`font-semibold mt-0.5 ${projectionSummary.projectedGrowth >= 0 ? "text-emerald-600" : "text-rose-600"}`}
+                data-testid="text-goal-projected-growth"
+              >
+                {projectionSummary.projectedGrowth >= 0 ? "+" : "-"}
+                {formatCurrency(Math.abs(projectionSummary.projectedGrowth))} ({projectionSummary.projectedGrowthPct.toFixed(1)}%)
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>
