@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueries } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
-import { format, parse, parseISO } from "date-fns";
+import { format, parse, parseISO, subMonths, subYears, startOfDay } from "date-fns";
 import { sk } from "date-fns/locale";
 import {
   LineChart,
@@ -12,6 +12,7 @@ import {
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
   ReferenceDot,
+  ReferenceLine,
 } from "recharts";
 import { ArrowLeft, ExternalLink, TrendingDown, TrendingUp, Clock, Shield, Calendar } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,8 +24,51 @@ import { CompanyLogo } from "@/components/CompanyLogo";
 import { BrokerLogo } from "@/components/BrokerLogo";
 import { useCurrency } from "@/hooks/useCurrency";
 import { useChartSettings } from "@/hooks/useChartSettings";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { HelpTip } from "@/components/HelpTip";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { BrokerCode, Transaction } from "@shared/schema";
-import { formatShareQuantity } from "@/lib/utils";
+import { cn, formatShareQuantity } from "@/lib/utils";
+
+const PRICE_CHART_RANGE_OPTIONS = [
+  { v: "1m" as const, label: "1M" },
+  { v: "3m" as const, label: "3M" },
+  { v: "6m" as const, label: "6M" },
+  { v: "1y" as const, label: "1R" },
+  { v: "5y" as const, label: "5R" },
+  { v: "all" as const, label: "Všetko" },
+];
+type PriceChartRange = (typeof PRICE_CHART_RANGE_OPTIONS)[number]["v"];
+
+function filterPriceSeriesByRange(
+  series: Array<{ date: string; price: number }>,
+  range: PriceChartRange,
+): Array<{ date: string; price: number }> {
+  if (series.length === 0 || range === "all") return series;
+  const last = parseISO(series[series.length - 1].date + "T12:00:00Z");
+  let start: Date;
+  switch (range) {
+    case "1m":
+      start = subMonths(last, 1);
+      break;
+    case "3m":
+      start = subMonths(last, 3);
+      break;
+    case "6m":
+      start = subMonths(last, 6);
+      break;
+    case "1y":
+      start = subYears(last, 1);
+      break;
+    case "5y":
+      start = subYears(last, 5);
+      break;
+    default:
+      return series;
+  }
+  const cutoff = format(startOfDay(start), "yyyy-MM-dd");
+  return series.filter((d) => d.date >= cutoff);
+}
 
 type PositionRow = {
   portfolioId: string | null;
@@ -125,7 +169,9 @@ export default function AssetDetail() {
   const [, setLocation] = useLocation();
   const { currency, convertPrice, getTickerCurrency, formatCurrency, formatWithConversion } = useCurrency();
   const { hideAmounts } = useChartSettings();
+  const isMobile = useIsMobile();
   const [tradePortfolioFilter, setTradePortfolioFilter] = useState<string>("all");
+  const [priceChartRange, setPriceChartRange] = useState<PriceChartRange>("1y");
 
   const mask = (s: string) => (hideAmounts ? "••••••" : s);
 
@@ -217,6 +263,40 @@ export default function AssetDetail() {
     }
     return out;
   }, [data?.marketTransactions, data?.prices, sortedAscDates, tradePortfolioFilter]);
+
+  const filteredChartData = useMemo(
+    () => filterPriceSeriesByRange(chartData, priceChartRange),
+    [chartData, priceChartRange],
+  );
+
+  const priceRangeCutoffIso = useMemo(() => {
+    if (priceChartRange === "all" || chartData.length === 0) return null;
+    const filtered = filterPriceSeriesByRange(chartData, priceChartRange);
+    if (filtered.length === 0) return null;
+    return filtered[0].date;
+  }, [chartData, priceChartRange]);
+
+  const tradeMarkersInRange = useMemo(() => {
+    if (!priceRangeCutoffIso) return tradeMarkers;
+    return tradeMarkers.filter((m) => m.date >= priceRangeCutoffIso);
+  }, [tradeMarkers, priceRangeCutoffIso]);
+
+  const periodPriceReturnPct = useMemo(() => {
+    if (filteredChartData.length < 2) return null;
+    const a = filteredChartData[0].price;
+    const b = filteredChartData[filteredChartData.length - 1].price;
+    if (!Number.isFinite(a) || !Number.isFinite(b) || a === 0) return null;
+    return ((b - a) / a) * 100;
+  }, [filteredChartData]);
+
+  const positionRoiPct = useMemo(() => {
+    if (!data || data.totals.shares <= 0) return null;
+    const q = data.quote;
+    if (!q || !Number.isFinite(q.price) || !Number.isFinite(data.totals.averageCost)) return null;
+    const avg = data.totals.averageCost;
+    if (avg <= 0) return null;
+    return ((q.price - avg) / avg) * 100;
+  }, [data]);
 
   const sortedTxDesc = useMemo(() => {
     if (!data?.transactions) return [];
@@ -332,6 +412,9 @@ export default function AssetDetail() {
   const quote = data.quote;
   const tc = getTickerCurrency(data.ticker);
   const changePositive = quote != null && quote.change >= 0;
+
+  const formatRoiPct = (p: number | null) =>
+    p == null || !Number.isFinite(p) ? "—" : `${p >= 0 ? "+" : ""}${p.toFixed(2)}%`;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-10">
@@ -764,10 +847,23 @@ export default function AssetDetail() {
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <CardTitle>Vývoj ceny a obchody</CardTitle>
+            <div className="space-y-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <CardTitle className="text-lg sm:text-xl">Vývoj ceny a obchody</CardTitle>
+                <HelpTip title="Návratnosť a graf">
+                  <p>
+                    <strong>ROI pozície</strong> je pomer aktuálnej kotácie k váženému priemernému nákupu (v mene
+                    titulu). Nezahŕňa dividendy ani realizované zisky z predajov.
+                  </p>
+                  <p>
+                    <strong>Zmena v období</strong> je čistá zmena uzatváracej ceny od prvého po posledný deň v grafe
+                    pre zvolené obdobie — teda vývoj ceny akcie, nie vášho portfólia.
+                  </p>
+                  <p>Čiaru „Priem. nákup“ vidíte len pri otvorenej pozícii.</p>
+                </HelpTip>
+              </div>
               <CardDescription>
-                Čiara je uzatváracia cena (historické dáta). Zelené body: nákup, červené: predaj (deň obchodu).
+                Interaktívny výber obdobia; zelené body: nákup, červené: predaj (deň obchodu).
               </CardDescription>
             </div>
             <div className="w-full sm:w-auto">
@@ -794,61 +890,173 @@ export default function AssetDetail() {
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           {chartData.length === 0 ? (
             <p className="text-sm text-muted-foreground py-8 text-center">
               Historické ceny nie sú k dispozícii (alebo ide o hotovosť).
             </p>
           ) : (
-            <div className="h-[320px] w-full" data-testid="asset-price-chart">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fontSize: 10 }}
-                    minTickGap={28}
-                    tickFormatter={(v) => {
-                      try {
-                        return format(parseISO(v as string), "MMM yy", { locale: sk });
-                      } catch {
-                        return String(v);
-                      }
-                    }}
-                  />
-                  <YAxis
-                    domain={["auto", "auto"]}
-                    tick={{ fontSize: 10 }}
-                    width={56}
-                    tickFormatter={(v) => Number(v).toFixed(0)}
-                  />
-                  <RechartsTooltip
-                    content={({ active, payload }) => {
-                      if (!active || !payload?.length) return null;
-                      const row = payload[0].payload as { date: string; price: number };
-                      return (
-                        <div className="rounded-md border bg-background px-3 py-2 text-xs shadow-md">
-                          <div className="font-medium">{row.date}</div>
-                          <div>{mask(formatWithConversion(row.price, data.ticker))}</div>
-                        </div>
-                      );
-                    }}
-                  />
-                  <Line type="monotone" dataKey="price" stroke="hsl(var(--primary))" dot={false} strokeWidth={2} />
-                  {tradeMarkers.map((m) => (
-                    <ReferenceDot
-                      key={m.key}
-                      x={m.date}
-                      y={m.price}
-                      r={5}
-                      fill={m.kind === "BUY" ? "#22c55e" : "#ef4444"}
-                      stroke="#fff"
-                      strokeWidth={1}
-                    />
+            <>
+              <div
+                className={cn(
+                  "w-full min-w-0 overflow-x-auto overscroll-x-contain pb-0.5 sm:overflow-visible [-webkit-overflow-scrolling:touch]",
+                )}
+              >
+                <ToggleGroup
+                  type="single"
+                  value={priceChartRange}
+                  onValueChange={(v) => v && setPriceChartRange(v as PriceChartRange)}
+                  className="flex w-max min-w-full flex-nowrap justify-start gap-1 sm:w-full sm:flex-wrap"
+                >
+                  {PRICE_CHART_RANGE_OPTIONS.map((o) => (
+                    <ToggleGroupItem
+                      key={o.v}
+                      value={o.v}
+                      className="shrink-0 text-xs px-2.5 data-[state=on]:z-10"
+                    >
+                      {o.label}
+                    </ToggleGroupItem>
                   ))}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
+                </ToggleGroup>
+              </div>
+
+              {data.ticker !== "CASH" && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
+                    <div className="text-[11px] text-muted-foreground uppercase tracking-wide">
+                      ROI pozície (vs. priem. nákup)
+                    </div>
+                    <div
+                      className={cn(
+                        "text-xl font-semibold tabular-nums",
+                        positionRoiPct == null
+                          ? "text-muted-foreground"
+                          : positionRoiPct >= 0
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-red-500",
+                      )}
+                    >
+                      {data.totals.shares <= 0 ? (
+                        <span className="text-sm font-normal text-muted-foreground">Bez otvorenej pozície</span>
+                      ) : positionRoiPct == null ? (
+                        <span className="text-sm font-normal text-muted-foreground">Kotácia nedostupná</span>
+                      ) : (
+                        mask(formatRoiPct(positionRoiPct))
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
+                    <div className="text-[11px] text-muted-foreground uppercase tracking-wide">
+                      Zmena ceny v období (graf)
+                    </div>
+                    <div
+                      className={cn(
+                        "text-xl font-semibold tabular-nums",
+                        periodPriceReturnPct == null
+                          ? "text-muted-foreground"
+                          : periodPriceReturnPct >= 0
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-red-500",
+                      )}
+                    >
+                      {mask(formatRoiPct(periodPriceReturnPct))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {filteredChartData.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-6 text-center">
+                  Pre zvolené obdobie nie sú dáta — skráťte rozsah alebo zvoľte „Všetko“.
+                </p>
+              ) : (
+                <div
+                  className={cn("w-full", isMobile ? "h-[260px]" : "h-[320px]")}
+                  data-testid="asset-price-chart"
+                >
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart
+                      data={filteredChartData}
+                      margin={{
+                        top: 8,
+                        right: isMobile ? 4 : 12,
+                        left: isMobile ? -6 : 0,
+                        bottom: 0,
+                      }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fontSize: 10 }}
+                        minTickGap={isMobile ? 20 : 28}
+                        tickFormatter={(v) => {
+                          try {
+                            return format(parseISO(v as string), "MMM yy", { locale: sk });
+                          } catch {
+                            return String(v);
+                          }
+                        }}
+                      />
+                      <YAxis
+                        domain={["auto", "auto"]}
+                        tick={{ fontSize: 10 }}
+                        width={isMobile ? 44 : 56}
+                        tickFormatter={(v) => Number(v).toFixed(0)}
+                      />
+                      <RechartsTooltip
+                        content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null;
+                          const row = payload[0].payload as { date: string; price: number };
+                          return (
+                            <div className="rounded-md border bg-background px-3 py-2 text-xs shadow-md max-w-[220px]">
+                              <div className="font-medium">
+                                {format(parseISO(row.date), "d. MMM yyyy", { locale: sk })}
+                              </div>
+                              <div className="text-muted-foreground text-[10px]">{row.date}</div>
+                              <div className="mt-1 font-medium">
+                                {mask(formatWithConversion(row.price, data.ticker))}
+                              </div>
+                            </div>
+                          );
+                        }}
+                      />
+                      {data.totals.shares > 0 && data.totals.averageCost > 0 && (
+                        <ReferenceLine
+                          y={data.totals.averageCost}
+                          stroke="hsl(var(--muted-foreground))"
+                          strokeDasharray="6 4"
+                          label={{
+                            value: "Priem. nákup",
+                            position: "insideTopRight",
+                            fill: "hsl(var(--muted-foreground))",
+                            fontSize: 10,
+                          }}
+                        />
+                      )}
+                      <Line
+                        type="monotone"
+                        dataKey="price"
+                        stroke="hsl(var(--primary))"
+                        dot={false}
+                        strokeWidth={2}
+                        isAnimationActive={!isMobile}
+                      />
+                      {tradeMarkersInRange.map((m) => (
+                        <ReferenceDot
+                          key={m.key}
+                          x={m.date}
+                          y={m.price}
+                          r={isMobile ? 4 : 5}
+                          fill={m.kind === "BUY" ? "#22c55e" : "#ef4444"}
+                          stroke="#fff"
+                          strokeWidth={1}
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
