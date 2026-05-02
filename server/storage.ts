@@ -1,7 +1,6 @@
 import {
   users,
   localAuthAccounts,
-  localPasswordResets,
   transactions,
   holdings,
   portfolioSnapshots,
@@ -26,7 +25,7 @@ import {
 } from "@shared/schema";
 import type { AllExchangeRates } from "./convertAmountBetween";
 import { netLedgerCashEur } from "./netLedgerCashEur";
-import { db } from "./db";
+import { db, pool } from "./db";
 import { buildEurPerUnitByTxnIdForTransactions } from "./eurAtTransactionDate";
 import { computeFifoRealizedGainsFromTransactions } from "@shared/fifoRealizedGains";
 import { sumCloseTradeCashFlowEurFromRows } from "@shared/cashFromTransactions";
@@ -242,20 +241,45 @@ export class DatabaseStorage implements IStorage {
     if (!user) {
       throw new Error("Používateľ neexistuje.");
     }
-    if (user.registrationStatus !== "pending") {
-      throw new Error("Zrušiť možno len žiadosť v stave „čaká na schválenie“.");
+    const st = String(user.registrationStatus ?? "")
+      .trim()
+      .toLowerCase();
+    if (st !== "pending") {
+      throw new Error("Zrušiť možno len žiadosť v stave čaká na schválenie.");
     }
-    await this.deleteAllTransactionData(userId);
-    const pfs = await this.getPortfoliosByUser(userId);
-    for (const p of pfs) {
-      await this.deletePortfolioCascade(p.id, userId);
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      // Poradie kvôli cudzím kľúčom (transakcie pred portfóliami, auth pred users).
+      await client.query("DELETE FROM transactions WHERE user_id = $1", [userId]);
+      await client.query("DELETE FROM option_trades WHERE user_id = $1", [userId]);
+      await client.query("DELETE FROM holdings WHERE user_id = $1", [userId]);
+      await client.query("DELETE FROM portfolio_snapshots WHERE user_id = $1", [userId]);
+      await client.query("DELETE FROM user_asset_metadata WHERE user_id = $1", [userId]);
+      await client.query("DELETE FROM user_settings WHERE user_id = $1", [userId]);
+      await client.query("DELETE FROM portfolios WHERE user_id = $1", [userId]);
+      await client.query("SAVEPOINT pw_reset_del");
+      try {
+        await client.query("DELETE FROM local_password_resets WHERE user_id = $1", [userId]);
+      } catch (pwErr: unknown) {
+        const pe = pwErr as { code?: string };
+        await client.query("ROLLBACK TO SAVEPOINT pw_reset_del");
+        if (pe?.code !== "42P01") throw pwErr;
+      }
+      await client.query("DELETE FROM local_auth_accounts WHERE user_id = $1", [userId]);
+      await client.query("DELETE FROM users WHERE id = $1", [userId]);
+      await client.query("COMMIT");
+    } catch (err) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        // ignore
+      }
+      throw err;
+    } finally {
+      client.release();
     }
-    await db.delete(portfolioSnapshots).where(eq(portfolioSnapshots.userId, userId));
-    await db.delete(userAssetMetadata).where(eq(userAssetMetadata.userId, userId));
-    await db.delete(userSettings).where(eq(userSettings.userId, userId));
-    await db.delete(localPasswordResets).where(eq(localPasswordResets.userId, userId));
-    await db.delete(localAuthAccounts).where(eq(localAuthAccounts.userId, userId));
-    await db.delete(users).where(eq(users.id, userId));
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {

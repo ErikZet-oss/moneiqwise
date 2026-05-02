@@ -2341,11 +2341,23 @@ export async function registerRoutes(
       res.json({ ok: true });
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Zrusenie zlyhalo.";
+      const pg = error as { code?: string; detail?: string; message?: string };
       if (msg.includes("Zrušiť možno") || msg.includes("neexistuje")) {
         return res.status(400).json({ message: msg });
       }
+      if (pg?.code === "23503") {
+        return res.status(409).json({
+          message:
+            "Účet sa nepodarilo odstrániť kvôli väzbám v databáze. Skús znova; ak problém pretrváva, daj vedieť.",
+        });
+      }
       console.error("Error deleting pending registration:", error);
-      res.status(500).json({ message: "Zrusenie zlyhalo." });
+      res.status(500).json({
+        message:
+          process.env.NODE_ENV === "development" && pg?.message
+            ? pg.message
+            : "Zrusenie zlyhalo.",
+      });
     }
   });
 
