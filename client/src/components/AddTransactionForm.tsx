@@ -24,7 +24,17 @@ import { usePortfolio } from "@/hooks/usePortfolio";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Check, ChevronsUpDown, Loader2, TrendingUp, TrendingDown, Coins, Briefcase, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { CASH_FLOW_TICKER } from "@shared/schema";
+import { getTickerCurrency } from "@shared/tickerCurrency";
 import { cn } from "@/lib/utils";
+
+const TRADE_CURRENCIES = ["EUR", "USD", "GBP", "CZK", "PLN"] as const;
+type TradeCurrency = (typeof TRADE_CURRENCIES)[number];
+
+function normalizeTradeCurrency(raw: string | undefined | null): TradeCurrency {
+  const c = (raw || "EUR").toUpperCase().trim().slice(0, 3);
+  if (TRADE_CURRENCIES.includes(c as TradeCurrency)) return c as TradeCurrency;
+  return "EUR";
+}
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
@@ -72,6 +82,8 @@ const transactionSchema = z
     transactionDate: z.string().min(1, "Vyberte dátum transakcie"),
     cashNote: z.string().optional().default(""),
     cashCurrency: z.string().default("EUR"),
+    /** Mena ceny / provízie pri BUY, SELL, DIVIDEND (nie hotovostný tok). */
+    tradeCurrency: z.enum(["EUR", "USD", "GBP", "CZK", "PLN"]).default("EUR"),
     externalRefId: z.string().optional().default(""),
   })
   .refine(
@@ -163,6 +175,7 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
       transactionDate: new Date().toISOString().slice(0, 16),
       cashNote: "",
       cashCurrency: "EUR",
+      tradeCurrency: "EUR",
       externalRefId: "",
     },
   });
@@ -204,7 +217,21 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
         if (data.externalRefId?.trim()) body.transactionId = data.externalRefId.trim();
         return await apiRequest("POST", "/api/transactions", body);
       }
-      return await apiRequest("POST", "/api/transactions", { ...data, portfolioId: selectedPortfolioId });
+      const ccy = normalizeTradeCurrency(data.tradeCurrency);
+      const body: Record<string, unknown> = {
+        type: data.type,
+        ticker: data.ticker,
+        companyName: data.companyName,
+        shares: data.shares,
+        pricePerShare: data.pricePerShare,
+        commission: data.commission,
+        transactionDate: data.transactionDate,
+        portfolioId: selectedPortfolioId,
+        currency: ccy,
+        originalCurrency: ccy,
+      };
+      if (data.id?.trim()) body.id = data.id.trim();
+      return await apiRequest("POST", "/api/transactions", body);
     },
     onSuccess: () => {
       const messages: Record<TransactionType, string> = {
@@ -241,6 +268,7 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
         transactionDate: new Date().toISOString().slice(0, 16),
         cashNote: "",
         cashCurrency: "EUR",
+        tradeCurrency: form.getValues("tradeCurrency"),
         externalRefId: "",
       });
       setSelectedStock(null);
@@ -267,6 +295,9 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
       setSelectedStock(stock);
       form.setValue("ticker", stock.ticker);
       form.setValue("companyName", stock.name);
+
+      const inferredCcy = normalizeTradeCurrency(stock.currency || getTickerCurrency(stock.ticker));
+      form.setValue("tradeCurrency", inferredCcy);
 
       if (transactionType !== "DIVIDEND") {
         const res = await fetch(`/api/stocks/quote/${stock.ticker}`);
@@ -296,10 +327,14 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
     mutation.mutate(data);
   };
 
-  const formatCurrency = (value: number) => {
+  const tradeCcy = normalizeTradeCurrency(form.watch("tradeCurrency"));
+  const cashCcy = normalizeTradeCurrency(form.watch("cashCurrency"));
+
+  const formatMoney = (value: number, currency: string) => {
+    const c = normalizeTradeCurrency(currency);
     return new Intl.NumberFormat("sk-SK", {
       style: "currency",
-      currency: "EUR",
+      currency: c,
       minimumFractionDigits: 2,
     }).format(value);
   };
@@ -487,6 +522,36 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
               </Select>
             </div>
 
+            {!isCashFlow && (
+              <FormField
+                control={form.control}
+                name="tradeCurrency"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Mena obchodu</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-trade-currency">
+                          <SelectValue placeholder="Mena" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {TRADE_CURRENCIES.map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {c}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Cena za kus, provízia a dividenda sa zadávajú v tejto mene (napr. USD pri amerických akciách).
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
             {isCashFlow && (
               <div className="space-y-4 p-4 rounded-lg border border-dashed bg-muted/40">
                 <p className="text-sm text-muted-foreground">
@@ -615,11 +680,12 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
                                     ticker: inputValue.toUpperCase(),
                                     name: inputValue.toUpperCase(),
                                     exchange: "Manuálne zadané",
-                                    currency: "EUR",
+                                    currency: getTickerCurrency(inputValue.toUpperCase()),
                                   };
                                   setSelectedStock(manualStock);
                                   form.setValue("ticker", manualStock.ticker);
                                   form.setValue("companyName", manualStock.name);
+                                  form.setValue("tradeCurrency", normalizeTradeCurrency(getTickerCurrency(inputValue.toUpperCase())));
                                   setSelectedQuote(null);
                                   setOpen(false);
                                 }}
@@ -650,13 +716,13 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
               <div className="p-4 rounded-lg bg-muted text-sm">
                 <div className="flex justify-between">
                   <span>Aktuálna cena:</span>
-                  <span className="font-medium">{formatCurrency(selectedQuote.price)}</span>
+                  <span className="font-medium">{formatMoney(selectedQuote.price, tradeCcy)}</span>
                 </div>
                 <div className="flex justify-between mt-1">
                   <span>Denná zmena:</span>
                   <span className={selectedQuote.change >= 0 ? "text-green-500" : "text-red-500"}>
                     {selectedQuote.change >= 0 ? "+" : ""}
-                    {formatCurrency(selectedQuote.change)} ({selectedQuote.changePercent >= 0 ? "+" : ""}
+                    {formatMoney(selectedQuote.change, tradeCcy)} ({selectedQuote.changePercent >= 0 ? "+" : ""}
                     {selectedQuote.changePercent.toFixed(2)}%)
                   </span>
                 </div>
@@ -712,10 +778,25 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
                 isCashFlow
                   ? "grid grid-cols-1 gap-4"
                   : transactionType === "DIVIDEND"
-                    ? ""
+                    ? "grid grid-cols-1 sm:grid-cols-2 gap-4"
                     : "grid grid-cols-2 gap-4"
               }
             >
+              {transactionType === "DIVIDEND" && !isCashFlow && (
+                <FormField
+                  control={form.control}
+                  name="shares"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Počet akcií (k výpočtu)</FormLabel>
+                      <FormControl>
+                        <Input type="number" step="0.0001" placeholder="0" {...field} data-testid="input-div-shares" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
               {transactionType !== "DIVIDEND" && !isCashFlow && (
                 <FormField
                   control={form.control}
@@ -739,10 +820,10 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
                   <FormItem>
                     <FormLabel>
                       {isCashFlow
-                        ? `Suma (kladne číslo) — ${(form.watch("cashCurrency") || "EUR").toUpperCase().slice(0, 3) || "EUR"}`
+                        ? `Suma (kladne číslo) — ${cashCcy}`
                         : transactionType === "DIVIDEND"
-                          ? "Celková suma dividendy (€)"
-                          : "Cena za akciu (€)"}
+                          ? `Celková suma dividendy (${tradeCcy})`
+                          : `Cena za akciu (${tradeCcy})`}
                     </FormLabel>
                     <FormControl>
                       <Input
@@ -766,7 +847,11 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
               name="commission"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{transactionType === "DIVIDEND" ? "Zrážková daň (€)" : "Poplatky / Provízia (€)"}</FormLabel>
+                  <FormLabel>
+                    {transactionType === "DIVIDEND"
+                      ? `Zrážková daň (${tradeCcy})`
+                      : `Poplatky / Provízia (${tradeCcy})`}
+                  </FormLabel>
                   <FormControl>
                     <Input type="number" step="0.01" placeholder="0.00" {...field} data-testid="input-commission" />
                   </FormControl>
@@ -789,17 +874,21 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
                       isCashFlow && transactionType === "WITHDRAWAL" && "text-amber-700"
                     )}
                   >
-                    {formatCurrency(
-                      transactionType === "DIVIDEND"
-                        ? parseFloat(form.watch("pricePerShare") || "0") - parseFloat(form.watch("commission") || "0")
-                        : calculateTotal()
-                    )}
+                    {isCashFlow
+                      ? formatMoney(calculateTotal(), cashCcy)
+                      : formatMoney(
+                          transactionType === "DIVIDEND"
+                            ? parseFloat(form.watch("pricePerShare") || "0") -
+                                parseFloat(form.watch("commission") || "0")
+                            : calculateTotal(),
+                          tradeCcy,
+                        )}
                   </span>
                 </div>
                 {transactionType === "DIVIDEND" && parseFloat(form.watch("commission") || "0") > 0 && (
                   <div className="flex justify-between text-xs text-muted-foreground mt-1">
                     <span>Hrubá dividenda:</span>
-                    <span>{formatCurrency(parseFloat(form.watch("pricePerShare") || "0"))}</span>
+                    <span>{formatMoney(parseFloat(form.watch("pricePerShare") || "0"), tradeCcy)}</span>
                   </div>
                 )}
               </div>
