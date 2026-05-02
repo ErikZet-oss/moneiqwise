@@ -2318,10 +2318,34 @@ export async function registerRoutes(
         ? q
         : "pending") as RegistrationAdminListFilter;
       const rows = await storage.listUsersForRegistrationAdmin(statusFilter);
-      res.json({ users: rows });
+      const counts = await storage.countRegistrationUsersByStatus();
+      res.json({ users: rows, counts });
     } catch (error) {
       console.error("Error listing registrations:", error);
       res.status(500).json({ message: "Nepodarilo sa nacitat registracie." });
+    }
+  });
+
+  app.delete("/api/admin/registrations/:userId", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!(await assertRegistrationAdmin(req, res))) return;
+      const targetId = req.params.userId as string;
+      if (!targetId) {
+        return res.status(400).json({ message: "Chybajuce user ID." });
+      }
+      if (targetId === req.user.claims.sub) {
+        return res.status(400).json({ message: "Nemozes zmazat vlastny ucet." });
+      }
+      await storage.deletePendingRegistrationUser(targetId);
+      invalidatePerformanceCache(targetId);
+      res.json({ ok: true });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Zrusenie zlyhalo.";
+      if (msg.includes("Zrušiť možno") || msg.includes("neexistuje")) {
+        return res.status(400).json({ message: msg });
+      }
+      console.error("Error deleting pending registration:", error);
+      res.status(500).json({ message: "Zrusenie zlyhalo." });
     }
   });
 

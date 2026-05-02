@@ -1,6 +1,7 @@
 import {
   users,
   localAuthAccounts,
+  localPasswordResets,
   transactions,
   holdings,
   portfolioSnapshots,
@@ -52,6 +53,9 @@ export interface IStorage {
     }>
   >;
   updateUserRegistrationStatus(userId: string, registrationStatus: string): Promise<void>;
+  /** Len `pending` — zmaže lokálny účet a súvisiace dáta (žiadosti o registráciu). */
+  deletePendingRegistrationUser(userId: string): Promise<void>;
+  countRegistrationUsersByStatus(): Promise<{ pending: number; approved: number; blocked: number }>;
   
   // Portfolio operations
   getPortfoliosByUser(userId: string): Promise<Portfolio[]>;
@@ -212,6 +216,46 @@ export class DatabaseStorage implements IStorage {
       .update(users)
       .set({ registrationStatus, updatedAt: new Date() })
       .where(eq(users.id, userId));
+  }
+
+  async countRegistrationUsersByStatus(): Promise<{ pending: number; approved: number; blocked: number }> {
+    const rows = await db
+      .select({
+        registrationStatus: users.registrationStatus,
+        c: sql<number>`count(*)::int`,
+      })
+      .from(users)
+      .innerJoin(localAuthAccounts, eq(users.id, localAuthAccounts.userId))
+      .groupBy(users.registrationStatus);
+    const out = { pending: 0, approved: 0, blocked: 0 };
+    for (const r of rows) {
+      const k = r.registrationStatus;
+      if (k === "pending") out.pending = Number(r.c);
+      else if (k === "approved") out.approved = Number(r.c);
+      else if (k === "blocked") out.blocked = Number(r.c);
+    }
+    return out;
+  }
+
+  async deletePendingRegistrationUser(userId: string): Promise<void> {
+    const user = await this.getUser(userId);
+    if (!user) {
+      throw new Error("Používateľ neexistuje.");
+    }
+    if (user.registrationStatus !== "pending") {
+      throw new Error("Zrušiť možno len žiadosť v stave „čaká na schválenie“.");
+    }
+    await this.deleteAllTransactionData(userId);
+    const pfs = await this.getPortfoliosByUser(userId);
+    for (const p of pfs) {
+      await this.deletePortfolioCascade(p.id, userId);
+    }
+    await db.delete(portfolioSnapshots).where(eq(portfolioSnapshots.userId, userId));
+    await db.delete(userAssetMetadata).where(eq(userAssetMetadata.userId, userId));
+    await db.delete(userSettings).where(eq(userSettings.userId, userId));
+    await db.delete(localPasswordResets).where(eq(localPasswordResets.userId, userId));
+    await db.delete(localAuthAccounts).where(eq(localAuthAccounts.userId, userId));
+    await db.delete(users).where(eq(users.id, userId));
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
