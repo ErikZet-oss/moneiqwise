@@ -3,6 +3,8 @@ import session from "express-session";
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "crypto";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { db } from "./db";
+import { storage } from "./storage";
+import { parseAdminEmailSet } from "./adminAuth";
 import { localAuthAccounts, localPasswordResets, users } from "@shared/schema";
 
 type LocalAuthUser = {
@@ -155,12 +157,18 @@ function regenerateSession(req: Request): Promise<void> {
   });
 }
 
-function clearSessionCookie(res: Response) {
+export function clearSessionCookie(res: Response) {
   res.clearCookie("moneiqwise.sid", {
     path: "/",
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
+  });
+}
+
+function destroySession(req: Request): Promise<void> {
+  return new Promise((resolve, reject) => {
+    req.session.destroy((err) => (err ? reject(err) : resolve()));
   });
 }
 
@@ -196,7 +204,13 @@ async function findAccountByEmail(email: string) {
   return account;
 }
 
-async function createAccount(email: string, password: string, firstName?: string, lastName?: string) {
+async function createAccount(
+  email: string,
+  password: string,
+  firstName?: string,
+  lastName?: string,
+  registrationStatus: "approved" | "pending" | "blocked" = "approved",
+) {
   const salt = randomBytes(16).toString("hex");
   const passwordHash = hashPassword(password, salt);
 
@@ -207,6 +221,7 @@ async function createAccount(email: string, password: string, firstName?: string
       firstName: firstName?.trim() || null,
       lastName: lastName?.trim() || null,
       profileImageUrl: null,
+      registrationStatus,
     })
     .returning();
 
@@ -288,6 +303,14 @@ export async function setupAuth(app: Express) {
     }),
   );
 
+  const registrationRequiresApproval = parseBool(process.env.LOCAL_AUTH_REGISTRATION_REQUIRES_APPROVAL, false);
+  const adminEmailSetForWarn = parseAdminEmailSet();
+  if (registrationRequiresApproval && (!adminEmailSetForWarn || adminEmailSetForWarn.size === 0)) {
+    console.warn(
+      "[auth] LOCAL_AUTH_REGISTRATION_REQUIRES_APPROVAL je zapnuty, ale LOCAL_AUTH_ADMIN_EMAILS je prazdny — schvalovanie registracii nebude dostupne.",
+    );
+  }
+
   app.use((req: Request, res: Response, next: NextFunction) => {
     // V developmente neblokuj podľa IP (VPN / IPv6 / trust proxy často dajú zlé req.ip).
     // Na produkcii ostáva ochrana, ak LOCAL_AUTH_ALLOW_REMOTE=false.
@@ -333,6 +356,25 @@ export async function setupAuth(app: Express) {
         return res.status(401).json({ message: "Nespravny email alebo heslo." });
       }
 
+      const [acctUser] = await db
+        .select({ registrationStatus: users.registrationStatus })
+        .from(users)
+        .where(eq(users.id, account.userId))
+        .limit(1);
+      if (!acctUser) {
+        return res.status(401).json({ message: "Nespravny email alebo heslo." });
+      }
+      if (acctUser.registrationStatus === "pending") {
+        return res.status(403).json({
+          message: "Ucet este nie je schvaleny. Po schvaleni spravcom sa budes moct prihlasit.",
+        });
+      }
+      if (acctUser.registrationStatus === "blocked") {
+        return res.status(403).json({
+          message: "Ucet je zablokovany. Kontaktuj spravcu aplikacie.",
+        });
+      }
+
       clearLoginFailures(values.email);
       await regenerateSession(req);
       req.session.userId = account.userId;
@@ -369,12 +411,23 @@ export async function setupAuth(app: Express) {
         return res.status(409).json({ message: "Ucet s tymto emailom uz existuje." });
       }
 
+      const userCount = await storage.countUsers();
+      const isFirstUser = userCount === 0;
+      const regStatus: "approved" | "pending" =
+        !registrationRequiresApproval || isFirstUser ? "approved" : "pending";
+
       const user = await createAccount(
         values.email,
         values.password,
         typeof firstName === "string" ? firstName : undefined,
         typeof lastName === "string" ? lastName : undefined,
+        regStatus,
       );
+
+      if (regStatus === "pending") {
+        return res.status(201).json({ ok: true, pendingApproval: true });
+      }
+
       await regenerateSession(req);
       req.session.userId = user.id;
       if (rememberMe) {
@@ -481,13 +534,39 @@ export async function setupAuth(app: Express) {
   });
 }
 
-export const isAuthenticated: RequestHandler = (req: Request, res: Response, next: NextFunction) => {
-  const userId = (req as any).user?.claims?.sub;
-  if (!userId) {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
+export const isAuthenticated: RequestHandler = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = (req as any).user?.claims?.sub;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
 
-  return next();
+    const [u] = await db
+      .select({ registrationStatus: users.registrationStatus })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (!u) {
+      await destroySession(req);
+      clearSessionCookie(res);
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    if (u.registrationStatus === "blocked") {
+      await destroySession(req);
+      clearSessionCookie(res);
+      return res.status(403).json({ message: "Ucet je zablokovany." });
+    }
+    if (u.registrationStatus === "pending") {
+      await destroySession(req);
+      clearSessionCookie(res);
+      return res.status(403).json({ message: "Ucet caka na schvalenie." });
+    }
+
+    return next();
+  } catch (err) {
+    return next(err);
+  }
 };
 
 declare module "express-session" {

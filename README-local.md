@@ -68,6 +68,10 @@ Poznamka k prihlaseniu:
 - `LOCAL_AUTH_RESET_TOKEN_MINUTES` urcuje platnost reset tokenu
 - `AUTH_RATE_LIMIT_*` limity pre login/register/reset endpointy
 - `AUTH_LOCKOUT_*` docasne zamknutie uctu po neuspesnych login pokusoch
+- **Schvaľovanie registrácií (voliteľné):**
+  - `LOCAL_AUTH_REGISTRATION_REQUIRES_APPROVAL=true` — nový používateľ je v stave „čaká“, kým ho správca neschváli; **prvý účet v databáze** je vždy schválený automaticky (bootstrap).
+  - `LOCAL_AUTH_ADMIN_EMAILS=tvoj@email.com,druhy@email.com` — tieto emaily (lokálne prihlásenie) uvidia v menu položku **Registrácie** a môžu schvaľovať / blokovať účty.
+  - Po `db:push` alebo prvom štarte server doplní stĺpec `registration_status` na `users`, ak chýba.
 
 ## 3) Priprava databazy
 

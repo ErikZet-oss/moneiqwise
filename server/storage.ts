@@ -1,5 +1,6 @@
 import {
   users,
+  localAuthAccounts,
   transactions,
   holdings,
   portfolioSnapshots,
@@ -29,12 +30,28 @@ import { buildEurPerUnitByTxnIdForTransactions } from "./eurAtTransactionDate";
 import { computeFifoRealizedGainsFromTransactions } from "@shared/fifoRealizedGains";
 import { sumCloseTradeCashFlowEurFromRows } from "@shared/cashFromTransactions";
 import { dividendNetEur } from "./pnlBreakdown";
-import { eq, and, desc, asc, sql, isNull, or, inArray, notInArray } from "drizzle-orm";
+import { eq, and, desc, asc, sql, isNull, or, inArray, notInArray, type SQL } from "drizzle-orm";
+
+export type RegistrationAdminListFilter = "pending" | "blocked" | "approved" | "all";
 
 export interface IStorage {
   // User operations - required for Replit Auth
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
+  countUsers(): Promise<number>;
+  listUsersForRegistrationAdmin(
+    statusFilter: RegistrationAdminListFilter,
+  ): Promise<
+    Array<{
+      id: string;
+      email: string;
+      firstName: string | null;
+      lastName: string | null;
+      registrationStatus: string;
+      createdAt: Date | null;
+    }>
+  >;
+  updateUserRegistrationStatus(userId: string, registrationStatus: string): Promise<void>;
   
   // Portfolio operations
   getPortfoliosByUser(userId: string): Promise<Portfolio[]>;
@@ -162,6 +179,39 @@ export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
+  }
+
+  async countUsers(): Promise<number> {
+    const [row] = await db.select({ c: sql<number>`count(*)::int` }).from(users);
+    return Number(row?.c ?? 0);
+  }
+
+  async listUsersForRegistrationAdmin(statusFilter: RegistrationAdminListFilter) {
+    const whereClause: SQL | undefined =
+      statusFilter === "all" ? undefined : eq(users.registrationStatus, statusFilter);
+    const base = db
+      .select({
+        id: users.id,
+        email: localAuthAccounts.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        registrationStatus: users.registrationStatus,
+        createdAt: users.createdAt,
+      })
+      .from(users)
+      .innerJoin(localAuthAccounts, eq(users.id, localAuthAccounts.userId))
+      .orderBy(desc(users.createdAt));
+    if (whereClause) {
+      return await base.where(whereClause);
+    }
+    return await base;
+  }
+
+  async updateUserRegistrationStatus(userId: string, registrationStatus: string): Promise<void> {
+    await db
+      .update(users)
+      .set({ registrationStatus, updatedAt: new Date() })
+      .where(eq(users.id, userId));
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {

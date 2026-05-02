@@ -17,7 +17,7 @@ import { z } from "zod";
 import { users } from "./usersTable";
 import { localPasswordResets } from "./localPasswordResetsTable";
 
-export { users } from "./usersTable";
+export { users, REGISTRATION_STATUSES, type RegistrationStatus } from "./usersTable";
 export { localPasswordResets } from "./localPasswordResetsTable";
 
 // Session storage table - required for Replit Auth

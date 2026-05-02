@@ -1,7 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import type { User } from "@shared/schema";
 
-export async function fetchAuthUser(): Promise<User | null> {
+/** Rozšírenie odpovede `/api/auth/user` o práva správcu registrácií. */
+export type AuthUser = User & { isRegistrationAdmin?: boolean };
+
+export async function fetchAuthUser(): Promise<AuthUser | null> {
   const res = await fetch("/api/auth/user", { credentials: "include" });
   if (res.status === 401) return null;
   if (!res.ok) {
@@ -12,7 +15,7 @@ export async function fetchAuthUser(): Promise<User | null> {
 }
 
 export function useAuth() {
-  const { data: user, isPending } = useQuery<User | null>({
+  const { data: user, isPending } = useQuery<AuthUser | null>({
     queryKey: ["/api/auth/user"],
     queryFn: fetchAuthUser,
     retry: false,

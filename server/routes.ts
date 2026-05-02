@@ -1,10 +1,11 @@
-import type { Express } from "express";
+import type { Express, Response } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
-import { storage } from "./storage";
+import { storage, type RegistrationAdminListFilter } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
+import { isRegistrationAdminEmail } from "./adminAuth";
 import {
   insertTransactionSchema,
   insertPortfolioSchema,
@@ -2266,11 +2267,16 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  const { ensurePortfolioSortOrderColumn, ensureTransactionImportColumns, ensureExchangeRatesTable } =
-    await import("./schemaEnsure");
+  const {
+    ensurePortfolioSortOrderColumn,
+    ensureTransactionImportColumns,
+    ensureExchangeRatesTable,
+    ensureUserRegistrationStatusColumn,
+  } = await import("./schemaEnsure");
   await ensurePortfolioSortOrderColumn();
   await ensureTransactionImportColumns();
   await ensureExchangeRatesTable();
+  await ensureUserRegistrationStatusColumn();
 
   // Setup auth middleware
   await setupAuth(app);
@@ -2280,10 +2286,75 @@ export async function registerRoutes(
     try {
       const userId = req.user.claims.sub;
       const user = await storage.getUser(userId);
-      res.json(user);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      res.json({
+        ...user,
+        isRegistrationAdmin: isRegistrationAdminEmail(user.email),
+      });
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  async function assertRegistrationAdmin(req: any, res: Response): Promise<boolean> {
+    const userId = req.user.claims.sub as string;
+    const adminUser = await storage.getUser(userId);
+    if (!adminUser?.email || !isRegistrationAdminEmail(adminUser.email)) {
+      res.status(403).json({ message: "Pristup len pre spravcov registracii." });
+      return false;
+    }
+    return true;
+  }
+
+  app.get("/api/admin/registrations", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!(await assertRegistrationAdmin(req, res))) return;
+      const q = typeof req.query.status === "string" ? req.query.status : "pending";
+      const allowed: RegistrationAdminListFilter[] = ["pending", "blocked", "approved", "all"];
+      const statusFilter = (allowed.includes(q as RegistrationAdminListFilter)
+        ? q
+        : "pending") as RegistrationAdminListFilter;
+      const rows = await storage.listUsersForRegistrationAdmin(statusFilter);
+      res.json({ users: rows });
+    } catch (error) {
+      console.error("Error listing registrations:", error);
+      res.status(500).json({ message: "Nepodarilo sa nacitat registracie." });
+    }
+  });
+
+  app.post("/api/admin/registrations/:userId/approve", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!(await assertRegistrationAdmin(req, res))) return;
+      const targetId = req.params.userId as string;
+      if (!targetId) {
+        return res.status(400).json({ message: "Chybajuce user ID." });
+      }
+      await storage.updateUserRegistrationStatus(targetId, "approved");
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("Error approving registration:", error);
+      res.status(500).json({ message: "Schvalenie zlyhalo." });
+    }
+  });
+
+  app.post("/api/admin/registrations/:userId/block", isAuthenticated, async (req: any, res) => {
+    try {
+      if (!(await assertRegistrationAdmin(req, res))) return;
+      const targetId = req.params.userId as string;
+      if (!targetId) {
+        return res.status(400).json({ message: "Chybajuce user ID." });
+      }
+      if (targetId === req.user.claims.sub) {
+        return res.status(400).json({ message: "Nemozes zablokovat vlastny ucet." });
+      }
+      await storage.updateUserRegistrationStatus(targetId, "blocked");
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("Error blocking registration:", error);
+      res.status(500).json({ message: "Blokovanie zlyhalo." });
     }
   });
 

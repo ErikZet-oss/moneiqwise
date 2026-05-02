@@ -84,3 +84,11 @@ export async function ensureExchangeRatesTable(): Promise<void> {
     )
   `);
 }
+
+/** Schvaľovanie registrácií – staršie DB bez `db:push`. */
+export async function ensureUserRegistrationStatusColumn(): Promise<void> {
+  await pool.query(`
+    ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS registration_status varchar(20) NOT NULL DEFAULT 'approved'
+  `);
+}

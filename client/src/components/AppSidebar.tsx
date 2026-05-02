@@ -1,4 +1,4 @@
-import { BarChart3, History, LogOut, User, TrendingUp, Settings, Briefcase, ChevronDown, Check, Target, Banknote, Upload, Sun, Moon, Layers, PieChart, Scale, LineChart, CircleHelp, CalendarClock } from "lucide-react";
+import { BarChart3, History, LogOut, User, TrendingUp, Settings, Briefcase, ChevronDown, Check, Target, Banknote, Upload, Sun, Moon, Layers, PieChart, Scale, LineChart, CircleHelp, CalendarClock, UserCog } from "lucide-react";
 import { useLocation } from "wouter";
 import {
   Sidebar,
@@ -242,6 +242,28 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              {user?.isRegistrationAdmin && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={location === "/admin/registrations"}
+                    data-testid="nav-admin-registrations"
+                    className="text-xs md:text-sm py-1.5 md:py-2"
+                  >
+                    <a
+                      href="/admin/registrations"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        setLocation("/admin/registrations");
+                        closeMobileSidebar();
+                      }}
+                    >
+                      <UserCog className="h-4 w-4 md:h-5 md:w-5" />
+                      <span>Registrácie</span>
+                    </a>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

@@ -26,6 +26,7 @@ import EventsCalendar from "@/pages/EventsCalendar";
 import AssetDetail from "@/pages/AssetDetail";
 import TaxSummaryPage from "@/pages/TaxSummaryPage";
 import FaqPage from "@/pages/FaqPage";
+import AdminRegistrations from "@/pages/AdminRegistrations";
 import { MarketQuoteTicker } from "@/components/MarketQuoteTicker";
 
 function RedirectToHistory() {
@@ -70,6 +71,7 @@ function Router() {
       <Route path="/goal" component={GoalTracker} />
       <Route path="/events" component={EventsCalendar} />
       <Route path="/settings" component={Settings} />
+      <Route path="/admin/registrations" component={AdminRegistrations} />
       <Route path="/faq" component={FaqPage} />
       <Route path="/asset/:ticker" component={AssetDetail} />
       <Route component={NotFound} />

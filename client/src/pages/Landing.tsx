@@ -86,6 +86,7 @@ export default function Landing() {
   const [resetToken, setResetToken] = useState("");
   const [resetNewPassword, setResetNewPassword] = useState("");
   const [devResetToken, setDevResetToken] = useState("");
+  const [authTab, setAuthTab] = useState("login");
   const registerStrength = getPasswordStrength(registerPassword);
   const resetStrength = getPasswordStrength(resetNewPassword);
 
@@ -119,13 +120,31 @@ export default function Landing() {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      await apiRequest("POST", "/api/register", {
-        firstName: registerFirstName,
-        lastName: registerLastName,
-        email: registerEmail,
-        password: registerPassword,
-        rememberMe: registerRememberMe,
+      const res = await fetch("/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          firstName: registerFirstName,
+          lastName: registerLastName,
+          email: registerEmail,
+          password: registerPassword,
+          rememberMe: registerRememberMe,
+        }),
       });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; pendingApproval?: boolean; message?: string };
+      if (!res.ok) {
+        throw new Error(typeof data?.message === "string" ? data.message : "Registrácia zlyhala.");
+      }
+      if (data.pendingApproval) {
+        toast({
+          title: "Žiadosť odoslaná",
+          description:
+            "Tvoj účet čaká na schválenie správcom. Po schválení sa prihlás rovnakým emailom a heslom.",
+        });
+        setAuthTab("login");
+        return;
+      }
       await refreshAuth();
       toast({ title: "Registracia uspesna", description: "Ucet bol vytvoreny a si prihlaseny." });
     } catch (error) {
@@ -242,7 +261,7 @@ export default function Landing() {
               <CardDescription>Prihláste sa alebo si vytvorte účet</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 pt-4">
-              <Tabs defaultValue="login" className="w-full">
+              <Tabs value={authTab} onValueChange={setAuthTab} className="w-full">
                 <TabsList className="grid h-auto w-full grid-cols-3 gap-0.5 p-1 sm:gap-1">
                   <TabsTrigger
                     value="login"
