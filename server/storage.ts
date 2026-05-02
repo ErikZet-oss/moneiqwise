@@ -251,22 +251,30 @@ export class DatabaseStorage implements IStorage {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
+      // Chýbajúca tabuľka (42P01) v prostredí bez migrácie inak zruší celú transakciu.
+      let optSp = 0;
+      const deleteOptionalTable = async (sql: string) => {
+        const sp = `pdel_${optSp++}`;
+        await client.query(`SAVEPOINT ${sp}`);
+        try {
+          await client.query(sql, [userId]);
+        } catch (e: unknown) {
+          const code = (e as { code?: string }).code;
+          await client.query(`ROLLBACK TO SAVEPOINT ${sp}`);
+          if (code === "42P01") return;
+          throw e;
+        }
+      };
+
       // Poradie kvôli cudzím kľúčom (transakcie pred portfóliami, auth pred users).
       await client.query("DELETE FROM transactions WHERE user_id = $1", [userId]);
-      await client.query("DELETE FROM option_trades WHERE user_id = $1", [userId]);
+      await deleteOptionalTable("DELETE FROM option_trades WHERE user_id = $1");
       await client.query("DELETE FROM holdings WHERE user_id = $1", [userId]);
-      await client.query("DELETE FROM portfolio_snapshots WHERE user_id = $1", [userId]);
-      await client.query("DELETE FROM user_asset_metadata WHERE user_id = $1", [userId]);
-      await client.query("DELETE FROM user_settings WHERE user_id = $1", [userId]);
+      await deleteOptionalTable("DELETE FROM portfolio_snapshots WHERE user_id = $1");
+      await deleteOptionalTable("DELETE FROM user_asset_metadata WHERE user_id = $1");
+      await deleteOptionalTable("DELETE FROM user_settings WHERE user_id = $1");
       await client.query("DELETE FROM portfolios WHERE user_id = $1", [userId]);
-      await client.query("SAVEPOINT pw_reset_del");
-      try {
-        await client.query("DELETE FROM local_password_resets WHERE user_id = $1", [userId]);
-      } catch (pwErr: unknown) {
-        const pe = pwErr as { code?: string };
-        await client.query("ROLLBACK TO SAVEPOINT pw_reset_del");
-        if (pe?.code !== "42P01") throw pwErr;
-      }
+      await deleteOptionalTable("DELETE FROM local_password_resets WHERE user_id = $1");
       await client.query("DELETE FROM local_auth_accounts WHERE user_id = $1", [userId]);
       await client.query("DELETE FROM users WHERE id = $1", [userId]);
       await client.query("COMMIT");
