@@ -284,10 +284,7 @@ export default function Dashboard() {
   } = useQuery<Record<string, StockQuote>>({
     queryKey: ["/api/quotes", holdings?.map(h => h.ticker)],
     enabled: !!holdings && holdings.length > 0,
-    // Quotes are the one thing we want reasonably fresh during market hours.
-    // 1 minute gives near-live feel while still coalescing many renders into a
-    // single network request. The server-side cache (30 min TTL) will usually
-    // serve it instantly anyway.
+    // Quotes: klient môže refetch častejšie; server má vlastný TTL (QUOTE_CACHE_TTL v routes).
     staleTime: 60 * 1000,
     queryFn: async () => {
       if (!holdings || holdings.length === 0) return {};

@@ -80,6 +80,8 @@ const historicalCache = new Map<string, CacheEntry>();
 const exchangeRateCache = new Map<string, CacheEntry>();
 const newsCache = new Map<string, CacheEntry>();
 const CACHE_TTL = 30 * 60 * 1000;
+/** Kotácie (pre/post market) — kratšie než CACHE_TTL, aby dashboard neukazoval 30 min staré ceny. */
+const QUOTE_CACHE_TTL = 3 * 60 * 1000;
 const HISTORICAL_CACHE_TTL = 12 * 60 * 60 * 1000; // 12 hours for historical data
 const EXCHANGE_RATE_CACHE_TTL = 60 * 60 * 1000; // 1 hour for exchange rates
 const NEWS_CACHE_TTL = 15 * 60 * 1000; // 15 minutes for news
@@ -1362,7 +1364,7 @@ async function fetchFinnhubQuote(ticker: string): Promise<any> {
 async function fetchStockQuote(ticker: string, skipCache = false): Promise<any> {
   // Check cache first (unless user explicitly refreshes quotes)
   const cached = priceCache.get(ticker);
-  if (!skipCache && cached && Date.now() - cached.timestamp < CACHE_TTL) {
+  if (!skipCache && cached && Date.now() - cached.timestamp < QUOTE_CACHE_TTL) {
     // Backward compatibility: older cache entries may miss newer fields.
     // If any required field is missing, force fresh fetch to avoid stale/zero metrics.
     if (
