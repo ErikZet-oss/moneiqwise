@@ -2550,17 +2550,17 @@ export default function Dashboard() {
                       }}
                     >
                       {mobileAssetsView === "simple" ? (
-                        <div className="flex gap-2.5 items-start">
+                        <div className="flex gap-2 items-start">
                           <div className="shrink-0 pt-0.5">
                             <CompanyLogo
                               ticker={holding.ticker}
                               companyName={holding.companyName}
-                              size="sm"
+                              size="xs"
                             />
                           </div>
                           <div className="min-w-0 flex-1 flex flex-col gap-0.5 pr-1">
                             <div className="flex items-center gap-1.5 min-w-0">
-                              <span className="font-semibold text-sm leading-tight truncate">
+                              <span className="font-semibold text-xs leading-tight truncate">
                                 {mobileSimpleAssetDisplayName(holding)}
                               </span>
                               <Badge
@@ -2570,16 +2570,16 @@ export default function Dashboard() {
                                 {mobileSimpleAssetBadgeLabel(holding)}
                               </Badge>
                             </div>
-                            <div className="text-[11px] text-muted-foreground tabular-nums">
+                            <div className="text-[9px] text-muted-foreground tabular-nums">
                               {formatShareQuantity(shares)} @ {maskAmount(formatCurrency(avgCostDisplay))}
                             </div>
                           </div>
                           <div className="text-right shrink-0 flex flex-col items-end gap-0.5 max-w-[46%]">
-                            <div className="text-sm font-semibold tabular-nums leading-tight">
+                            <div className="text-xs font-semibold tabular-nums leading-tight">
                               {maskAmount(formatCurrency(currentValue))}
                             </div>
                             <div
-                              className={`text-[11px] font-medium tabular-nums leading-tight ${getChangeColor(gainLoss)}`}
+                              className={`text-[10px] font-medium tabular-nums leading-tight ${getChangeColor(gainLoss)}`}
                             >
                               {gainLoss > 0 ? "+" : ""}
                               {maskAmount(formatCurrency(gainLoss))}{" "}
