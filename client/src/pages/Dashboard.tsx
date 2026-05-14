@@ -12,13 +12,42 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, Wallet, Banknote, Newspaper, ExternalLink, HelpCircle, Loader2, RefreshCw, Moon, Calendar, ChevronRight, Sparkles } from "lucide-react";
+import {
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Wallet,
+  Banknote,
+  Newspaper,
+  ExternalLink,
+  HelpCircle,
+  Loader2,
+  RefreshCw,
+  Moon,
+  Calendar,
+  ChevronRight,
+  Sparkles,
+  LayoutList,
+  ArrowDownUp,
+} from "lucide-react";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
-import { useChartSettings } from "@/hooks/useChartSettings";
+import { useChartSettings, type MobileAssetsSortBy, type MobileAssetsView } from "@/hooks/useChartSettings";
 import { CompanyLogo } from "@/components/CompanyLogo";
 import { BrokerLogo } from "@/components/BrokerLogo";
 import { MobilePortfolioChart } from "@/components/MobilePortfolioChart";
@@ -125,6 +154,88 @@ async function fetchDashboardQuotesBatch(
   return data.quotes as Record<string, StockQuote>;
 }
 
+type PortfolioQuoteCurrency = "EUR" | "USD" | "GBP" | "CZK" | "PLN";
+
+function sortHoldingsArray(
+  holdings: Holding[] | undefined,
+  quotes: Record<string, StockQuote> | undefined,
+  sortField: SortField,
+  sortDirection: SortDirection,
+  convertPrice: (amount: number, sourceCurrency: PortfolioQuoteCurrency) => number,
+  getTickerCurrency: (ticker: string) => PortfolioQuoteCurrency,
+): Holding[] {
+  if (!holdings) return [];
+  if (!quotes) return [...holdings];
+
+  return [...holdings].sort((a, b) => {
+    let aValue: number | string;
+    let bValue: number | string;
+
+    const aShares = parseFloat(a.shares);
+    const bShares = parseFloat(b.shares);
+    const aAvgCost = parseFloat(a.averageCost);
+    const bAvgCost = parseFloat(b.averageCost);
+    const aTickerCurrency = getTickerCurrency(a.ticker);
+    const bTickerCurrency = getTickerCurrency(b.ticker);
+    const aQuote = quotes[a.ticker];
+    const bQuote = quotes[b.ticker];
+    const aAvgCostDisplay = convertPrice(aAvgCost, aTickerCurrency);
+    const bAvgCostDisplay = convertPrice(bAvgCost, bTickerCurrency);
+    const aCurrentPrice = aQuote ? convertPrice(aQuote.price, aTickerCurrency) : aAvgCostDisplay;
+    const bCurrentPrice = bQuote ? convertPrice(bQuote.price, bTickerCurrency) : bAvgCostDisplay;
+    const aCurrentValue = aShares * aCurrentPrice;
+    const bCurrentValue = bShares * bCurrentPrice;
+    const aInvested = parseFloat(a.totalInvested);
+    const bInvested = parseFloat(b.totalInvested);
+    const aInvestedDisplay = convertPrice(aInvested, aTickerCurrency);
+    const bInvestedDisplay = convertPrice(bInvested, bTickerCurrency);
+    const aGainLoss = aCurrentValue - aInvestedDisplay;
+    const bGainLoss = bCurrentValue - bInvestedDisplay;
+
+    switch (sortField) {
+      case "ticker":
+        aValue = a.ticker.toUpperCase();
+        bValue = b.ticker.toUpperCase();
+        break;
+      case "companyName":
+        aValue = (a.companyName || "").toUpperCase();
+        bValue = (b.companyName || "").toUpperCase();
+        break;
+      case "shares":
+        aValue = aShares;
+        bValue = bShares;
+        break;
+      case "avgCost":
+        aValue = aAvgCostDisplay;
+        bValue = bAvgCostDisplay;
+        break;
+      case "currentPrice":
+        aValue = aCurrentPrice;
+        bValue = bCurrentPrice;
+        break;
+      case "value":
+        aValue = aCurrentValue;
+        bValue = bCurrentValue;
+        break;
+      case "gainLoss":
+        aValue = aGainLoss;
+        bValue = bGainLoss;
+        break;
+      default:
+        aValue = a.ticker;
+        bValue = b.ticker;
+    }
+
+    if (typeof aValue === "string" && typeof bValue === "string") {
+      const comparison = aValue.localeCompare(bValue, "sk");
+      return sortDirection === "asc" ? comparison : -comparison;
+    }
+
+    const comparison = (aValue as number) - (bValue as number);
+    return sortDirection === "asc" ? comparison : -comparison;
+  });
+}
+
 interface NewsArticle {
   ticker: string;
   title: string;
@@ -194,6 +305,12 @@ export default function Dashboard() {
     dailyMoversCount,
     showAthPopup,
     showCalendarEventsPopup,
+    mobileAssetsSortBy,
+    mobileAssetsSortOrder,
+    mobileAssetsView,
+    setMobileAssetsSortBy,
+    setMobileAssetsSortOrder,
+    setMobileAssetsView,
   } = useChartSettings();
   const [sortField, setSortField] = useState<SortField>("ticker");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
@@ -209,6 +326,10 @@ export default function Dashboard() {
   const [todayCalendarEvents, setTodayCalendarEvents] = useState<DashboardCalendarEvent[]>([]);
   const calendarPopupHandledRef = useRef(false);
   const [athDontShowAgainToday, setAthDontShowAgainToday] = useState(false);
+  const [mobileAssetsSortDialogOpen, setMobileAssetsSortDialogOpen] = useState(false);
+  const [mobileAssetsViewPopoverOpen, setMobileAssetsViewPopoverOpen] = useState(false);
+  const [draftMobileSortBy, setDraftMobileSortBy] = useState<MobileAssetsSortBy>("name");
+  const [draftMobileSortOrder, setDraftMobileSortOrder] = useState<SortDirection>("asc");
 
   const maskAmount = (amount: string) => hideAmounts ? "••••••" : amount;
   const premarketMoonClass = "text-amber-600 dark:text-amber-400";
@@ -1107,77 +1228,50 @@ export default function Dashboard() {
       : <ArrowDown className="h-4 w-4 ml-1" />;
   };
 
-  const sortedHoldings = useMemo(() => {
-    if (!holdings || !quotes) return holdings || [];
+  const openMobileAssetsSortDialog = useCallback(() => {
+    setDraftMobileSortBy(mobileAssetsSortBy);
+    setDraftMobileSortOrder(mobileAssetsSortOrder);
+    setMobileAssetsSortDialogOpen(true);
+  }, [mobileAssetsSortBy, mobileAssetsSortOrder]);
 
-    return [...holdings].sort((a, b) => {
-      let aValue: number | string;
-      let bValue: number | string;
+  const applyMobileAssetsSort = useCallback(() => {
+    setMobileAssetsSortBy(draftMobileSortBy);
+    setMobileAssetsSortOrder(draftMobileSortOrder);
+    setMobileAssetsSortDialogOpen(false);
+  }, [draftMobileSortBy, draftMobileSortOrder, setMobileAssetsSortBy, setMobileAssetsSortOrder]);
 
-      const aShares = parseFloat(a.shares);
-      const bShares = parseFloat(b.shares);
-      const aAvgCost = parseFloat(a.averageCost);
-      const bAvgCost = parseFloat(b.averageCost);
-      const aTickerCurrency = getTickerCurrency(a.ticker);
-      const bTickerCurrency = getTickerCurrency(b.ticker);
-      const aQuote = quotes[a.ticker];
-      const bQuote = quotes[b.ticker];
-      const aAvgCostDisplay = convertPrice(aAvgCost, aTickerCurrency);
-      const bAvgCostDisplay = convertPrice(bAvgCost, bTickerCurrency);
-      const aCurrentPrice = aQuote ? convertPrice(aQuote.price, aTickerCurrency) : aAvgCostDisplay;
-      const bCurrentPrice = bQuote ? convertPrice(bQuote.price, bTickerCurrency) : bAvgCostDisplay;
-      const aCurrentValue = aShares * aCurrentPrice;
-      const bCurrentValue = bShares * bCurrentPrice;
-      const aInvested = parseFloat(a.totalInvested);
-      const bInvested = parseFloat(b.totalInvested);
-      const aInvestedDisplay = convertPrice(aInvested, aTickerCurrency);
-      const bInvestedDisplay = convertPrice(bInvested, bTickerCurrency);
-      const aGainLoss = aCurrentValue - aInvestedDisplay;
-      const bGainLoss = bCurrentValue - bInvestedDisplay;
+  const sortedHoldingsDesktop = useMemo(
+    () =>
+      sortHoldingsArray(
+        holdings,
+        quotes,
+        sortField,
+        sortDirection,
+        convertPrice,
+        getTickerCurrency,
+      ),
+    [holdings, quotes, sortField, sortDirection, convertPrice, getTickerCurrency],
+  );
 
-      switch (sortField) {
-        case "ticker":
-          aValue = a.ticker.toUpperCase();
-          bValue = b.ticker.toUpperCase();
-          break;
-        case "companyName":
-          aValue = (a.companyName || "").toUpperCase();
-          bValue = (b.companyName || "").toUpperCase();
-          break;
-        case "shares":
-          aValue = aShares;
-          bValue = bShares;
-          break;
-        case "avgCost":
-          aValue = aAvgCostDisplay;
-          bValue = bAvgCostDisplay;
-          break;
-        case "currentPrice":
-          aValue = aCurrentPrice;
-          bValue = bCurrentPrice;
-          break;
-        case "value":
-          aValue = aCurrentValue;
-          bValue = bCurrentValue;
-          break;
-        case "gainLoss":
-          aValue = aGainLoss;
-          bValue = bGainLoss;
-          break;
-        default:
-          aValue = a.ticker;
-          bValue = b.ticker;
-      }
+  const mobileSortField: SortField =
+    mobileAssetsSortBy === "value"
+      ? "value"
+      : mobileAssetsSortBy === "netProfit"
+        ? "gainLoss"
+        : "companyName";
 
-      if (typeof aValue === "string" && typeof bValue === "string") {
-        const comparison = aValue.localeCompare(bValue, "sk");
-        return sortDirection === "asc" ? comparison : -comparison;
-      }
-
-      const comparison = (aValue as number) - (bValue as number);
-      return sortDirection === "asc" ? comparison : -comparison;
-    });
-  }, [holdings, quotes, sortField, sortDirection, convertPrice, getTickerCurrency]);
+  const sortedHoldingsMobile = useMemo(
+    () =>
+      sortHoldingsArray(
+        holdings,
+        quotes,
+        mobileSortField,
+        mobileAssetsSortOrder,
+        convertPrice,
+        getTickerCurrency,
+      ),
+    [holdings, quotes, mobileSortField, mobileAssetsSortOrder, convertPrice, getTickerCurrency],
+  );
 
   const formatPercent = (value: number) => {
     const sign = value >= 0 ? "+" : "";
@@ -2267,9 +2361,134 @@ export default function Dashboard() {
             </div>
           ) : (
             <>
+              <Dialog open={mobileAssetsSortDialogOpen} onOpenChange={setMobileAssetsSortDialogOpen}>
+                <DialogContent className="max-w-[min(100vw-1.5rem,24rem)] gap-0 p-0 sm:max-w-md overflow-hidden">
+                  <DialogHeader className="p-5 pb-3 border-b border-border">
+                    <DialogTitle className="text-base">Zoradiť podľa</DialogTitle>
+                    <DialogDescription className="sr-only">
+                      Vyberte kritérium a poradie zoradenia zoznamu aktív na mobile.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="px-5 pt-3 pb-1">
+                    <RadioGroup
+                      value={draftMobileSortBy}
+                      onValueChange={(v) => setDraftMobileSortBy(v as MobileAssetsSortBy)}
+                      className="gap-0"
+                    >
+                      <label
+                        htmlFor="mobile-sort-name"
+                        className="flex cursor-pointer items-center gap-3 border-b border-border py-3 first:pt-0"
+                      >
+                        <RadioGroupItem value="name" id="mobile-sort-name" />
+                        <span className="text-sm font-normal">Názov</span>
+                      </label>
+                      <label
+                        htmlFor="mobile-sort-value"
+                        className="flex cursor-pointer items-center gap-3 border-b border-border py-3"
+                      >
+                        <RadioGroupItem value="value" id="mobile-sort-value" />
+                        <span className="text-sm font-normal">Hodnota</span>
+                      </label>
+                      <label
+                        htmlFor="mobile-sort-profit"
+                        className="flex cursor-pointer items-center gap-3 py-3"
+                      >
+                        <RadioGroupItem value="netProfit" id="mobile-sort-profit" />
+                        <span className="text-sm font-normal">Čistý zisk</span>
+                      </label>
+                    </RadioGroup>
+                  </div>
+                  <Separator />
+                  <div className="px-5 pt-3 pb-1">
+                    <p className="text-sm font-semibold mb-1">Poradie</p>
+                    <RadioGroup
+                      value={draftMobileSortOrder}
+                      onValueChange={(v) => setDraftMobileSortOrder(v as SortDirection)}
+                      className="gap-0"
+                    >
+                      <label
+                        htmlFor="mobile-order-asc"
+                        className="flex cursor-pointer items-center gap-3 border-b border-border py-3 first:pt-0"
+                      >
+                        <RadioGroupItem value="asc" id="mobile-order-asc" />
+                        <span className="text-sm font-normal">Vzostupne</span>
+                      </label>
+                      <label htmlFor="mobile-order-desc" className="flex cursor-pointer items-center gap-3 py-3">
+                        <RadioGroupItem value="desc" id="mobile-order-desc" />
+                        <span className="text-sm font-normal">Zostupne</span>
+                      </label>
+                    </RadioGroup>
+                  </div>
+                  <DialogFooter className="flex-col gap-2 border-t border-border bg-muted/30 p-4 sm:flex-col">
+                    <Button type="button" className="w-full" onClick={applyMobileAssetsSort}>
+                      Použiť
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="w-full"
+                      onClick={() => setMobileAssetsSortDialogOpen(false)}
+                    >
+                      Zrušiť
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              <div className="md:hidden flex gap-2 border-b border-border pb-2 mb-2">
+                <Popover open={mobileAssetsViewPopoverOpen} onOpenChange={setMobileAssetsViewPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 h-9 gap-1.5 text-xs font-medium"
+                      aria-label="Zmeniť zobrazenie zoznamu aktív"
+                    >
+                      <LayoutList className="h-4 w-4 shrink-0" aria-hidden />
+                      Zobrazenie
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 p-3" align="start">
+                    <p className="text-sm font-semibold mb-2">Zobrazenie</p>
+                    <RadioGroup
+                      value={mobileAssetsView}
+                      onValueChange={(v) => {
+                        setMobileAssetsView(v as MobileAssetsView);
+                        setMobileAssetsViewPopoverOpen(false);
+                      }}
+                      className="gap-0"
+                    >
+                      <label
+                        htmlFor="mobile-view-detailed"
+                        className="flex cursor-pointer items-center gap-3 border-b border-border py-2.5 first:pt-0"
+                      >
+                        <RadioGroupItem value="detailed" id="mobile-view-detailed" />
+                        <span className="text-sm font-normal">Podrobné</span>
+                      </label>
+                      <label htmlFor="mobile-view-simple" className="flex cursor-pointer items-center gap-3 py-2.5">
+                        <RadioGroupItem value="simple" id="mobile-view-simple" />
+                        <span className="text-sm font-normal">Jednoduché</span>
+                      </label>
+                    </RadioGroup>
+                  </PopoverContent>
+                </Popover>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 h-9 gap-1.5 text-xs font-medium"
+                  aria-label="Zoradiť zoznam aktív"
+                  onClick={openMobileAssetsSortDialog}
+                >
+                  <ArrowDownUp className="h-4 w-4 shrink-0" aria-hidden />
+                  Zoradiť
+                </Button>
+              </div>
+
               {/* Mobile view - compact list */}
               <div className="md:hidden space-y-1">
-                {sortedHoldings.map((holding) => {
+                {sortedHoldingsMobile.map((holding) => {
                   const quote = quotes?.[holding.ticker];
                   const shares = parseFloat(holding.shares);
                   const tickerCurrency = getTickerCurrency(holding.ticker);
@@ -2306,67 +2525,93 @@ export default function Dashboard() {
                         }
                       }}
                     >
-                      {(() => {
-                        return (
-                          <>
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <CompanyLogo ticker={holding.ticker} companyName={holding.companyName} size="xs" />
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-1.5">
-                                    <a 
-                                      href={`https://finance.yahoo.com/quote/${holding.ticker}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="font-semibold text-xs hover:text-primary"
-                                      data-testid={`link-ticker-${holding.ticker}`}
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      {holding.ticker}
-                                    </a>
-                                    <span className="text-[9px] text-muted-foreground">
-                                      {formatShareQuantity(shares)} ks
-                                    </span>
-                                  </div>
-                                  <p className="text-[9px] text-muted-foreground truncate">{holding.companyName}</p>
+                      {mobileAssetsView === "simple" ? (
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="font-semibold text-sm tracking-tight">{holding.ticker}</div>
+                            <div className="text-[11px] text-muted-foreground mt-0.5 tabular-nums">
+                              {formatShareQuantity(shares)}
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="text-sm font-semibold tabular-nums">
+                              {maskAmount(formatCurrency(currentValue))}
+                            </div>
+                            <div
+                              className={`text-[11px] mt-0.5 tabular-nums font-medium ${getChangeColor(gainLoss)}`}
+                            >
+                              {gainLoss >= 0 ? "+" : ""}
+                              {maskAmount(formatCurrency(gainLoss))}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <CompanyLogo ticker={holding.ticker} companyName={holding.companyName} size="xs" />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                  <a
+                                    href={`https://finance.yahoo.com/quote/${holding.ticker}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="font-semibold text-xs hover:text-primary"
+                                    data-testid={`link-ticker-${holding.ticker}`}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {holding.ticker}
+                                  </a>
+                                  <span className="text-[9px] text-muted-foreground">
+                                    {formatShareQuantity(shares)} ks
+                                  </span>
                                 </div>
-                              </div>
-                              <div className="text-right pl-2">
-                                <div className="text-xs font-semibold">{maskAmount(formatCurrency(currentValue))}</div>
-                                <div className={`text-[10px] ${getChangeColor(gainLoss)}`}>
-                                  {formatPercent(gainLossPercent)}
-                                </div>
+                                <p className="text-[9px] text-muted-foreground truncate">{holding.companyName}</p>
                               </div>
                             </div>
-                          </>
-                        );
-                      })()}
-                      <div className="flex items-center justify-between mt-1 text-[9px] text-muted-foreground">
-                        <div className="flex items-center gap-3">
-                          <span>Priem: <span className="text-foreground">{maskAmount(formatCurrency(avgCostDisplay))}</span></span>
-                          <span className="inline-flex flex-col">
-                            <span>
-                              Cena: <span className="text-foreground">{maskAmount(formatCurrency(currentPrice))}</span>
-                              {usSessionState === "LIVE" && quote && (
-                                <span className={`ml-0.5 ${getChangeColor(quote.change)}`}>{formatPercent(quote.changePercent)}</span>
-                              )}
-                            </span>
-                            {showPremarketPrice && (
-                              <span className="mt-0.5 inline-flex items-center gap-0.5 text-[8px] text-muted-foreground">
-                                <Moon className={`h-2.5 w-2.5 ${premarketMoonClass}`} />
-                                {maskAmount(formatCurrency(preMarketPrice))}
+                            <div className="text-right pl-2">
+                              <div className="text-xs font-semibold">{maskAmount(formatCurrency(currentValue))}</div>
+                              <div className={`text-[10px] ${getChangeColor(gainLoss)}`}>
+                                {formatPercent(gainLossPercent)}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between mt-1 text-[9px] text-muted-foreground">
+                            <div className="flex items-center gap-3">
+                              <span>
+                                Priem:{" "}
+                                <span className="text-foreground">{maskAmount(formatCurrency(avgCostDisplay))}</span>
                               </span>
-                            )}
-                            {showOffHoursDailyChange && (
-                              <span className={`mt-0.5 inline-flex items-center gap-0.5 text-[8px] ${getChangeColor(quote?.preMarketChange ?? 0)}`}>
-                                <Moon className={`h-2.5 w-2.5 ${premarketMoonClass}`} />
-                                {formatPercent(quote?.preMarketChangePercent ?? 0)}
+                              <span className="inline-flex flex-col">
+                                <span>
+                                  Cena:{" "}
+                                  <span className="text-foreground">{maskAmount(formatCurrency(currentPrice))}</span>
+                                  {usSessionState === "LIVE" && quote && (
+                                    <span className={`ml-0.5 ${getChangeColor(quote.change)}`}>
+                                      {formatPercent(quote.changePercent)}
+                                    </span>
+                                  )}
+                                </span>
+                                {showPremarketPrice && (
+                                  <span className="mt-0.5 inline-flex items-center gap-0.5 text-[8px] text-muted-foreground">
+                                    <Moon className={`h-2.5 w-2.5 ${premarketMoonClass}`} />
+                                    {maskAmount(formatCurrency(preMarketPrice))}
+                                  </span>
+                                )}
+                                {showOffHoursDailyChange && (
+                                  <span
+                                    className={`mt-0.5 inline-flex items-center gap-0.5 text-[8px] ${getChangeColor(quote?.preMarketChange ?? 0)}`}
+                                  >
+                                    <Moon className={`h-2.5 w-2.5 ${premarketMoonClass}`} />
+                                    {formatPercent(quote?.preMarketChangePercent ?? 0)}
+                                  </span>
+                                )}
                               </span>
-                            )}
-                          </span>
-                        </div>
-                        <span className={getChangeColor(gainLoss)}>{maskAmount(formatCurrency(gainLoss))}</span>
-                      </div>
+                            </div>
+                            <span className={getChangeColor(gainLoss)}>{maskAmount(formatCurrency(gainLoss))}</span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   );
                 })}
@@ -2450,7 +2695,7 @@ export default function Dashboard() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sortedHoldings.map((holding) => {
+                    {sortedHoldingsDesktop.map((holding) => {
                       const quote = quotes?.[holding.ticker];
                       const shares = parseFloat(holding.shares);
                       const tickerCurrency = getTickerCurrency(holding.ticker);

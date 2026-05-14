@@ -3,6 +3,12 @@ import { useState, useEffect, useCallback } from "react";
 /** Počet riadkov v rebríčkoch „Najlepšie / Najhoršie“ na Dashboarde. */
 export type DailyMoversDisplayCount = 1 | 3 | 5;
 
+/** Mobilný „Prehľad aktív“ — pole zoradenia (zodpovedá stĺpcom v desktop tabuľke). */
+export type MobileAssetsSortBy = "name" | "value" | "netProfit";
+
+/** Mobilný „Prehľad aktív“ — podrobný zoznam vs. jednoduchý (dva riadky ako XTB). */
+export type MobileAssetsView = "detailed" | "simple";
+
 interface ChartSettings {
   showChart: boolean;
   showTooltip: boolean;
@@ -14,6 +20,10 @@ interface ChartSettings {
   dailyMoversCount: DailyMoversDisplayCount;
   showAthPopup: boolean;
   showCalendarEventsPopup: boolean;
+  /** Zoradenie zoznamu aktív na mobile (Dashboard). */
+  mobileAssetsSortBy: MobileAssetsSortBy;
+  mobileAssetsSortOrder: "asc" | "desc";
+  mobileAssetsView: MobileAssetsView;
 }
 
 const STORAGE_KEY = "portfolio-chart-settings";
@@ -27,12 +37,30 @@ const defaultSettings: ChartSettings = {
   dailyMoversCount: 5,
   showAthPopup: true,
   showCalendarEventsPopup: true,
+  mobileAssetsSortBy: "name",
+  mobileAssetsSortOrder: "asc",
+  mobileAssetsView: "detailed",
 };
 
 function normalizeDailyMoversCount(raw: unknown): DailyMoversDisplayCount {
   const n = typeof raw === "number" ? raw : parseInt(String(raw ?? ""), 10);
   if (n === 1 || n === 3 || n === 5) return n;
   return defaultSettings.dailyMoversCount;
+}
+
+function normalizeMobileAssetsSortBy(raw: unknown): MobileAssetsSortBy {
+  if (raw === "name" || raw === "value" || raw === "netProfit") return raw;
+  return defaultSettings.mobileAssetsSortBy;
+}
+
+function normalizeMobileAssetsSortOrder(raw: unknown): "asc" | "desc" {
+  if (raw === "asc" || raw === "desc") return raw;
+  return defaultSettings.mobileAssetsSortOrder;
+}
+
+function normalizeMobileAssetsView(raw: unknown): MobileAssetsView {
+  if (raw === "detailed" || raw === "simple") return raw;
+  return defaultSettings.mobileAssetsView;
 }
 
 function loadSettings(): ChartSettings {
@@ -44,6 +72,9 @@ function loadSettings(): ChartSettings {
         ...defaultSettings,
         ...parsed,
         dailyMoversCount: normalizeDailyMoversCount(parsed.dailyMoversCount),
+        mobileAssetsSortBy: normalizeMobileAssetsSortBy(parsed.mobileAssetsSortBy),
+        mobileAssetsSortOrder: normalizeMobileAssetsSortOrder(parsed.mobileAssetsSortOrder),
+        mobileAssetsView: normalizeMobileAssetsView(parsed.mobileAssetsView),
       };
     }
   } catch {
@@ -94,6 +125,9 @@ export function useChartSettings() {
     dailyMoversCount: normalizeDailyMoversCount(settings.dailyMoversCount),
     showAthPopup: settings.showAthPopup !== false,
     showCalendarEventsPopup: settings.showCalendarEventsPopup !== false,
+    mobileAssetsSortBy: normalizeMobileAssetsSortBy(settings.mobileAssetsSortBy),
+    mobileAssetsSortOrder: normalizeMobileAssetsSortOrder(settings.mobileAssetsSortOrder),
+    mobileAssetsView: normalizeMobileAssetsView(settings.mobileAssetsView),
     setShowChart: (value: boolean) => updateSettings({ showChart: value }),
     setShowTooltip: (value: boolean) => updateSettings({ showTooltip: value }),
     setHideAmounts: (value: boolean) => updateSettings({ hideAmounts: value }),
@@ -104,6 +138,12 @@ export function useChartSettings() {
     setShowAthPopup: (value: boolean) => updateSettings({ showAthPopup: value }),
     setShowCalendarEventsPopup: (value: boolean) =>
       updateSettings({ showCalendarEventsPopup: value }),
+    setMobileAssetsSortBy: (value: MobileAssetsSortBy) =>
+      updateSettings({ mobileAssetsSortBy: normalizeMobileAssetsSortBy(value) }),
+    setMobileAssetsSortOrder: (value: "asc" | "desc") =>
+      updateSettings({ mobileAssetsSortOrder: normalizeMobileAssetsSortOrder(value) }),
+    setMobileAssetsView: (value: MobileAssetsView) =>
+      updateSettings({ mobileAssetsView: normalizeMobileAssetsView(value) }),
     toggleHideAmounts: () => updateSettings({ hideAmounts: !settings.hideAmounts }),
   };
 }
