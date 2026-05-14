@@ -2274,11 +2274,13 @@ export async function registerRoutes(
     ensureTransactionImportColumns,
     ensureExchangeRatesTable,
     ensureUserRegistrationStatusColumn,
+    ensureUserSettingsAverageCostDisplayCurrencyColumn,
   } = await import("./schemaEnsure");
   await ensurePortfolioSortOrderColumn();
   await ensureTransactionImportColumns();
   await ensureExchangeRatesTable();
   await ensureUserRegistrationStatusColumn();
+  await ensureUserSettingsAverageCostDisplayCurrencyColumn();
 
   // Setup auth middleware
   await setupAuth(app);
@@ -5044,6 +5046,10 @@ export async function registerRoutes(
       
       res.json({
         preferredCurrency: settings?.preferredCurrency || "EUR",
+        averageCostDisplayCurrency:
+          settings?.averageCostDisplayCurrency === "EUR" || settings?.averageCostDisplayCurrency === "USD"
+            ? settings.averageCostDisplayCurrency
+            : null,
       });
     } catch (error) {
       console.error("Error fetching user settings:", error);
@@ -5055,14 +5061,30 @@ export async function registerRoutes(
   app.post("/api/settings", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { preferredCurrency } = req.body ?? {};
+      const body = req.body ?? {};
+      const { preferredCurrency, averageCostDisplayCurrency } = body;
 
-      const settings = await storage.upsertUserSettings(userId, {
-        preferredCurrency: preferredCurrency || "EUR",
-      });
+      const patch: {
+        preferredCurrency?: string | null;
+        averageCostDisplayCurrency?: string | null;
+      } = {};
+      if (preferredCurrency !== undefined) {
+        patch.preferredCurrency = preferredCurrency || "EUR";
+      }
+      if (averageCostDisplayCurrency !== undefined) {
+        const a = averageCostDisplayCurrency;
+        patch.averageCostDisplayCurrency =
+          a === null || a === "" ? null : a === "EUR" || a === "USD" ? a : null;
+      }
+
+      const settings = await storage.upsertUserSettings(userId, patch);
 
       res.json({
         preferredCurrency: settings.preferredCurrency || "EUR",
+        averageCostDisplayCurrency:
+          settings.averageCostDisplayCurrency === "EUR" || settings.averageCostDisplayCurrency === "USD"
+            ? settings.averageCostDisplayCurrency
+            : null,
       });
     } catch (error) {
       console.error("Error updating user settings:", error);

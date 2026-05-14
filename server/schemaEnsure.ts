@@ -92,3 +92,11 @@ export async function ensureUserRegistrationStatusColumn(): Promise<void> {
     ADD COLUMN IF NOT EXISTS registration_status varchar(20) NOT NULL DEFAULT 'approved'
   `);
 }
+
+/** Voliteľná mena len pre zobrazenie priemerných nákupných cien (EUR/USD). */
+export async function ensureUserSettingsAverageCostDisplayCurrencyColumn(): Promise<void> {
+  await pool.query(`
+    ALTER TABLE user_settings
+    ADD COLUMN IF NOT EXISTS average_cost_display_currency varchar(3)
+  `);
+}

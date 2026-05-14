@@ -250,6 +250,8 @@ export const userSettings = pgTable("user_settings", {
   alphaVantageKey: text("alpha_vantage_key"),
   finnhubKey: text("finnhub_key"),
   preferredCurrency: varchar("preferred_currency", { length: 3 }).default("EUR"),
+  /** Ak null, priemerné nákupné ceny sa zobrazujú v `preferred_currency`. Inak len tieto ceny v EUR alebo USD. */
+  averageCostDisplayCurrency: varchar("average_cost_display_currency", { length: 3 }),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 

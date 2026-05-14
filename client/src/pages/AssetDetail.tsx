@@ -167,7 +167,7 @@ export default function AssetDetail() {
   const rawTicker = (params as { ticker?: string }).ticker ?? "";
   const ticker = rawTicker ? decodeURIComponent(rawTicker) : "";
   const [, setLocation] = useLocation();
-  const { currency, convertPrice, getTickerCurrency, formatCurrency, formatWithConversion } = useCurrency();
+  const { currency, convertPrice, convertAverageCostPrice, getTickerCurrency, formatCurrency, formatAverageCostCurrency, formatWithConversion } = useCurrency();
   const { hideAmounts } = useChartSettings();
   const isMobile = useIsMobile();
   const [tradePortfolioFilter, setTradePortfolioFilter] = useState<string>("all");
@@ -535,7 +535,7 @@ export default function AssetDetail() {
           <div>
             <div className="text-xs text-muted-foreground">Priemerná nákupná cena (vážená)</div>
             <div className="text-lg font-semibold">
-              {mask(formatCurrency(convertPrice(data.totals.averageCost, tc)))}
+              {mask(formatAverageCostCurrency(convertAverageCostPrice(data.totals.averageCost, tc)))}
             </div>
           </div>
           <div>
@@ -576,7 +576,7 @@ export default function AssetDetail() {
                     </TableCell>
                     <TableCell className="text-right font-mono">{formatShareQuantity(p.shares)}</TableCell>
                     <TableCell className="text-right">
-                      {mask(formatCurrency(convertPrice(p.averageCost, tc)))}
+                      {mask(formatAverageCostCurrency(convertAverageCostPrice(p.averageCost, tc)))}
                     </TableCell>
                     <TableCell className="text-right">
                       {mask(formatCurrency(convertPrice(p.totalInvested, tc)))}
@@ -642,8 +642,11 @@ export default function AssetDetail() {
                             <div className="text-[10px] text-muted-foreground mt-1">Nákup / ks</div>
                             <div>
                               {mask(
-                                formatCurrency(
-                                  convertPrice(row.pricePerShareLocal, codeToCurrency(row.purchaseCurrency)),
+                                formatAverageCostCurrency(
+                                  convertAverageCostPrice(
+                                    row.pricePerShareLocal,
+                                    codeToCurrency(row.purchaseCurrency),
+                                  ),
                                 ),
                               )}
                             </div>
@@ -731,8 +734,8 @@ export default function AssetDetail() {
                             </TableCell>
                             <TableCell className="text-right text-sm">
                               {mask(
-                                formatCurrency(
-                                  convertPrice(
+                                formatAverageCostCurrency(
+                                  convertAverageCostPrice(
                                     row.pricePerShareLocal,
                                     codeToCurrency(row.purchaseCurrency),
                                   ),

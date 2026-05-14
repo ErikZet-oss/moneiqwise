@@ -1,3 +1,4 @@
+import { useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Currency } from "@shared/schema";
@@ -15,6 +16,8 @@ interface ExchangeRate {
 
 interface Settings {
   preferredCurrency: Currency;
+  /** null / undefined = rovnaká ako mena zobrazenia */
+  averageCostDisplayCurrency?: Currency | null;
 }
 
 const defaultRates: ExchangeRate = {
@@ -50,11 +53,17 @@ export function useCurrency() {
   const currency: Currency = settings?.preferredCurrency || "EUR";
   const rate = exchangeRate || defaultRates;
 
+  const averageCostDisplayCurrency: Currency = useMemo(() => {
+    const c = settings?.averageCostDisplayCurrency;
+    if (c === "EUR" || c === "USD") return c;
+    return currency;
+  }, [settings?.averageCostDisplayCurrency, currency]);
+
   // Convert price based on source currency and target currency
   const convertPrice = (price: number, sourceCurrency: "EUR" | "USD" | "GBP" | "CZK" | "PLN"): number => {
     // If same currency, no conversion needed
     if (sourceCurrency === currency) return price;
-    
+
     // First convert source currency to EUR
     let eurPrice = price;
     if (sourceCurrency === "USD") {
@@ -66,31 +75,69 @@ export function useCurrency() {
     } else if (sourceCurrency === "PLN") {
       eurPrice = price * rate.plnToEur;
     }
-    
+
     // Then convert from EUR to target currency
     if (currency === "EUR") {
       return eurPrice;
     } else if (currency === "USD") {
       return eurPrice * rate.eurToUsd;
     }
-    
+
     return eurPrice; // Default to EUR
   };
+
+  /** Priemerná nákupná cena: prepočet do `averageCostDisplayCurrency` (EUR/USD alebo mena zobrazenia). */
+  const convertAverageCostPrice = useCallback(
+    (price: number, sourceCurrency: "EUR" | "USD" | "GBP" | "CZK" | "PLN"): number => {
+      const target = averageCostDisplayCurrency;
+      if (sourceCurrency === target) return price;
+
+      let eurPrice = price;
+      if (sourceCurrency === "USD") {
+        eurPrice = price * rate.usdToEur;
+      } else if (sourceCurrency === "GBP") {
+        eurPrice = price * rate.gbpToEur;
+      } else if (sourceCurrency === "CZK") {
+        eurPrice = price * rate.czkToEur;
+      } else if (sourceCurrency === "PLN") {
+        eurPrice = price * rate.plnToEur;
+      }
+
+      if (target === "EUR") {
+        return eurPrice;
+      }
+      if (target === "USD") {
+        return eurPrice * rate.eurToUsd;
+      }
+      return eurPrice;
+    },
+    [averageCostDisplayCurrency, rate],
+  );
 
   // Get currency for a ticker
   const getTickerCurrency = (ticker: string): "EUR" | "USD" | "GBP" | "CZK" | "PLN" => {
     const upperTicker = ticker.toUpperCase();
     // German exchanges (XETRA, Frankfurt, Berlin, Düsseldorf, Hamburg, Stuttgart, Munich)
-    if (upperTicker.endsWith(".DE") || upperTicker.endsWith(".F") ||
-        upperTicker.endsWith(".BE") || upperTicker.endsWith(".DU") ||
-        upperTicker.endsWith(".HM") || upperTicker.endsWith(".SG") ||
-        upperTicker.endsWith(".MU")) {
+    if (
+      upperTicker.endsWith(".DE") ||
+      upperTicker.endsWith(".F") ||
+      upperTicker.endsWith(".BE") ||
+      upperTicker.endsWith(".DU") ||
+      upperTicker.endsWith(".HM") ||
+      upperTicker.endsWith(".SG") ||
+      upperTicker.endsWith(".MU")
+    ) {
       return "EUR";
     }
     // Other European exchanges (EUR)
-    if (upperTicker.endsWith(".PA") || upperTicker.endsWith(".AS") || 
-        upperTicker.endsWith(".MI") || upperTicker.endsWith(".VI") ||
-        upperTicker.endsWith(".BR") || upperTicker.endsWith(".SW")) {
+    if (
+      upperTicker.endsWith(".PA") ||
+      upperTicker.endsWith(".AS") ||
+      upperTicker.endsWith(".MI") ||
+      upperTicker.endsWith(".VI") ||
+      upperTicker.endsWith(".BR") ||
+      upperTicker.endsWith(".SW")
+    ) {
       return "EUR";
     }
     // Prague Stock Exchange (CZK)
@@ -118,6 +165,18 @@ export function useCurrency() {
     return formatted;
   };
 
+  const formatAverageCostCurrency = useCallback(
+    (value: number, showSymbol = true): string => {
+      return new Intl.NumberFormat("sk-SK", {
+        style: showSymbol ? "currency" : "decimal",
+        currency: averageCostDisplayCurrency,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(value);
+    },
+    [averageCostDisplayCurrency],
+  );
+
   // Format with conversion from ticker's native currency
   const formatWithConversion = (price: number, ticker: string): string => {
     const sourceCurrency = getTickerCurrency(ticker);
@@ -127,13 +186,16 @@ export function useCurrency() {
 
   return {
     currency,
+    averageCostDisplayCurrency,
     exchangeRate: rate,
     isLoading: settingsLoading || rateLoading,
     setCurrency: updateCurrencyMutation.mutate,
     isUpdating: updateCurrencyMutation.isPending,
     convertPrice,
+    convertAverageCostPrice,
     getTickerCurrency,
     formatCurrency,
+    formatAverageCostCurrency,
     formatWithConversion,
   };
 }

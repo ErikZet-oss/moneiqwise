@@ -168,7 +168,10 @@ export interface IStorage {
   
   // User settings operations
   getUserSettings(userId: string): Promise<UserSettings | undefined>;
-  upsertUserSettings(userId: string, settings: { preferredCurrency?: string | null }): Promise<UserSettings>;
+  upsertUserSettings(
+    userId: string,
+    settings: { preferredCurrency?: string | null; averageCostDisplayCurrency?: string | null },
+  ): Promise<UserSettings>;
   
   // Option trades operations
   createOptionTrade(trade: InsertOptionTrade): Promise<OptionTrade>;
@@ -1265,13 +1268,21 @@ export class DatabaseStorage implements IStorage {
     return settings;
   }
 
-  async upsertUserSettings(userId: string, settings: { preferredCurrency?: string | null }): Promise<UserSettings> {
+  async upsertUserSettings(
+    userId: string,
+    settings: { preferredCurrency?: string | null; averageCostDisplayCurrency?: string | null },
+  ): Promise<UserSettings> {
     const existing = await this.getUserSettings(userId);
 
     if (existing) {
       const updateData: Partial<UserSettings> = { updatedAt: new Date() };
       if (settings.preferredCurrency !== undefined) {
         updateData.preferredCurrency = settings.preferredCurrency || "EUR";
+      }
+      if (settings.averageCostDisplayCurrency !== undefined) {
+        const v = settings.averageCostDisplayCurrency;
+        updateData.averageCostDisplayCurrency =
+          v === "EUR" || v === "USD" ? v : null;
       }
 
       const [updated] = await db
@@ -1282,11 +1293,18 @@ export class DatabaseStorage implements IStorage {
       return updated!;
     }
 
+    const pref = settings.preferredCurrency || "EUR";
+    const avgCcy =
+      settings.averageCostDisplayCurrency === "EUR" || settings.averageCostDisplayCurrency === "USD"
+        ? settings.averageCostDisplayCurrency
+        : null;
+
     const [created] = await db
       .insert(userSettings)
       .values({
         userId,
-        preferredCurrency: settings.preferredCurrency || "EUR",
+        preferredCurrency: pref,
+        averageCostDisplayCurrency: avgCcy,
       })
       .returning();
     return created!;

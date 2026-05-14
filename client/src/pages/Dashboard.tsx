@@ -176,6 +176,7 @@ function sortHoldingsArray(
   sortField: SortField,
   sortDirection: SortDirection,
   convertPrice: (amount: number, sourceCurrency: PortfolioQuoteCurrency) => number,
+  convertAverageCostPrice: (amount: number, sourceCurrency: PortfolioQuoteCurrency) => number,
   getTickerCurrency: (ticker: string) => PortfolioQuoteCurrency,
 ): Holding[] {
   if (!holdings) return [];
@@ -193,10 +194,12 @@ function sortHoldingsArray(
     const bTickerCurrency = getTickerCurrency(b.ticker);
     const aQuote = quotes[a.ticker];
     const bQuote = quotes[b.ticker];
-    const aAvgCostDisplay = convertPrice(aAvgCost, aTickerCurrency);
-    const bAvgCostDisplay = convertPrice(bAvgCost, bTickerCurrency);
-    const aCurrentPrice = aQuote ? convertPrice(aQuote.price, aTickerCurrency) : aAvgCostDisplay;
-    const bCurrentPrice = bQuote ? convertPrice(bQuote.price, bTickerCurrency) : bAvgCostDisplay;
+    const aAvgCostPortfolio = convertPrice(aAvgCost, aTickerCurrency);
+    const bAvgCostPortfolio = convertPrice(bAvgCost, bTickerCurrency);
+    const aAvgCostSort = convertAverageCostPrice(aAvgCost, aTickerCurrency);
+    const bAvgCostSort = convertAverageCostPrice(bAvgCost, bTickerCurrency);
+    const aCurrentPrice = aQuote ? convertPrice(aQuote.price, aTickerCurrency) : aAvgCostPortfolio;
+    const bCurrentPrice = bQuote ? convertPrice(bQuote.price, bTickerCurrency) : bAvgCostPortfolio;
     const aCurrentValue = aShares * aCurrentPrice;
     const bCurrentValue = bShares * bCurrentPrice;
     const aInvested = parseFloat(a.totalInvested);
@@ -220,8 +223,8 @@ function sortHoldingsArray(
         bValue = bShares;
         break;
       case "avgCost":
-        aValue = aAvgCostDisplay;
-        bValue = bAvgCostDisplay;
+        aValue = aAvgCostSort;
+        bValue = bAvgCostSort;
         break;
       case "currentPrice":
         aValue = aCurrentPrice;
@@ -314,7 +317,7 @@ interface UpcomingMacroEventsRes {
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
-  const { currency, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
+  const { currency, convertPrice, convertAverageCostPrice, getTickerCurrency, formatCurrency, formatAverageCostCurrency } = useCurrency();
   const { getQueryParam, selectedPortfolio, isAllPortfolios, portfolios } = usePortfolio();
   const {
     hideAmounts,
@@ -1266,9 +1269,10 @@ export default function Dashboard() {
         sortField,
         sortDirection,
         convertPrice,
+        convertAverageCostPrice,
         getTickerCurrency,
       ),
-    [holdings, quotes, sortField, sortDirection, convertPrice, getTickerCurrency],
+    [holdings, quotes, sortField, sortDirection, convertPrice, convertAverageCostPrice, getTickerCurrency],
   );
 
   const mobileSortField: SortField =
@@ -1288,9 +1292,10 @@ export default function Dashboard() {
         mobileSortField,
         mobileAssetsSortOrder,
         convertPrice,
+        convertAverageCostPrice,
         getTickerCurrency,
       ),
-    [holdings, quotes, mobileSortField, mobileAssetsSortOrder, convertPrice, getTickerCurrency],
+    [holdings, quotes, mobileSortField, mobileAssetsSortOrder, convertPrice, convertAverageCostPrice, getTickerCurrency],
   );
 
   const formatPercent = (value: number) => {
@@ -2516,9 +2521,10 @@ export default function Dashboard() {
                   const quote = quotes?.[holding.ticker];
                   const shares = parseFloat(holding.shares);
                   const tickerCurrency = getTickerCurrency(holding.ticker);
-                  const avgCostDisplay = convertPrice(parseFloat(holding.averageCost), tickerCurrency);
+                  const avgCostPortfolio = convertPrice(parseFloat(holding.averageCost), tickerCurrency);
+                  const avgCostForDisplay = convertAverageCostPrice(parseFloat(holding.averageCost), tickerCurrency);
                   const investedDisplay = convertPrice(parseFloat(holding.totalInvested), tickerCurrency);
-                  const currentPrice = quote ? convertPrice(quote.price, tickerCurrency) : avgCostDisplay;
+                  const currentPrice = quote ? convertPrice(quote.price, tickerCurrency) : avgCostPortfolio;
                   const preMarketPrice =
                     quote?.preMarketPrice != null ? convertPrice(quote.preMarketPrice, tickerCurrency) : null;
                   const showPremarketPrice =
@@ -2571,7 +2577,7 @@ export default function Dashboard() {
                               </Badge>
                             </div>
                             <div className="text-[9px] text-muted-foreground tabular-nums">
-                              {formatShareQuantity(shares)} @ {maskAmount(formatCurrency(avgCostDisplay))}
+                              {formatShareQuantity(shares)} @ {maskAmount(formatAverageCostCurrency(avgCostForDisplay))}
                             </div>
                           </div>
                           <div className="text-right shrink-0 flex flex-col items-end gap-0.5 max-w-[46%]">
@@ -2622,7 +2628,7 @@ export default function Dashboard() {
                             <div className="flex items-center gap-3">
                               <span>
                                 Priem:{" "}
-                                <span className="text-foreground">{maskAmount(formatCurrency(avgCostDisplay))}</span>
+                                <span className="text-foreground">{maskAmount(formatAverageCostCurrency(avgCostForDisplay))}</span>
                               </span>
                               <span className="inline-flex flex-col">
                                 <span>
@@ -2741,9 +2747,10 @@ export default function Dashboard() {
                       const quote = quotes?.[holding.ticker];
                       const shares = parseFloat(holding.shares);
                       const tickerCurrency = getTickerCurrency(holding.ticker);
-                      const avgCostDisplay = convertPrice(parseFloat(holding.averageCost), tickerCurrency);
+                      const avgCostPortfolio = convertPrice(parseFloat(holding.averageCost), tickerCurrency);
+                      const avgCostForDisplay = convertAverageCostPrice(parseFloat(holding.averageCost), tickerCurrency);
                       const investedDisplay = convertPrice(parseFloat(holding.totalInvested), tickerCurrency);
-                      const currentPrice = quote ? convertPrice(quote.price, tickerCurrency) : avgCostDisplay;
+                      const currentPrice = quote ? convertPrice(quote.price, tickerCurrency) : avgCostPortfolio;
                       const preMarketPrice =
                         quote?.preMarketPrice != null ? convertPrice(quote.preMarketPrice, tickerCurrency) : null;
                       const showPremarketPrice =
@@ -2785,7 +2792,7 @@ export default function Dashboard() {
                           </TableCell>
                           <TableCell className="text-muted-foreground">{holding.companyName}</TableCell>
                           <TableCell className="text-right">{formatShareQuantity(shares)}</TableCell>
-                          <TableCell className="text-right">{maskAmount(formatCurrency(avgCostDisplay))}</TableCell>
+                          <TableCell className="text-right">{maskAmount(formatAverageCostCurrency(avgCostForDisplay))}</TableCell>
                           <TableCell className="text-right">
                             <div className="flex flex-col items-end">
                               <div className="flex items-center justify-end gap-1">

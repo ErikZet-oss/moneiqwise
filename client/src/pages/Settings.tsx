@@ -18,6 +18,7 @@ import { HelpTip } from "@/components/HelpTip";
 
 interface ApiSettings {
   preferredCurrency: Currency;
+  averageCostDisplayCurrency: Currency | null;
 }
 
 interface ExchangeRate {
@@ -132,7 +133,7 @@ export default function Settings() {
   });
 
   const updateSettingsMutation = useMutation({
-    mutationFn: async (data: { preferredCurrency?: Currency }) => {
+    mutationFn: async (data: { preferredCurrency?: Currency; averageCostDisplayCurrency?: Currency | null }) => {
       return apiRequest("POST", "/api/settings", data);
     },
     onSuccess: () => {
@@ -154,6 +155,14 @@ export default function Settings() {
 
   const handleCurrencyChange = (currency: Currency) => {
     updateSettingsMutation.mutate({ preferredCurrency: currency });
+  };
+
+  const handleAverageCostCurrencyChange = (value: string) => {
+    if (value === "same-as-display") {
+      updateSettingsMutation.mutate({ averageCostDisplayCurrency: null });
+    } else if (value === "EUR" || value === "USD") {
+      updateSettingsMutation.mutate({ averageCostDisplayCurrency: value });
+    }
   };
 
   const wipeAllDataMutation = useMutation({
@@ -726,6 +735,44 @@ export default function Settings() {
               </p>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Calculator className="h-5 w-5 text-primary" />
+            <CardTitle>Priemerné nákupné ceny</CardTitle>
+          </div>
+          <CardDescription>
+            Mena zobrazenia portfólia zostáva z predchádzajúceho bloku. Tu volíte len menu, v ktorej sa zobrazí{" "}
+            <span className="font-medium">priemerná nákupná cena</span> (prepočet cez kurz z ECB).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+            <Select
+              value={
+                settings?.averageCostDisplayCurrency === "EUR" || settings?.averageCostDisplayCurrency === "USD"
+                  ? settings.averageCostDisplayCurrency
+                  : "same-as-display"
+              }
+              onValueChange={handleAverageCostCurrencyChange}
+              disabled={updateSettingsMutation.isPending || isLoading}
+            >
+              <SelectTrigger className="w-full sm:w-[280px]" data-testid="select-average-cost-currency">
+                <SelectValue placeholder="Vyberte" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="same-as-display">
+                  Rovnaká ako mena zobrazenia ({settings?.preferredCurrency || "EUR"})
+                </SelectItem>
+                <SelectItem value="EUR">EUR — Euro</SelectItem>
+                <SelectItem value="USD">USD — Americký dolár</SelectItem>
+              </SelectContent>
+            </Select>
+            {updateSettingsMutation.isPending && <Loader2 className="h-4 w-4 animate-spin shrink-0" />}
+          </div>
         </CardContent>
       </Card>
 
