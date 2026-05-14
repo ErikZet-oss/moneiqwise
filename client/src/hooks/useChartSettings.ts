@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 export type DailyMoversDisplayCount = 1 | 3 | 5;
 
 /** Mobilný „Prehľad aktív“ — pole zoradenia (zodpovedá stĺpcom v desktop tabuľke). */
-export type MobileAssetsSortBy = "name" | "value" | "netProfit";
+export type MobileAssetsSortBy = "name" | "value" | "netProfit" | "gainPercent";
 
 /** Mobilný „Prehľad aktív“ — podrobný zoznam vs. jednoduchý (dva riadky ako XTB). */
 export type MobileAssetsView = "detailed" | "simple";
@@ -49,7 +49,7 @@ function normalizeDailyMoversCount(raw: unknown): DailyMoversDisplayCount {
 }
 
 function normalizeMobileAssetsSortBy(raw: unknown): MobileAssetsSortBy {
-  if (raw === "name" || raw === "value" || raw === "netProfit") return raw;
+  if (raw === "name" || raw === "value" || raw === "netProfit" || raw === "gainPercent") return raw;
   return defaultSettings.mobileAssetsSortBy;
 }
 

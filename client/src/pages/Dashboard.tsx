@@ -56,6 +56,20 @@ import type { Holding } from "@shared/schema";
 import { CASH_INTEREST_DISPLAY_NAME, CASH_INTEREST_TICKER } from "@shared/tickerCurrency";
 import { formatShareQuantity } from "@/lib/utils";
 
+/** Krátky typ v mobile „jednoduché“ zobrazení (badge ako XTB). */
+function mobileSimpleAssetBadgeLabel(holding: Holding): string {
+  const t = holding.ticker.toUpperCase();
+  if (t === CASH_INTEREST_TICKER) return "Hotovosť";
+  const name = (holding.companyName || "").toLowerCase();
+  if (/\betf\b/.test(name) || /\betc\b/.test(name) || /\betf\b/.test(t)) return "ETF";
+  return "Akcie";
+}
+
+function mobileSimpleAssetDisplayName(holding: Holding): string {
+  if (holding.ticker.toUpperCase() === CASH_INTEREST_TICKER) return CASH_INTEREST_DISPLAY_NAME;
+  return (holding.companyName || holding.ticker).trim() || holding.ticker;
+}
+
 interface RealizedGainSummary {
   totalRealized: number;
   closeTradeNetEur?: number;
@@ -116,7 +130,7 @@ interface OptionTrade {
   realizedGain: string | null;
 }
 
-type SortField = "ticker" | "companyName" | "shares" | "avgCost" | "currentPrice" | "value" | "gainLoss";
+type SortField = "ticker" | "companyName" | "shares" | "avgCost" | "currentPrice" | "value" | "gainLoss" | "gainLossPercent";
 type SortDirection = "asc" | "desc";
 
 interface StockQuote {
@@ -220,6 +234,10 @@ function sortHoldingsArray(
       case "gainLoss":
         aValue = aGainLoss;
         bValue = bGainLoss;
+        break;
+      case "gainLossPercent":
+        aValue = aInvestedDisplay > 0 ? (aGainLoss / aInvestedDisplay) * 100 : 0;
+        bValue = bInvestedDisplay > 0 ? (bGainLoss / bInvestedDisplay) * 100 : 0;
         break;
       default:
         aValue = a.ticker;
@@ -1258,7 +1276,9 @@ export default function Dashboard() {
       ? "value"
       : mobileAssetsSortBy === "netProfit"
         ? "gainLoss"
-        : "companyName";
+        : mobileAssetsSortBy === "gainPercent"
+          ? "gainLossPercent"
+          : "companyName";
 
   const sortedHoldingsMobile = useMemo(
     () =>
@@ -2391,10 +2411,14 @@ export default function Dashboard() {
                       </label>
                       <label
                         htmlFor="mobile-sort-profit"
-                        className="flex cursor-pointer items-center gap-3 py-3"
+                        className="flex cursor-pointer items-center gap-3 border-b border-border py-3"
                       >
                         <RadioGroupItem value="netProfit" id="mobile-sort-profit" />
                         <span className="text-sm font-normal">Čistý zisk</span>
+                      </label>
+                      <label htmlFor="mobile-sort-gain-pct" className="flex cursor-pointer items-center gap-3 py-3">
+                        <RadioGroupItem value="gainPercent" id="mobile-sort-gain-pct" />
+                        <span className="text-sm font-normal">% zhodnotenia</span>
                       </label>
                     </RadioGroup>
                   </div>
@@ -2526,22 +2550,40 @@ export default function Dashboard() {
                       }}
                     >
                       {mobileAssetsView === "simple" ? (
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <div className="font-semibold text-sm tracking-tight">{holding.ticker}</div>
-                            <div className="text-[11px] text-muted-foreground mt-0.5 tabular-nums">
-                              {formatShareQuantity(shares)}
+                        <div className="flex gap-2.5 items-start">
+                          <div className="shrink-0 pt-0.5">
+                            <CompanyLogo
+                              ticker={holding.ticker}
+                              companyName={holding.companyName}
+                              size="sm"
+                            />
+                          </div>
+                          <div className="min-w-0 flex-1 flex flex-col gap-0.5 pr-1">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="font-semibold text-sm leading-tight truncate">
+                                {mobileSimpleAssetDisplayName(holding)}
+                              </span>
+                              <Badge
+                                variant="secondary"
+                                className="shrink-0 px-1.5 py-0 text-[9px] font-normal leading-none text-muted-foreground border border-border/80"
+                              >
+                                {mobileSimpleAssetBadgeLabel(holding)}
+                              </Badge>
+                            </div>
+                            <div className="text-[11px] text-muted-foreground tabular-nums">
+                              {formatShareQuantity(shares)} @ {maskAmount(formatCurrency(avgCostDisplay))}
                             </div>
                           </div>
-                          <div className="text-right shrink-0">
-                            <div className="text-sm font-semibold tabular-nums">
+                          <div className="text-right shrink-0 flex flex-col items-end gap-0.5 max-w-[46%]">
+                            <div className="text-sm font-semibold tabular-nums leading-tight">
                               {maskAmount(formatCurrency(currentValue))}
                             </div>
                             <div
-                              className={`text-[11px] mt-0.5 tabular-nums font-medium ${getChangeColor(gainLoss)}`}
+                              className={`text-[11px] font-medium tabular-nums leading-tight ${getChangeColor(gainLoss)}`}
                             >
-                              {gainLoss >= 0 ? "+" : ""}
-                              {maskAmount(formatCurrency(gainLoss))}
+                              {gainLoss > 0 ? "+" : ""}
+                              {maskAmount(formatCurrency(gainLoss))}{" "}
+                              <span className="whitespace-nowrap">({formatPercent(gainLossPercent)})</span>
                             </div>
                           </div>
                         </div>
