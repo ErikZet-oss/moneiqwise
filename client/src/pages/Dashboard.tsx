@@ -2540,6 +2540,32 @@ export default function Dashboard() {
                   const gainLoss = currentValue - investedDisplay;
                   const gainLossPercent = investedDisplay > 0 ? (gainLoss / investedDisplay) * 100 : 0;
 
+                  const simpleDailyPctEl =
+                    !quote
+                      ? null
+                      : usSessionState === "LIVE" && Number.isFinite(quote.changePercent)
+                        ? (
+                            <span className={`text-[8px] tabular-nums ${getChangeColor(quote.change)}`}>
+                              {formatPercent(quote.changePercent)}
+                            </span>
+                          )
+                        : showOffHoursDailyChange
+                          ? (
+                              <span
+                                className={`text-[8px] tabular-nums inline-flex items-center gap-0.5 ${getChangeColor(quote.preMarketChange ?? 0)}`}
+                              >
+                                <Moon className={`h-2 w-2 shrink-0 ${premarketMoonClass}`} aria-hidden />
+                                {formatPercent(quote.preMarketChangePercent ?? 0)}
+                              </span>
+                            )
+                          : Number.isFinite(quote.changePercent)
+                            ? (
+                                <span className={`text-[8px] tabular-nums ${getChangeColor(quote.change)}`}>
+                                  {formatPercent(quote.changePercent)}
+                                </span>
+                              )
+                            : null;
+
                   return (
                     <div
                       key={holding.id}
@@ -2576,8 +2602,14 @@ export default function Dashboard() {
                                 {mobileSimpleAssetBadgeLabel(holding)}
                               </Badge>
                             </div>
-                            <div className="text-[9px] text-muted-foreground tabular-nums">
-                              {formatShareQuantity(shares)} @ {maskAmount(formatAverageCostCurrency(avgCostForDisplay))}
+                            <div className="flex items-center justify-between gap-1.5 text-[9px] text-muted-foreground tabular-nums min-w-0">
+                              <span className="truncate min-w-0">
+                                {formatShareQuantity(shares)} @{" "}
+                                {maskAmount(formatAverageCostCurrency(avgCostForDisplay))}
+                              </span>
+                              {simpleDailyPctEl != null ? (
+                                <span className="shrink-0">{simpleDailyPctEl}</span>
+                              ) : null}
                             </div>
                           </div>
                           <div className="text-right shrink-0 flex flex-col items-end gap-0.5 max-w-[46%]">
