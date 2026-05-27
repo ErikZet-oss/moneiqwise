@@ -566,6 +566,87 @@ export default function Dashboard() {
     return `${sign}${value.toFixed(2)}%`;
   };
 
+  type DailyMoverRowData = {
+    ticker: string;
+    name: string;
+    pct: number;
+    dayValueEur: number | null;
+  };
+
+  const renderDailyMoverRow = (
+    row: DailyMoverRowData,
+    idx: number,
+    pctColorClass: string,
+    rowTestId: string,
+    valueTestId: string,
+  ) => (
+    <div key={row.ticker} className="border-b border-border/60 last:border-0" data-testid={rowTestId}>
+      {/* Mobile — rovnaké proporcie ako jednoduchý Prehľad aktív */}
+      <div className="flex gap-2 items-start py-2 md:hidden">
+        <span className="text-[9px] text-muted-foreground tabular-nums shrink-0 w-3 pt-0.5">
+          {idx + 1}.
+        </span>
+        <div className="shrink-0 pt-0.5">
+          <CompanyLogo ticker={row.ticker} companyName={row.name} size="xs" />
+        </div>
+        <div className="min-w-0 flex-1 flex flex-col gap-0.5 pr-1">
+          <span className="font-semibold text-xs leading-tight truncate">{row.ticker}</span>
+          <span className="text-[9px] text-muted-foreground truncate">{row.name}</span>
+        </div>
+        <div className="text-right shrink-0 flex flex-col items-end gap-0.5 max-w-[46%]">
+          <span
+            className={`text-xs font-semibold tabular-nums leading-tight inline-flex items-center gap-0.5 ${pctColorClass}`}
+          >
+            {moversUseExtendedQuotes && (
+              <Moon className={`h-2.5 w-2.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
+            )}
+            {formatSignedDayPct(row.pct)}
+          </span>
+          {row.dayValueEur != null && Number.isFinite(row.dayValueEur) && (
+            <span
+              className={`text-[10px] font-medium tabular-nums leading-tight ${getChangeColor(row.dayValueEur)}`}
+              data-testid={valueTestId}
+            >
+              {row.dayValueEur >= 0 ? "+" : ""}
+              {maskAmount(formatCurrency(row.dayValueEur))}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Desktop */}
+      <div className="hidden md:flex items-center justify-between gap-2 py-1.5">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <span className="text-xs text-muted-foreground tabular-nums w-5 shrink-0">{idx + 1}.</span>
+          <CompanyLogo ticker={row.ticker} companyName={row.name} size="xs" />
+          <div className="min-w-0">
+            <div className="font-medium text-sm truncate">{row.ticker}</div>
+            <div className="text-xs text-muted-foreground truncate">{row.name}</div>
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-0.5 shrink-0">
+          <span className="inline-flex items-center gap-1">
+            {moversUseExtendedQuotes && (
+              <Moon className={`h-3.5 w-3.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
+            )}
+            <span className={`text-sm font-semibold tabular-nums ${pctColorClass}`}>
+              {formatSignedDayPct(row.pct)}
+            </span>
+          </span>
+          {row.dayValueEur != null && Number.isFinite(row.dayValueEur) && (
+            <span
+              className={`text-[10px] tabular-nums ${getChangeColor(row.dayValueEur)}`}
+              data-testid={valueTestId}
+            >
+              {row.dayValueEur >= 0 ? "+" : ""}
+              {maskAmount(formatCurrency(row.dayValueEur))}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
   const refreshDashboardQuotes = useCallback(async () => {
     if (!holdings || holdings.length === 0) return;
     const tickers = holdings.map((h) => h.ticker);
@@ -2220,11 +2301,11 @@ export default function Dashboard() {
               </CardTitle>
               <p className="text-xs text-muted-foreground">Zmena podľa režimu trhu (RTH vs pre/post market).</p>
             </CardHeader>
-            <CardContent className="space-y-2 pt-0">
+            <CardContent className="pt-0">
               {quotesFetching && !quotesData ? (
                 <>
                   {Array.from({ length: dailyMoversCount }, (_, i) => (
-                    <Skeleton key={i} className="h-10 w-full" />
+                    <Skeleton key={i} className="h-12 md:h-10 w-full" />
                   ))}
                 </>
               ) : dailyMovers.gainers.length === 0 ? (
@@ -2234,43 +2315,9 @@ export default function Dashboard() {
                     : "Žiadna z držaných akcií v hlavnej relácii dnes nebola v pluse."}
                 </p>
               ) : (
-                dailyMovers.gainers.map((row, idx) => (
-                  <div
-                    key={row.ticker}
-                    className="flex items-center justify-between gap-2 py-1.5 border-b border-border/60 last:border-0"
-                    data-testid={`dashboard-gainer-${idx}`}
-                  >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <span className="text-xs text-muted-foreground tabular-nums w-5 shrink-0">
-                        {idx + 1}.
-                      </span>
-                      <CompanyLogo ticker={row.ticker} companyName={row.name} size="xs" />
-                      <div className="min-w-0">
-                        <div className="font-medium text-sm truncate">{row.ticker}</div>
-                        <div className="text-xs text-muted-foreground truncate">{row.name}</div>
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-0.5 shrink-0">
-                      <span className="inline-flex items-center gap-1">
-                        {moversUseExtendedQuotes && (
-                          <Moon className={`h-3.5 w-3.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
-                        )}
-                        <span className="text-sm font-semibold tabular-nums text-green-500">
-                          {formatSignedDayPct(row.pct)}
-                        </span>
-                      </span>
-                      {row.dayValueEur != null && Number.isFinite(row.dayValueEur) && (
-                        <span
-                          className={`text-[10px] tabular-nums ${getChangeColor(row.dayValueEur)}`}
-                          data-testid={`dashboard-gainer-value-${idx}`}
-                        >
-                          {row.dayValueEur >= 0 ? "+" : ""}
-                          {maskAmount(formatCurrency(row.dayValueEur))}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))
+                dailyMovers.gainers.map((row, idx) =>
+                  renderDailyMoverRow(row, idx, "text-green-500", `dashboard-gainer-${idx}`, `dashboard-gainer-value-${idx}`),
+                )
               )}
             </CardContent>
           </Card>
@@ -2316,11 +2363,11 @@ export default function Dashboard() {
               </CardTitle>
               <p className="text-xs text-muted-foreground">Zmena podľa režimu trhu (RTH vs pre/post market).</p>
             </CardHeader>
-            <CardContent className="space-y-2 pt-0">
+            <CardContent className="pt-0">
               {quotesFetching && !quotesData ? (
                 <>
                   {Array.from({ length: dailyMoversCount }, (_, i) => (
-                    <Skeleton key={i} className="h-10 w-full" />
+                    <Skeleton key={i} className="h-12 md:h-10 w-full" />
                   ))}
                 </>
               ) : dailyMovers.losers.length === 0 ? (
@@ -2330,43 +2377,9 @@ export default function Dashboard() {
                     : "Žiadna z držaných akcií v hlavnej relácii dnes nebola v mínuse."}
                 </p>
               ) : (
-                dailyMovers.losers.map((row, idx) => (
-                  <div
-                    key={row.ticker}
-                    className="flex items-center justify-between gap-2 py-1.5 border-b border-border/60 last:border-0"
-                    data-testid={`dashboard-loser-${idx}`}
-                  >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <span className="text-xs text-muted-foreground tabular-nums w-5 shrink-0">
-                        {idx + 1}.
-                      </span>
-                      <CompanyLogo ticker={row.ticker} companyName={row.name} size="xs" />
-                      <div className="min-w-0">
-                        <div className="font-medium text-sm truncate">{row.ticker}</div>
-                        <div className="text-xs text-muted-foreground truncate">{row.name}</div>
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-0.5 shrink-0">
-                      <span className="inline-flex items-center gap-1">
-                        {moversUseExtendedQuotes && (
-                          <Moon className={`h-3.5 w-3.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
-                        )}
-                        <span className="text-sm font-semibold tabular-nums text-red-500">
-                          {formatSignedDayPct(row.pct)}
-                        </span>
-                      </span>
-                      {row.dayValueEur != null && Number.isFinite(row.dayValueEur) && (
-                        <span
-                          className={`text-[10px] tabular-nums ${getChangeColor(row.dayValueEur)}`}
-                          data-testid={`dashboard-loser-value-${idx}`}
-                        >
-                          {row.dayValueEur >= 0 ? "+" : ""}
-                          {maskAmount(formatCurrency(row.dayValueEur))}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))
+                dailyMovers.losers.map((row, idx) =>
+                  renderDailyMoverRow(row, idx, "text-red-500", `dashboard-loser-${idx}`, `dashboard-loser-value-${idx}`),
+                )
               )}
             </CardContent>
           </Card>
