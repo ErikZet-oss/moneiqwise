@@ -351,6 +351,8 @@ export default function Dashboard() {
   const [mobileAssetsViewPopoverOpen, setMobileAssetsViewPopoverOpen] = useState(false);
   const [draftMobileSortBy, setDraftMobileSortBy] = useState<MobileAssetsSortBy>("name");
   const [draftMobileSortOrder, setDraftMobileSortOrder] = useState<SortDirection>("asc");
+  /** `gainer:TICKER` / `loser:TICKER` — názov spoločnosti po kliknutí na ticker. */
+  const [dailyMoverExpandedKey, setDailyMoverExpandedKey] = useState<string | null>(null);
 
   const maskAmount = (amount: string) => hideAmounts ? "••••••" : amount;
   const premarketMoonClass = "text-amber-600 dark:text-amber-400";
@@ -576,13 +578,18 @@ export default function Dashboard() {
   const renderDailyMoverRow = (
     row: DailyMoverRowData,
     idx: number,
+    variant: "gainer" | "loser",
     pctColorClass: string,
     rowTestId: string,
     valueTestId: string,
-  ) => (
+  ) => {
+    const expandKey = `${variant}:${row.ticker}`;
+    const nameExpanded = dailyMoverExpandedKey === expandKey;
+
+    return (
     <div key={row.ticker} className="border-b border-border/60 last:border-0" data-testid={rowTestId}>
-      {/* Mobile — rovnaké proporcie ako jednoduchý Prehľad aktív */}
-      <div className="flex gap-2 items-start py-2 md:hidden">
+      {/* Mobile — zarovnanie s Prehľadom aktív; názov až po kliknutí na ticker */}
+      <div className="flex gap-2 items-start py-1.5 md:hidden">
         <span className="text-[9px] text-muted-foreground tabular-nums shrink-0 w-3 pt-0.5">
           {idx + 1}.
         </span>
@@ -590,27 +597,45 @@ export default function Dashboard() {
           <CompanyLogo ticker={row.ticker} companyName={row.name} size="xs" />
         </div>
         <div className="min-w-0 flex-1 flex flex-col gap-0.5 pr-1">
-          <span className="font-semibold text-xs leading-tight truncate">{row.ticker}</span>
-          <span className="text-[9px] text-muted-foreground truncate">{row.name}</span>
-        </div>
-        <div className="text-right shrink-0 flex flex-col items-end gap-0.5 max-w-[46%]">
-          <span
-            className={`text-xs font-semibold tabular-nums leading-tight inline-flex items-center gap-0.5 ${pctColorClass}`}
+          <button
+            type="button"
+            className="font-semibold text-xs leading-tight truncate text-left hover:underline underline-offset-2 w-fit max-w-full rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={(e) => {
+              e.preventDefault();
+              setDailyMoverExpandedKey((k) => (k === expandKey ? null : expandKey));
+            }}
+            aria-expanded={nameExpanded}
+            aria-controls={nameExpanded ? `${rowTestId}-company` : undefined}
+            data-testid={`${rowTestId}-ticker`}
           >
-            {moversUseExtendedQuotes && (
-              <Moon className={`h-2.5 w-2.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
-            )}
-            {formatSignedDayPct(row.pct)}
-          </span>
-          {row.dayValueEur != null && Number.isFinite(row.dayValueEur) && (
-            <span
-              className={`text-[10px] font-medium tabular-nums leading-tight ${getChangeColor(row.dayValueEur)}`}
-              data-testid={valueTestId}
-            >
-              {row.dayValueEur >= 0 ? "+" : ""}
-              {maskAmount(formatCurrency(row.dayValueEur))}
+            {row.ticker}
+          </button>
+          {nameExpanded ? (
+            <span id={`${rowTestId}-company`} className="text-[9px] text-muted-foreground truncate">
+              {row.name}
             </span>
-          )}
+          ) : null}
+        </div>
+        <div className="text-right shrink-0 max-w-[52%]">
+          <div className="inline-flex flex-wrap items-center justify-end gap-x-1.5 gap-y-0.5">
+            <span
+              className={`text-xs font-semibold tabular-nums leading-tight inline-flex items-center gap-0.5 ${pctColorClass}`}
+            >
+              {moversUseExtendedQuotes && (
+                <Moon className={`h-2.5 w-2.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
+              )}
+              {formatSignedDayPct(row.pct)}
+            </span>
+            {row.dayValueEur != null && Number.isFinite(row.dayValueEur) && (
+              <span
+                className={`text-[10px] font-medium tabular-nums leading-tight ${getChangeColor(row.dayValueEur)}`}
+                data-testid={valueTestId}
+              >
+                {row.dayValueEur >= 0 ? "+" : ""}
+                {maskAmount(formatCurrency(row.dayValueEur))}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -619,12 +644,28 @@ export default function Dashboard() {
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <span className="text-xs text-muted-foreground tabular-nums w-5 shrink-0">{idx + 1}.</span>
           <CompanyLogo ticker={row.ticker} companyName={row.name} size="xs" />
-          <div className="min-w-0">
-            <div className="font-medium text-sm truncate">{row.ticker}</div>
-            <div className="text-xs text-muted-foreground truncate">{row.name}</div>
+          <div className="min-w-0 flex flex-col gap-0.5">
+            <button
+              type="button"
+              className="font-medium text-sm truncate text-left hover:underline underline-offset-2 w-fit max-w-full rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={(e) => {
+                e.preventDefault();
+                setDailyMoverExpandedKey((k) => (k === expandKey ? null : expandKey));
+              }}
+              aria-expanded={nameExpanded}
+              aria-controls={nameExpanded ? `${rowTestId}-company-desktop` : undefined}
+              data-testid={`${rowTestId}-ticker-desktop`}
+            >
+              {row.ticker}
+            </button>
+            {nameExpanded ? (
+              <div id={`${rowTestId}-company-desktop`} className="text-xs text-muted-foreground truncate">
+                {row.name}
+              </div>
+            ) : null}
           </div>
         </div>
-        <div className="flex flex-col items-end gap-0.5 shrink-0">
+        <div className="flex flex-wrap items-end justify-end gap-x-1.5 gap-y-0.5 shrink-0">
           <span className="inline-flex items-center gap-1">
             {moversUseExtendedQuotes && (
               <Moon className={`h-3.5 w-3.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
@@ -635,7 +676,7 @@ export default function Dashboard() {
           </span>
           {row.dayValueEur != null && Number.isFinite(row.dayValueEur) && (
             <span
-              className={`text-[10px] tabular-nums ${getChangeColor(row.dayValueEur)}`}
+              className={`text-sm font-medium tabular-nums ${getChangeColor(row.dayValueEur)}`}
               data-testid={valueTestId}
             >
               {row.dayValueEur >= 0 ? "+" : ""}
@@ -645,7 +686,8 @@ export default function Dashboard() {
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
   const refreshDashboardQuotes = useCallback(async () => {
     if (!holdings || holdings.length === 0) return;
@@ -2261,8 +2303,8 @@ export default function Dashboard() {
       {showDailyMovers && portfolios.length > 0 && moversTickers.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card data-testid="dashboard-daily-gainers">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2 flex-wrap">
+            <CardHeader className="p-3 md:p-6">
+              <CardTitle className="text-base md:text-lg flex items-center gap-2 flex-wrap">
                 <TrendingUp className="h-4 w-4 text-green-500" />
                 Najlepšie (%)
                 <Tooltip>
@@ -2299,13 +2341,15 @@ export default function Dashboard() {
                   </Tooltip>
                 )}
               </CardTitle>
-              <p className="text-xs text-muted-foreground">Zmena podľa režimu trhu (RTH vs pre/post market).</p>
+              <CardDescription className="text-xs md:text-sm">
+                Zmena podľa režimu trhu (RTH vs pre/post market).
+              </CardDescription>
             </CardHeader>
-            <CardContent className="pt-0">
+            <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
               {quotesFetching && !quotesData ? (
                 <>
                   {Array.from({ length: dailyMoversCount }, (_, i) => (
-                    <Skeleton key={i} className="h-12 md:h-10 w-full" />
+                    <Skeleton key={i} className="h-9 md:h-10 w-full" />
                   ))}
                 </>
               ) : dailyMovers.gainers.length === 0 ? (
@@ -2316,15 +2360,22 @@ export default function Dashboard() {
                 </p>
               ) : (
                 dailyMovers.gainers.map((row, idx) =>
-                  renderDailyMoverRow(row, idx, "text-green-500", `dashboard-gainer-${idx}`, `dashboard-gainer-value-${idx}`),
+                  renderDailyMoverRow(
+                    row,
+                    idx,
+                    "gainer",
+                    "text-green-500",
+                    `dashboard-gainer-${idx}`,
+                    `dashboard-gainer-value-${idx}`,
+                  ),
                 )
               )}
             </CardContent>
           </Card>
 
           <Card data-testid="dashboard-daily-losers">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2 flex-wrap">
+            <CardHeader className="p-3 md:p-6">
+              <CardTitle className="text-base md:text-lg flex items-center gap-2 flex-wrap">
                 <TrendingDown className="h-4 w-4 text-red-500" />
                 Najhoršie (%)
                 <Tooltip>
@@ -2361,13 +2412,15 @@ export default function Dashboard() {
                   </Tooltip>
                 )}
               </CardTitle>
-              <p className="text-xs text-muted-foreground">Zmena podľa režimu trhu (RTH vs pre/post market).</p>
+              <CardDescription className="text-xs md:text-sm">
+                Zmena podľa režimu trhu (RTH vs pre/post market).
+              </CardDescription>
             </CardHeader>
-            <CardContent className="pt-0">
+            <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
               {quotesFetching && !quotesData ? (
                 <>
                   {Array.from({ length: dailyMoversCount }, (_, i) => (
-                    <Skeleton key={i} className="h-12 md:h-10 w-full" />
+                    <Skeleton key={i} className="h-9 md:h-10 w-full" />
                   ))}
                 </>
               ) : dailyMovers.losers.length === 0 ? (
@@ -2378,7 +2431,14 @@ export default function Dashboard() {
                 </p>
               ) : (
                 dailyMovers.losers.map((row, idx) =>
-                  renderDailyMoverRow(row, idx, "text-red-500", `dashboard-loser-${idx}`, `dashboard-loser-value-${idx}`),
+                  renderDailyMoverRow(
+                    row,
+                    idx,
+                    "loser",
+                    "text-red-500",
+                    `dashboard-loser-${idx}`,
+                    `dashboard-loser-value-${idx}`,
+                  ),
                 )
               )}
             </CardContent>
