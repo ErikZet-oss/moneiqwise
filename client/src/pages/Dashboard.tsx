@@ -1429,7 +1429,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-3 md:space-y-6">
+    <div className="flex flex-col gap-3 md:gap-6">
       <div className="hidden md:flex items-center gap-2 min-w-0" data-testid="desktop-portfolio-header">
         {!isAllPortfolios && <BrokerLogo brokerCode={selectedPortfolio?.brokerCode} size="sm" />}
         <h1
