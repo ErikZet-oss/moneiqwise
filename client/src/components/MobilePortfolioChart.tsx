@@ -41,6 +41,7 @@ interface MobilePortfolioChartProps {
   totalProfit?: number;
   totalProfitPercent?: number;
   unrealizedGain?: number;
+  cashValue?: number;
   onRefreshQuotes?: () => void | Promise<void>;
   quotesRefreshing?: boolean;
   athCelebrationActive?: boolean;
@@ -54,6 +55,7 @@ export function MobilePortfolioChart({
   totalProfit = 0,
   totalProfitPercent = 0,
   unrealizedGain = 0,
+  cashValue = 0,
   onRefreshQuotes,
   quotesRefreshing = false,
   athCelebrationActive = false,
@@ -390,7 +392,7 @@ export function MobilePortfolioChart({
         </span>
       </div>
 
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex items-center gap-2 mb-1">
         <Popover>
           <PopoverTrigger asChild>
             <span className="text-xs text-muted-foreground flex items-center gap-1 cursor-help">
@@ -414,7 +416,7 @@ export function MobilePortfolioChart({
       </div>
 
       {usSessionState === "LIVE" && (
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex items-center gap-2 mb-1">
           <Popover>
             <PopoverTrigger asChild>
               <span className="text-[10px] text-muted-foreground flex items-center gap-1 cursor-help">
@@ -441,7 +443,7 @@ export function MobilePortfolioChart({
         <div className="mb-1 text-[10px] text-muted-foreground">Trh uzatvorený</div>
       )}
 
-      <div className="flex items-center gap-2 mb-2">
+      <div className="flex items-center gap-2 mb-1">
         <span className="text-[10px] text-muted-foreground">
           Nerealizovaný zisk:
         </span>
@@ -453,6 +455,13 @@ export function MobilePortfolioChart({
         >
           {unrealizedGain >= 0 ? "+" : ""}
           {maskAmount(formatCurrency(unrealizedGain))}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-2 mb-1">
+        <span className="text-[10px] text-muted-foreground">Hotovosť:</span>
+        <span className="text-xs font-medium text-foreground" data-testid="text-mobile-cash-balance">
+          {maskAmount(formatCurrency(cashValue))}
         </span>
       </div>
 

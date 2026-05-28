@@ -1662,6 +1662,7 @@ export default function Dashboard() {
         totalProfit={metrics.totalProfit}
         totalProfitPercent={metrics.totalProfitPercent}
         unrealizedGain={metrics.unrealizedGain}
+        cashValue={metrics.cashValue}
         onRefreshQuotes={refreshDashboardQuotes}
         quotesRefreshing={quotesFetching}
         athCelebrationActive={athForCurrentSelection}
