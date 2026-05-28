@@ -351,9 +351,6 @@ export default function Dashboard() {
   const [mobileAssetsViewPopoverOpen, setMobileAssetsViewPopoverOpen] = useState(false);
   const [draftMobileSortBy, setDraftMobileSortBy] = useState<MobileAssetsSortBy>("name");
   const [draftMobileSortOrder, setDraftMobileSortOrder] = useState<SortDirection>("asc");
-  /** `gainer:TICKER` / `loser:TICKER` — názov spoločnosti po kliknutí na ticker. */
-  const [dailyMoverExpandedKey, setDailyMoverExpandedKey] = useState<string | null>(null);
-
   const maskAmount = (amount: string) => hideAmounts ? "••••••" : amount;
   const premarketMoonClass = "text-amber-600 dark:text-amber-400";
 
@@ -578,17 +575,12 @@ export default function Dashboard() {
   const renderDailyMoverRow = (
     row: DailyMoverRowData,
     idx: number,
-    variant: "gainer" | "loser",
     pctColorClass: string,
     rowTestId: string,
     valueTestId: string,
-  ) => {
-    const expandKey = `${variant}:${row.ticker}`;
-    const nameExpanded = dailyMoverExpandedKey === expandKey;
-
-    return (
+  ) => (
     <div key={row.ticker} className="border-b border-border/60 last:border-0" data-testid={rowTestId}>
-      {/* Mobile — zarovnanie s Prehľadom aktív; názov až po kliknutí na ticker */}
+      {/* Mobile — kompaktný layout, názov je stále viditeľný */}
       <div className="flex gap-2 items-start py-1.5 md:hidden">
         <span className="text-[9px] text-muted-foreground tabular-nums shrink-0 w-3 pt-0.5">
           {idx + 1}.
@@ -597,24 +589,10 @@ export default function Dashboard() {
           <CompanyLogo ticker={row.ticker} companyName={row.name} size="xs" />
         </div>
         <div className="min-w-0 flex-1 flex flex-col gap-0.5 pr-1">
-          <button
-            type="button"
-            className="font-semibold text-xs leading-tight truncate text-left hover:underline underline-offset-2 w-fit max-w-full rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={(e) => {
-              e.preventDefault();
-              setDailyMoverExpandedKey((k) => (k === expandKey ? null : expandKey));
-            }}
-            aria-expanded={nameExpanded}
-            aria-controls={nameExpanded ? `${rowTestId}-company` : undefined}
-            data-testid={`${rowTestId}-ticker`}
-          >
+          <span className="font-semibold text-xs leading-tight truncate" data-testid={`${rowTestId}-ticker`}>
             {row.ticker}
-          </button>
-          {nameExpanded ? (
-            <span id={`${rowTestId}-company`} className="text-[9px] text-muted-foreground truncate">
-              {row.name}
-            </span>
-          ) : null}
+          </span>
+          <span className="text-[9px] text-muted-foreground truncate">{row.name}</span>
         </div>
         <div className="text-right shrink-0 max-w-[52%]">
           <div className="inline-flex flex-wrap items-center justify-end gap-x-1.5 gap-y-0.5">
@@ -645,24 +623,10 @@ export default function Dashboard() {
           <span className="text-xs text-muted-foreground tabular-nums w-5 shrink-0">{idx + 1}.</span>
           <CompanyLogo ticker={row.ticker} companyName={row.name} size="xs" />
           <div className="min-w-0 flex flex-col gap-0.5">
-            <button
-              type="button"
-              className="font-medium text-sm truncate text-left hover:underline underline-offset-2 w-fit max-w-full rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={(e) => {
-                e.preventDefault();
-                setDailyMoverExpandedKey((k) => (k === expandKey ? null : expandKey));
-              }}
-              aria-expanded={nameExpanded}
-              aria-controls={nameExpanded ? `${rowTestId}-company-desktop` : undefined}
-              data-testid={`${rowTestId}-ticker-desktop`}
-            >
+            <span className="font-medium text-sm truncate" data-testid={`${rowTestId}-ticker-desktop`}>
               {row.ticker}
-            </button>
-            {nameExpanded ? (
-              <div id={`${rowTestId}-company-desktop`} className="text-xs text-muted-foreground truncate">
-                {row.name}
-              </div>
-            ) : null}
+            </span>
+            <div className="text-xs text-muted-foreground truncate">{row.name}</div>
           </div>
         </div>
         <div className="flex flex-wrap items-end justify-end gap-x-1.5 gap-y-0.5 shrink-0">
@@ -686,8 +650,7 @@ export default function Dashboard() {
         </div>
       </div>
     </div>
-    );
-  };
+  );
 
   const refreshDashboardQuotes = useCallback(async () => {
     if (!holdings || holdings.length === 0) return;
@@ -1993,7 +1956,7 @@ export default function Dashboard() {
         totalProfitPercent={metrics.totalProfitPercent}
       />
       
-      <div className="md:hidden px-4 space-y-2 -mt-1">
+      <div className="md:hidden px-3 space-y-2 -mt-1">
         <div className="grid gap-2 grid-cols-2">
           <div className="bg-card rounded-lg p-2.5 border">
             <div className="flex items-center justify-between gap-1">
@@ -2363,7 +2326,6 @@ export default function Dashboard() {
                   renderDailyMoverRow(
                     row,
                     idx,
-                    "gainer",
                     "text-green-500",
                     `dashboard-gainer-${idx}`,
                     `dashboard-gainer-value-${idx}`,
@@ -2434,7 +2396,6 @@ export default function Dashboard() {
                   renderDailyMoverRow(
                     row,
                     idx,
-                    "loser",
                     "text-red-500",
                     `dashboard-loser-${idx}`,
                     `dashboard-loser-value-${idx}`,
