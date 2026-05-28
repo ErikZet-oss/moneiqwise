@@ -45,7 +45,7 @@ import {
   ArrowDownUp,
 } from "lucide-react";
 import { useCurrency } from "@/hooks/useCurrency";
-import { usePortfolio } from "@/hooks/usePortfolio";
+import { usePortfolio, type Portfolio } from "@/hooks/usePortfolio";
 import { useChartSettings, type MobileAssetsSortBy, type MobileAssetsView } from "@/hooks/useChartSettings";
 import { CompanyLogo } from "@/components/CompanyLogo";
 import { BrokerLogo } from "@/components/BrokerLogo";
@@ -281,6 +281,111 @@ interface PortfolioHistoryAllRes {
   points: Array<{ date: string; totalValue: number }>;
 }
 
+const ATH_VALUE_EPS = 1e-6;
+
+type AthReachedPortfolio = {
+  id: string;
+  name: string;
+  brokerCode: Portfolio["brokerCode"];
+  previousAthDate: string | null;
+};
+
+function findPreviousAthDate(
+  points: Array<{ date: string; totalValue: number }>,
+  todayIso: string,
+): string | null {
+  if (points.length < 2) return null;
+  const lastPoint = points[points.length - 1];
+  const endIdx =
+    lastPoint?.date && String(lastPoint.date).startsWith(todayIso)
+      ? points.length - 1
+      : points.length;
+  let runningMax = Number.NEGATIVE_INFINITY;
+  let lastAthDate: string | null = null;
+  for (let i = 0; i < endIdx; i++) {
+    const p = points[i];
+    const v = p?.totalValue;
+    if (!Number.isFinite(v)) continue;
+    if (v > runningMax + ATH_VALUE_EPS) {
+      runningMax = v;
+      lastAthDate = p.date;
+    } else if (Math.abs(v - runningMax) <= ATH_VALUE_EPS) {
+      lastAthDate = p.date;
+    }
+  }
+  return Number.isFinite(runningMax) ? lastAthDate : null;
+}
+
+function portfolioReachedAthToday(
+  points: Array<{ date: string; totalValue: number }>,
+  todayIso: string,
+): boolean {
+  if (points.length < 2) return false;
+  const lastPoint = points[points.length - 1];
+  if (!lastPoint?.date || !String(lastPoint.date).startsWith(todayIso)) return false;
+  const last = lastPoint.totalValue;
+  if (!Number.isFinite(last)) return false;
+  let prevMax = Number.NEGATIVE_INFINITY;
+  for (let i = 0; i < points.length - 1; i++) {
+    const v = points[i]?.totalValue;
+    if (Number.isFinite(v)) prevMax = Math.max(prevMax, v);
+  }
+  if (!Number.isFinite(prevMax)) return false;
+  return last > prevMax + ATH_VALUE_EPS;
+}
+
+function parseAthCelebrateFromStorage(
+  raw: string,
+  portfolios: Portfolio[],
+  todayIso: string,
+  historyById?: Record<string, PortfolioHistoryAllRes>,
+): AthReachedPortfolio[] {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed) || parsed.length === 0) return [];
+
+    const fromSnapshot = (item: unknown): AthReachedPortfolio | null => {
+      if (!item || typeof item !== "object") return null;
+      const o = item as Record<string, unknown>;
+      const id = typeof o.id === "string" ? o.id : "";
+      const portfolio = portfolios.find((p) => p.id === id);
+      if (!portfolio) return null;
+      const previousAthDate =
+        typeof o.previousAthDate === "string"
+          ? o.previousAthDate
+          : historyById
+            ? findPreviousAthDate(historyById[id]?.points ?? [], todayIso)
+            : null;
+      return {
+        id: portfolio.id,
+        name: portfolio.name,
+        brokerCode: portfolio.brokerCode,
+        previousAthDate,
+      };
+    };
+
+    if (typeof parsed[0] === "string") {
+      return parsed
+        .map((v) => (typeof v === "string" ? v.trim() : ""))
+        .filter((v) => v.length > 0)
+        .map((name) => portfolios.find((p) => p.name === name))
+        .filter((p): p is Portfolio => !!p)
+        .map((p) => ({
+          id: p.id,
+          name: p.name,
+          brokerCode: p.brokerCode,
+          previousAthDate: historyById
+            ? findPreviousAthDate(historyById[p.id]?.points ?? [], todayIso)
+            : null,
+        }));
+    }
+
+    return parsed.map(fromSnapshot).filter((p): p is AthReachedPortfolio => p !== null);
+  } catch {
+    return [];
+  }
+}
+
 interface HoldingsNextEarningsRes {
   next: { ticker: string; companyName: string; date: string; session?: "BMO" | "AMC" } | null;
   all: Array<{ ticker: string; companyName: string; date: string; session?: "BMO" | "AMC" }>;
@@ -339,7 +444,7 @@ export default function Dashboard() {
   const [mobileMacroEventIndex, setMobileMacroEventIndex] = useState(0);
   const [desktopInsightIndex, setDesktopInsightIndex] = useState(0);
   const [athDialogOpen, setAthDialogOpen] = useState(false);
-  const [athPortfolioNames, setAthPortfolioNames] = useState<string[]>([]);
+  const [athReachedPortfolios, setAthReachedPortfolios] = useState<AthReachedPortfolio[]>([]);
   const [athPopupEvaluated, setAthPopupEvaluated] = useState(false);
   const [calendarTodayDialogOpen, setCalendarTodayDialogOpen] = useState(false);
   const [todayCalendarEvents, setTodayCalendarEvents] = useState<DashboardCalendarEvent[]>([]);
@@ -359,20 +464,17 @@ export default function Dashboard() {
   }, [portfolioParam]);
 
   useEffect(() => {
+    if (portfolios.length === 0) return;
     try {
       const todayIso = format(startOfDay(new Date()), "yyyy-MM-dd");
       const raw = sessionStorage.getItem(`mw-dash-ath-celebrate-${todayIso}`);
       if (!raw) return;
-      const parsed = JSON.parse(raw) as unknown;
-      if (!Array.isArray(parsed)) return;
-      const names = parsed
-        .map((v) => (typeof v === "string" ? v.trim() : ""))
-        .filter((v) => v.length > 0);
-      if (names.length > 0) setAthPortfolioNames(names);
+      const restored = parseAthCelebrateFromStorage(raw, portfolios, todayIso);
+      if (restored.length > 0) setAthReachedPortfolios(restored);
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [portfolios]);
 
   useEffect(() => {
     if (showAthPopup) {
@@ -932,23 +1034,17 @@ export default function Dashboard() {
       return;
     }
     if (!athHistoryByPortfolio || athPopupEvaluated) return;
-    const eps = 1e-6;
     const todayIso = format(startOfDay(new Date()), "yyyy-MM-dd");
-    const reachedAth: string[] = [];
+    const reachedAth: AthReachedPortfolio[] = [];
     for (const p of portfolios) {
       const points = athHistoryByPortfolio[p.id]?.points ?? [];
-      if (points.length < 2) continue;
-      const lastPoint = points[points.length - 1];
-      if (!lastPoint?.date || !String(lastPoint.date).startsWith(todayIso)) continue;
-      const last = lastPoint.totalValue;
-      if (!Number.isFinite(last)) continue;
-      let prevMax = Number.NEGATIVE_INFINITY;
-      for (let i = 0; i < points.length - 1; i++) {
-        const v = points[i]?.totalValue;
-        if (Number.isFinite(v)) prevMax = Math.max(prevMax, v);
-      }
-      if (!Number.isFinite(prevMax)) continue;
-      if (last > prevMax + eps) reachedAth.push(p.name);
+      if (!portfolioReachedAthToday(points, todayIso)) continue;
+      reachedAth.push({
+        id: p.id,
+        name: p.name,
+        brokerCode: p.brokerCode,
+        previousAthDate: findPreviousAthDate(points, todayIso),
+      });
     }
     if (reachedAth.length > 0) {
       let allowAthDialog = true;
@@ -965,7 +1061,7 @@ export default function Dashboard() {
       } catch {
         /* ignore */
       }
-      setAthPortfolioNames(reachedAth);
+      setAthReachedPortfolios(reachedAth);
       if (allowAthDialog) setAthDialogOpen(true);
     }
     setAthPopupEvaluated(true);
@@ -1059,12 +1155,26 @@ export default function Dashboard() {
   };
 
   const athForCurrentSelection = useMemo(() => {
-    if (athPortfolioNames.length === 0) return false;
+    if (athReachedPortfolios.length === 0) return false;
     if (isAllPortfolios) return true;
-    const currentName = selectedPortfolio?.name;
-    if (!currentName) return false;
-    return athPortfolioNames.includes(currentName);
-  }, [athPortfolioNames, isAllPortfolios, selectedPortfolio?.name]);
+    const currentId = selectedPortfolio?.id;
+    if (!currentId) return false;
+    return athReachedPortfolios.some((p) => p.id === currentId);
+  }, [athReachedPortfolios, isAllPortfolios, selectedPortfolio?.id]);
+
+  const athReachedPortfoliosForDialog = useMemo(() => {
+    if (athReachedPortfolios.length === 0) return [];
+    const todayIso = format(startOfDay(new Date()), "yyyy-MM-dd");
+    if (!athHistoryByPortfolio) return athReachedPortfolios;
+    return athReachedPortfolios.map((p) => {
+      if (p.previousAthDate) return p;
+      const points = athHistoryByPortfolio[p.id]?.points ?? [];
+      return {
+        ...p,
+        previousAthDate: findPreviousAthDate(points, todayIso),
+      };
+    });
+  }, [athReachedPortfolios, athHistoryByPortfolio]);
   const dashboardPortfolioLabel = isAllPortfolios
     ? "Všetky portfóliá"
     : selectedPortfolio?.name ?? "Vybrané portfólio";
@@ -1440,15 +1550,39 @@ export default function Dashboard() {
       </div>
 
       <Dialog open={showAthPopup && athDialogOpen} onOpenChange={handleAthDialogOpenChange}>
-        <DialogContent className="max-w-sm gap-4">
+        <DialogContent className="max-w-md gap-4">
           <DialogHeader>
             <DialogTitle>Nové ATH portfólia</DialogTitle>
             <DialogDescription>
-              {athPortfolioNames.length === 1
-                ? `Portfólio ${athPortfolioNames[0]} dosiahlo nové ATH.`
-                : `Portfóliá ${athPortfolioNames.join(", ")} dosiahli nové ATH.`}
+              {athReachedPortfoliosForDialog.length === 1
+                ? "Portfólio dosiahlo nové maximum hodnoty."
+                : `${athReachedPortfoliosForDialog.length} portfóliá dosiahli nové maximum hodnoty.`}
             </DialogDescription>
           </DialogHeader>
+          <ul className="divide-y divide-border rounded-md border border-border/60">
+            {athReachedPortfoliosForDialog.map((p) => (
+              <li
+                key={p.id}
+                className="flex items-center justify-between gap-3 px-3 py-2.5"
+                data-testid="badge-ath-portfolio-name"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <BrokerLogo brokerCode={p.brokerCode} size="sm" />
+                  <span className="text-sm font-medium truncate">{p.name}</span>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-[10px] text-muted-foreground leading-tight">Posledné ATH</p>
+                  <p className="text-xs font-medium tabular-nums leading-tight">
+                    {p.previousAthDate
+                      ? format(parse(p.previousAthDate, "yyyy-MM-dd", new Date()), "d. MMM yyyy", {
+                          locale: sk,
+                        })
+                      : "Prvé ATH"}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
           <div className="flex items-start gap-2">
             <Checkbox
               id="ath-popup-dont-show-today"
