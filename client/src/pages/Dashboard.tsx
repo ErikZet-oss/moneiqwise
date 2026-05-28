@@ -1956,7 +1956,7 @@ export default function Dashboard() {
         totalProfitPercent={metrics.totalProfitPercent}
       />
       
-      <div className="md:hidden px-3 space-y-1.5 -mt-1">
+      <div className="md:hidden space-y-1.5 -mt-1">
         <div className="grid gap-1.5 grid-cols-2">
           <div className="bg-card rounded-lg p-2.5 border">
             <div className="flex items-center justify-between gap-1">
