@@ -2266,7 +2266,7 @@ export default function Dashboard() {
       {showDailyMovers && portfolios.length > 0 && moversTickers.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
           <Card data-testid="dashboard-daily-gainers">
-            <CardHeader className="p-3 md:p-6">
+            <CardHeader className="p-2.5 md:p-6">
               <CardTitle className="text-base md:text-lg flex items-center gap-2 flex-wrap">
                 <TrendingUp className="h-4 w-4 text-green-500" />
                 Najlepšie (%)
@@ -2308,7 +2308,7 @@ export default function Dashboard() {
                 Zmena podľa režimu trhu (RTH vs pre/post market).
               </CardDescription>
             </CardHeader>
-            <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
+            <CardContent className="p-2.5 pt-0 md:p-6 md:pt-0">
               {quotesFetching && !quotesData ? (
                 <>
                   {Array.from({ length: dailyMoversCount }, (_, i) => (
@@ -2336,7 +2336,7 @@ export default function Dashboard() {
           </Card>
 
           <Card data-testid="dashboard-daily-losers">
-            <CardHeader className="p-3 md:p-6">
+            <CardHeader className="p-2.5 md:p-6">
               <CardTitle className="text-base md:text-lg flex items-center gap-2 flex-wrap">
                 <TrendingDown className="h-4 w-4 text-red-500" />
                 Najhoršie (%)
@@ -2378,7 +2378,7 @@ export default function Dashboard() {
                 Zmena podľa režimu trhu (RTH vs pre/post market).
               </CardDescription>
             </CardHeader>
-            <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
+            <CardContent className="p-2.5 pt-0 md:p-6 md:pt-0">
               {quotesFetching && !quotesData ? (
                 <>
                   {Array.from({ length: dailyMoversCount }, (_, i) => (
@@ -2408,11 +2408,11 @@ export default function Dashboard() {
       )}
 
       <Card>
-        <CardHeader className="p-3 md:p-6">
+        <CardHeader className="p-2.5 md:p-6">
           <CardTitle className="text-base md:text-lg">Prehľad aktív</CardTitle>
           <CardDescription className="text-xs md:text-sm">Vaše aktuálne držané akcie ({currency})</CardDescription>
         </CardHeader>
-        <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
+        <CardContent className="p-2.5 pt-0 md:p-6 md:pt-0">
           {!holdings || holdings.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground" data-testid="text-no-holdings">
               <p>Zatiaľ nemáte žiadne akcie.</p>
