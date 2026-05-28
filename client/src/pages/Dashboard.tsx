@@ -41,7 +41,6 @@ import {
   Moon,
   Calendar,
   ChevronRight,
-  Sparkles,
   LayoutList,
   ArrowDownUp,
 } from "lucide-react";
@@ -341,7 +340,6 @@ export default function Dashboard() {
   const [desktopInsightIndex, setDesktopInsightIndex] = useState(0);
   const [athDialogOpen, setAthDialogOpen] = useState(false);
   const [athPortfolioNames, setAthPortfolioNames] = useState<string[]>([]);
-  const [athFunnyLine, setAthFunnyLine] = useState("");
   const [athPopupEvaluated, setAthPopupEvaluated] = useState(false);
   const [calendarTodayDialogOpen, setCalendarTodayDialogOpen] = useState(false);
   const [todayCalendarEvents, setTodayCalendarEvents] = useState<DashboardCalendarEvent[]>([]);
@@ -967,14 +965,7 @@ export default function Dashboard() {
       } catch {
         /* ignore */
       }
-      const lines = [
-        "Trh dnes posiela virtuálne šampanské. Nezabudni, že bublinky sú super, ale risk manažment ešte lepší.",
-        "ATH potvrdené. Portfólio ide bomby a kalkulačka má dnes sviatok.",
-        "Nové maximum! Graf sa usmieva, ale stop-loss stále nezaspáva.",
-      ];
-      const idx = reachedAth.join("|").length % lines.length;
       setAthPortfolioNames(reachedAth);
-      setAthFunnyLine(lines[idx]);
       if (allowAthDialog) setAthDialogOpen(true);
     }
     setAthPopupEvaluated(true);
@@ -1449,42 +1440,16 @@ export default function Dashboard() {
       </div>
 
       <Dialog open={showAthPopup && athDialogOpen} onOpenChange={handleAthDialogOpenChange}>
-        <DialogContent className="max-w-md overflow-hidden">
-          <div className="pointer-events-none absolute inset-0">
-            <span className="absolute left-4 top-3 text-lg motion-safe:animate-bounce">🎉</span>
-            <span className="absolute right-5 top-4 text-base motion-safe:animate-pulse">✨</span>
-            <span className="absolute left-10 bottom-4 text-sm motion-safe:animate-pulse">🎊</span>
-            <span className="absolute right-12 bottom-3 text-base motion-safe:animate-bounce">✨</span>
-          </div>
-          <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-emerald-500/15 to-transparent" />
+        <DialogContent className="max-w-sm gap-4">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600">
-                <Sparkles className="h-4 w-4" />
-              </span>
-              Nové ATH portfólia
-            </DialogTitle>
+            <DialogTitle>Nové ATH portfólia</DialogTitle>
             <DialogDescription>
               {athPortfolioNames.length === 1
-                ? `Portfólio ${athPortfolioNames[0]} dosiahlo nové ATH. Gratulujem!`
-                : `Portfóliá ${athPortfolioNames.join(", ")} dosiahli nové ATH. Gratulujem!`}
+                ? `Portfólio ${athPortfolioNames[0]} dosiahlo nové ATH.`
+                : `Portfóliá ${athPortfolioNames.join(", ")} dosiahli nové ATH.`}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <div className="flex flex-wrap gap-1.5">
-              {athPortfolioNames.map((name) => (
-                <Badge
-                  key={name}
-                  className="bg-emerald-600/90 hover:bg-emerald-600 text-white"
-                  data-testid="badge-ath-portfolio-name"
-                >
-                  {name}
-                </Badge>
-              ))}
-            </div>
-            <p className="text-sm leading-relaxed text-muted-foreground">{athFunnyLine}</p>
-          </div>
-          <div className="flex items-start gap-2 pt-2 border-t border-border/60">
+          <div className="flex items-start gap-2">
             <Checkbox
               id="ath-popup-dont-show-today"
               checked={athDontShowAgainToday}
