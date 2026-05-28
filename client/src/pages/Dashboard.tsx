@@ -594,26 +594,24 @@ export default function Dashboard() {
           </span>
           <span className="text-[9px] text-muted-foreground truncate">{row.name}</span>
         </div>
-        <div className="text-right shrink-0 max-w-[52%]">
-          <div className="inline-flex flex-wrap items-center justify-end gap-x-1.5 gap-y-0.5">
-            <span
-              className={`text-xs font-semibold tabular-nums leading-tight inline-flex items-center gap-0.5 ${pctColorClass}`}
-            >
-              {moversUseExtendedQuotes && (
-                <Moon className={`h-2.5 w-2.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
-              )}
-              {formatSignedDayPct(row.pct)}
-            </span>
-            {row.dayValueEur != null && Number.isFinite(row.dayValueEur) && (
-              <span
-                className={`text-[10px] font-medium tabular-nums leading-tight ${getChangeColor(row.dayValueEur)}`}
-                data-testid={valueTestId}
-              >
-                {row.dayValueEur >= 0 ? "+" : ""}
-                {maskAmount(formatCurrency(row.dayValueEur))}
-              </span>
+        <div className="shrink-0 max-w-[46%] flex flex-col items-end justify-center gap-0 leading-none">
+          <span
+            className={`text-xs font-semibold tabular-nums leading-tight inline-flex items-center justify-end gap-0.5 ${pctColorClass}`}
+          >
+            {moversUseExtendedQuotes && (
+              <Moon className={`h-2.5 w-2.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
             )}
-          </div>
+            {formatSignedDayPct(row.pct)}
+          </span>
+          {row.dayValueEur != null && Number.isFinite(row.dayValueEur) && (
+            <span
+              className={`text-[8px] font-medium tabular-nums leading-tight mt-0.5 ${getChangeColor(row.dayValueEur)}`}
+              data-testid={valueTestId}
+            >
+              {row.dayValueEur >= 0 ? "+" : ""}
+              {maskAmount(formatCurrency(row.dayValueEur))}
+            </span>
+          )}
         </div>
       </div>
 
@@ -629,18 +627,18 @@ export default function Dashboard() {
             <div className="text-xs text-muted-foreground truncate">{row.name}</div>
           </div>
         </div>
-        <div className="flex flex-wrap items-end justify-end gap-x-1.5 gap-y-0.5 shrink-0">
-          <span className="inline-flex items-center gap-1">
+        <div className="shrink-0 flex flex-col items-end justify-center gap-0 leading-none">
+          <span className="inline-flex items-center justify-end gap-1">
             {moversUseExtendedQuotes && (
               <Moon className={`h-3.5 w-3.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
             )}
-            <span className={`text-sm font-semibold tabular-nums ${pctColorClass}`}>
+            <span className={`text-sm font-semibold tabular-nums leading-tight ${pctColorClass}`}>
               {formatSignedDayPct(row.pct)}
             </span>
           </span>
           {row.dayValueEur != null && Number.isFinite(row.dayValueEur) && (
             <span
-              className={`text-sm font-medium tabular-nums ${getChangeColor(row.dayValueEur)}`}
+              className={`text-[10px] font-medium tabular-nums leading-tight mt-0.5 ${getChangeColor(row.dayValueEur)}`}
               data-testid={valueTestId}
             >
               {row.dayValueEur >= 0 ? "+" : ""}
