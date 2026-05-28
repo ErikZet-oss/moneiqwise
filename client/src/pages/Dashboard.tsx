@@ -1429,7 +1429,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-4 md:space-y-6">
+    <div className="space-y-3 md:space-y-6">
       <div className="hidden md:flex items-center gap-2 min-w-0" data-testid="desktop-portfolio-header">
         {!isAllPortfolios && <BrokerLogo brokerCode={selectedPortfolio?.brokerCode} size="sm" />}
         <h1
@@ -2264,7 +2264,7 @@ export default function Dashboard() {
       )}
 
       {showDailyMovers && portfolios.length > 0 && moversTickers.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
           <Card data-testid="dashboard-daily-gainers">
             <CardHeader className="p-3 md:p-6">
               <CardTitle className="text-base md:text-lg flex items-center gap-2 flex-wrap">
