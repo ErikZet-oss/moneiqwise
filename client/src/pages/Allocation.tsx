@@ -380,14 +380,14 @@ export default function Allocation() {
     cashValueConv <= 0;
 
   return (
-    <div className="space-y-6 p-4 md:p-6 max-w-7xl mx-auto pb-10">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 md:gap-6 max-w-7xl mx-auto pb-10 -mx-6 px-0 md:mx-auto md:px-0">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-2.5 md:px-0">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <PieChartIcon className="h-7 w-7 text-primary" />
+          <h1 className="text-xl md:text-2xl font-bold tracking-tight flex items-center gap-2">
+            <PieChartIcon className="h-6 w-6 md:h-7 md:w-7 text-primary" />
             Rozloženie portfólia
           </h1>
-          <p className="text-muted-foreground text-sm mt-1">
+          <p className="text-muted-foreground text-xs md:text-sm mt-1">
             Podľa tickerov, sektorov, krajín a typu aktíva. Sektor/krajina/typ vieš manuálne prepísať
             nižšie pre presnejšie koláče.
           </p>
@@ -410,14 +410,14 @@ export default function Allocation() {
       </div>
 
       {loading ? (
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 md:gap-6 md:grid-cols-2 xl:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
             <Card key={i}>
-              <CardHeader>
+              <CardHeader className="p-2.5 md:p-6">
                 <Skeleton className="h-5 w-40" />
                 <Skeleton className="h-4 w-full mt-2" />
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-2.5 pt-0 md:p-6 md:pt-0">
                 <Skeleton className="h-[280px] w-full rounded-lg" />
               </CardContent>
             </Card>
@@ -425,12 +425,12 @@ export default function Allocation() {
         </div>
       ) : empty ? (
         <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
+          <CardContent className="py-8 md:py-12 px-2.5 md:px-6 text-center text-muted-foreground">
             Žiadne pozície ani hotovosť na zobrazenie rozloženia.
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 md:gap-6 md:grid-cols-2 xl:grid-cols-4">
           <AllocationPieCard
             title="Podľa akcií"
             description="Každý ticker + hotovosť"
@@ -480,13 +480,13 @@ export default function Allocation() {
       )}
 
       <Card>
-        <CardHeader>
-          <CardTitle>Manuálne metadáta aktív</CardTitle>
-          <CardDescription>
+        <CardHeader className="p-2.5 md:p-6">
+          <CardTitle className="text-base md:text-lg">Manuálne metadáta aktív</CardTitle>
+          <CardDescription className="text-xs md:text-sm">
             Prepíše sektor, krajinu a typ z Yahoo pre vybraný ticker (necháš prázdne = použije sa Yahoo).
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-3 p-2.5 pt-0 md:p-6 md:pt-0">
           {metadataLoading && equityTickers.length > 0 ? (
             <Skeleton className="h-24 w-full" />
           ) : equityTickers.length === 0 ? (
@@ -506,7 +506,7 @@ export default function Allocation() {
                 return (
                   <div
                     key={ticker}
-                    className="grid gap-2 rounded-md border p-3 sm:grid-cols-[120px_1fr_1fr_170px] sm:items-center"
+                    className="grid gap-2 rounded-md border p-2.5 md:p-3 sm:grid-cols-[120px_1fr_1fr_170px] sm:items-center"
                   >
                     <div className="font-medium">{ticker}</div>
                     <Select
@@ -628,11 +628,11 @@ function AllocationPieCard({
         "bg-card/80 backdrop-blur-[2px]"
       )}
     >
-      <CardHeader className="pb-3 space-y-1">
-        <CardTitle className="text-lg tracking-tight">{title}</CardTitle>
-        <CardDescription className="text-xs leading-snug">{description}</CardDescription>
+      <CardHeader className="p-2.5 md:p-6 pb-2 space-y-1">
+        <CardTitle className="text-base md:text-lg tracking-tight">{title}</CardTitle>
+        <CardDescription className="text-xs md:text-sm leading-snug">{description}</CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4 pt-0 pb-5">
+      <CardContent className="flex flex-col gap-3 md:gap-4 p-2.5 pt-0 md:p-6 md:pt-0 pb-4 md:pb-6">
         {chartData.length === 0 ? (
           <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
             Nedostatok dát
@@ -732,7 +732,7 @@ function AllocationLegend({
   return (
     <div
       className={cn(
-        "rounded-xl border border-border/70 bg-muted/25 px-2 py-2 sm:px-3",
+        "rounded-xl border border-border/70 bg-muted/25 px-1.5 py-2 sm:px-3",
         "space-y-1"
       )}
       role="list"
