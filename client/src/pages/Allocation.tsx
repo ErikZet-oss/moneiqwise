@@ -614,8 +614,8 @@ function AllocationPieCard({
   const [showAllLegendItems, setShowAllLegendItems] = useState(false);
   const chartData = data.map((d) => ({ ...d }));
 
-  const innerR = narrow ? 52 : 58;
-  const outerR = narrow ? 90 : 96;
+  const innerR = narrow ? "42%" : "48%";
+  const outerR = narrow ? "92%" : "88%";
   const mobileLegendLimit = denseLegend ? 6 : 5;
   const hasMoreLegendItems = narrow && chartData.length > mobileLegendLimit;
   const visibleLegendSlices =
@@ -646,16 +646,16 @@ function AllocationPieCard({
               <div className="text-lg font-semibold tabular-nums">{mask(formatCurrency(total))}</div>
             </div>
 
-            <div className="flex justify-center w-full min-w-0">
+            <div className="flex justify-center w-full min-w-0 -mx-0.5">
               <div
                 className={cn(
-                  "w-full max-w-[320px] aspect-square max-h-[300px] sm:max-h-[280px]",
+                  "w-full aspect-square max-h-[min(88vw,360px)] sm:max-w-[320px] sm:max-h-[300px]",
                   !chartReady && "opacity-0 pointer-events-none"
                 )}
               >
                 {chartReady ? (
                   <ResponsiveContainer width="100%" height="100%" minWidth={160} minHeight={160}>
-                    <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                    <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                       <Pie
                         data={chartData}
                         dataKey="value"
