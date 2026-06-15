@@ -114,11 +114,12 @@ export function MobilePortfolioChart({
       if (!holdings || holdings.length === 0) return {};
       
       const tickers = holdings.map(h => h.ticker);
+      const refresh = shouldUseExtendedQuotes(getUsMarketSessionState());
       const res = await fetch("/api/stocks/quotes/batch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ tickers }),
+        body: JSON.stringify({ tickers, refresh }),
       });
       
       if (!res.ok) throw new Error("Failed to fetch quotes");

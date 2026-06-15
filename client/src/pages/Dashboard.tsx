@@ -538,7 +538,8 @@ export default function Dashboard() {
     queryFn: async () => {
       if (!holdings || holdings.length === 0) return {};
       const tickers = holdings.map(h => h.ticker);
-      return fetchDashboardQuotesBatch(tickers, false);
+      const refresh = shouldUseExtendedQuotes(getUsMarketSessionState());
+      return fetchDashboardQuotesBatch(tickers, refresh);
     },
   });
   

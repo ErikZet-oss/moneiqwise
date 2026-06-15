@@ -91,29 +91,6 @@ export function mapExtendedQuoteFromYahooV7(
   const marketStateRaw = String(q.marketState ?? "").toUpperCase();
   const marketState = marketStateRaw || null;
 
-  const overnightPrice = num(q.overnightMarketPrice);
-  const overnightCh = num(q.overnightMarketChange);
-  const overnightChPct = num(q.overnightMarketChangePercent);
-  if (overnightPrice != null && overnightPrice > 0) {
-    if (
-      marketStateRaw === "OVERNIGHT" ||
-      marketStateRaw === "PREPRE" ||
-      overnightChPct != null ||
-      overnightCh != null
-    ) {
-      return {
-        preMarketPrice: overnightPrice,
-        preMarketChange: overnightCh ?? (rthPrice > 0 ? overnightPrice - rthPrice : null),
-        preMarketChangePercent:
-          overnightChPct ?? (rthPrice > 0 ? ((overnightPrice - rthPrice) / rthPrice) * 100 : null),
-        marketState:
-          marketStateRaw === "PREPRE" || marketStateRaw === "OVERNIGHT"
-            ? "OVERNIGHT"
-            : marketState,
-      };
-    }
-  }
-
   const prePrice = num(q.preMarketPrice);
   const preCh = num(q.preMarketChange);
   const preChPct = num(q.preMarketChangePercent);
@@ -124,10 +101,10 @@ export function mapExtendedQuoteFromYahooV7(
   ) {
     return {
       preMarketPrice: prePrice,
-      preMarketChange: preCh ?? (previousClose > 0 ? prePrice - previousClose : null),
+      preMarketChange: preCh ?? (rthPrice > 0 ? prePrice - rthPrice : null),
       preMarketChangePercent:
-        preChPct ?? (previousClose > 0 ? ((prePrice - previousClose) / previousClose) * 100 : null),
-      marketState,
+        preChPct ?? (rthPrice > 0 ? ((prePrice - rthPrice) / rthPrice) * 100 : null),
+      marketState: marketStateRaw === "PREPRE" ? "PRE" : marketState,
     };
   }
 
@@ -145,6 +122,29 @@ export function mapExtendedQuoteFromYahooV7(
       preMarketChangePercent:
         postChPct ?? (rthPrice > 0 ? ((postPrice - rthPrice) / rthPrice) * 100 : null),
       marketState,
+    };
+  }
+
+  const overnightPrice = num(q.overnightMarketPrice);
+  const overnightCh = num(q.overnightMarketChange);
+  const overnightChPct = num(q.overnightMarketChangePercent);
+  if (
+    overnightPrice != null &&
+    overnightPrice > 0 &&
+    marketStateRaw !== "PRE" &&
+    marketStateRaw !== "POST" &&
+    marketStateRaw !== "POSTPOST" &&
+    marketStateRaw !== "REGULAR"
+  ) {
+    return {
+      preMarketPrice: overnightPrice,
+      preMarketChange: overnightCh ?? (rthPrice > 0 ? overnightPrice - rthPrice : null),
+      preMarketChangePercent:
+        overnightChPct ?? (rthPrice > 0 ? ((overnightPrice - rthPrice) / rthPrice) * 100 : null),
+      marketState:
+        marketStateRaw === "PREPRE" || marketStateRaw === "OVERNIGHT"
+          ? "OVERNIGHT"
+          : marketState,
     };
   }
 

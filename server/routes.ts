@@ -221,7 +221,7 @@ function isMarketDataTicker(u: string): boolean {
 const CACHE_DIR = path.join(process.cwd(), ".cache");
 const CACHE_FILE = path.join(CACHE_DIR, "prices.json");
 /** Bump when quote shape/source changes — invalidates stale on-disk quote cache. */
-const QUOTE_CACHE_VERSION = 2;
+const QUOTE_CACHE_VERSION = 3;
 
 function isUsExtendedSessionNow(): boolean {
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -240,6 +240,25 @@ function isUsExtendedSessionNow(): boolean {
   if (m >= 22 * 60 || m < 2 * 60) return true;
   if (m >= 2 * 60 && m < 10 * 60) return true;
   return false;
+}
+
+function isStaleOvernightInPreMarketCache(data: unknown): boolean {
+  if (!data || typeof data !== "object") return false;
+  const ms = String((data as Record<string, unknown>).marketState ?? "").toUpperCase();
+  if (ms !== "OVERNIGHT" && ms !== "PREPRE") return false;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Bratislava",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    weekday: "short",
+  }).formatToParts(new Date());
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+  const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
+  if (weekday.startsWith("Sat") || weekday.startsWith("Sun")) return false;
+  const m = hour * 60 + minute;
+  return m >= 10 * 60 && m < 15 * 60 + 30;
 }
 
 function isStaleChartExtendedCache(data: unknown): boolean {
@@ -1621,7 +1640,8 @@ async function fetchStockQuote(ticker: string, skipCache = false): Promise<any> 
       cached.data?.preMarketChangePercent == null;
     const staleExtended = missingExtended && Date.now() - cached.timestamp > 45 * 1000;
     const staleChartExtended = isStaleChartExtendedCache(cached.data);
-    if (hasRequiredFields && !staleExtended && !staleChartExtended) {
+    const staleOvernightPre = isStaleOvernightInPreMarketCache(cached.data);
+    if (hasRequiredFields && !staleExtended && !staleChartExtended && !staleOvernightPre) {
       return cached.data;
     }
   }
