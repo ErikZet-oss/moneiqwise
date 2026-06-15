@@ -24,6 +24,10 @@ import {
   CASH_INTEREST_TAX_DISPLAY_NAME,
   CASH_INTEREST_TICKER,
 } from "@shared/tickerCurrency";
+import {
+  fetchYahooV7Quote,
+  mapExtendedQuoteFromYahooV7,
+} from "./yahooQuoteClient";
 import { parseXTBFile, type XTBImportResult } from "./xtbParser";
 import {
   computeRealizedGainsFromTransactionsAsync,
@@ -554,9 +558,13 @@ function resolveExtendedQuoteFromChart(
         session = "POST";
       }
     } else if (barSession === "PRE" || barSession === "POST" || afterRth || differsFromRth) {
-      // PRE + OVERNIGHT: Yahoo shows vs previous close (same as pre-market).
+      // PRE: vs previous close. OVERNIGHT chart fallback: vs RTH (approximation when v7 unavailable).
       extendedPrice = lastBar.price;
       session = "PRE";
+      if (activeExtended === "OVERNIGHT") {
+        // Baseline handled below via session POST trick — use RTH for overnight %.
+        session = "POST";
+      }
     }
   }
 
@@ -1404,96 +1412,54 @@ async function fetchYahooCompanyName(ticker: string): Promise<string | null> {
 async function fetchYahooQuote(ticker: string): Promise<any> {
   try {
     const yahooTicker = toYahooTicker(ticker);
-    const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(yahooTicker)}`;
 
-    // v7/quote carries pre/post fields when available (Yahoo may block this endpoint).
-    const quoteResponse = await fetch(quoteUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
-    });
-
-    if (quoteResponse.ok) {
-      const quoteData = await quoteResponse.json();
-      const q = quoteData?.quoteResponse?.result?.[0];
-      const regularMarketPriceRaw = Number(q?.regularMarketPrice);
-      const regularMarketPrice =
-        Number.isFinite(regularMarketPriceRaw) && regularMarketPriceRaw > 0
-          ? regularMarketPriceRaw
-          : null;
-      const previousCloseRaw = Number(q?.regularMarketPreviousClose);
+    const q = await fetchYahooV7Quote(yahooTicker);
+    if (q) {
+      const regularMarketPrice = Number(q.regularMarketPrice);
+      const previousCloseRaw = Number(q.regularMarketPreviousClose);
       const previousClose =
         Number.isFinite(previousCloseRaw) && previousCloseRaw > 0
           ? previousCloseRaw
           : regularMarketPrice;
+      const marketStateRaw = String(q.marketState ?? "").toUpperCase();
+      const marketState = marketStateRaw || null;
+      const isMarketOpen =
+        marketStateRaw === "REGULAR" ? true : marketStateRaw ? false : null;
+      const change = previousClose != null ? regularMarketPrice - previousClose : 0;
+      const changePercent =
+        previousClose != null && previousClose > 0 ? (change / previousClose) * 100 : 0;
 
-      if (regularMarketPrice != null) {
-        const marketStateRaw = String(q?.marketState ?? "").toUpperCase();
-        const marketState = marketStateRaw || null;
-        const isMarketOpen =
-          marketStateRaw === "REGULAR"
-            ? true
-            : marketStateRaw
-              ? false
-              : null;
-        const change = previousClose != null ? regularMarketPrice - previousClose : 0;
-        const changePercent =
-          previousClose != null && previousClose > 0 ? (change / previousClose) * 100 : 0;
+      const extended = mapExtendedQuoteFromYahooV7(q, regularMarketPrice, previousClose);
 
-        const preMarketPriceRaw = Number(q?.preMarketPrice);
-        const postMarketPriceRaw = Number(q?.postMarketPrice);
-        const preOrPostMarketPrice =
-          Number.isFinite(preMarketPriceRaw) && preMarketPriceRaw > 0
-            ? preMarketPriceRaw
-            : Number.isFinite(postMarketPriceRaw) && postMarketPriceRaw > 0
-              ? postMarketPriceRaw
-              : null;
-        let extendedPrice = preOrPostMarketPrice;
-        if (extendedPrice == null) {
-          extendedPrice = await fetchYahooExtendedSessionPrice(yahooTicker, regularMarketPrice);
-        }
-        const { preMarketPrice, preMarketChange, preMarketChangePercent } =
-          resolveExtendedSessionChange(
-            extendedPrice,
-            previousClose ?? regularMarketPrice,
-            regularMarketPrice,
-            marketState,
-            Number(q?.preMarketChange),
-            Number(q?.preMarketChangePercent),
-          );
-
-        const regularMarketTimeRaw = Number(q?.regularMarketTime);
-        const quoteDate = quoteDateFromEpoch(
-          regularMarketTimeRaw,
-          typeof q?.exchangeTimezoneName === "string" ? q.exchangeTimezoneName : null,
-        );
-        const annualDividendPerShareRaw = Number(
-          q?.trailingAnnualDividendRate ?? q?.dividendRate,
-        );
-        let annualDividendPerShare =
-          Number.isFinite(annualDividendPerShareRaw) && annualDividendPerShareRaw > 0
-            ? annualDividendPerShareRaw
-            : 0;
-        if (annualDividendPerShare <= 0) {
-          annualDividendPerShare = await fetchYahooAnnualDividendPerShare(ticker);
-        }
-
-        return {
-          ticker,
-          price: regularMarketPrice,
-          change,
-          changePercent,
-          quoteDate,
-          marketState,
-          isMarketOpen,
-          preMarketPrice,
-          preMarketChange,
-          preMarketChangePercent,
-          high52: Number(q?.fiftyTwoWeekHigh) || 0,
-          low52: Number(q?.fiftyTwoWeekLow) || 0,
-          annualDividendPerShare,
-        };
+      const regularMarketTimeRaw = Number(q.regularMarketTime);
+      const quoteDate = quoteDateFromEpoch(
+        regularMarketTimeRaw,
+        typeof q.exchangeTimezoneName === "string" ? q.exchangeTimezoneName : null,
+      );
+      const annualDividendPerShareRaw = Number(q.trailingAnnualDividendRate ?? q.dividendRate);
+      let annualDividendPerShare =
+        Number.isFinite(annualDividendPerShareRaw) && annualDividendPerShareRaw > 0
+          ? annualDividendPerShareRaw
+          : 0;
+      if (annualDividendPerShare <= 0) {
+        annualDividendPerShare = await fetchYahooAnnualDividendPerShare(ticker);
       }
+
+      return {
+        ticker,
+        price: regularMarketPrice,
+        change,
+        changePercent,
+        quoteDate,
+        marketState: extended.marketState ?? marketState,
+        isMarketOpen,
+        preMarketPrice: extended.preMarketPrice,
+        preMarketChange: extended.preMarketChange,
+        preMarketChangePercent: extended.preMarketChangePercent,
+        high52: Number(q.fiftyTwoWeekHigh) || 0,
+        low52: Number(q.fiftyTwoWeekLow) || 0,
+        annualDividendPerShare,
+      };
     }
 
     return await fetchYahooQuoteFromChart(yahooTicker, ticker);
