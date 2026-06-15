@@ -1,4 +1,9 @@
-export type UsMarketSessionState = "PRE_MARKET" | "LIVE" | "POST_MARKET" | "CLOSED";
+export type UsMarketSessionState =
+  | "PRE_MARKET"
+  | "LIVE"
+  | "POST_MARKET"
+  | "OVERNIGHT"
+  | "CLOSED";
 
 /** SEČ okná pre US akcie (letný čas; orientačné). */
 export function getUsMarketSessionState(now = new Date()): UsMarketSessionState {
@@ -20,16 +25,27 @@ export function getUsMarketSessionState(now = new Date()): UsMarketSessionState 
   if (minutesFromMidnight >= 10 * 60 && minutesFromMidnight < 15 * 60 + 30) return "PRE_MARKET";
   if (minutesFromMidnight >= 15 * 60 + 30 && minutesFromMidnight < 22 * 60) return "LIVE";
   if (minutesFromMidnight >= 22 * 60 || minutesFromMidnight < 2 * 60) return "POST_MARKET";
+  if (minutesFromMidnight >= 2 * 60 && minutesFromMidnight < 10 * 60) return "OVERNIGHT";
   return "CLOSED";
 }
 
 export function quoteHasExtendedSession(marketState?: string | null): boolean {
   const s = String(marketState ?? "").toUpperCase();
-  return s === "PRE" || s === "PREPRE" || s === "POST" || s === "POSTPOST";
+  return (
+    s === "PRE" ||
+    s === "PREPRE" ||
+    s === "POST" ||
+    s === "POSTPOST" ||
+    s === "OVERNIGHT"
+  );
 }
 
 export function shouldUseExtendedQuotes(usSession: UsMarketSessionState): boolean {
-  return usSession === "PRE_MARKET" || usSession === "POST_MARKET";
+  return (
+    usSession === "PRE_MARKET" ||
+    usSession === "POST_MARKET" ||
+    usSession === "OVERNIGHT"
+  );
 }
 
 export function shouldShowExtendedQuote(
@@ -40,4 +56,17 @@ export function shouldShowExtendedQuote(
   if (preMarketChangePercent == null || !Number.isFinite(preMarketChangePercent)) return false;
   if (shouldUseExtendedQuotes(usSession)) return true;
   return quoteHasExtendedSession(marketState);
+}
+
+export function getExtendedSessionLabel(usSession: UsMarketSessionState): string {
+  switch (usSession) {
+    case "POST_MARKET":
+      return "Po zatvorení:";
+    case "OVERNIGHT":
+      return "Overnight:";
+    case "PRE_MARKET":
+      return "Pred open:";
+    default:
+      return "Pred open:";
+  }
 }

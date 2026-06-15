@@ -54,6 +54,7 @@ import { DesktopPortfolioChart } from "@/components/DesktopPortfolioChart";
 import type { Holding } from "@shared/schema";
 import { CASH_INTEREST_DISPLAY_NAME, CASH_INTEREST_TICKER } from "@shared/tickerCurrency";
 import {
+  getExtendedSessionLabel,
   getUsMarketSessionState,
   shouldShowExtendedQuote,
   shouldUseExtendedQuotes,
@@ -1341,6 +1342,7 @@ export default function Dashboard() {
       return { available: false, amount: 0, percent: 0 };
     }
 
+    const usSession = getUsMarketSessionState();
     let totalCurrent = 0;
     let totalPreOpen = 0;
     let hasPreOpenData = false;
@@ -1354,7 +1356,12 @@ export default function Dashboard() {
 
       const tickerCurrency = getTickerCurrency(holding.ticker);
       const regularPrice = convertPrice(quote.price, tickerCurrency);
-      const preOpenRaw = quote.preMarketPrice;
+      const showExtended = shouldShowExtendedQuote(
+        usSession,
+        quote.marketState,
+        quote.preMarketChangePercent,
+      );
+      const preOpenRaw = showExtended ? quote.preMarketPrice : null;
       const preOpenPrice =
         typeof preOpenRaw === "number" && Number.isFinite(preOpenRaw) && preOpenRaw > 0
           ? convertPrice(preOpenRaw, tickerCurrency)
@@ -1709,10 +1716,10 @@ export default function Dashboard() {
                 Z toho hotovosť / margin: {maskAmount(formatCurrency(metrics.cashValue))}
               </p>
             )}
-            {usSessionState !== "LIVE" && (
+            {shouldUseExtendedQuotes(usSessionState) && (
               <p className="text-xs text-muted-foreground truncate mt-0.5 inline-flex items-center gap-1" data-testid="text-pre-open-preview">
                 <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
-                Pred open:{" "}
+                {getExtendedSessionLabel(usSessionState)}{" "}
                 {preOpenPreview.available ? (
                   <>
                     <span className={getChangeColor(preOpenPreview.amount)}>

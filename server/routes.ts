@@ -483,6 +483,15 @@ function lastYahooValidBar(
   return null;
 }
 
+function isYahooOvernightPeriod(
+  periods: YahooTradingPeriods | null,
+  liveState: ReturnType<typeof inferYahooLiveMarketState>,
+  nowSec = Math.floor(Date.now() / 1000),
+): boolean {
+  if (liveState !== "CLOSED" || periods?.pre?.start == null) return false;
+  return nowSec < periods.pre.start;
+}
+
 function resolveExtendedQuoteFromChart(
   meta: Record<string, unknown>,
   closes: unknown[],
@@ -507,7 +516,9 @@ function resolveExtendedQuoteFromChart(
   if (!Number.isFinite(rthPrice) || rthPrice <= 0) return empty;
 
   const periods = getYahooTradingPeriods(meta);
-  const liveState = inferYahooLiveMarketState(periods);
+  const nowSec = Math.floor(Date.now() / 1000);
+  const liveState = inferYahooLiveMarketState(periods, nowSec);
+  const overnight = isYahooOvernightPeriod(periods, liveState, nowSec);
   const lastBar = lastYahooValidBar(closes, timestamps);
   const metaPre = Number(meta.preMarketPrice);
   const metaPost = Number(meta.postMarketPrice);
@@ -516,38 +527,48 @@ function resolveExtendedQuoteFromChart(
   let extendedPrice: number | null = null;
   let session: "PRE" | "POST" | null = null;
 
-  // Extended quotes only while Yahoo reports an active pre/post window (avoids stale
-  // after-hours bars from the prior session when the market is fully closed).
-  if (liveState === "PRE" && Number.isFinite(metaPre) && metaPre > 0) {
+  const activeExtended: "PRE" | "POST" | "OVERNIGHT" | null =
+    liveState === "PRE"
+      ? "PRE"
+      : liveState === "POST"
+        ? "POST"
+        : overnight
+          ? "OVERNIGHT"
+          : null;
+
+  if (activeExtended === "PRE" && Number.isFinite(metaPre) && metaPre > 0) {
     extendedPrice = metaPre;
     session = "PRE";
-  } else if (liveState === "POST" && Number.isFinite(metaPost) && metaPost > 0) {
+  } else if (activeExtended === "POST" && Number.isFinite(metaPost) && metaPost > 0) {
     extendedPrice = metaPost;
     session = "POST";
-    } else if ((liveState === "PRE" || liveState === "POST") && lastBar) {
+  } else if (activeExtended && lastBar) {
     const barSession = inferYahooBarSession(periods, lastBar.ts);
-    if (barSession === liveState) {
-      extendedPrice = lastBar.price;
-      session = barSession;
-    } else if (barSession == null) {
-      const differsFromRth = Math.abs(lastBar.price - rthPrice) > 1e-9;
-      const inExtendedWindow =
-        liveState === "PRE"
-          ? differsFromRth || lastBar.ts < (periods?.regular?.start ?? Infinity)
-          : differsFromRth &&
-            Number.isFinite(regularMarketTime) &&
-            lastBar.ts > regularMarketTime;
-      if (inExtendedWindow) {
+    const differsFromRth = Math.abs(lastBar.price - rthPrice) > 1e-9;
+    const afterRth =
+      Number.isFinite(regularMarketTime) && lastBar.ts > regularMarketTime;
+
+    if (activeExtended === "POST") {
+      if (barSession === "POST" || (afterRth && differsFromRth)) {
         extendedPrice = lastBar.price;
-        session = liveState;
+        session = "POST";
       }
+    } else if (barSession === "PRE" || barSession === "POST" || afterRth || differsFromRth) {
+      // PRE + OVERNIGHT: Yahoo shows vs previous close (same as pre-market).
+      extendedPrice = lastBar.price;
+      session = "PRE";
     }
   }
 
   if (extendedPrice == null || session == null) {
     return {
       ...empty,
-      marketState: liveState !== "CLOSED" ? liveState : empty.marketState,
+      marketState:
+        activeExtended === "OVERNIGHT"
+          ? "OVERNIGHT"
+          : liveState !== "CLOSED"
+            ? liveState
+            : empty.marketState,
     };
   }
 
@@ -558,7 +579,8 @@ function resolveExtendedQuoteFromChart(
       preMarketChange: null,
       preMarketChangePercent: null,
       extendedSession: session,
-      marketState: session,
+      marketState:
+        activeExtended === "OVERNIGHT" ? "OVERNIGHT" : session,
     };
   }
 
@@ -568,7 +590,12 @@ function resolveExtendedQuoteFromChart(
     preMarketChange,
     preMarketChangePercent: (preMarketChange / baseline) * 100,
     extendedSession: session,
-    marketState: liveState !== "CLOSED" ? liveState : session,
+    marketState:
+      activeExtended === "OVERNIGHT"
+        ? "OVERNIGHT"
+        : liveState !== "CLOSED"
+          ? liveState
+          : session,
   };
 }
 

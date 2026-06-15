@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { BrokerLogo } from "@/components/BrokerLogo";
 import { ArrowRightLeft, Eye, EyeOff, HelpCircle, Loader2, Moon, RefreshCw } from "lucide-react";
 import type { Holding } from "@shared/schema";
-import { getUsMarketSessionState, shouldShowExtendedQuote, shouldUseExtendedQuotes } from "@/lib/usMarketSession";
+import { getExtendedSessionLabel, getUsMarketSessionState, shouldShowExtendedQuote, shouldUseExtendedQuotes } from "@/lib/usMarketSession";
 
 interface StockQuote {
   ticker: string;
@@ -459,7 +459,7 @@ export function MobilePortfolioChart({
         <div className="flex items-center gap-2 mb-2">
           <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
             <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
-            {usSessionState === "POST_MARKET" ? "Po zatvorení:" : "Pred open:"}
+            {getExtendedSessionLabel(usSessionState)}
           </span>
           {preOpenPreview.available ? (
             <>
