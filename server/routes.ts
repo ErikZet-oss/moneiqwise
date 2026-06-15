@@ -207,17 +207,60 @@ function isMarketDataTicker(u: string): boolean {
 // TTL is still respected on read via the per-entry timestamp.
 const CACHE_DIR = path.join(process.cwd(), ".cache");
 const CACHE_FILE = path.join(CACHE_DIR, "prices.json");
+/** Bump when quote shape/source changes — invalidates stale on-disk quote cache. */
+const QUOTE_CACHE_VERSION = 2;
+
+function isUsExtendedSessionNow(): boolean {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Bratislava",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    weekday: "short",
+  }).formatToParts(new Date());
+  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+  const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
+  if (weekday.startsWith("Sat") || weekday.startsWith("Sun")) return false;
+  const m = hour * 60 + minute;
+  if (m >= 10 * 60 && m < 15 * 60 + 30) return true;
+  if (m >= 22 * 60 || m < 2 * 60) return true;
+  if (m >= 2 * 60 && m < 10 * 60) return true;
+  return false;
+}
+
+function isStaleChartExtendedCache(data: unknown): boolean {
+  if (!data || typeof data !== "object") return false;
+  const q = data as Record<string, unknown>;
+  const ms = String(q.marketState ?? "").toUpperCase();
+  if (ms === "OVERNIGHT" || ms === "PRE" || ms === "PREPRE" || ms === "POST" || ms === "POSTPOST") {
+    return false;
+  }
+  const extPct = Number(q.preMarketChangePercent);
+  if (!Number.isFinite(extPct)) return false;
+  return isUsExtendedSessionNow();
+}
 
 function loadCacheFromDisk(): void {
   try {
     if (!fs.existsSync(CACHE_FILE)) return;
     const raw = fs.readFileSync(CACHE_FILE, "utf-8");
     const parsed = JSON.parse(raw) as {
+      quoteCacheVersion?: number;
       quotes?: Record<string, CacheEntry>;
       historical?: Record<string, CacheEntry>;
       exchangeRates?: Record<string, CacheEntry>;
       symbols?: Record<string, CacheEntry>;
     };
+    if (parsed.quoteCacheVersion !== QUOTE_CACHE_VERSION) {
+      console.log(
+        `Quote disk cache version ${parsed.quoteCacheVersion ?? 0} != ${QUOTE_CACHE_VERSION}, ignoring cached quotes`,
+      );
+      for (const [k, v] of Object.entries(parsed.historical || {})) historicalCache.set(k, v);
+      for (const [k, v] of Object.entries(parsed.exchangeRates || {})) exchangeRateCache.set(k, v);
+      for (const [k, v] of Object.entries(parsed.symbols || {})) symbolCache.set(k, v);
+      return;
+    }
     for (const [k, v] of Object.entries(parsed.quotes || {})) priceCache.set(k, v);
     for (const [k, v] of Object.entries(parsed.historical || {})) historicalCache.set(k, v);
     for (const [k, v] of Object.entries(parsed.exchangeRates || {})) exchangeRateCache.set(k, v);
@@ -240,6 +283,7 @@ function scheduleCacheSave(): void {
       fs.mkdirSync(CACHE_DIR, { recursive: true });
       const payload = {
         savedAt: Date.now(),
+        quoteCacheVersion: QUOTE_CACHE_VERSION,
         quotes: Object.fromEntries(priceCache),
         historical: Object.fromEntries(historicalCache),
         exchangeRates: Object.fromEntries(exchangeRateCache),
@@ -557,15 +601,11 @@ function resolveExtendedQuoteFromChart(
         extendedPrice = lastBar.price;
         session = "POST";
       }
-    } else if (barSession === "PRE" || barSession === "POST" || afterRth || differsFromRth) {
-      // PRE: vs previous close. OVERNIGHT chart fallback: vs RTH (approximation when v7 unavailable).
+    } else if (activeExtended === "PRE" && (barSession === "PRE" || barSession === "POST" || afterRth || differsFromRth)) {
       extendedPrice = lastBar.price;
       session = "PRE";
-      if (activeExtended === "OVERNIGHT") {
-        // Baseline handled below via session POST trick — use RTH for overnight %.
-        session = "POST";
-      }
     }
+    // OVERNIGHT: chart API lacks BOATS — do not surface stale post-market bars.
   }
 
   if (extendedPrice == null || session == null) {
@@ -1462,6 +1502,7 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
       };
     }
 
+    console.warn(`Yahoo v7 overnight quote unavailable for ${ticker}, using chart fallback`);
     return await fetchYahooQuoteFromChart(yahooTicker, ticker);
   } catch (error) {
     console.error(`Error fetching Yahoo Finance quote for ${ticker}:`, error);
@@ -1561,7 +1602,8 @@ async function fetchStockQuote(ticker: string, skipCache = false): Promise<any> 
       cached.data?.preMarketPrice == null &&
       cached.data?.preMarketChangePercent == null;
     const staleExtended = missingExtended && Date.now() - cached.timestamp > 45 * 1000;
-    if (hasRequiredFields && !staleExtended) {
+    const staleChartExtended = isStaleChartExtendedCache(cached.data);
+    if (hasRequiredFields && !staleExtended && !staleChartExtended) {
       return cached.data;
     }
   }
@@ -1571,7 +1613,11 @@ async function fetchStockQuote(ticker: string, skipCache = false): Promise<any> 
     const result = await fetchYahooQuote(ticker);
     priceCache.set(ticker, { data: result, timestamp: Date.now() });
     scheduleCacheSave();
-    console.log(`Yahoo Finance success for ${ticker}: ${result.price}`);
+    const extLabel =
+      result.preMarketChangePercent != null
+        ? ` ext=${result.preMarketChangePercent.toFixed(2)}% (${result.marketState ?? "?"})`
+        : "";
+    console.log(`Yahoo Finance success for ${ticker}: ${result.price}${extLabel}`);
     return result;
   } catch (error) {
     console.warn(`Yahoo Finance failed for ${ticker}, trying Alpha Vantage...`);

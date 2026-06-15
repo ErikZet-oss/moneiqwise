@@ -65,7 +65,10 @@ export async function fetchYahooV7Quote(yahooTicker: string): Promise<YahooV7Quo
       quoteResponse?: { result?: YahooV7QuoteRow[] };
     };
     const row = data?.quoteResponse?.result?.[0];
-    if (!row || row.quoteType === "NONE") return null;
+    if (!row || row.quoteType === "NONE") {
+      console.warn(`Yahoo v7 quote empty for ${yahooTicker}`);
+      return null;
+    }
     const price = num(row.regularMarketPrice);
     if (price == null || price <= 0) return null;
     return row;
@@ -91,20 +94,24 @@ export function mapExtendedQuoteFromYahooV7(
   const overnightPrice = num(q.overnightMarketPrice);
   const overnightCh = num(q.overnightMarketChange);
   const overnightChPct = num(q.overnightMarketChangePercent);
-  if (
-    overnightPrice != null &&
-    overnightPrice > 0 &&
-    (marketStateRaw === "OVERNIGHT" ||
+  if (overnightPrice != null && overnightPrice > 0) {
+    if (
+      marketStateRaw === "OVERNIGHT" ||
       marketStateRaw === "PREPRE" ||
-      overnightChPct != null)
-  ) {
-    return {
-      preMarketPrice: overnightPrice,
-      preMarketChange: overnightCh ?? (rthPrice > 0 ? overnightPrice - rthPrice : null),
-      preMarketChangePercent:
-        overnightChPct ?? (rthPrice > 0 ? ((overnightPrice - rthPrice) / rthPrice) * 100 : null),
-      marketState: marketStateRaw === "PREPRE" ? "OVERNIGHT" : marketState,
-    };
+      overnightChPct != null ||
+      overnightCh != null
+    ) {
+      return {
+        preMarketPrice: overnightPrice,
+        preMarketChange: overnightCh ?? (rthPrice > 0 ? overnightPrice - rthPrice : null),
+        preMarketChangePercent:
+          overnightChPct ?? (rthPrice > 0 ? ((overnightPrice - rthPrice) / rthPrice) * 100 : null),
+        marketState:
+          marketStateRaw === "PREPRE" || marketStateRaw === "OVERNIGHT"
+            ? "OVERNIGHT"
+            : marketState,
+      };
+    }
   }
 
   const prePrice = num(q.preMarketPrice);

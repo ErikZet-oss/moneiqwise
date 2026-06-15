@@ -28,6 +28,7 @@ const allowlist = [
   "stripe",
   "uuid",
   "xlsx",
+  "yahoo-finance2",
   "zod",
   "zod-validation-error",
 ];
