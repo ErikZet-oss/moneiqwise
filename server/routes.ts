@@ -429,22 +429,157 @@ async function fetchYahooExtendedSessionPrice(
     const data = await response.json();
     const result = data?.chart?.result?.[0];
     const meta = result?.meta;
-    const pre = Number(meta?.preMarketPrice);
-    if (Number.isFinite(pre) && pre > 0) return pre;
-    const post = Number(meta?.postMarketPrice);
-    if (Number.isFinite(post) && post > 0) return post;
-
     const closes: unknown[] = result?.indicators?.quote?.[0]?.close ?? [];
-    for (let i = closes.length - 1; i >= 0; i--) {
-      const v = Number(closes[i]);
-      if (Number.isFinite(v) && v > 0 && Math.abs(v - regularPrice) > 1e-9) {
-        return v;
-      }
-    }
-    return null;
+    return resolveExtendedSessionPrice(meta, closes, regularPrice);
   } catch {
     return null;
   }
+}
+
+function resolveExtendedSessionPrice(
+  meta: Record<string, unknown> | undefined,
+  closes: unknown[],
+  rthPrice: number,
+): number | null {
+  const marketState = String(meta?.marketState ?? "").toUpperCase();
+  const pre = Number(meta?.preMarketPrice);
+  if ((marketState === "PRE" || marketState === "PREPRE") && Number.isFinite(pre) && pre > 0) {
+    return pre;
+  }
+  const post = Number(meta?.postMarketPrice);
+  if ((marketState === "POST" || marketState === "POSTPOST") && Number.isFinite(post) && post > 0) {
+    return post;
+  }
+  if (Number.isFinite(pre) && pre > 0) return pre;
+  if (Number.isFinite(post) && post > 0) return post;
+
+  for (let i = closes.length - 1; i >= 0; i--) {
+    const v = Number(closes[i]);
+    if (Number.isFinite(v) && v > 0 && Math.abs(v - rthPrice) > 1e-9) {
+      return v;
+    }
+  }
+  return null;
+}
+
+function resolveExtendedSessionChange(
+  extendedPrice: number | null,
+  previousClose: number,
+  rthPrice: number,
+  marketState: string | null | undefined,
+  yahooPreChange?: number,
+  yahooPreChangePercent?: number,
+): {
+  preMarketPrice: number | null;
+  preMarketChange: number | null;
+  preMarketChangePercent: number | null;
+} {
+  if (extendedPrice == null || !Number.isFinite(extendedPrice) || extendedPrice <= 0) {
+    return { preMarketPrice: null, preMarketChange: null, preMarketChangePercent: null };
+  }
+
+  if (Number.isFinite(yahooPreChange) && Number.isFinite(yahooPreChangePercent)) {
+    return {
+      preMarketPrice: extendedPrice,
+      preMarketChange: yahooPreChange as number,
+      preMarketChangePercent: yahooPreChangePercent as number,
+    };
+  }
+
+  const state = String(marketState ?? "").toUpperCase();
+  const baseline =
+    state === "POST" || state === "POSTPOST"
+      ? rthPrice > 0
+        ? rthPrice
+        : previousClose
+      : previousClose > 0
+        ? previousClose
+        : rthPrice;
+
+  if (!Number.isFinite(baseline) || baseline <= 0) {
+    return { preMarketPrice: extendedPrice, preMarketChange: null, preMarketChangePercent: null };
+  }
+
+  const preMarketChange = extendedPrice - baseline;
+  return {
+    preMarketPrice: extendedPrice,
+    preMarketChange,
+    preMarketChangePercent: (preMarketChange / baseline) * 100,
+  };
+}
+
+async function fetchYahooQuoteFromChart(yahooTicker: string, ticker: string): Promise<any> {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooTicker)}?interval=1m&range=1d&includePrePost=true`;
+  const response = await fetch(url, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Yahoo Finance returned ${response.status}`);
+  }
+
+  const data = await response.json();
+  const result = data.chart?.result?.[0];
+  if (!result) {
+    throw new Error("Invalid response from Yahoo Finance");
+  }
+
+  const meta = result.meta;
+  const quote = result.indicators?.quote?.[0];
+  const closes: unknown[] = quote?.close ?? [];
+
+  const rthPrice =
+    Number(meta?.regularMarketPrice) ||
+    Number(closes[closes.length - 1]) ||
+    0;
+  const previousClose =
+    Number(meta?.previousClose) ||
+    Number(meta?.chartPreviousClose) ||
+    rthPrice;
+
+  if (!Number.isFinite(rthPrice) || rthPrice <= 0) {
+    throw new Error("Invalid response from Yahoo Finance");
+  }
+
+  const change = previousClose > 0 ? rthPrice - previousClose : 0;
+  const changePercent = previousClose > 0 ? (change / previousClose) * 100 : 0;
+  const marketState = String(meta?.marketState ?? "").toUpperCase() || null;
+
+  const extendedPrice = resolveExtendedSessionPrice(meta, closes, rthPrice);
+  const { preMarketPrice, preMarketChange, preMarketChangePercent } = resolveExtendedSessionChange(
+    extendedPrice,
+    previousClose,
+    rthPrice,
+    marketState,
+  );
+
+  const regularMarketTimeRaw = Number(meta?.regularMarketTime);
+  const quoteDate = quoteDateFromEpoch(
+    regularMarketTimeRaw,
+    typeof meta?.exchangeTimezoneName === "string" ? meta.exchangeTimezoneName : null,
+  );
+
+  let annualDividendPerShare = 0;
+  annualDividendPerShare = await fetchYahooAnnualDividendPerShare(ticker);
+
+  return {
+    ticker,
+    price: rthPrice,
+    change,
+    changePercent,
+    quoteDate,
+    marketState,
+    isMarketOpen:
+      marketState === "REGULAR" ? true : marketState ? false : null,
+    preMarketPrice,
+    preMarketChange,
+    preMarketChangePercent,
+    high52: meta.fiftyTwoWeekHigh || 0,
+    low52: meta.fiftyTwoWeekLow || 0,
+    annualDividendPerShare,
+  };
 }
 
 function quoteDateFromEpoch(
@@ -1115,7 +1250,7 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
     const yahooTicker = toYahooTicker(ticker);
     const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(yahooTicker)}`;
 
-    // Prefer v7/quote: it reliably carries pre/post-market fields.
+    // v7/quote carries pre/post fields when available (Yahoo may block this endpoint).
     const quoteResponse = await fetch(quoteUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -1157,15 +1292,19 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
             : Number.isFinite(postMarketPriceRaw) && postMarketPriceRaw > 0
               ? postMarketPriceRaw
               : null;
-        let preMarketPrice = preOrPostMarketPrice;
-        if (preMarketPrice == null) {
-          preMarketPrice = await fetchYahooExtendedSessionPrice(yahooTicker, regularMarketPrice);
+        let extendedPrice = preOrPostMarketPrice;
+        if (extendedPrice == null) {
+          extendedPrice = await fetchYahooExtendedSessionPrice(yahooTicker, regularMarketPrice);
         }
-        const preMarketChange = preMarketPrice != null ? preMarketPrice - regularMarketPrice : null;
-        const preMarketChangePercent =
-          preMarketPrice != null && regularMarketPrice > 0
-            ? (preMarketChange! / regularMarketPrice) * 100
-            : null;
+        const { preMarketPrice, preMarketChange, preMarketChangePercent } =
+          resolveExtendedSessionChange(
+            extendedPrice,
+            previousClose ?? regularMarketPrice,
+            regularMarketPrice,
+            marketState,
+            Number(q?.preMarketChange),
+            Number(q?.preMarketChangePercent),
+          );
 
         const regularMarketTimeRaw = Number(q?.regularMarketTime);
         const quoteDate = quoteDateFromEpoch(
@@ -1201,82 +1340,7 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
       }
     }
 
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooTicker)}?interval=1d&range=1d`;
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Yahoo Finance returned ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    if (data.chart?.result?.[0]) {
-      const result = data.chart.result[0];
-      const meta = result.meta;
-      const quote = result.indicators?.quote?.[0];
-      
-      const currentPrice = meta.regularMarketPrice || (quote?.close?.[quote.close.length - 1]) || 0;
-      const previousClose = meta.previousClose || meta.chartPreviousClose || currentPrice;
-      const change = currentPrice - previousClose;
-      const changePercent = previousClose > 0 ? (change / previousClose) * 100 : 0;
-      
-      if (currentPrice > 0) {
-        const preMarketPriceRaw = Number(meta?.preMarketPrice);
-        const postMarketPriceRaw = Number(meta?.postMarketPrice);
-        const preOrPostMarketPrice =
-          Number.isFinite(preMarketPriceRaw) && preMarketPriceRaw > 0
-            ? preMarketPriceRaw
-            : Number.isFinite(postMarketPriceRaw) && postMarketPriceRaw > 0
-              ? postMarketPriceRaw
-              : null;
-        let preMarketPrice = preOrPostMarketPrice;
-        if (preMarketPrice == null) {
-          preMarketPrice = await fetchYahooExtendedSessionPrice(yahooTicker, currentPrice);
-        }
-        const preMarketChange = preMarketPrice != null ? preMarketPrice - currentPrice : null;
-        const preMarketChangePercent =
-          preMarketPrice != null && currentPrice > 0
-            ? (preMarketChange! / currentPrice) * 100
-            : null;
-
-        const regularMarketTimeRaw = Number(meta?.regularMarketTime);
-        const quoteDate = quoteDateFromEpoch(
-          regularMarketTimeRaw,
-          typeof meta?.exchangeTimezoneName === "string" ? meta.exchangeTimezoneName : null,
-        );
-
-        let annualDividendPerShare = 0;
-        if (currentPrice > 0) {
-          annualDividendPerShare = await fetchYahooAnnualDividendPerShare(ticker);
-        }
-        return {
-          ticker,
-          price: currentPrice,
-          change,
-          changePercent,
-          quoteDate,
-          marketState: String(meta?.marketState ?? "").toUpperCase() || null,
-          isMarketOpen:
-            String(meta?.marketState ?? "").toUpperCase() === "REGULAR"
-              ? true
-              : String(meta?.marketState ?? "").toUpperCase()
-                ? false
-                : null,
-          preMarketPrice,
-          preMarketChange,
-          preMarketChangePercent,
-          high52: meta.fiftyTwoWeekHigh || 0,
-          low52: meta.fiftyTwoWeekLow || 0,
-          annualDividendPerShare,
-        };
-      }
-    }
-    
-    throw new Error("Invalid response from Yahoo Finance");
+    return await fetchYahooQuoteFromChart(yahooTicker, ticker);
   } catch (error) {
     console.error(`Error fetching Yahoo Finance quote for ${ticker}:`, error);
     throw error;
@@ -1367,11 +1431,15 @@ async function fetchStockQuote(ticker: string, skipCache = false): Promise<any> 
   if (!skipCache && cached && Date.now() - cached.timestamp < QUOTE_CACHE_TTL) {
     // Backward compatibility: older cache entries may miss newer fields.
     // If any required field is missing, force fresh fetch to avoid stale/zero metrics.
-    if (
+    const hasRequiredFields =
       cached.data &&
       Object.prototype.hasOwnProperty.call(cached.data, "preMarketPrice") &&
-      Object.prototype.hasOwnProperty.call(cached.data, "annualDividendPerShare")
-    ) {
+      Object.prototype.hasOwnProperty.call(cached.data, "annualDividendPerShare");
+    const missingExtended =
+      cached.data?.preMarketPrice == null &&
+      cached.data?.preMarketChangePercent == null;
+    const staleExtended = missingExtended && Date.now() - cached.timestamp > 45 * 1000;
+    if (hasRequiredFields && !staleExtended) {
       return cached.data;
     }
   }
