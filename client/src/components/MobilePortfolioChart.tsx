@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { BrokerLogo } from "@/components/BrokerLogo";
 import { ArrowRightLeft, Eye, EyeOff, HelpCircle, Loader2, Moon, RefreshCw } from "lucide-react";
 import type { Holding } from "@shared/schema";
-import { getExtendedSessionLabel, getUsMarketSessionState, shouldShowExtendedQuote, shouldUseExtendedQuotes } from "@/lib/usMarketSession";
+import { getExtendedSessionLabel, getQuoteRefreshIntervalMs, getQuoteStaleTimeMs, getUsMarketSessionState, shouldShowExtendedQuote, shouldUseExtendedQuotes } from "@/lib/usMarketSession";
 
 interface StockQuote {
   ticker: string;
@@ -108,6 +108,8 @@ export function MobilePortfolioChart({
   const { data: quotes } = useQuery<Record<string, StockQuote>>({
     queryKey: ["/api/quotes", holdings?.map(h => h.ticker)],
     enabled: chartQueriesEnabled && !!holdings && holdings.length > 0,
+    staleTime: getQuoteStaleTimeMs(),
+    refetchInterval: () => getQuoteRefreshIntervalMs(),
     queryFn: async () => {
       if (!holdings || holdings.length === 0) return {};
       

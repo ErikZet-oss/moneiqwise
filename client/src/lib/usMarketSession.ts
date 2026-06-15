@@ -58,6 +58,20 @@ export function shouldShowExtendedQuote(
   return quoteHasExtendedSession(marketState);
 }
 
+/** Auto-refresh kotácií na dashboarde (ms); false = bez pollingu počas RTH. */
+export function getQuoteRefreshIntervalMs(now = new Date()): number | false {
+  const state = getUsMarketSessionState(now);
+  if (state === "LIVE") return false;
+  if (shouldUseExtendedQuotes(state)) return 20_000;
+  return 60_000;
+}
+
+export function getQuoteStaleTimeMs(now = new Date()): number {
+  const state = getUsMarketSessionState(now);
+  if (shouldUseExtendedQuotes(state)) return 15_000;
+  return 60_000;
+}
+
 export function getExtendedSessionLabel(usSession: UsMarketSessionState): string {
   switch (usSession) {
     case "POST_MARKET":

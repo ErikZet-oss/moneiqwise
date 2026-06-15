@@ -84,8 +84,21 @@ const historicalCache = new Map<string, CacheEntry>();
 const exchangeRateCache = new Map<string, CacheEntry>();
 const newsCache = new Map<string, CacheEntry>();
 const CACHE_TTL = 30 * 60 * 1000;
-/** Kotácie (pre/post market) — kratšie než CACHE_TTL, aby dashboard neukazoval 30 min staré ceny. */
-const QUOTE_CACHE_TTL = 3 * 60 * 1000;
+/** Kotácie počas RTH — kratšie než CACHE_TTL, aby dashboard neukazoval 30 min staré ceny. */
+const QUOTE_CACHE_TTL_LIVE_MS = 3 * 60 * 1000;
+/** Overnight / pre / post — Yahoo sa mení často, držíme max ~20 s. */
+const QUOTE_CACHE_TTL_EXTENDED_MS = 20 * 1000;
+
+function getQuoteCacheTtlMs(cachedData?: unknown): number {
+  if (isUsExtendedSessionNow()) return QUOTE_CACHE_TTL_EXTENDED_MS;
+  if (cachedData && typeof cachedData === "object") {
+    const ms = String((cachedData as Record<string, unknown>).marketState ?? "").toUpperCase();
+    if (["OVERNIGHT", "PRE", "PREPRE", "POST", "POSTPOST"].includes(ms)) {
+      return QUOTE_CACHE_TTL_EXTENDED_MS;
+    }
+  }
+  return QUOTE_CACHE_TTL_LIVE_MS;
+}
 const HISTORICAL_CACHE_TTL = 12 * 60 * 60 * 1000; // 12 hours for historical data
 const EXCHANGE_RATE_CACHE_TTL = 60 * 60 * 1000; // 1 hour for exchange rates
 const NEWS_CACHE_TTL = 15 * 60 * 1000; // 15 minutes for news
@@ -261,7 +274,11 @@ function loadCacheFromDisk(): void {
       for (const [k, v] of Object.entries(parsed.symbols || {})) symbolCache.set(k, v);
       return;
     }
-    for (const [k, v] of Object.entries(parsed.quotes || {})) priceCache.set(k, v);
+    for (const [k, v] of Object.entries(parsed.quotes || {})) {
+      if (Date.now() - v.timestamp < getQuoteCacheTtlMs(v.data)) {
+        priceCache.set(k, v);
+      }
+    }
     for (const [k, v] of Object.entries(parsed.historical || {})) historicalCache.set(k, v);
     for (const [k, v] of Object.entries(parsed.exchangeRates || {})) exchangeRateCache.set(k, v);
     for (const [k, v] of Object.entries(parsed.symbols || {})) symbolCache.set(k, v);
@@ -1591,7 +1608,8 @@ async function fetchFinnhubQuote(ticker: string): Promise<any> {
 async function fetchStockQuote(ticker: string, skipCache = false): Promise<any> {
   // Check cache first (unless user explicitly refreshes quotes)
   const cached = priceCache.get(ticker);
-  if (!skipCache && cached && Date.now() - cached.timestamp < QUOTE_CACHE_TTL) {
+  const quoteCacheTtl = getQuoteCacheTtlMs(cached?.data);
+  if (!skipCache && cached && Date.now() - cached.timestamp < quoteCacheTtl) {
     // Backward compatibility: older cache entries may miss newer fields.
     // If any required field is missing, force fresh fetch to avoid stale/zero metrics.
     const hasRequiredFields =

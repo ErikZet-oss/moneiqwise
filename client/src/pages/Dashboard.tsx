@@ -55,6 +55,8 @@ import type { Holding } from "@shared/schema";
 import { CASH_INTEREST_DISPLAY_NAME, CASH_INTEREST_TICKER } from "@shared/tickerCurrency";
 import {
   getExtendedSessionLabel,
+  getQuoteRefreshIntervalMs,
+  getQuoteStaleTimeMs,
   getUsMarketSessionState,
   shouldShowExtendedQuote,
   shouldUseExtendedQuotes,
@@ -531,9 +533,8 @@ export default function Dashboard() {
   } = useQuery<Record<string, StockQuote>>({
     queryKey: ["/api/quotes", holdings?.map(h => h.ticker)],
     enabled: !!holdings && holdings.length > 0,
-    // Quotes: klient môže refetch častejšie; server má vlastný TTL (QUOTE_CACHE_TTL v routes).
-    staleTime: 60 * 1000,
-    refetchInterval: getUsMarketSessionState() !== "LIVE" ? 60 * 1000 : false,
+    staleTime: getQuoteStaleTimeMs(),
+    refetchInterval: () => getQuoteRefreshIntervalMs(),
     queryFn: async () => {
       if (!holdings || holdings.length === 0) return {};
       const tickers = holdings.map(h => h.ticker);
