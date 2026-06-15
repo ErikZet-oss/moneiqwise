@@ -11,13 +11,16 @@ import { Button } from "@/components/ui/button";
 import { BrokerLogo } from "@/components/BrokerLogo";
 import { ArrowRightLeft, Eye, EyeOff, HelpCircle, Loader2, Moon, RefreshCw } from "lucide-react";
 import type { Holding } from "@shared/schema";
+import { getUsMarketSessionState, shouldShowExtendedQuote, shouldUseExtendedQuotes } from "@/lib/usMarketSession";
 
 interface StockQuote {
   ticker: string;
   price: number;
   change: number;
   changePercent: number;
+  marketState?: string | null;
   preMarketPrice?: number | null;
+  preMarketChangePercent?: number | null;
 }
 
 type TimePeriod = "1M" | "3M" | "6M" | "YTD" | "ALL";
@@ -238,6 +241,7 @@ export function MobilePortfolioChart({
       return { available: false, amount: 0, percent: 0 };
     }
 
+    const usSession = getUsMarketSessionState();
     let totalCurrent = 0;
     let totalPreOpen = 0;
     let hasPreOpenData = false;
@@ -251,7 +255,12 @@ export function MobilePortfolioChart({
 
       const tickerCurrency = getTickerCurrency(holding.ticker);
       const regularPrice = convertPrice(quote.price, tickerCurrency);
-      const preOpenRaw = quote.preMarketPrice;
+      const showExtended = shouldShowExtendedQuote(
+        usSession,
+        quote.marketState,
+        quote.preMarketChangePercent,
+      );
+      const preOpenRaw = showExtended ? quote.preMarketPrice : null;
       const preOpenPrice =
         typeof preOpenRaw === "number" && Number.isFinite(preOpenRaw) && preOpenRaw > 0
           ? convertPrice(preOpenRaw, tickerCurrency)
@@ -277,26 +286,7 @@ export function MobilePortfolioChart({
 
   const periods: TimePeriod[] = ["1M", "3M", "6M", "YTD", "ALL"];
 
-  const usSessionState = (() => {
-    const parts = new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Europe/Bratislava",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-      weekday: "short",
-    }).formatToParts(new Date());
-
-    const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
-    const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
-    const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
-    const isWeekend = weekday.startsWith("Sat") || weekday.startsWith("Sun");
-    if (isWeekend) return "CLOSED" as const;
-
-    const minutes = hour * 60 + minute;
-    if (minutes >= 10 * 60 && minutes < 15 * 60 + 30) return "PRE_MARKET" as const;
-    if (minutes >= 15 * 60 + 30 && minutes < 22 * 60) return "LIVE" as const;
-    return "CLOSED" as const;
-  })();
+  const usSessionState = getUsMarketSessionState();
 
   const displayedDailyChange = usSessionState === "LIVE" ? dailyChange : 0;
   const displayedDailyChangePercent = usSessionState === "LIVE" ? dailyChangePercent : 0;
@@ -439,7 +429,7 @@ export function MobilePortfolioChart({
           </span>
         </div>
       )}
-      {usSessionState !== "LIVE" && (
+      {usSessionState === "CLOSED" && !preOpenPreview.available && (
         <div className="mb-1 text-[10px] text-muted-foreground">Trh uzatvorený</div>
       )}
 
@@ -465,11 +455,11 @@ export function MobilePortfolioChart({
         </span>
       </div>
 
-      {usSessionState !== "LIVE" && (
+      {shouldUseExtendedQuotes(usSessionState) && (
         <div className="flex items-center gap-2 mb-2">
           <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground">
             <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
-            Pred open:
+            {usSessionState === "POST_MARKET" ? "Po zatvorení:" : "Pred open:"}
           </span>
           {preOpenPreview.available ? (
             <>

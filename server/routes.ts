@@ -413,6 +413,165 @@ function toYahooTicker(ticker: string): string {
   return ticker;
 }
 
+type YahooTradingPeriodWindow = { start?: number; end?: number };
+type YahooTradingPeriods = {
+  pre?: YahooTradingPeriodWindow;
+  regular?: YahooTradingPeriodWindow;
+  post?: YahooTradingPeriodWindow;
+};
+
+function getYahooTradingPeriods(meta: Record<string, unknown> | undefined): YahooTradingPeriods | null {
+  const ctp = meta?.currentTradingPeriod;
+  if (!ctp || typeof ctp !== "object") return null;
+  return ctp as YahooTradingPeriods;
+}
+
+function inferYahooLiveMarketState(
+  periods: YahooTradingPeriods | null,
+  nowSec = Math.floor(Date.now() / 1000),
+): "PRE" | "REGULAR" | "POST" | "CLOSED" {
+  if (!periods) return "CLOSED";
+  const inWindow = (w?: YahooTradingPeriodWindow) =>
+    !!w &&
+    Number.isFinite(w.start) &&
+    Number.isFinite(w.end) &&
+    nowSec >= w.start! &&
+    nowSec < w.end!;
+  if (inWindow(periods.pre)) return "PRE";
+  if (inWindow(periods.regular)) return "REGULAR";
+  if (inWindow(periods.post)) return "POST";
+  return "CLOSED";
+}
+
+function inferYahooBarSession(
+  periods: YahooTradingPeriods | null,
+  barTs: number,
+): "PRE" | "REGULAR" | "POST" | null {
+  if (!periods || !Number.isFinite(barTs)) return null;
+  const { pre, regular, post } = periods;
+  if (pre?.start != null && pre?.end != null && barTs >= pre.start && barTs < pre.end) return "PRE";
+  if (regular?.start != null && regular?.end != null && barTs >= regular.start && barTs < regular.end) {
+    return "REGULAR";
+  }
+  if (post?.start != null && post?.end != null && barTs >= post.start && barTs < post.end) return "POST";
+  if (
+    pre?.start != null &&
+    regular?.start != null &&
+    barTs >= pre.start &&
+    barTs < regular.start
+  ) {
+    return "PRE";
+  }
+  if (regular?.end != null && post?.end != null && barTs >= regular.end && barTs < post.end) {
+    return "POST";
+  }
+  if (regular?.end != null && barTs >= regular.end) return "POST";
+  return null;
+}
+
+function lastYahooValidBar(
+  closes: unknown[],
+  timestamps: unknown[],
+): { price: number; ts: number } | null {
+  for (let i = closes.length - 1; i >= 0; i--) {
+    const price = Number(closes[i]);
+    const ts = Number(timestamps[i]);
+    if (Number.isFinite(price) && price > 0 && Number.isFinite(ts)) {
+      return { price, ts };
+    }
+  }
+  return null;
+}
+
+function resolveExtendedQuoteFromChart(
+  meta: Record<string, unknown>,
+  closes: unknown[],
+  timestamps: unknown[],
+): {
+  preMarketPrice: number | null;
+  preMarketChange: number | null;
+  preMarketChangePercent: number | null;
+  extendedSession: "PRE" | "POST" | null;
+  marketState: string | null;
+} {
+  const rthPrice = Number(meta.regularMarketPrice);
+  const previousClose =
+    Number(meta.previousClose) || Number(meta.chartPreviousClose) || rthPrice;
+  const empty = {
+    preMarketPrice: null,
+    preMarketChange: null,
+    preMarketChangePercent: null,
+    extendedSession: null as "PRE" | "POST" | null,
+    marketState: String(meta.marketState ?? "").toUpperCase() || null,
+  };
+  if (!Number.isFinite(rthPrice) || rthPrice <= 0) return empty;
+
+  const periods = getYahooTradingPeriods(meta);
+  const liveState = inferYahooLiveMarketState(periods);
+  const lastBar = lastYahooValidBar(closes, timestamps);
+  const metaPre = Number(meta.preMarketPrice);
+  const metaPost = Number(meta.postMarketPrice);
+  const regularMarketTime = Number(meta.regularMarketTime);
+
+  let extendedPrice: number | null = null;
+  let session: "PRE" | "POST" | null = null;
+
+  // Extended quotes only while Yahoo reports an active pre/post window (avoids stale
+  // after-hours bars from the prior session when the market is fully closed).
+  if (liveState === "PRE" && Number.isFinite(metaPre) && metaPre > 0) {
+    extendedPrice = metaPre;
+    session = "PRE";
+  } else if (liveState === "POST" && Number.isFinite(metaPost) && metaPost > 0) {
+    extendedPrice = metaPost;
+    session = "POST";
+    } else if ((liveState === "PRE" || liveState === "POST") && lastBar) {
+    const barSession = inferYahooBarSession(periods, lastBar.ts);
+    if (barSession === liveState) {
+      extendedPrice = lastBar.price;
+      session = barSession;
+    } else if (barSession == null) {
+      const differsFromRth = Math.abs(lastBar.price - rthPrice) > 1e-9;
+      const inExtendedWindow =
+        liveState === "PRE"
+          ? differsFromRth || lastBar.ts < (periods?.regular?.start ?? Infinity)
+          : differsFromRth &&
+            Number.isFinite(regularMarketTime) &&
+            lastBar.ts > regularMarketTime;
+      if (inExtendedWindow) {
+        extendedPrice = lastBar.price;
+        session = liveState;
+      }
+    }
+  }
+
+  if (extendedPrice == null || session == null) {
+    return {
+      ...empty,
+      marketState: liveState !== "CLOSED" ? liveState : empty.marketState,
+    };
+  }
+
+  const baseline = session === "POST" ? rthPrice : previousClose;
+  if (!Number.isFinite(baseline) || baseline <= 0) {
+    return {
+      preMarketPrice: extendedPrice,
+      preMarketChange: null,
+      preMarketChangePercent: null,
+      extendedSession: session,
+      marketState: session,
+    };
+  }
+
+  const preMarketChange = extendedPrice - baseline;
+  return {
+    preMarketPrice: extendedPrice,
+    preMarketChange,
+    preMarketChangePercent: (preMarketChange / baseline) * 100,
+    extendedSession: session,
+    marketState: liveState !== "CLOSED" ? liveState : session,
+  };
+}
+
 async function fetchYahooExtendedSessionPrice(
   yahooTicker: string,
   regularPrice: number,
@@ -428,38 +587,14 @@ async function fetchYahooExtendedSessionPrice(
 
     const data = await response.json();
     const result = data?.chart?.result?.[0];
-    const meta = result?.meta;
+    const meta = (result?.meta ?? {}) as Record<string, unknown>;
     const closes: unknown[] = result?.indicators?.quote?.[0]?.close ?? [];
-    return resolveExtendedSessionPrice(meta, closes, regularPrice);
+    const timestamps: unknown[] = result?.timestamp ?? [];
+    const resolved = resolveExtendedQuoteFromChart(meta, closes, timestamps);
+    return resolved.preMarketPrice;
   } catch {
     return null;
   }
-}
-
-function resolveExtendedSessionPrice(
-  meta: Record<string, unknown> | undefined,
-  closes: unknown[],
-  rthPrice: number,
-): number | null {
-  const marketState = String(meta?.marketState ?? "").toUpperCase();
-  const pre = Number(meta?.preMarketPrice);
-  if ((marketState === "PRE" || marketState === "PREPRE") && Number.isFinite(pre) && pre > 0) {
-    return pre;
-  }
-  const post = Number(meta?.postMarketPrice);
-  if ((marketState === "POST" || marketState === "POSTPOST") && Number.isFinite(post) && post > 0) {
-    return post;
-  }
-  if (Number.isFinite(pre) && pre > 0) return pre;
-  if (Number.isFinite(post) && post > 0) return post;
-
-  for (let i = closes.length - 1; i >= 0; i--) {
-    const v = Number(closes[i]);
-    if (Number.isFinite(v) && v > 0 && Math.abs(v - rthPrice) > 1e-9) {
-      return v;
-    }
-  }
-  return null;
 }
 
 function resolveExtendedSessionChange(
@@ -526,9 +661,10 @@ async function fetchYahooQuoteFromChart(yahooTicker: string, ticker: string): Pr
     throw new Error("Invalid response from Yahoo Finance");
   }
 
-  const meta = result.meta;
+  const meta = result.meta as Record<string, unknown>;
   const quote = result.indicators?.quote?.[0];
   const closes: unknown[] = quote?.close ?? [];
+  const timestamps: unknown[] = result.timestamp ?? [];
 
   const rthPrice =
     Number(meta?.regularMarketPrice) ||
@@ -545,15 +681,8 @@ async function fetchYahooQuoteFromChart(yahooTicker: string, ticker: string): Pr
 
   const change = previousClose > 0 ? rthPrice - previousClose : 0;
   const changePercent = previousClose > 0 ? (change / previousClose) * 100 : 0;
-  const marketState = String(meta?.marketState ?? "").toUpperCase() || null;
 
-  const extendedPrice = resolveExtendedSessionPrice(meta, closes, rthPrice);
-  const { preMarketPrice, preMarketChange, preMarketChangePercent } = resolveExtendedSessionChange(
-    extendedPrice,
-    previousClose,
-    rthPrice,
-    marketState,
-  );
+  const extended = resolveExtendedQuoteFromChart(meta, closes, timestamps);
 
   const regularMarketTimeRaw = Number(meta?.regularMarketTime);
   const quoteDate = quoteDateFromEpoch(
@@ -570,14 +699,14 @@ async function fetchYahooQuoteFromChart(yahooTicker: string, ticker: string): Pr
     change,
     changePercent,
     quoteDate,
-    marketState,
+    marketState: extended.marketState,
     isMarketOpen:
-      marketState === "REGULAR" ? true : marketState ? false : null,
-    preMarketPrice,
-    preMarketChange,
-    preMarketChangePercent,
-    high52: meta.fiftyTwoWeekHigh || 0,
-    low52: meta.fiftyTwoWeekLow || 0,
+      extended.marketState === "REGULAR" ? true : extended.marketState ? false : null,
+    preMarketPrice: extended.preMarketPrice,
+    preMarketChange: extended.preMarketChange,
+    preMarketChangePercent: extended.preMarketChangePercent,
+    high52: (meta.fiftyTwoWeekHigh as number) || 0,
+    low52: (meta.fiftyTwoWeekLow as number) || 0,
     annualDividendPerShare,
   };
 }

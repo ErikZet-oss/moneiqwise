@@ -53,6 +53,11 @@ import { MobilePortfolioChart } from "@/components/MobilePortfolioChart";
 import { DesktopPortfolioChart } from "@/components/DesktopPortfolioChart";
 import type { Holding } from "@shared/schema";
 import { CASH_INTEREST_DISPLAY_NAME, CASH_INTEREST_TICKER } from "@shared/tickerCurrency";
+import {
+  getUsMarketSessionState,
+  shouldShowExtendedQuote,
+  shouldUseExtendedQuotes,
+} from "@/lib/usMarketSession";
 import { formatShareQuantity } from "@/lib/utils";
 
 /** Krátky typ v mobile „jednoduché“ zobrazení (badge ako XTB). */
@@ -527,6 +532,7 @@ export default function Dashboard() {
     enabled: !!holdings && holdings.length > 0,
     // Quotes: klient môže refetch častejšie; server má vlastný TTL (QUOTE_CACHE_TTL v routes).
     staleTime: 60 * 1000,
+    refetchInterval: getUsMarketSessionState() !== "LIVE" ? 60 * 1000 : false,
     queryFn: async () => {
       if (!holdings || holdings.length === 0) return {};
       const tickers = holdings.map(h => h.ticker);
@@ -561,36 +567,19 @@ export default function Dashboard() {
   }, [holdings]);
 
   const { usSessionState, moversUseExtendedQuotes } = (() => {
-    const parts = new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Europe/Bratislava",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-      weekday: "short",
-    }).formatToParts(new Date());
-
-    const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
-    const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
-    const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
-    const isWeekend = weekday.startsWith("Sat") || weekday.startsWith("Sun");
-    const minutesFromMidnight = hour * 60 + minute;
-
-    let state: "PRE_MARKET" | "LIVE" | "CLOSED";
-    if (isWeekend) state = "CLOSED";
-    else if (minutesFromMidnight >= 10 * 60 && minutesFromMidnight < 15 * 60 + 30) {
-      state = "PRE_MARKET";
-    } else if (minutesFromMidnight >= 15 * 60 + 30 && minutesFromMidnight < 22 * 60) {
-      state = "LIVE";
-    } else state = "CLOSED";
-
-    // Mimo live režimu používame pre/post-market zmenu, s fallbackom na RTH.
-    const moversUseExtendedQuotes = state !== "LIVE";
-
+    const state = getUsMarketSessionState();
+    const moversUseExtendedQuotes = shouldUseExtendedQuotes(state);
     return { usSessionState: state, moversUseExtendedQuotes };
   })();
 
   const dailyMovers = useMemo(() => {
-    type MoverRow = { ticker: string; name: string; pct: number; dayValueEur: number | null };
+    type MoverRow = {
+      ticker: string;
+      name: string;
+      pct: number;
+      dayValueEur: number | null;
+      useExtended: boolean;
+    };
     if (!quotesData || !holdings || moversTickers.length === 0) {
       return {
         gainers: [] as MoverRow[],
@@ -617,14 +606,10 @@ export default function Dashboard() {
         const extCh = num(q?.preMarketChange);
         const regPct = num(q?.changePercent);
         const regCh = num(q?.change);
-        pct =
-          moversUseExtendedQuotes && Number.isFinite(extPct)
-            ? extPct
-            : regPct;
-        const ch =
-          moversUseExtendedQuotes && Number.isFinite(extCh)
-            ? extCh
-            : regCh;
+        const useExtendedForTicker =
+          shouldShowExtendedQuote(usSessionState, q?.marketState, extPct);
+        pct = useExtendedForTicker && Number.isFinite(extPct) ? extPct : regPct;
+        const ch = useExtendedForTicker && Number.isFinite(extCh) ? extCh : regCh;
         if (shares > 0 && Number.isFinite(ch)) {
           dayValueEur = shares * convertPrice(ch, getTickerCurrency(t));
         }
@@ -634,6 +619,7 @@ export default function Dashboard() {
           name: tickerDisplayNames.get(t) ?? t,
           pct: Number.isFinite(pct) ? pct : NaN,
           dayValueEur,
+          useExtended: useExtendedForTicker,
         };
       })
       .filter((r) => Number.isFinite(r.pct));
@@ -670,6 +656,7 @@ export default function Dashboard() {
     name: string;
     pct: number;
     dayValueEur: number | null;
+    useExtended?: boolean;
   };
 
   const renderDailyMoverRow = (
@@ -698,7 +685,7 @@ export default function Dashboard() {
           <span
             className={`text-xs font-semibold tabular-nums leading-tight inline-flex items-center justify-end gap-0.5 ${pctColorClass}`}
           >
-            {moversUseExtendedQuotes && (
+            {row.useExtended && (
               <Moon className={`h-2.5 w-2.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
             )}
             {formatSignedDayPct(row.pct)}
@@ -729,7 +716,7 @@ export default function Dashboard() {
         </div>
         <div className="shrink-0 flex flex-col items-end justify-center gap-0 leading-none">
           <span className="inline-flex items-center justify-end gap-1">
-            {moversUseExtendedQuotes && (
+            {row.useExtended && (
               <Moon className={`h-3.5 w-3.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
             )}
             <span className={`text-sm font-semibold tabular-nums leading-tight ${pctColorClass}`}>
@@ -2660,14 +2647,19 @@ export default function Dashboard() {
                   const preMarketPrice =
                     quote?.preMarketPrice != null ? convertPrice(quote.preMarketPrice, tickerCurrency) : null;
                   const showPremarketPrice =
-                    usSessionState !== "LIVE" &&
+                    shouldShowExtendedQuote(
+                      usSessionState,
+                      quote?.marketState,
+                      quote?.preMarketChangePercent,
+                    ) &&
                     preMarketPrice != null &&
                     Number.isFinite(preMarketPrice) &&
                     preMarketPrice > 0;
-                  const showOffHoursDailyChange =
-                    usSessionState !== "LIVE" &&
-                    quote?.preMarketChangePercent != null &&
-                    Number.isFinite(quote.preMarketChangePercent);
+                  const showOffHoursDailyChange = shouldShowExtendedQuote(
+                    usSessionState,
+                    quote?.marketState,
+                    quote?.preMarketChangePercent,
+                  );
                   const currentValue = shares * currentPrice;
                   const gainLoss = currentValue - investedDisplay;
                   const gainLossPercent = investedDisplay > 0 ? (gainLoss / investedDisplay) * 100 : 0;
@@ -2918,14 +2910,19 @@ export default function Dashboard() {
                       const preMarketPrice =
                         quote?.preMarketPrice != null ? convertPrice(quote.preMarketPrice, tickerCurrency) : null;
                       const showPremarketPrice =
-                        usSessionState !== "LIVE" &&
+                        shouldShowExtendedQuote(
+                          usSessionState,
+                          quote?.marketState,
+                          quote?.preMarketChangePercent,
+                        ) &&
                         preMarketPrice != null &&
                         Number.isFinite(preMarketPrice) &&
                         preMarketPrice > 0;
-                      const showOffHoursDailyChange =
-                        usSessionState !== "LIVE" &&
-                        quote?.preMarketChangePercent != null &&
-                        Number.isFinite(quote.preMarketChangePercent);
+                      const showOffHoursDailyChange = shouldShowExtendedQuote(
+                        usSessionState,
+                        quote?.marketState,
+                        quote?.preMarketChangePercent,
+                      );
                       const currentValue = shares * currentPrice;
                       const gainLoss = currentValue - investedDisplay;
                       const gainLossPercent = investedDisplay > 0 ? (gainLoss / investedDisplay) * 100 : 0;
