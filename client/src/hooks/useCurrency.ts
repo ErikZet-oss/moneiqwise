@@ -2,6 +2,7 @@ import { useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Currency } from "@shared/schema";
+import { getTickerCostCurrency, getTickerCurrency } from "@shared/tickerCurrency";
 
 interface ExchangeRate {
   eurToUsd: number;
@@ -114,55 +115,16 @@ export function useCurrency() {
     [averageCostDisplayCurrency, rate],
   );
 
-  // Get currency for a ticker
-  const getTickerCurrency = (ticker: string): "EUR" | "USD" | "GBP" | "CZK" | "PLN" => {
-    const upperTicker = ticker.toUpperCase();
-    // German exchanges (XETRA, Frankfurt, Berlin, Düsseldorf, Hamburg, Stuttgart, Munich)
-    if (
-      upperTicker.endsWith(".DE") ||
-      upperTicker.endsWith(".F") ||
-      upperTicker.endsWith(".BE") ||
-      upperTicker.endsWith(".DU") ||
-      upperTicker.endsWith(".HM") ||
-      upperTicker.endsWith(".SG") ||
-      upperTicker.endsWith(".MU")
-    ) {
-      return "EUR";
-    }
-    // Other European exchanges (EUR)
-    if (
-      upperTicker.endsWith(".PA") ||
-      upperTicker.endsWith(".AS") ||
-      upperTicker.endsWith(".MI") ||
-      upperTicker.endsWith(".VI") ||
-      upperTicker.endsWith(".BR") ||
-      upperTicker.endsWith(".SW")
-    ) {
-      return "EUR";
-    }
-    // Prague Stock Exchange (CZK)
-    if (upperTicker.endsWith(".PR")) {
-      return "CZK";
-    }
-    // Warsaw Stock Exchange (PLN)
-    if (upperTicker.endsWith(".WA")) {
-      return "PLN";
-    }
-    if (upperTicker.endsWith(".L")) {
-      return "GBP";
-    }
-    return "USD";
-  };
+  // Get currency for a ticker's market quote (re-export shared helper)
+  // Get cost currency for average cost / invested (re-export shared helper)
 
-  // Format currency with proper symbol
   const formatCurrency = (value: number, showSymbol = true): string => {
-    const formatted = new Intl.NumberFormat("sk-SK", {
+    return new Intl.NumberFormat("sk-SK", {
       style: showSymbol ? "currency" : "decimal",
       currency: currency,
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(value);
-    return formatted;
   };
 
   const formatAverageCostCurrency = useCallback(
@@ -177,7 +139,7 @@ export function useCurrency() {
     [averageCostDisplayCurrency],
   );
 
-  // Format with conversion from ticker's native currency
+  // Format with conversion from ticker's native quote currency
   const formatWithConversion = (price: number, ticker: string): string => {
     const sourceCurrency = getTickerCurrency(ticker);
     const converted = convertPrice(price, sourceCurrency);
@@ -194,6 +156,7 @@ export function useCurrency() {
     convertPrice,
     convertAverageCostPrice,
     getTickerCurrency,
+    getTickerCostCurrency,
     formatCurrency,
     formatAverageCostCurrency,
     formatWithConversion,

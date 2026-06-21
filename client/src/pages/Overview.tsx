@@ -110,7 +110,7 @@ export default function Overview() {
     setSelectedPortfolioId,
     isLoading: portfoliosLoading,
   } = usePortfolio();
-  const { convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
+  const { convertPrice, getTickerCurrency, getTickerCostCurrency, formatCurrency } = useCurrency();
   const { hideAmounts } = useChartSettings();
   const [, setLocation] = useLocation();
 
@@ -219,21 +219,22 @@ export default function Overview() {
     holdings.forEach((h) => {
       const shares = parseFloat(h.shares);
       const invested = parseFloat(h.totalInvested);
-      const tickerCurrency = getTickerCurrency(h.ticker);
+      const quoteCurrency = getTickerCurrency(h.ticker);
+      const costCurrency = getTickerCostCurrency(h.ticker);
 
-      totalInvested += invested;
+      totalInvested += convertPrice(invested, costCurrency);
 
       const quote = quotes?.[h.ticker];
       if (quote) {
         const annualDividendPerShare = Number(quote.annualDividendPerShare ?? 0);
         if (Number.isFinite(annualDividendPerShare) && annualDividendPerShare > 0) {
-          forwardDividendIncome += shares * convertPrice(annualDividendPerShare, tickerCurrency);
+          forwardDividendIncome += shares * convertPrice(annualDividendPerShare, quoteCurrency);
         }
         anyQuote = true;
-        stockValue += shares * convertPrice(quote.price, tickerCurrency);
-        dailyChange += shares * convertPrice(quote.change, tickerCurrency);
+        stockValue += shares * convertPrice(quote.price, quoteCurrency);
+        dailyChange += shares * convertPrice(quote.change, quoteCurrency);
       } else {
-        stockValue += invested;
+        stockValue += convertPrice(invested, costCurrency);
       }
     });
 
@@ -424,7 +425,7 @@ export default function Overview() {
     }
     return map;
     // quotes / currency helpers must trigger recompute when quotes arrive
-  }, [overview, portfolios, quotes, convertPrice, getTickerCurrency, optionsByPortfolioId, forwardIncomeByPortfolio]);
+  }, [overview, portfolios, quotes, convertPrice, getTickerCurrency, getTickerCostCurrency, optionsByPortfolioId, forwardIncomeByPortfolio]);
 
   const grandTotal = useMemo(() => {
     let total = 0;

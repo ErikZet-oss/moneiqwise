@@ -167,7 +167,7 @@ export default function AssetDetail() {
   const rawTicker = (params as { ticker?: string }).ticker ?? "";
   const ticker = rawTicker ? decodeURIComponent(rawTicker) : "";
   const [, setLocation] = useLocation();
-  const { currency, convertPrice, convertAverageCostPrice, getTickerCurrency, formatCurrency, formatAverageCostCurrency, formatWithConversion } = useCurrency();
+  const { currency, convertPrice, convertAverageCostPrice, getTickerCurrency, getTickerCostCurrency, formatCurrency, formatAverageCostCurrency, formatWithConversion } = useCurrency();
   const { hideAmounts } = useChartSettings();
   const isMobile = useIsMobile();
   const [tradePortfolioFilter, setTradePortfolioFilter] = useState<string>("all");
@@ -410,7 +410,8 @@ export default function AssetDetail() {
   }
 
   const quote = data.quote;
-  const tc = getTickerCurrency(data.ticker);
+  const quoteCurrency = getTickerCurrency(data.ticker);
+  const costCurrency = getTickerCostCurrency(data.ticker);
   const changePositive = quote != null && quote.change >= 0;
 
   const formatRoiPct = (p: number | null) =>
@@ -461,14 +462,14 @@ export default function AssetDetail() {
                         className={`text-sm flex items-center gap-1 ${changePositive ? "text-green-500" : "text-red-500"}`}
                       >
                         {changePositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                        {mask(formatCurrency(convertPrice(quote.change, tc)))}{" "}
+                        {mask(formatCurrency(convertPrice(quote.change, quoteCurrency)))}{" "}
                         <span className="text-xs">
                           ({changePositive ? "+" : ""}
                           {(quote.changePercent ?? 0).toFixed(2)}%)
                         </span>
                       </div>
                       <div className="text-xs text-muted-foreground mt-1">
-                        Menovka kotácie: {tc} · zobrazenie: {currency}
+                        Menovka kotácie: {quoteCurrency} · zobrazenie: {currency}
                       </div>
                     </>
                   ) : (
@@ -535,13 +536,13 @@ export default function AssetDetail() {
           <div>
             <div className="text-xs text-muted-foreground">Priemerná nákupná cena (vážená)</div>
             <div className="text-lg font-semibold">
-              {mask(formatAverageCostCurrency(convertAverageCostPrice(data.totals.averageCost, tc)))}
+              {mask(formatAverageCostCurrency(convertAverageCostPrice(data.totals.averageCost, costCurrency)))}
             </div>
           </div>
           <div>
             <div className="text-xs text-muted-foreground">Celkom investované</div>
             <div className="text-lg font-semibold">
-              {mask(formatCurrency(convertPrice(data.totals.totalInvested, tc)))}
+              {mask(formatCurrency(convertPrice(data.totals.totalInvested, costCurrency)))}
             </div>
           </div>
         </CardContent>
@@ -576,10 +577,10 @@ export default function AssetDetail() {
                     </TableCell>
                     <TableCell className="text-right font-mono">{formatShareQuantity(p.shares)}</TableCell>
                     <TableCell className="text-right">
-                      {mask(formatAverageCostCurrency(convertAverageCostPrice(p.averageCost, tc)))}
+                      {mask(formatAverageCostCurrency(convertAverageCostPrice(p.averageCost, costCurrency)))}
                     </TableCell>
                     <TableCell className="text-right">
-                      {mask(formatCurrency(convertPrice(p.totalInvested, tc)))}
+                      {mask(formatCurrency(convertPrice(p.totalInvested, costCurrency)))}
                     </TableCell>
                   </TableRow>
                 ))}
