@@ -1,4 +1,5 @@
 import type { Transaction } from "./schema";
+import { isPhysicalMetalTicker } from "./physicalMetal";
 import { sumCashFlowEurFromRows } from "./cashFromTransactions";
 import { buySellLineEur, inferTradeCurrency } from "./transactionEur";
 import { convertAmountBetween, type AllExchangeRates } from "./convertAmountBetween";
@@ -23,6 +24,7 @@ export function transactionNetCashDeltaEur(
     return sumCashFlowEurFromRows([t]);
   }
   if (t.type === "BUY" || t.type === "SELL") {
+    if (isPhysicalMetalTicker(t.ticker)) return 0;
     const { eur } = buySellLineEur(t, fallbackEurPerUnit);
     if (!Number.isFinite(eur)) return 0;
     return t.type === "BUY" ? -eur : eur;

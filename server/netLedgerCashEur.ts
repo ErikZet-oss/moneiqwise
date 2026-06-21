@@ -1,4 +1,5 @@
 import type { Transaction } from "@shared/schema";
+import { isPhysicalMetalTicker } from "@shared/physicalMetal";
 import { sumCashFlowEurFromRows } from "@shared/cashFromTransactions";
 import { buySellLineEur, inferTradeCurrency } from "@shared/transactionEur";
 import { buildEurPerUnitByTxnIdForTransactions } from "./eurAtTransactionDate";
@@ -79,6 +80,10 @@ export async function computeCashLedgerBreakdownEur(
       continue;
     }
     if (t.type === "BUY" || t.type === "SELL") {
+      if (isPhysicalMetalTicker(t.ticker)) {
+        bump(t.type);
+        continue;
+      }
       const { eur } = buySellLineEur(t, eurM.get(t.id) ?? null);
       if (!Number.isFinite(eur)) continue;
       if (t.type === "BUY") {
