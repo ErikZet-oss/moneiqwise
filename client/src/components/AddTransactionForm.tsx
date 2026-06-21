@@ -24,6 +24,11 @@ import { usePortfolio } from "@/hooks/usePortfolio";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Check, ChevronsUpDown, Loader2, TrendingUp, TrendingDown, Coins, Briefcase, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
 import { CASH_FLOW_TICKER } from "@shared/schema";
+import {
+  isSilverPortfolio,
+  PHYSICAL_SILVER_DISPLAY_NAME,
+  PHYSICAL_SILVER_TICKER,
+} from "@shared/physicalMetal";
 import { getTickerCurrency } from "@shared/tickerCurrency";
 import { cn } from "@/lib/utils";
 
@@ -101,6 +106,7 @@ const transactionSchema = z
   .refine(
     (data) => {
       if (data.type === "BUY" || data.type === "SELL" || data.type === "DIVIDEND") {
+        if (data.ticker?.trim().toUpperCase() === PHYSICAL_SILVER_TICKER) return true;
         if (!data.ticker?.trim()) return false;
         if (!data.companyName?.trim()) return false;
         return true;
@@ -149,6 +155,9 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
   const [loadingPrice, setLoadingPrice] = useState(false);
   const [selectedPortfolioId, setSelectedPortfolioId] = useState<string>("");
 
+  const activePortfolio = portfolios.find((p) => p.id === selectedPortfolioId);
+  const isSilverMode = isSilverPortfolio(activePortfolio?.brokerCode);
+
   const debouncedSearch = useDebounce(inputValue, 300);
 
   useEffect(() => {
@@ -187,8 +196,41 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
       if (!res.ok) throw new Error("Failed to search stocks");
       return res.json();
     },
-    enabled: debouncedSearch.length >= 1,
+    enabled: !isSilverMode && debouncedSearch.length >= 1,
   });
+
+  const { data: silverSpotQuote } = useQuery<StockQuote>({
+    queryKey: ["/api/stocks/quote", PHYSICAL_SILVER_TICKER],
+    queryFn: async () => {
+      const res = await fetch(`/api/stocks/quote/${encodeURIComponent(PHYSICAL_SILVER_TICKER)}`);
+      if (!res.ok) throw new Error("Failed to fetch silver spot");
+      return res.json();
+    },
+    enabled: isSilverMode && (transactionType === "BUY" || transactionType === "SELL"),
+  });
+
+  useEffect(() => {
+    if (!isSilverMode) return;
+    form.setValue("ticker", PHYSICAL_SILVER_TICKER);
+    if (!form.getValues("companyName")?.trim()) {
+      form.setValue("companyName", PHYSICAL_SILVER_DISPLAY_NAME);
+    }
+    form.setValue("tradeCurrency", "EUR");
+    setSelectedStock({
+      ticker: PHYSICAL_SILVER_TICKER,
+      name: PHYSICAL_SILVER_DISPLAY_NAME,
+      exchange: "Spot XAG",
+      currency: "USD",
+    });
+    if (
+      transactionType === "DIVIDEND" ||
+      transactionType === "DEPOSIT" ||
+      transactionType === "WITHDRAWAL"
+    ) {
+      setTransactionType("BUY");
+      form.setValue("type", "BUY");
+    }
+  }, [isSilverMode, selectedPortfolioId, form, transactionType]);
 
   const mutation = useMutation({
     mutationFn: async (data: TransactionForm) => {
@@ -218,10 +260,11 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
         return await apiRequest("POST", "/api/transactions", body);
       }
       const ccy = normalizeTradeCurrency(data.tradeCurrency);
+      const note = (data.companyName || "").trim() || PHYSICAL_SILVER_DISPLAY_NAME;
       const body: Record<string, unknown> = {
         type: data.type,
-        ticker: data.ticker,
-        companyName: data.companyName,
+        ticker: isSilverMode ? PHYSICAL_SILVER_TICKER : data.ticker,
+        companyName: isSilverMode ? note : data.companyName,
         shares: data.shares,
         pricePerShare: data.pricePerShare,
         commission: data.commission,
@@ -365,6 +408,16 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
   };
 
   const getDescription = () => {
+    if (isSilverMode) {
+      switch (transactionType) {
+        case "BUY":
+          return "Zaznamenajte nákup strieborných mincí (1 ks = 1 trójska unca). Aktuálna hodnota sa počíta zo spot ceny striebra.";
+        case "SELL":
+          return "Zaznamenajte predaj strieborných mincí.";
+        default:
+          return "Transakcia so striebrom.";
+      }
+    }
     switch (transactionType) {
       case "BUY":
         return "Pridajte nákup akcie do svojho portfólia.";
@@ -460,6 +513,8 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
                   <TrendingDown className="h-4 w-4" />
                   Predaj
                 </Button>
+                {!isSilverMode && (
+                <>
                 <Button
                   type="button"
                   variant={transactionType === "DIVIDEND" ? "default" : "outline"}
@@ -499,6 +554,8 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
                   <ArrowUpFromLine className="h-4 w-4" />
                   Výber
                 </Button>
+                </>
+                )}
               </div>
             </div>
 
@@ -522,10 +579,10 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
               </Select>
             </div>
 
-            {!isCashFlow && (
-              <FormField
-                control={form.control}
-                name="tradeCurrency"
+            {!isCashFlow && !isSilverMode && (
+            <FormField
+              control={form.control}
+              name="tradeCurrency"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Mena obchodu</FormLabel>
@@ -605,7 +662,49 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
               </div>
             )}
 
-            {!isCashFlow && (
+            {isSilverMode && !isCashFlow && (
+              <div className="space-y-4 p-4 rounded-lg border border-dashed bg-muted/40">
+                <p className="text-sm font-medium">Striebro 1 oz (univerzálna minca)</p>
+                <p className="text-xs text-muted-foreground">
+                  Počet = počet uncí / mincí. Nákupná cenu zadajte v EUR — koľko ste reálne zaplatili za 1 mincu.
+                  Aktuálna hodnota portfólia sa počíta zo spot ceny striebra (XAG, USD/oz).
+                </p>
+                {silverSpotQuote && (
+                  <div className="text-sm flex justify-between gap-2">
+                    <span className="text-muted-foreground">Spot striebra teraz:</span>
+                    <span className="font-medium tabular-nums">
+                      {silverSpotQuote.price.toFixed(2)} USD/oz
+                      <span className="text-muted-foreground font-normal ml-1">
+                        ({silverSpotQuote.changePercent >= 0 ? "+" : ""}
+                        {silverSpotQuote.changePercent.toFixed(2)} %)
+                      </span>
+                    </span>
+                  </div>
+                )}
+                <FormField
+                  control={form.control}
+                  name="companyName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Poznámka (voliteľné)</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="napr. Maple Leaf 2024, nákup u predajcu XY…"
+                          {...field}
+                          data-testid="input-silver-note"
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Ak necháte prázdne, zobrazí sa „{PHYSICAL_SILVER_DISPLAY_NAME}“.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+
+            {!isCashFlow && !isSilverMode && (
             <FormField
               control={form.control}
               name="ticker"
@@ -803,7 +902,7 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
                   name="shares"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Počet kusov</FormLabel>
+                      <FormLabel>{isSilverMode ? "Počet mincí (uncí)" : "Počet kusov"}</FormLabel>
                       <FormControl>
                         <Input type="number" step="0.0001" placeholder="0.00" {...field} data-testid="input-shares" />
                       </FormControl>
@@ -823,7 +922,9 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
                         ? `Suma (kladne číslo) — ${cashCcy}`
                         : transactionType === "DIVIDEND"
                           ? `Celková suma dividendy (${tradeCcy})`
-                          : `Cena za akciu (${tradeCcy})`}
+                          : isSilverMode
+                            ? `Nákupná cena za 1 oz (${tradeCcy})`
+                            : `Cena za akciu (${tradeCcy})`}
                     </FormLabel>
                     <FormControl>
                       <Input

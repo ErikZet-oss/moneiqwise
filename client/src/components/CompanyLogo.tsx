@@ -200,6 +200,19 @@ export function CompanyLogo({ ticker, companyName, size = "md", className = "" }
   const fullTicker = ticker.toUpperCase();
   const cleanTicker = fullTicker.split(".")[0];
 
+  if (fullTicker.startsWith("PM:")) {
+    return (
+      <Avatar className={`${sizeClasses[size]} ${className}`} data-testid={`logo-${ticker}`}>
+        <AvatarFallback
+          className="text-[10px] font-bold text-slate-800"
+          style={{ background: "linear-gradient(145deg, #e2e8f0 0%, #94a3b8 50%, #cbd5e1 100%)" }}
+        >
+          Ag
+        </AvatarFallback>
+      </Avatar>
+    );
+  }
+
   const getLogoUrls = (): string[] => {
     const urls: string[] = [];
     const domain = tickerToDomain[cleanTicker];

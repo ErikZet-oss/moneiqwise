@@ -92,6 +92,12 @@ export const BROKER_CATALOG: Record<BrokerCode, BrokerInfo> = {
     color: "#f7931a",
     textColor: "#ffffff",
   },
+  silver: {
+    name: "Strieborné mince",
+    shortName: "Ag",
+    color: "#94a3b8",
+    textColor: "#1e293b",
+  },
   other: {
     name: "Iný broker",
     shortName: "?",
@@ -109,6 +115,29 @@ const sizeClasses = {
 
 type LogoSize = keyof typeof sizeClasses;
 
+function SilverCoinMark({ size, testId }: { size: LogoSize; testId?: string }) {
+  const boxClass = `${sizeClasses[size]} rounded-full flex items-center justify-center shrink-0 ring-1 ring-slate-400/60`;
+  return (
+    <div
+      className={boxClass}
+      style={{
+        background: "linear-gradient(145deg, #e2e8f0 0%, #94a3b8 45%, #cbd5e1 100%)",
+        color: "#334155",
+      }}
+      title="Strieborné mince"
+      data-testid={testId}
+      aria-hidden
+    >
+      <svg viewBox="0 0 24 24" className="h-[70%] w-[70%]" fill="currentColor">
+        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="1.5" opacity="0.5" />
+        <text x="12" y="15.5" textAnchor="middle" fontSize="9" fontWeight="700" fill="currentColor">
+          Ag
+        </text>
+      </svg>
+    </div>
+  );
+}
+
 function BrokerLogoMark({
   brokerCode,
   broker,
@@ -122,10 +151,14 @@ function BrokerLogoMark({
 }) {
   const [logoFailed, setLogoFailed] = useState(false);
   const domain = BROKER_LOGO_DOMAIN[brokerCode];
-  const showInitials = brokerCode === "other" || !domain || logoFailed;
+  const showInitials = brokerCode === "other" || brokerCode === "silver" || !domain || logoFailed;
 
   const shortLen = size === "xs" ? 2 : 3;
   const boxClass = `${sizeClasses[size]} rounded-md flex items-center justify-center font-bold shrink-0`;
+
+  if (brokerCode === "silver") {
+    return <SilverCoinMark size={size} testId={testId} />;
+  }
 
   if (showInitials) {
     return (

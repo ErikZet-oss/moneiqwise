@@ -56,6 +56,7 @@ export const BROKER_CODES = [
   "freedom24",
   "tastyworks",
   "crypto",
+  "silver",
   "other"
 ] as const;
 

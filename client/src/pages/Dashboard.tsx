@@ -52,6 +52,7 @@ import { BrokerLogo } from "@/components/BrokerLogo";
 import { MobilePortfolioChart } from "@/components/MobilePortfolioChart";
 import { DesktopPortfolioChart } from "@/components/DesktopPortfolioChart";
 import type { Holding } from "@shared/schema";
+import { isPhysicalSilverTicker } from "@shared/physicalMetal";
 import { CASH_INTEREST_DISPLAY_NAME, CASH_INTEREST_TICKER } from "@shared/tickerCurrency";
 import {
   getExtendedSessionLabel,
@@ -67,6 +68,7 @@ import { formatShareQuantity } from "@/lib/utils";
 function mobileSimpleAssetBadgeLabel(holding: Holding): string {
   const t = holding.ticker.toUpperCase();
   if (t === CASH_INTEREST_TICKER) return "Hotovosť";
+  if (isPhysicalSilverTicker(t)) return "Striebro";
   const name = (holding.companyName || "").toLowerCase();
   if (/\betf\b/.test(name) || /\betc\b/.test(name) || /\betf\b/.test(t)) return "ETF";
   return "Akcie";

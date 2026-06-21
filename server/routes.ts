@@ -24,10 +24,12 @@ import {
   CASH_INTEREST_TAX_DISPLAY_NAME,
   CASH_INTEREST_TICKER,
 } from "@shared/tickerCurrency";
+import { isPhysicalMetalTicker, isPhysicalSilverTicker } from "@shared/physicalMetal";
 import {
   fetchYahooV7Quote,
   mapExtendedQuoteFromYahooV7,
 } from "./yahooQuoteClient";
+import { fetchSilverHistoricalPrices, fetchSilverSpotQuote } from "./metalQuoteClient";
 import { parseXTBFile, type XTBImportResult } from "./xtbParser";
 import {
   computeRealizedGainsFromTransactionsAsync,
@@ -209,6 +211,28 @@ function isMarketDataTicker(u: string): boolean {
   if (u === CASH_FLOW_TICKER) return false;
   if (u === CASH_INTEREST_TICKER) return false;
   return true;
+}
+
+async function fetchPhysicalMetalQuote(ticker: string): Promise<any> {
+  if (!isPhysicalSilverTicker(ticker)) {
+    throw new Error(`Unsupported physical metal ticker: ${ticker}`);
+  }
+  const spot = await fetchSilverSpotQuote();
+  return {
+    ticker,
+    price: spot.price,
+    change: spot.change,
+    changePercent: spot.changePercent,
+    quoteDate: null,
+    marketState: "CLOSED",
+    isMarketOpen: false,
+    preMarketPrice: null,
+    preMarketChange: null,
+    preMarketChangePercent: null,
+    high52: spot.high52,
+    low52: spot.low52,
+    annualDividendPerShare: 0,
+  };
 }
 
 // -----------------------------------------------------------------------------
@@ -1631,18 +1655,34 @@ async function fetchStockQuote(ticker: string, skipCache = false): Promise<any> 
   if (!skipCache && cached && Date.now() - cached.timestamp < quoteCacheTtl) {
     // Backward compatibility: older cache entries may miss newer fields.
     // If any required field is missing, force fresh fetch to avoid stale/zero metrics.
+    const isPhysical = isPhysicalMetalTicker(ticker);
     const hasRequiredFields =
       cached.data &&
       Object.prototype.hasOwnProperty.call(cached.data, "preMarketPrice") &&
       Object.prototype.hasOwnProperty.call(cached.data, "annualDividendPerShare");
     const missingExtended =
+      !isPhysical &&
       cached.data?.preMarketPrice == null &&
       cached.data?.preMarketChangePercent == null;
     const staleExtended = missingExtended && Date.now() - cached.timestamp > 45 * 1000;
-    const staleChartExtended = isStaleChartExtendedCache(cached.data);
-    const staleOvernightPre = isStaleOvernightInPreMarketCache(cached.data);
+    const staleChartExtended = !isPhysical && isStaleChartExtendedCache(cached.data);
+    const staleOvernightPre = !isPhysical && isStaleOvernightInPreMarketCache(cached.data);
     if (hasRequiredFields && !staleExtended && !staleChartExtended && !staleOvernightPre) {
       return cached.data;
+    }
+  }
+
+  if (isPhysicalMetalTicker(ticker)) {
+    try {
+      const result = await fetchPhysicalMetalQuote(ticker);
+      priceCache.set(ticker, { data: result, timestamp: Date.now() });
+      scheduleCacheSave();
+      console.log(`Physical metal quote for ${ticker}: ${result.price} USD/oz`);
+      return result;
+    } catch (error) {
+      console.warn(`Physical metal quote failed for ${ticker}:`, error);
+      if (cached) return cached.data;
+      throw error;
     }
   }
 
@@ -1758,6 +1798,20 @@ async function fetchHistoricalPrices(ticker: string): Promise<Record<string, num
   const cached = historicalCache.get(ticker);
   if (cached && Date.now() - cached.timestamp < HISTORICAL_CACHE_TTL) {
     return cached.data;
+  }
+
+  if (isPhysicalSilverTicker(ticker)) {
+    try {
+      const prices = await fetchSilverHistoricalPrices();
+      if (Object.keys(prices).length > 0) {
+        historicalCache.set(ticker, { data: prices, timestamp: Date.now() });
+        scheduleCacheSave();
+        console.log(`Silver historical success: ${Object.keys(prices).length} days`);
+        return prices;
+      }
+    } catch (error) {
+      console.warn("Silver historical fetch failed:", error);
+    }
   }
 
   let prices: Record<string, number> = {};

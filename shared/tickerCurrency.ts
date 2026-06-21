@@ -17,6 +17,9 @@ export function getTickerCurrency(
   if (u === CASH_INTEREST_TICKER || u === "PORTFOLIO_CASH_FLOW" || u === "CASH") {
     return "EUR";
   }
+  if (u.startsWith("PM:")) {
+    return "USD";
+  }
   if (
     u.endsWith(".DE") ||
     u.endsWith(".F") ||

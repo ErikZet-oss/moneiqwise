@@ -461,7 +461,13 @@ export default function Settings() {
             />
             <Select
               value={newPortfolioBroker || "none"}
-              onValueChange={(value) => setNewPortfolioBroker(value === "none" ? undefined : value as BrokerCode)}
+              onValueChange={(value) => {
+                const code = value === "none" ? undefined : (value as BrokerCode);
+                setNewPortfolioBroker(code);
+                if (code === "silver" && !newPortfolioName.trim()) {
+                  setNewPortfolioName("Strieborné mince");
+                }
+              }}
             >
               <SelectTrigger className="w-[180px]" data-testid="select-new-portfolio-broker">
                 <SelectValue placeholder="Broker (voliteľné)">
@@ -618,7 +624,7 @@ export default function Settings() {
               <label className="text-sm font-medium">Broker</label>
               <Select
                 value={editingPortfolio?.brokerCode || "none"}
-                onValueChange={(value) => setEditingPortfolio(prev => prev ? { ...prev, brokerCode: value === "none" ? null : value as BrokerCode } : null)}
+              onValueChange={(value) => setEditingPortfolio(prev => prev ? { ...prev, brokerCode: value === "none" ? null : value as BrokerCode } : null)}
               >
                 <SelectTrigger data-testid="select-edit-portfolio-broker">
                   <SelectValue placeholder="Vyberte brokera">
