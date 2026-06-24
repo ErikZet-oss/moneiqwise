@@ -29,7 +29,7 @@ export function buildCloseTradeFallbackEurBySellId(transactions: Transaction[]):
 
   const usedCloseIds = new Set<string>();
   const bySellId = new Map<string, number>();
-  const maxDiffMs = 5 * 60 * 1000;
+  const maxDiffMs = 60 * 60 * 1000;
   const minuteMs = 60 * 1000;
   const toMinuteKey = (ts: number) => Math.floor(ts / minuteMs);
   const closeByMinute = new Map<number, Transaction[]>();
@@ -77,6 +77,30 @@ export function buildCloseTradeFallbackEurBySellId(transactions: Transaction[]):
         : NaN;
     if (!Number.isFinite(amtEur) || Math.abs(amtEur) <= 1e-9) continue;
     bySellId.set(sell.id, amtEur);
+  }
+
+  // Záloha: ten istý kalendárny deň (XTB export môže mať predaj a close trade hodiny od seba).
+  const isoDay = (ts: number) => new Date(ts).toISOString().slice(0, 10);
+  const unmatchedSells = sells.filter((s) => !bySellId.has(s.id));
+  const unmatchedClose = closeCashRows.filter((c) => !usedCloseIds.has(c.id));
+  if (unmatchedSells.length === 1 && unmatchedClose.length === 1) {
+    const sell = unmatchedSells[0]!;
+    const cashTx = unmatchedClose[0]!;
+    const sellTs = new Date(sell.transactionDate as unknown as string).getTime();
+    const cashTs = new Date(cashTx.transactionDate as unknown as string).getTime();
+    if (Number.isFinite(sellTs) && Number.isFinite(cashTs) && isoDay(sellTs) === isoDay(cashTs)) {
+      const baseEur = parseFloat(String(cashTx.baseCurrencyAmount ?? "NaN"));
+      const shares = parseFloat(String(cashTx.shares ?? "NaN"));
+      const price = parseFloat(String(cashTx.pricePerShare ?? "NaN"));
+      const amtEur = Number.isFinite(baseEur)
+        ? baseEur
+        : Number.isFinite(shares) && Number.isFinite(price)
+          ? shares * price
+          : NaN;
+      if (Number.isFinite(amtEur) && Math.abs(amtEur) > 1e-9) {
+        bySellId.set(sell.id, amtEur);
+      }
+    }
   }
 
   return bySellId;

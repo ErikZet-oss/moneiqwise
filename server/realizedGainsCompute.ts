@@ -161,6 +161,7 @@ function mergeSkippedSellCloseTradeFallback(
   fifoProcessedSellIds: Set<string>,
   fallbackBySellId: Map<string, number>,
   now: Date,
+  skipSellIds: Set<string> = new Set(),
 ): number {
   const startOfYear = new Date(now.getFullYear(), 0, 1);
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -174,6 +175,7 @@ function mergeSkippedSellCloseTradeFallback(
 
   for (const sell of sells) {
     if (fifoProcessedSellIds.has(sell.id)) continue;
+    if (skipSellIds.has(sell.id)) continue;
     const sh = Math.abs(parseFloat(String(sell.shares)));
     if (!(sh > 0)) continue;
     const fb = fallbackBySellId.get(sell.id);
@@ -234,17 +236,24 @@ export async function computeRealizedGainsFromTransactionsAsync(
     }
   }
 
-  const fifo = computeFifoRealizedGainsFromTransactions(userTransactions, m, now);
+  const fifo = computeFifoRealizedGainsFromTransactions(
+    userTransactions,
+    m,
+    now,
+    fallbackBySellId,
+  );
   const summary: RealizedGainsComputedSummary = {
     ...fifo.summary,
     byTicker: fifo.summary.byTicker.map((r) => ({ ...r })),
   };
+  mergedPairedCloseTradeEur += fifo.mergedCloseTradePairedEur;
   mergedPairedCloseTradeEur += mergeSkippedSellCloseTradeFallback(
     summary,
     sells,
     fifo.fifoProcessedSellIds,
     fallbackBySellId,
     now,
+    fifo.closeTradePairedSellIds,
   );
 
   if (summary.transactionCount > 0) {
@@ -288,7 +297,12 @@ export function computeRealizedGainsFromTransactions(
     }
   }
 
-  const fifo = computeFifoRealizedGainsFromTransactions(userTransactions, m, now);
+  const fifo = computeFifoRealizedGainsFromTransactions(
+    userTransactions,
+    m,
+    now,
+    fallbackBySellId,
+  );
   const summary: RealizedGainsComputedSummary = {
     ...fifo.summary,
     byTicker: fifo.summary.byTicker.map((r) => ({ ...r })),
@@ -299,6 +313,7 @@ export function computeRealizedGainsFromTransactions(
     fifo.fifoProcessedSellIds,
     fallbackBySellId,
     now,
+    fifo.closeTradePairedSellIds,
   );
 
   if (summary.transactionCount > 0) {

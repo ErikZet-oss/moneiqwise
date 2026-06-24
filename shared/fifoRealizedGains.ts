@@ -22,13 +22,17 @@ function txnIsoDate(txn: Transaction): string {
   return new Date(txn.transactionDate as unknown as string).toISOString().slice(0, 10);
 }
 
+const REALIZED_NEAR_ZERO = 1e-6;
+
 /**
  * FIFO v EUR. `eurPerUnitByTxnId` – vypočítané v deň D z Frankfurter, ak v DB chýba kurz.
+ * `closeTradeFallbackBySellId` – XTB „close trade“ vklad spárovaný s predajom (profit v EUR).
  */
 export function computeFifoRealizedGainsFromTransactions(
   userTransactions: Transaction[],
   eurPerUnitByTxnId: Map<string, number | null>,
   now = new Date(),
+  closeTradeFallbackBySellId?: Map<string, number>,
 ): {
   summary: RealizedGainsComputedSummary;
   openLots: Record<string, OpenFifoLot[]>;
@@ -38,6 +42,10 @@ export function computeFifoRealizedGainsFromTransactions(
   realizedEurByYearMonth: Record<string, number>;
   /** SELL, ktoré FIFO spracovalo (má platný výnos v EUR). */
   fifoProcessedSellIds: Set<string>;
+  /** SELL, kde bol použitý close-trade fallback namiesto nulového FIFO. */
+  closeTradePairedSellIds: Set<string>;
+  /** Suma EUR z close-trade párovania zarátaná do summary (pre odpočet od hrubého close-trade). */
+  mergedCloseTradePairedEur: number;
 } {
   const txnTypeOrder = (t: Transaction) => {
     const k = String(t.type ?? "")
@@ -73,6 +81,8 @@ export function computeFifoRealizedGainsFromTransactions(
   const realizedEurByCalendarYear: Record<number, number> = {};
   const realizedEurByYearMonth: Record<string, number> = {};
   const fifoProcessedSellIds = new Set<string>();
+  const closeTradePairedSellIds = new Set<string>();
+  let mergedCloseTradePairedEur = 0;
 
   const getKey = (txn: Transaction) => transactionLotKey(txn);
 
@@ -121,7 +131,19 @@ export function computeFifoRealizedGainsFromTransactions(
         toSell -= take;
       }
 
-      const gain = proceedsEur - costRemoved;
+      let gain = proceedsEur - costRemoved;
+      const closeFb = closeTradeFallbackBySellId?.get(txn.id);
+      if (
+        Math.abs(gain) < REALIZED_NEAR_ZERO &&
+        closeFb != null &&
+        Number.isFinite(closeFb) &&
+        Math.abs(closeFb) >= REALIZED_NEAR_ZERO
+      ) {
+        gain = closeFb;
+        closeTradePairedSellIds.add(txn.id);
+        mergedCloseTradePairedEur += closeFb;
+      }
+
       totalRealized += gain;
 
       const txnDate = new Date(txn.transactionDate as unknown as string);
@@ -170,5 +192,7 @@ export function computeFifoRealizedGainsFromTransactions(
     realizedEurByCalendarYear,
     realizedEurByYearMonth,
     fifoProcessedSellIds,
+    closeTradePairedSellIds,
+    mergedCloseTradePairedEur,
   };
 }
