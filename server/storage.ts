@@ -30,6 +30,7 @@ import { buildEurPerUnitByTxnIdForTransactions } from "./eurAtTransactionDate";
 import { computeFifoRealizedGainsFromTransactions } from "@shared/fifoRealizedGains";
 import { sumCloseTradeCashFlowEurFromRows } from "@shared/cashFromTransactions";
 import { dividendNetEur } from "./pnlBreakdown";
+import { enrichHoldingsWithCostCurrency } from "@shared/holdingCostCurrency";
 import { eq, and, desc, asc, sql, isNull, or, inArray, notInArray, type SQL } from "drizzle-orm";
 
 export type RegistrationAdminListFilter = "pending" | "blocked" | "approved" | "all";
@@ -1068,10 +1069,13 @@ export class DatabaseStorage implements IStorage {
 
         const cashEur = await netLedgerCashEur(list, rates, eurM);
 
+        const portfolioHoldings = holdingsByPid.get(id) ?? [];
+        const portfolioTxns = txnsByPid.get(id) ?? [];
+
         return [
           id,
           {
-            holdings: holdingsByPid.get(id) ?? [],
+            holdings: enrichHoldingsWithCostCurrency(portfolioHoldings, portfolioTxns),
             totalRealized,
             closeTradeNetEur,
             dividendNet,

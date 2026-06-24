@@ -3,6 +3,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Currency } from "@shared/schema";
 import { getTickerCostCurrency, getTickerCurrency } from "@shared/tickerCurrency";
+import type { HoldingWithCostCurrency } from "@shared/holdingCostCurrency";
+import type { TradeCurrency } from "@shared/transactionEur";
 
 interface ExchangeRate {
   eurToUsd: number;
@@ -146,6 +148,14 @@ export function useCurrency() {
     return formatCurrency(converted);
   };
 
+  const resolveHoldingCostCurrency = useCallback(
+    (holding: Pick<HoldingWithCostCurrency, "ticker" | "costCurrency">): TradeCurrency => {
+      if (holding.costCurrency) return holding.costCurrency;
+      return getTickerCostCurrency(holding.ticker);
+    },
+    [],
+  );
+
   return {
     currency,
     averageCostDisplayCurrency,
@@ -157,6 +167,7 @@ export function useCurrency() {
     convertAverageCostPrice,
     getTickerCurrency,
     getTickerCostCurrency,
+    resolveHoldingCostCurrency,
     formatCurrency,
     formatAverageCostCurrency,
     formatWithConversion,

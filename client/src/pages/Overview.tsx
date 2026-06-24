@@ -21,7 +21,8 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
 import { BrokerLogo } from "@/components/BrokerLogo";
-import type { Holding, OptionTrade } from "@shared/schema";
+import type { HoldingWithCostCurrency } from "@shared/holdingCostCurrency";
+import type { OptionTrade } from "@shared/schema";
 
 interface StockQuote {
   ticker: string;
@@ -40,7 +41,7 @@ interface OverviewBundle {
   byPortfolioId: Record<
     string,
     {
-      holdings: Holding[];
+      holdings: HoldingWithCostCurrency[];
       /** Realiz. zisk z akcii (FIFO) v EUR. */
       totalRealized: number;
       /** Hotov. efekt z XTB „close trade“ (vklad/výber), nie je v FIFO. */
@@ -110,7 +111,7 @@ export default function Overview() {
     setSelectedPortfolioId,
     isLoading: portfoliosLoading,
   } = usePortfolio();
-  const { convertPrice, getTickerCurrency, getTickerCostCurrency, formatCurrency } = useCurrency();
+  const { convertPrice, getTickerCurrency, resolveHoldingCostCurrency, formatCurrency } = useCurrency();
   const { hideAmounts } = useChartSettings();
   const [, setLocation] = useLocation();
 
@@ -202,7 +203,7 @@ export default function Overview() {
   }, [optionTrades, portfolios]);
 
   const computeMetrics = (
-    holdings: Holding[],
+    holdings: HoldingWithCostCurrency[],
     optionTradesForPortfolio: OptionTrade[],
     totalRealizedFifoEur: number,
     closeTradeNetEur: number,
@@ -220,7 +221,7 @@ export default function Overview() {
       const shares = parseFloat(h.shares);
       const invested = parseFloat(h.totalInvested);
       const quoteCurrency = getTickerCurrency(h.ticker);
-      const costCurrency = getTickerCostCurrency(h.ticker);
+      const costCurrency = resolveHoldingCostCurrency(h);
 
       totalInvested += convertPrice(invested, costCurrency);
 
@@ -425,7 +426,7 @@ export default function Overview() {
     }
     return map;
     // quotes / currency helpers must trigger recompute when quotes arrive
-  }, [overview, portfolios, quotes, convertPrice, getTickerCurrency, getTickerCostCurrency, optionsByPortfolioId, forwardIncomeByPortfolio]);
+  }, [overview, portfolios, quotes, convertPrice, getTickerCurrency, resolveHoldingCostCurrency, optionsByPortfolioId, forwardIncomeByPortfolio]);
 
   const grandTotal = useMemo(() => {
     let total = 0;

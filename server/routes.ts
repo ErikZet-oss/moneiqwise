@@ -26,6 +26,10 @@ import {
 } from "@shared/tickerCurrency";
 import { isPhysicalMetalTicker, isPhysicalSilverTicker } from "@shared/physicalMetal";
 import {
+  enrichHoldingsWithCostCurrency,
+  inferHoldingCostCurrency,
+} from "@shared/holdingCostCurrency";
+import {
   fetchYahooV7Quote,
   mapExtendedQuoteFromYahooV7,
 } from "./yahooQuoteClient";
@@ -3061,7 +3065,8 @@ export async function registerRoutes(
       const userId = req.user.claims.sub;
       const portfolioId = req.query.portfolio as string | undefined;
       const userHoldings = await storage.getHoldingsByUser(userId, portfolioId);
-      res.json(userHoldings);
+      const txns = await storage.getTransactionsByUser(userId, portfolioId ?? "all");
+      res.json(enrichHoldingsWithCostCurrency(userHoldings, txns));
     } catch (error) {
       console.error("Error fetching holdings:", error);
       res.status(500).json({ message: "Failed to fetch holdings" });
@@ -3184,6 +3189,9 @@ export async function registerRoutes(
         .map((h) => {
           const pid = h.portfolioId;
           const p = pid ? portfolioMap.get(pid) : undefined;
+          const portfolioTxns = pid
+            ? txRows.filter((t) => t.portfolioId === pid || t.portfolioId == null)
+            : txRows;
           return {
             portfolioId: h.portfolioId,
             portfolioName: p?.name ?? (pid ? "Neznáme portfólio" : "Bez portfólia"),
@@ -3191,6 +3199,7 @@ export async function registerRoutes(
             shares: parseFloat(h.shares),
             averageCost: parseFloat(h.averageCost),
             totalInvested: parseFloat(h.totalInvested),
+            costCurrency: inferHoldingCostCurrency(displayTicker, portfolioTxns),
           };
         });
 
@@ -3290,6 +3299,7 @@ export async function registerRoutes(
       res.json({
         ticker: displayTicker,
         companyName,
+        costCurrency: inferHoldingCostCurrency(displayTicker, txRows),
         positions,
         portfolios: allPortfolios.map((p) => ({ id: p.id, name: p.name })),
         totals: {

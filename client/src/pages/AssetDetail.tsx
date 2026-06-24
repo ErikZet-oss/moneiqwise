@@ -28,6 +28,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { HelpTip } from "@/components/HelpTip";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { BrokerCode, Transaction } from "@shared/schema";
+import type { TradeCurrency } from "@shared/transactionEur";
 import { cn, formatShareQuantity } from "@/lib/utils";
 
 const PRICE_CHART_RANGE_OPTIONS = [
@@ -77,6 +78,7 @@ type PositionRow = {
   shares: number;
   averageCost: number;
   totalInvested: number;
+  costCurrency: TradeCurrency;
 };
 
 type DividendPayment = {
@@ -93,6 +95,7 @@ type DividendPayment = {
 type AssetDetailResponse = {
   ticker: string;
   companyName: string;
+  costCurrency: TradeCurrency;
   positions: PositionRow[];
   portfolios: { id: string; name: string }[];
   totals: { shares: number; totalInvested: number; averageCost: number };
@@ -167,7 +170,7 @@ export default function AssetDetail() {
   const rawTicker = (params as { ticker?: string }).ticker ?? "";
   const ticker = rawTicker ? decodeURIComponent(rawTicker) : "";
   const [, setLocation] = useLocation();
-  const { currency, convertPrice, convertAverageCostPrice, getTickerCurrency, getTickerCostCurrency, formatCurrency, formatAverageCostCurrency, formatWithConversion } = useCurrency();
+  const { currency, convertPrice, convertAverageCostPrice, getTickerCurrency, resolveHoldingCostCurrency, formatCurrency, formatAverageCostCurrency, formatWithConversion } = useCurrency();
   const { hideAmounts } = useChartSettings();
   const isMobile = useIsMobile();
   const [tradePortfolioFilter, setTradePortfolioFilter] = useState<string>("all");
@@ -411,7 +414,7 @@ export default function AssetDetail() {
 
   const quote = data.quote;
   const quoteCurrency = getTickerCurrency(data.ticker);
-  const costCurrency = getTickerCostCurrency(data.ticker);
+  const costCurrency = data.costCurrency ?? resolveHoldingCostCurrency({ ticker: data.ticker });
   const changePositive = quote != null && quote.change >= 0;
 
   const formatRoiPct = (p: number | null) =>
@@ -567,7 +570,9 @@ export default function AssetDetail() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.positions.map((p) => (
+                {data.positions.map((p) => {
+                  const positionCostCurrency = p.costCurrency ?? costCurrency;
+                  return (
                   <TableRow key={p.portfolioId ?? "none"}>
                     <TableCell>
                       <div className="flex items-center gap-2 min-w-0">
@@ -577,13 +582,14 @@ export default function AssetDetail() {
                     </TableCell>
                     <TableCell className="text-right font-mono">{formatShareQuantity(p.shares)}</TableCell>
                     <TableCell className="text-right">
-                      {mask(formatAverageCostCurrency(convertAverageCostPrice(p.averageCost, costCurrency)))}
+                      {mask(formatAverageCostCurrency(convertAverageCostPrice(p.averageCost, positionCostCurrency)))}
                     </TableCell>
                     <TableCell className="text-right">
-                      {mask(formatCurrency(convertPrice(p.totalInvested, costCurrency)))}
+                      {mask(formatCurrency(convertPrice(p.totalInvested, positionCostCurrency)))}
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           )}

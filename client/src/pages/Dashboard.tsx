@@ -51,7 +51,7 @@ import { CompanyLogo } from "@/components/CompanyLogo";
 import { BrokerLogo } from "@/components/BrokerLogo";
 import { MobilePortfolioChart } from "@/components/MobilePortfolioChart";
 import { DesktopPortfolioChart } from "@/components/DesktopPortfolioChart";
-import type { Holding } from "@shared/schema";
+import type { HoldingWithCostCurrency } from "@shared/holdingCostCurrency";
 import { isPhysicalSilverTicker } from "@shared/physicalMetal";
 import { CASH_INTEREST_DISPLAY_NAME, CASH_INTEREST_TICKER } from "@shared/tickerCurrency";
 import {
@@ -65,7 +65,7 @@ import {
 import { formatShareQuantity } from "@/lib/utils";
 
 /** Krátky typ v mobile „jednoduché“ zobrazení (badge ako XTB). */
-function mobileSimpleAssetBadgeLabel(holding: Holding): string {
+function mobileSimpleAssetBadgeLabel(holding: HoldingWithCostCurrency): string {
   const t = holding.ticker.toUpperCase();
   if (t === CASH_INTEREST_TICKER) return "Hotovosť";
   if (isPhysicalSilverTicker(t)) return "Striebro";
@@ -74,7 +74,7 @@ function mobileSimpleAssetBadgeLabel(holding: Holding): string {
   return "Akcie";
 }
 
-function mobileSimpleAssetDisplayName(holding: Holding): string {
+function mobileSimpleAssetDisplayName(holding: HoldingWithCostCurrency): string {
   if (holding.ticker.toUpperCase() === CASH_INTEREST_TICKER) return CASH_INTEREST_DISPLAY_NAME;
   return (holding.companyName || holding.ticker).trim() || holding.ticker;
 }
@@ -180,15 +180,15 @@ async function fetchDashboardQuotesBatch(
 type PortfolioQuoteCurrency = "EUR" | "USD" | "GBP" | "CZK" | "PLN";
 
 function sortHoldingsArray(
-  holdings: Holding[] | undefined,
+  holdings: HoldingWithCostCurrency[] | undefined,
   quotes: Record<string, StockQuote> | undefined,
   sortField: SortField,
   sortDirection: SortDirection,
   convertPrice: (amount: number, sourceCurrency: PortfolioQuoteCurrency) => number,
   convertAverageCostPrice: (amount: number, sourceCurrency: PortfolioQuoteCurrency) => number,
   getTickerCurrency: (ticker: string) => PortfolioQuoteCurrency,
-  getTickerCostCurrency: (ticker: string) => PortfolioQuoteCurrency,
-): Holding[] {
+  resolveHoldingCostCurrency: (holding: Pick<HoldingWithCostCurrency, "ticker" | "costCurrency">) => PortfolioQuoteCurrency,
+): HoldingWithCostCurrency[] {
   if (!holdings) return [];
   if (!quotes) return [...holdings];
 
@@ -202,8 +202,8 @@ function sortHoldingsArray(
     const bAvgCost = parseFloat(b.averageCost);
     const aTickerCurrency = getTickerCurrency(a.ticker);
     const bTickerCurrency = getTickerCurrency(b.ticker);
-    const aCostCurrency = getTickerCostCurrency(a.ticker);
-    const bCostCurrency = getTickerCostCurrency(b.ticker);
+    const aCostCurrency = resolveHoldingCostCurrency(a);
+    const bCostCurrency = resolveHoldingCostCurrency(b);
     const aQuote = quotes[a.ticker];
     const bQuote = quotes[b.ticker];
     const aAvgCostPortfolio = convertPrice(aAvgCost, aCostCurrency);
@@ -434,7 +434,7 @@ interface UpcomingMacroEventsRes {
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
-  const { currency, convertPrice, convertAverageCostPrice, getTickerCurrency, getTickerCostCurrency, formatCurrency, formatAverageCostCurrency } = useCurrency();
+  const { currency, convertPrice, convertAverageCostPrice, getTickerCurrency, resolveHoldingCostCurrency, formatCurrency, formatAverageCostCurrency } = useCurrency();
   const { getQueryParam, selectedPortfolio, isAllPortfolios, portfolios } = usePortfolio();
   const {
     hideAmounts,
@@ -522,7 +522,7 @@ export default function Dashboard() {
     };
   }, []);
   
-  const { data: holdings, isLoading: holdingsLoading } = useQuery<Holding[]>({
+  const { data: holdings, isLoading: holdingsLoading } = useQuery<HoldingWithCostCurrency[]>({
     queryKey: ["/api/holdings", portfolioParam],
     queryFn: async () => {
       const res = await fetch(`/api/holdings?portfolio=${portfolioParam}`);
@@ -1266,7 +1266,7 @@ export default function Dashboard() {
         const shares = parseFloat(holding.shares);
         const invested = parseFloat(holding.totalInvested);
         const quoteCurrency = getTickerCurrency(holding.ticker);
-        const costCurrency = getTickerCostCurrency(holding.ticker);
+        const costCurrency = resolveHoldingCostCurrency(holding);
         
         totalInvested += convertPrice(invested, costCurrency);
         
@@ -1342,7 +1342,7 @@ export default function Dashboard() {
       cashValue,
       convertPrice,
       getTickerCurrency,
-      getTickerCostCurrency,
+      resolveHoldingCostCurrency,
     ],
   );
 
@@ -1459,9 +1459,9 @@ export default function Dashboard() {
         convertPrice,
         convertAverageCostPrice,
         getTickerCurrency,
-        getTickerCostCurrency,
+        resolveHoldingCostCurrency,
       ),
-    [holdings, quotes, sortField, sortDirection, convertPrice, convertAverageCostPrice, getTickerCurrency, getTickerCostCurrency],
+    [holdings, quotes, sortField, sortDirection, convertPrice, convertAverageCostPrice, getTickerCurrency, resolveHoldingCostCurrency],
   );
 
   const mobileSortField: SortField =
@@ -1483,9 +1483,9 @@ export default function Dashboard() {
         convertPrice,
         convertAverageCostPrice,
         getTickerCurrency,
-        getTickerCostCurrency,
+        resolveHoldingCostCurrency,
       ),
-    [holdings, quotes, mobileSortField, mobileAssetsSortOrder, convertPrice, convertAverageCostPrice, getTickerCurrency, getTickerCostCurrency],
+    [holdings, quotes, mobileSortField, mobileAssetsSortOrder, convertPrice, convertAverageCostPrice, getTickerCurrency, resolveHoldingCostCurrency],
   );
 
   const formatPercent = (value: number) => {
@@ -2658,7 +2658,7 @@ export default function Dashboard() {
                   const quote = quotes?.[holding.ticker];
                   const shares = parseFloat(holding.shares);
                   const quoteCurrency = getTickerCurrency(holding.ticker);
-                  const costCurrency = getTickerCostCurrency(holding.ticker);
+                  const costCurrency = resolveHoldingCostCurrency(holding);
                   const avgCostPortfolio = convertPrice(parseFloat(holding.averageCost), costCurrency);
                   const avgCostForDisplay = convertAverageCostPrice(parseFloat(holding.averageCost), costCurrency);
                   const investedDisplay = convertPrice(parseFloat(holding.totalInvested), costCurrency);
@@ -2922,7 +2922,7 @@ export default function Dashboard() {
                       const quote = quotes?.[holding.ticker];
                       const shares = parseFloat(holding.shares);
                       const quoteCurrency = getTickerCurrency(holding.ticker);
-                      const costCurrency = getTickerCostCurrency(holding.ticker);
+                      const costCurrency = resolveHoldingCostCurrency(holding);
                       const avgCostPortfolio = convertPrice(parseFloat(holding.averageCost), costCurrency);
                       const avgCostForDisplay = convertAverageCostPrice(parseFloat(holding.averageCost), costCurrency);
                       const investedDisplay = convertPrice(parseFloat(holding.totalInvested), costCurrency);
