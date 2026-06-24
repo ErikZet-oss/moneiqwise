@@ -111,7 +111,7 @@ export default function Overview() {
     setSelectedPortfolioId,
     isLoading: portfoliosLoading,
   } = usePortfolio();
-  const { convertPrice, getTickerCurrency, resolveHoldingCostCurrency, formatCurrency } = useCurrency();
+  const { convertPrice, getTickerCurrency, resolveHoldingCostCurrency, pnlInvestedForDisplay, formatCurrency } = useCurrency();
   const { hideAmounts } = useChartSettings();
   const [, setLocation] = useLocation();
 
@@ -223,7 +223,7 @@ export default function Overview() {
       const quoteCurrency = getTickerCurrency(h.ticker);
       const costCurrency = resolveHoldingCostCurrency(h);
 
-      totalInvested += convertPrice(invested, costCurrency);
+      totalInvested += pnlInvestedForDisplay(h);
 
       const quote = quotes?.[h.ticker];
       if (quote) {
@@ -426,7 +426,7 @@ export default function Overview() {
     }
     return map;
     // quotes / currency helpers must trigger recompute when quotes arrive
-  }, [overview, portfolios, quotes, convertPrice, getTickerCurrency, resolveHoldingCostCurrency, optionsByPortfolioId, forwardIncomeByPortfolio]);
+  }, [overview, portfolios, quotes, convertPrice, getTickerCurrency, resolveHoldingCostCurrency, pnlInvestedForDisplay, optionsByPortfolioId, forwardIncomeByPortfolio]);
 
   const grandTotal = useMemo(() => {
     let total = 0;

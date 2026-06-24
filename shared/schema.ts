@@ -146,6 +146,11 @@ export const transactions = pgTable(
     }),
     /** Suma prepočítaná do EUR (alebo inej `user_settings.preferred_currency`) v čase transakcie. */
     baseCurrencyAmount: numeric("base_currency_amount", { precision: 18, scale: 4 }),
+    /**
+     * Cena za kus v mene inštrumentu z XTB (stĺpec / komentár „OPEN BUY @ …“), napr. USD pri US akciách.
+     * `pricePerShare` je suma z účtu v EUR; toto je otváracia cena ako v XTB pre výpočet P/L %.
+     */
+    instrumentPricePerShare: numeric("instrument_price_per_share", { precision: 18, scale: 4 }),
     transactionDate: timestamp("transaction_date").notNull(),
     createdAt: timestamp("created_at").defaultNow(),
   },

@@ -29,6 +29,8 @@ export interface ParsedTransaction {
   exchangeRateAtTransaction?: number;
   /** Suma v EUR (základná mena) — pri EUR účte zhodné s |Amount|. */
   baseCurrencyAmount?: number;
+  /** Otváracia cena v mene inštrumentu (USD pri US akciách) — z kurzu / komentára XTB. */
+  instrumentPricePerShare?: number;
   /** Voliteľný názov v histórii (napr. „Close trade“ namiesto všeobecného Vklad/Výber). */
   companyName?: string;
 }
@@ -432,7 +434,7 @@ function resolveQtyPriceForTrade(
   qtyCol: number,
   rateCol: number,
   totalAmountAbs: number
-): { quantity: number; pricePerShare: number } {
+): { quantity: number; pricePerShare: number; instrumentPricePerShare: number } {
   let quantity = 0;
   if (qtyCol !== -1) {
     const q = parseAmount(row[qtyCol]);
@@ -463,7 +465,10 @@ function resolveQtyPriceForTrade(
     pricePerShare = rateFromCol;
   }
 
-  return { quantity, pricePerShare };
+  const instrumentPricePerShare =
+    rateFromCol > 0 ? rateFromCol : parsed.rate > 0 ? parsed.rate : pricePerShare;
+
+  return { quantity, pricePerShare, instrumentPricePerShare };
 }
 
 /** Porovnanie hlavičky stĺpca s aliasmi (EN/SK, diakritika). */
@@ -921,7 +926,7 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
       }
       
       const totalAmount = Math.abs(amount);
-      const { quantity, pricePerShare } = resolveQtyPriceForTrade(
+      const { quantity, pricePerShare, instrumentPricePerShare } = resolveQtyPriceForTrade(
         comment,
         row,
         qtyCol,
@@ -959,6 +964,7 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
         originalCurrency: buyFx.originalCurrency,
         exchangeRateAtTransaction: buyFx.exchangeRateAtTransaction,
         baseCurrencyAmount: buyFx.baseCurrencyAmount,
+        instrumentPricePerShare,
       });
       
       log.push({
@@ -986,7 +992,7 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
       }
       
       const totalAmount = Math.abs(amount);
-      const { quantity, pricePerShare } = resolveQtyPriceForTrade(
+      const { quantity, pricePerShare, instrumentPricePerShare } = resolveQtyPriceForTrade(
         comment,
         row,
         qtyCol,
@@ -1024,6 +1030,7 @@ function parseCashOperations(data: any[][], log: ImportLogEntry[]): ParsedTransa
         originalCurrency: sellFx.originalCurrency,
         exchangeRateAtTransaction: sellFx.exchangeRateAtTransaction,
         baseCurrencyAmount: sellFx.baseCurrencyAmount,
+        instrumentPricePerShare,
       });
       
       log.push({

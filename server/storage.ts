@@ -1075,7 +1075,7 @@ export class DatabaseStorage implements IStorage {
         return [
           id,
           {
-            holdings: enrichHoldingsWithCostCurrency(portfolioHoldings, portfolioTxns),
+            holdings: enrichHoldingsWithCostCurrency(portfolioHoldings, portfolioTxns, rates),
             totalRealized,
             closeTradeNetEur,
             dividendNet,

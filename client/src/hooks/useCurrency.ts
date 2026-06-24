@@ -156,6 +156,20 @@ export function useCurrency() {
     [],
   );
 
+  const pnlInvestedForDisplay = useCallback(
+    (holding: Pick<HoldingWithCostCurrency, "totalInvested" | "pnlInvestedEur" | "ticker" | "costCurrency">): number => {
+      if (
+        holding.pnlInvestedEur != null &&
+        Number.isFinite(holding.pnlInvestedEur) &&
+        holding.pnlInvestedEur > 0
+      ) {
+        return convertPrice(holding.pnlInvestedEur, "EUR");
+      }
+      return convertPrice(parseFloat(holding.totalInvested), resolveHoldingCostCurrency(holding));
+    },
+    [convertPrice, resolveHoldingCostCurrency],
+  );
+
   return {
     currency,
     averageCostDisplayCurrency,
@@ -168,6 +182,7 @@ export function useCurrency() {
     getTickerCurrency,
     getTickerCostCurrency,
     resolveHoldingCostCurrency,
+    pnlInvestedForDisplay,
     formatCurrency,
     formatAverageCostCurrency,
     formatWithConversion,

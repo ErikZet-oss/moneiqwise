@@ -1,6 +1,7 @@
 import type { Holding, Transaction } from "./schema";
 import { inferTradeCurrency, type TradeCurrency } from "./transactionEur";
 import { getTickerCostCurrency } from "./tickerCurrency";
+import { computePnlInvestedEur, type HoldingPnlRates } from "./holdingPnlCost";
 
 /**
  * Mena, v ktorej sú uložené `averageCost` / `totalInvested` v holdingu
@@ -47,11 +48,16 @@ export function inferHoldingCostCurrency(
   return best;
 }
 
-export type HoldingWithCostCurrency = Holding & { costCurrency?: TradeCurrency };
+export type HoldingWithCostCurrency = Holding & {
+  costCurrency?: TradeCurrency;
+  /** Náklad v EUR pre výpočet zisku % (XTB: USD otváracia × aktuálny kurz). */
+  pnlInvestedEur?: number;
+};
 
 export function enrichHoldingsWithCostCurrency(
   holdings: Holding[],
   allTransactions: Transaction[],
+  rates?: HoldingPnlRates,
 ): HoldingWithCostCurrency[] {
   return holdings.map((h) => {
     const pid = h.portfolioId;
@@ -62,6 +68,9 @@ export function enrichHoldingsWithCostCurrency(
     return {
       ...h,
       costCurrency: inferHoldingCostCurrency(h.ticker, relevant),
+      ...(rates
+        ? { pnlInvestedEur: computePnlInvestedEur(h, relevant, rates) }
+        : {}),
     };
   });
 }

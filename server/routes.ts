@@ -3066,7 +3066,8 @@ export async function registerRoutes(
       const portfolioId = req.query.portfolio as string | undefined;
       const userHoldings = await storage.getHoldingsByUser(userId, portfolioId);
       const txns = await storage.getTransactionsByUser(userId, portfolioId ?? "all");
-      res.json(enrichHoldingsWithCostCurrency(userHoldings, txns));
+      const rates = await fetchAllExchangeRates();
+      res.json(enrichHoldingsWithCostCurrency(userHoldings, txns, rates));
     } catch (error) {
       console.error("Error fetching holdings:", error);
       res.status(500).json({ message: "Failed to fetch holdings" });
@@ -6382,6 +6383,8 @@ export async function registerRoutes(
               String(cashCustomName || companyName || ""),
             );
 
+          const instPx = (tx as { instrumentPricePerShare?: number }).instrumentPricePerShare;
+
           const payload: InsertTransaction = {
             userId,
             portfolioId: targetPortfolioId,
@@ -6397,6 +6400,9 @@ export async function registerRoutes(
             currency: origCur,
             exchangeRateAtTransaction: exRate.toFixed(8),
             baseCurrencyAmount: baseNum.toFixed(4),
+            ...(typeof instPx === "number" && Number.isFinite(instPx) && instPx > 0
+              ? { instrumentPricePerShare: instPx.toFixed(4) }
+              : {}),
             ...(isCloseTradeCashImport ? { realizedGain: baseNum.toFixed(4) } : {}),
             ...(txId ? { transactionId: txId } : {}),
           };

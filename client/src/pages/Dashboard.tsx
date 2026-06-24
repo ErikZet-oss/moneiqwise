@@ -188,6 +188,7 @@ function sortHoldingsArray(
   convertAverageCostPrice: (amount: number, sourceCurrency: PortfolioQuoteCurrency) => number,
   getTickerCurrency: (ticker: string) => PortfolioQuoteCurrency,
   resolveHoldingCostCurrency: (holding: Pick<HoldingWithCostCurrency, "ticker" | "costCurrency">) => PortfolioQuoteCurrency,
+  pnlInvestedForDisplay: (holding: Pick<HoldingWithCostCurrency, "totalInvested" | "pnlInvestedEur" | "ticker" | "costCurrency">) => number,
 ): HoldingWithCostCurrency[] {
   if (!holdings) return [];
   if (!quotes) return [...holdings];
@@ -216,8 +217,8 @@ function sortHoldingsArray(
     const bCurrentValue = bShares * bCurrentPrice;
     const aInvested = parseFloat(a.totalInvested);
     const bInvested = parseFloat(b.totalInvested);
-    const aInvestedDisplay = convertPrice(aInvested, aCostCurrency);
-    const bInvestedDisplay = convertPrice(bInvested, bCostCurrency);
+    const aInvestedDisplay = pnlInvestedForDisplay(a);
+    const bInvestedDisplay = pnlInvestedForDisplay(b);
     const aGainLoss = aCurrentValue - aInvestedDisplay;
     const bGainLoss = bCurrentValue - bInvestedDisplay;
 
@@ -434,7 +435,7 @@ interface UpcomingMacroEventsRes {
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
-  const { currency, convertPrice, convertAverageCostPrice, getTickerCurrency, resolveHoldingCostCurrency, formatCurrency, formatAverageCostCurrency } = useCurrency();
+  const { currency, convertPrice, convertAverageCostPrice, getTickerCurrency, resolveHoldingCostCurrency, pnlInvestedForDisplay, formatCurrency, formatAverageCostCurrency } = useCurrency();
   const { getQueryParam, selectedPortfolio, isAllPortfolios, portfolios } = usePortfolio();
   const {
     hideAmounts,
@@ -1267,8 +1268,9 @@ export default function Dashboard() {
         const invested = parseFloat(holding.totalInvested);
         const quoteCurrency = getTickerCurrency(holding.ticker);
         const costCurrency = resolveHoldingCostCurrency(holding);
+        const investedForPnl = pnlInvestedForDisplay(holding);
         
-        totalInvested += convertPrice(invested, costCurrency);
+        totalInvested += investedForPnl;
         
         if (quote) {
           const convertedPrice = convertPrice(quote.price, quoteCurrency);
@@ -1343,6 +1345,7 @@ export default function Dashboard() {
       convertPrice,
       getTickerCurrency,
       resolveHoldingCostCurrency,
+      pnlInvestedForDisplay,
     ],
   );
 
@@ -1460,8 +1463,9 @@ export default function Dashboard() {
         convertAverageCostPrice,
         getTickerCurrency,
         resolveHoldingCostCurrency,
+        pnlInvestedForDisplay,
       ),
-    [holdings, quotes, sortField, sortDirection, convertPrice, convertAverageCostPrice, getTickerCurrency, resolveHoldingCostCurrency],
+    [holdings, quotes, sortField, sortDirection, convertPrice, convertAverageCostPrice, getTickerCurrency, resolveHoldingCostCurrency, pnlInvestedForDisplay],
   );
 
   const mobileSortField: SortField =
@@ -1484,8 +1488,9 @@ export default function Dashboard() {
         convertAverageCostPrice,
         getTickerCurrency,
         resolveHoldingCostCurrency,
+        pnlInvestedForDisplay,
       ),
-    [holdings, quotes, mobileSortField, mobileAssetsSortOrder, convertPrice, convertAverageCostPrice, getTickerCurrency, resolveHoldingCostCurrency],
+    [holdings, quotes, mobileSortField, mobileAssetsSortOrder, convertPrice, convertAverageCostPrice, getTickerCurrency, resolveHoldingCostCurrency, pnlInvestedForDisplay],
   );
 
   const formatPercent = (value: number) => {
@@ -2661,7 +2666,7 @@ export default function Dashboard() {
                   const costCurrency = resolveHoldingCostCurrency(holding);
                   const avgCostPortfolio = convertPrice(parseFloat(holding.averageCost), costCurrency);
                   const avgCostForDisplay = convertAverageCostPrice(parseFloat(holding.averageCost), costCurrency);
-                  const investedDisplay = convertPrice(parseFloat(holding.totalInvested), costCurrency);
+                  const investedDisplay = pnlInvestedForDisplay(holding);
                   const currentPrice = quote ? convertPrice(quote.price, quoteCurrency) : avgCostPortfolio;
                   const preMarketPrice =
                     quote?.preMarketPrice != null ? convertPrice(quote.preMarketPrice, quoteCurrency) : null;
@@ -2925,7 +2930,7 @@ export default function Dashboard() {
                       const costCurrency = resolveHoldingCostCurrency(holding);
                       const avgCostPortfolio = convertPrice(parseFloat(holding.averageCost), costCurrency);
                       const avgCostForDisplay = convertAverageCostPrice(parseFloat(holding.averageCost), costCurrency);
-                      const investedDisplay = convertPrice(parseFloat(holding.totalInvested), costCurrency);
+                      const investedDisplay = pnlInvestedForDisplay(holding);
                       const currentPrice = quote ? convertPrice(quote.price, quoteCurrency) : avgCostPortfolio;
                       const preMarketPrice =
                         quote?.preMarketPrice != null ? convertPrice(quote.preMarketPrice, quoteCurrency) : null;

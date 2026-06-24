@@ -58,6 +58,10 @@ export async function ensureTransactionImportColumns(): Promise<void> {
     ALTER TABLE transactions
     ADD COLUMN IF NOT EXISTS base_currency_amount numeric(18, 4)
   `);
+  await pool.query(`
+    ALTER TABLE transactions
+    ADD COLUMN IF NOT EXISTS instrument_price_per_share numeric(18, 4)
+  `);
 
   await pool.query(`
     CREATE INDEX IF NOT EXISTS transactions_transaction_id_lookup_idx
