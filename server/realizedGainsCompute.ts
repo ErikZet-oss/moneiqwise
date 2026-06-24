@@ -1,7 +1,7 @@
 import type { Transaction } from "@shared/schema";
 import { computeFifoRealizedGainsFromTransactions } from "@shared/fifoRealizedGains";
 import type { RealizedGainsComputedSummary, RealizedTickerRow } from "@shared/realizedGainsTypes";
-import { buildCloseTradeFallbackEurBySellId } from "@shared/sellCloseTradeFallback";
+import { buildCloseTradeFallbackPairing } from "@shared/sellCloseTradeFallback";
 import {
   eurPerUnitFromTxn,
   grossAndCommission,
@@ -44,15 +44,56 @@ function scaleStoredRealizedGainToEur(t: Transaction, fb: number | null): number
   return 0;
 }
 
-/**
- * Súčet realizovaného zisku zo stĺpca `realizedGain` pri SELL (rovnaká logika ako v Histórii),
- * s prepočtom do EUR; pri prázdnom stĺpci ako v Histórii „close trade“ fallback (EUR).
- */
-function summaryFromStoredSellRealized(
-  sells: Transaction[],
+type ResolvedSellGain = {
+  sell: Transaction;
+  gainEur: number;
+  usedCloseTrade: boolean;
+};
+
+function resolveSellGainEur(
+  sell: Transaction,
+  eurPerUnitByTxnId: Map<string, number | null>,
+  fallbackBySellId: Map<string, number>,
+  fifoGainBySellId: Map<string, number>,
+  closeTradePairedSellIds: Set<string>,
+): ResolvedSellGain | null {
+  const sh = Math.abs(parseFloat(String(sell.shares)));
+  if (!(sh > 0)) return null;
+
+  const fb = eurPerUnitByTxnId.get(sell.id) ?? null;
+  const rgRaw = parseFloat(String(sell.realizedGain ?? "0"));
+  let gainEur = 0;
+  let usedCloseTrade = false;
+
+  if (Number.isFinite(rgRaw) && Math.abs(rgRaw) >= REALIZED_NEAR_ZERO) {
+    gainEur = scaleStoredRealizedGainToEur(sell, fb);
+    if (Math.abs(gainEur) < REALIZED_NEAR_ZERO) gainEur = rgRaw;
+  }
+
+  if (Math.abs(gainEur) < REALIZED_NEAR_ZERO) {
+    const fifoGain = fifoGainBySellId.get(sell.id);
+    if (fifoGain != null && Number.isFinite(fifoGain)) {
+      gainEur = fifoGain;
+      usedCloseTrade = closeTradePairedSellIds.has(sell.id);
+    }
+  }
+
+  if (Math.abs(gainEur) < REALIZED_NEAR_ZERO) {
+    const closeFb = fallbackBySellId.get(sell.id);
+    if (closeFb != null && Number.isFinite(closeFb) && Math.abs(closeFb) >= REALIZED_NEAR_ZERO) {
+      gainEur = closeFb;
+      usedCloseTrade = true;
+    }
+  }
+
+  if (!Number.isFinite(gainEur) || Math.abs(gainEur) < REALIZED_NEAR_ZERO) return null;
+  return { sell, gainEur, usedCloseTrade };
+}
+
+function aggregateResolvedSellGains(
+  resolved: ResolvedSellGain[],
   eurPerUnitByTxnId: Map<string, number | null>,
   now: Date,
-  fallbackBySellId: Map<string, number>,
 ): RealizedGainsComputeResult {
   const startOfYear = new Date(now.getFullYear(), 0, 1);
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -66,38 +107,15 @@ function summaryFromStoredSellRealized(
   let mergedPairedCloseTradeEur = 0;
   const byTicker: Record<string, RealizedTickerRow> = {};
 
-  const sorted = [...sells].sort((a, b) => {
-    const ta = new Date(a.transactionDate as unknown as string).getTime();
-    const tb = new Date(b.transactionDate as unknown as string).getTime();
+  const sorted = [...resolved].sort((a, b) => {
+    const ta = new Date(a.sell.transactionDate as unknown as string).getTime();
+    const tb = new Date(b.sell.transactionDate as unknown as string).getTime();
     if (ta !== tb) return ta - tb;
-    return String(a.id).localeCompare(String(b.id));
+    return String(a.sell.id).localeCompare(String(b.sell.id));
   });
 
-  for (const txn of sorted) {
-    const sh = Math.abs(parseFloat(String(txn.shares)));
-    if (!(sh > 0)) continue;
-
-    const rgRaw = parseFloat(String(txn.realizedGain ?? "0"));
-    const fb = eurPerUnitByTxnId.get(txn.id) ?? null;
-    let gainEur = scaleStoredRealizedGainToEur(txn, fb);
-    if (
-      Number.isFinite(rgRaw) &&
-      Math.abs(rgRaw) >= 1e-9 &&
-      Math.abs(gainEur) < REALIZED_NEAR_ZERO
-    ) {
-      gainEur = rgRaw;
-    }
-    let usedCloseTradePair = false;
-    if (!Number.isFinite(gainEur) || Math.abs(gainEur) < 1e-12) {
-      const closeFb = fallbackBySellId.get(txn.id);
-      if (closeFb != null && Number.isFinite(closeFb) && Math.abs(closeFb) > 1e-9) {
-        gainEur = closeFb;
-        usedCloseTradePair = true;
-      }
-    }
-    if (!Number.isFinite(gainEur) || Math.abs(gainEur) < 1e-12) continue;
-
-    if (usedCloseTradePair) mergedPairedCloseTradeEur += gainEur;
+  for (const { sell: txn, gainEur, usedCloseTrade } of sorted) {
+    if (usedCloseTrade) mergedPairedCloseTradeEur += gainEur;
 
     transactionCount++;
     totalRealized += gainEur;
@@ -107,6 +125,7 @@ function summaryFromStoredSellRealized(
     if (txnDate >= startOfMonth) realizedThisMonth += gainEur;
     if (txnDate >= todayStart) realizedToday += gainEur;
 
+    const fb = eurPerUnitByTxnId.get(txn.id) ?? null;
     const proceedsEur = resolveBuySellLineEur(txn, fb);
     const { gross, commission } = grossAndCommission(txn);
     const lineLocal = gross - commission;
@@ -148,65 +167,39 @@ function summaryFromStoredSellRealized(
   };
 }
 
-function sellsHaveStoredRealizedGain(sells: Transaction[]): boolean {
-  return sells.some((t) => {
-    const r = parseFloat(String(t.realizedGain ?? "0"));
-    return Number.isFinite(r) && Math.abs(r) >= 1e-9;
-  });
-}
-
-function mergeSkippedSellCloseTradeFallback(
-  summary: RealizedGainsComputedSummary,
-  sells: Transaction[],
-  fifoProcessedSellIds: Set<string>,
-  fallbackBySellId: Map<string, number>,
+function computeRealizedGainsCore(
+  userTransactions: Transaction[],
+  eurPerUnitByTxnId: Map<string, number | null>,
   now: Date,
-  skipSellIds: Set<string> = new Set(),
-): number {
-  const startOfYear = new Date(now.getFullYear(), 0, 1);
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+): RealizedGainsComputeResult {
+  const { bySellId: fallbackBySellId } = buildCloseTradeFallbackPairing(userTransactions);
+  const sells = userTransactions.filter(
+    (t) =>
+      String(t.type ?? "")
+        .trim()
+        .toUpperCase() === "SELL",
+  );
 
-  let mergedPairedCloseTradeEur = 0;
-  const byTickerMap: Record<string, RealizedTickerRow> = {};
-  for (const row of summary.byTicker) {
-    byTickerMap[row.ticker] = { ...row };
-  }
+  const fifo = computeFifoRealizedGainsFromTransactions(
+    userTransactions,
+    eurPerUnitByTxnId,
+    now,
+    fallbackBySellId,
+  );
 
+  const resolved: ResolvedSellGain[] = [];
   for (const sell of sells) {
-    if (fifoProcessedSellIds.has(sell.id)) continue;
-    if (skipSellIds.has(sell.id)) continue;
-    const sh = Math.abs(parseFloat(String(sell.shares)));
-    if (!(sh > 0)) continue;
-    const fb = fallbackBySellId.get(sell.id);
-    if (fb == null || !Number.isFinite(fb) || Math.abs(fb) < 1e-9) continue;
-
-    mergedPairedCloseTradeEur += fb;
-    summary.transactionCount++;
-    summary.totalRealized += fb;
-    const txnDate = new Date(sell.transactionDate as unknown as string);
-    if (txnDate >= startOfYear) summary.realizedYTD += fb;
-    if (txnDate >= startOfMonth) summary.realizedThisMonth += fb;
-    if (txnDate >= todayStart) summary.realizedToday += fb;
-
-    const tk = String(sell.ticker ?? "")
-      .trim()
-      .toUpperCase();
-    if (!byTickerMap[tk]) {
-      byTickerMap[tk] = {
-        ticker: tk,
-        companyName: sell.companyName || tk,
-        totalGain: 0,
-        totalSold: 0,
-        transactions: 0,
-      };
-    }
-    byTickerMap[tk].totalGain += fb;
-    byTickerMap[tk].transactions += 1;
+    const row = resolveSellGainEur(
+      sell,
+      eurPerUnitByTxnId,
+      fallbackBySellId,
+      fifo.gainEurBySellId,
+      fifo.closeTradePairedSellIds,
+    );
+    if (row) resolved.push(row);
   }
 
-  summary.byTicker = Object.values(byTickerMap).sort((a, b) => b.totalGain - a.totalGain);
-  return mergedPairedCloseTradeEur;
+  return aggregateResolvedSellGains(resolved, eurPerUnitByTxnId, now);
 }
 
 /**
@@ -218,59 +211,7 @@ export async function computeRealizedGainsFromTransactionsAsync(
   now = new Date(),
 ): Promise<RealizedGainsComputeResult> {
   const m = await buildEurPerUnitByTxnIdForTransactions(userTransactions);
-  const fallbackBySellId = buildCloseTradeFallbackEurBySellId(userTransactions);
-  const sells = userTransactions.filter(
-    (t) =>
-      String(t.type ?? "")
-        .trim()
-        .toUpperCase() === "SELL",
-  );
-
-  let mergedPairedCloseTradeEur = 0;
-
-  if (sellsHaveStoredRealizedGain(sells)) {
-    const fromStored = summaryFromStoredSellRealized(sells, m, now, fallbackBySellId);
-    mergedPairedCloseTradeEur += fromStored.mergedPairedCloseTradeEur;
-    if (fromStored.summary.transactionCount > 0) {
-      return { summary: fromStored.summary, mergedPairedCloseTradeEur };
-    }
-  }
-
-  const fifo = computeFifoRealizedGainsFromTransactions(
-    userTransactions,
-    m,
-    now,
-    fallbackBySellId,
-  );
-  const summary: RealizedGainsComputedSummary = {
-    ...fifo.summary,
-    byTicker: fifo.summary.byTicker.map((r) => ({ ...r })),
-  };
-  mergedPairedCloseTradeEur += fifo.mergedCloseTradePairedEur;
-  mergedPairedCloseTradeEur += mergeSkippedSellCloseTradeFallback(
-    summary,
-    sells,
-    fifo.fifoProcessedSellIds,
-    fallbackBySellId,
-    now,
-    fifo.closeTradePairedSellIds,
-  );
-
-  if (summary.transactionCount > 0) {
-    return { summary, mergedPairedCloseTradeEur };
-  }
-
-  if (sells.length === 0) {
-    return { summary, mergedPairedCloseTradeEur };
-  }
-
-  const fallback = summaryFromStoredSellRealized(sells, m, now, fallbackBySellId);
-  mergedPairedCloseTradeEur += fallback.mergedPairedCloseTradeEur;
-  if (fallback.summary.transactionCount > 0) {
-    return { summary: fallback.summary, mergedPairedCloseTradeEur };
-  }
-
-  return { summary, mergedPairedCloseTradeEur };
+  return computeRealizedGainsCore(userTransactions, m, now);
 }
 
 /**
@@ -282,44 +223,5 @@ export function computeRealizedGainsFromTransactions(
 ): RealizedGainsComputedSummary {
   const m = new Map<string, number | null>();
   for (const t of userTransactions) m.set(t.id, null);
-  const fallbackBySellId = buildCloseTradeFallbackEurBySellId(userTransactions);
-  const sells = userTransactions.filter(
-    (t) =>
-      String(t.type ?? "")
-        .trim()
-        .toUpperCase() === "SELL",
-  );
-
-  if (sellsHaveStoredRealizedGain(sells)) {
-    const fromStored = summaryFromStoredSellRealized(sells, m, now, fallbackBySellId);
-    if (fromStored.summary.transactionCount > 0) {
-      return fromStored.summary;
-    }
-  }
-
-  const fifo = computeFifoRealizedGainsFromTransactions(
-    userTransactions,
-    m,
-    now,
-    fallbackBySellId,
-  );
-  const summary: RealizedGainsComputedSummary = {
-    ...fifo.summary,
-    byTicker: fifo.summary.byTicker.map((r) => ({ ...r })),
-  };
-  mergeSkippedSellCloseTradeFallback(
-    summary,
-    sells,
-    fifo.fifoProcessedSellIds,
-    fallbackBySellId,
-    now,
-    fifo.closeTradePairedSellIds,
-  );
-
-  if (summary.transactionCount > 0) {
-    return summary;
-  }
-  if (sells.length === 0) return summary;
-  const fallback = summaryFromStoredSellRealized(sells, m, now, fallbackBySellId);
-  return fallback.summary.transactionCount > 0 ? fallback.summary : summary;
+  return computeRealizedGainsCore(userTransactions, m, now).summary;
 }

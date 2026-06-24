@@ -44,6 +44,8 @@ export function computeFifoRealizedGainsFromTransactions(
   fifoProcessedSellIds: Set<string>;
   /** SELL, kde bol použitý close-trade fallback namiesto nulového FIFO. */
   closeTradePairedSellIds: Set<string>;
+  /** Realizovaný zisk v EUR po jednotlivých SELL (vrátane close-trade fallback). */
+  gainEurBySellId: Map<string, number>;
   /** Suma EUR z close-trade párovania zarátaná do summary (pre odpočet od hrubého close-trade). */
   mergedCloseTradePairedEur: number;
 } {
@@ -82,6 +84,7 @@ export function computeFifoRealizedGainsFromTransactions(
   const realizedEurByYearMonth: Record<string, number> = {};
   const fifoProcessedSellIds = new Set<string>();
   const closeTradePairedSellIds = new Set<string>();
+  const gainEurBySellId = new Map<string, number>();
   let mergedCloseTradePairedEur = 0;
 
   const getKey = (txn: Transaction) => transactionLotKey(txn);
@@ -132,8 +135,19 @@ export function computeFifoRealizedGainsFromTransactions(
       }
 
       let gain = proceedsEur - costRemoved;
+      const rgRaw = parseFloat(String(txn.realizedGain ?? "0"));
+      const hasStoredGain = Number.isFinite(rgRaw) && Math.abs(rgRaw) >= REALIZED_NEAR_ZERO;
       const closeFb = closeTradeFallbackBySellId?.get(txn.id);
       if (
+        closeFb != null &&
+        Number.isFinite(closeFb) &&
+        Math.abs(closeFb) >= REALIZED_NEAR_ZERO &&
+        !hasStoredGain
+      ) {
+        gain = closeFb;
+        closeTradePairedSellIds.add(txn.id);
+        mergedCloseTradePairedEur += closeFb;
+      } else if (
         Math.abs(gain) < REALIZED_NEAR_ZERO &&
         closeFb != null &&
         Number.isFinite(closeFb) &&
@@ -172,6 +186,7 @@ export function computeFifoRealizedGainsFromTransactions(
       byTicker[aggTicker].totalGain += gain;
       byTicker[aggTicker].totalSold += Math.abs(proceedsEur);
       byTicker[aggTicker].transactions += 1;
+      gainEurBySellId.set(txn.id, gain);
     }
   }
 
@@ -193,6 +208,7 @@ export function computeFifoRealizedGainsFromTransactions(
     realizedEurByYearMonth,
     fifoProcessedSellIds,
     closeTradePairedSellIds,
+    gainEurBySellId,
     mergedCloseTradePairedEur,
   };
 }

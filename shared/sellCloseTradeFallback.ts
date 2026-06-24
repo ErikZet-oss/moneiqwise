@@ -7,11 +7,16 @@ export function isCloseTradeCashRow(tx: Transaction): boolean {
   return label.includes("close trade") || label.includes("profit of position");
 }
 
+export type CloseTradeFallbackPairing = {
+  bySellId: Map<string, number>;
+  pairedCloseTradeIds: Set<string>;
+};
+
 /**
- * Párovanie ako v `History.tsx`: SELL bez vyplneného realizedGain ↔ close trade cash
- * v časovom okne (5 min). Hodnota je v EUR z `baseCurrencyAmount` alebo shares×price.
+ * SELL bez vyplneného realizedGain ↔ close trade cash (okno 60 min + záloha ten istý deň).
+ * Hodnota je v EUR z `baseCurrencyAmount` alebo shares×price.
  */
-export function buildCloseTradeFallbackEurBySellId(transactions: Transaction[]): Map<string, number> {
+export function buildCloseTradeFallbackPairing(transactions: Transaction[]): CloseTradeFallbackPairing {
   const sells = transactions
     .filter((t) => String(t.type ?? "").trim().toUpperCase() === "SELL")
     .sort(
@@ -98,10 +103,16 @@ export function buildCloseTradeFallbackEurBySellId(transactions: Transaction[]):
           ? shares * price
           : NaN;
       if (Number.isFinite(amtEur) && Math.abs(amtEur) > 1e-9) {
+        usedCloseIds.add(cashTx.id);
         bySellId.set(sell.id, amtEur);
       }
     }
   }
 
-  return bySellId;
+  return { bySellId, pairedCloseTradeIds: usedCloseIds };
+}
+
+/** @deprecated Prefer `buildCloseTradeFallbackPairing` when you need paired close-trade row ids. */
+export function buildCloseTradeFallbackEurBySellId(transactions: Transaction[]): Map<string, number> {
+  return buildCloseTradeFallbackPairing(transactions).bySellId;
 }
