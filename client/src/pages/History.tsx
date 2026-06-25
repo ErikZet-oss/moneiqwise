@@ -31,6 +31,7 @@ import { AddTransactionForm } from "@/components/AddTransactionForm";
 import { formatShareQuantity } from "@/lib/utils";
 import {
   buildCloseTradeFallbackPairing,
+  hasAuthoritativeStoredRealizedGain,
   isCloseTradeCashRow,
 } from "@shared/sellCloseTradeFallback";
 
@@ -66,7 +67,7 @@ function sellRealizedDisplay(
 ): { amount: number; currency: ReturnType<typeof realizedGainSourceCurrency> } | null {
   if (tx.type !== "SELL") return null;
   const stored = parseFloat(String(tx.realizedGain ?? "0"));
-  if (Number.isFinite(stored) && Math.abs(stored) >= REALIZED_NEAR_ZERO) {
+  if (hasAuthoritativeStoredRealizedGain(tx)) {
     return { amount: stored, currency: realizedGainSourceCurrency(tx) };
   }
   if (

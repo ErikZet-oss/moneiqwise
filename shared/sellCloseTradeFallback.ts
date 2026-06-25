@@ -1,5 +1,13 @@
 import type { Transaction } from "./schema";
 
+/** Stĺpec `realizedGain` pod touto hranicou (v mene obchodu) považujeme za FIFO/prepočet šum — close-trade má prednosť. */
+export const INSIGNIFICANT_STORED_REALIZED_GAIN = 0.01;
+
+export function hasAuthoritativeStoredRealizedGain(sell: Pick<Transaction, "realizedGain">): boolean {
+  const rg = parseFloat(String(sell.realizedGain ?? "0"));
+  return Number.isFinite(rg) && Math.abs(rg) >= INSIGNIFICANT_STORED_REALIZED_GAIN;
+}
+
 /** Rovnaká detekcia ako História: hotovosť z uzavretia pozície (XTB import). */
 export function isCloseTradeCashRow(tx: Transaction): boolean {
   if (tx.type !== "DEPOSIT" && tx.type !== "WITHDRAWAL") return false;
@@ -49,8 +57,7 @@ export function buildCloseTradeFallbackPairing(transactions: Transaction[]): Clo
   }
 
   for (const sell of sells) {
-    const sellRg = parseFloat(String(sell.realizedGain ?? "0"));
-    if (Number.isFinite(sellRg) && Math.abs(sellRg) > 1e-9) continue;
+    if (hasAuthoritativeStoredRealizedGain(sell)) continue;
 
     const sellTs = new Date(sell.transactionDate as unknown as string).getTime();
     if (!Number.isFinite(sellTs)) continue;
