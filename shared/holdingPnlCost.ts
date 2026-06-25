@@ -1,4 +1,5 @@
 import type { Holding, Transaction } from "./schema";
+import { resolveInstrumentPricePerShare } from "./instrumentPrice";
 import { getTickerCurrency, type QuoteCurrency } from "./tickerCurrency";
 
 function quoteCurrencyToEurFactor(
@@ -45,7 +46,7 @@ export function syncInstrumentCostBasisFromTrades(
 
   for (const txn of trades) {
     const s = Math.abs(parseFloat(String(txn.shares)));
-    const ip = parseFloat(String(txn.instrumentPricePerShare ?? "0"));
+    const ip = resolveInstrumentPricePerShare(txn);
     if (!(s > 0) || !Number.isFinite(ip) || ip <= 0) continue;
 
     if (txn.type === "BUY") {

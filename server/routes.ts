@@ -19,6 +19,7 @@ import {
   type Transaction,
 } from "@shared/schema";
 import { sumCloseTradeCashFlowEurFromRows } from "@shared/cashFromTransactions";
+import { buildCloseTradeFallbackPairing } from "@shared/sellCloseTradeFallback";
 import {
   CASH_INTEREST_DISPLAY_NAME,
   CASH_INTEREST_TAX_DISPLAY_NAME,
@@ -5175,6 +5176,7 @@ export async function registerRoutes(
       const userId = req.user.claims.sub;
       const portfolioId = req.query.portfolio as string | undefined;
       const userTransactions = await storage.getTransactionsByUser(userId, portfolioId);
+      const closeTradePairing = buildCloseTradeFallbackPairing(userTransactions);
       
       // Sort transactions by date (oldest first) to calculate holdings at each point
       const sortedTransactions = [...userTransactions].sort((a, b) => 
@@ -5204,8 +5206,18 @@ export async function registerRoutes(
           h.avgCost = h.totalCost / newShares;
           h.shares = newShares;
         } else if (txn.type === "SELL") {
-          // Calculate realized gain based on current holdings state
           const h = holdingsState[lotKey];
+          if (closeTradePairing.bySellId.has(txn.id)) {
+            await storage.updateTransaction(txn.id, userId, {
+              realizedGain: null,
+            });
+            if (h && h.shares > 0) {
+              const soldCost = shares * h.avgCost;
+              h.shares = Math.max(0, h.shares - shares);
+              h.totalCost = Math.max(0, h.totalCost - soldCost);
+            }
+            continue;
+          }
           if (h && h.shares > 0) {
             const costBasis = h.avgCost;
             // Realized gain = (sell price - avg cost) * shares - commission

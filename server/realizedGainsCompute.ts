@@ -1,7 +1,7 @@
 import type { Transaction } from "@shared/schema";
 import { computeFifoRealizedGainsFromTransactions } from "@shared/fifoRealizedGains";
 import type { RealizedGainsComputedSummary, RealizedTickerRow } from "@shared/realizedGainsTypes";
-import { buildCloseTradeFallbackPairing, hasAuthoritativeStoredRealizedGain } from "@shared/sellCloseTradeFallback";
+import { buildCloseTradeFallbackPairing, hasAuthoritativeStoredRealizedGain, shouldPreferCloseTradeGain } from "@shared/sellCloseTradeFallback";
 import {
   eurPerUnitFromTxn,
   grossAndCommission,
@@ -67,7 +67,7 @@ function resolveSellGainEur(
     closeFb != null &&
     Number.isFinite(closeFb) &&
     Math.abs(closeFb) >= REALIZED_NEAR_ZERO &&
-    !hasAuthoritativeStoredRealizedGain(sell)
+    shouldPreferCloseTradeGain(sell, closeFb)
   ) {
     return { sell, gainEur: closeFb, usedCloseTrade: true };
   }
@@ -76,7 +76,7 @@ function resolveSellGainEur(
   let gainEur = 0;
   let usedCloseTrade = false;
 
-  if (hasAuthoritativeStoredRealizedGain(sell)) {
+  if (hasAuthoritativeStoredRealizedGain(sell, closeFb)) {
     gainEur = scaleStoredRealizedGainToEur(sell, fb);
     if (Math.abs(gainEur) < REALIZED_NEAR_ZERO) gainEur = rgRaw;
   }

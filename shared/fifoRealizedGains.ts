@@ -1,7 +1,7 @@
 import type { Transaction } from "./schema";
 import { transactionLotKey } from "./lotKey";
 import type { RealizedGainsComputedSummary, RealizedTickerRow } from "./realizedGainsTypes";
-import { hasAuthoritativeStoredRealizedGain } from "./sellCloseTradeFallback";
+import { hasAuthoritativeStoredRealizedGain, shouldPreferCloseTradeGain } from "./sellCloseTradeFallback";
 import { inferTradeCurrency, type TradeCurrency } from "./transactionEur";
 import { eurPerUnitOfTradeCurrency, resolveBuySellLineEur } from "./transactionEur";
 
@@ -141,7 +141,7 @@ export function computeFifoRealizedGainsFromTransactions(
         closeFb != null &&
         Number.isFinite(closeFb) &&
         Math.abs(closeFb) >= REALIZED_NEAR_ZERO &&
-        !hasAuthoritativeStoredRealizedGain(txn)
+        shouldPreferCloseTradeGain(txn, closeFb)
       ) {
         gain = closeFb;
         closeTradePairedSellIds.add(txn.id);

@@ -3,9 +3,34 @@ import type { Transaction } from "./schema";
 /** Stĺpec `realizedGain` pod touto hranicou (v mene obchodu) považujeme za FIFO/prepočet šum — close-trade má prednosť. */
 export const INSIGNIFICANT_STORED_REALIZED_GAIN = 0.01;
 
-export function hasAuthoritativeStoredRealizedGain(sell: Pick<Transaction, "realizedGain">): boolean {
+/** Pod touto hranicou v abs. hodnote nikdy neblokujeme XTB close-trade párovanie. */
+export const MIN_AUTHORITATIVE_STORED_REALIZED_GAIN = 1;
+
+export function hasAuthoritativeStoredRealizedGain(
+  sell: Pick<Transaction, "realizedGain">,
+  closeTradeEur?: number,
+): boolean {
   const rg = parseFloat(String(sell.realizedGain ?? "0"));
-  return Number.isFinite(rg) && Math.abs(rg) >= INSIGNIFICANT_STORED_REALIZED_GAIN;
+  if (!Number.isFinite(rg) || Math.abs(rg) < INSIGNIFICANT_STORED_REALIZED_GAIN) {
+    return false;
+  }
+  if (
+    closeTradeEur != null &&
+    Number.isFinite(closeTradeEur) &&
+    Math.abs(closeTradeEur) > 1 &&
+    Math.abs(rg) < Math.abs(closeTradeEur) * 0.15
+  ) {
+    return false;
+  }
+  return Math.abs(rg) >= MIN_AUTHORITATIVE_STORED_REALIZED_GAIN;
+}
+
+export function shouldPreferCloseTradeGain(
+  sell: Pick<Transaction, "realizedGain">,
+  closeTradeEur: number,
+): boolean {
+  if (!Number.isFinite(closeTradeEur) || Math.abs(closeTradeEur) < 1e-6) return false;
+  return !hasAuthoritativeStoredRealizedGain(sell, closeTradeEur);
 }
 
 /** Rovnaká detekcia ako História: hotovosť z uzavretia pozície (XTB import). */

@@ -67,7 +67,16 @@ function sellRealizedDisplay(
 ): { amount: number; currency: ReturnType<typeof realizedGainSourceCurrency> } | null {
   if (tx.type !== "SELL") return null;
   const stored = parseFloat(String(tx.realizedGain ?? "0"));
-  if (hasAuthoritativeStoredRealizedGain(tx)) {
+  const closeFb = fallbackSellRealizedEur;
+  if (
+    closeFb != null &&
+    Number.isFinite(closeFb) &&
+    Math.abs(closeFb) > 1e-9 &&
+    !hasAuthoritativeStoredRealizedGain(tx, closeFb)
+  ) {
+    return { amount: closeFb, currency: "EUR" };
+  }
+  if (hasAuthoritativeStoredRealizedGain(tx, closeFb)) {
     return { amount: stored, currency: realizedGainSourceCurrency(tx) };
   }
   if (

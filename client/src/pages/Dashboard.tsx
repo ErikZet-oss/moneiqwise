@@ -1228,8 +1228,10 @@ export default function Dashboard() {
     const hasHoldings = holdings && holdings.length > 0 && quotes;
     const hasOptions = isAllPortfolios && optionStats;
     
-    const stockRealizedGain =
-      realizedGains?.realizedGainTotal ?? realizedGains?.totalRealized ?? 0;
+    const stockRealizedGain = convertPrice(
+      realizedGains?.realizedGainTotal ?? realizedGains?.totalRealized ?? 0,
+      "EUR",
+    );
     const dividendGain = dividends?.totalNet || 0;
     
     if (!hasHoldings && !hasOptions) {

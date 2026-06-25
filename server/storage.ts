@@ -27,7 +27,7 @@ import type { AllExchangeRates } from "./convertAmountBetween";
 import { netLedgerCashEur } from "./netLedgerCashEur";
 import { db, pool } from "./db";
 import { buildEurPerUnitByTxnIdForTransactions } from "./eurAtTransactionDate";
-import { computeFifoRealizedGainsFromTransactions } from "@shared/fifoRealizedGains";
+import { computeRealizedGainsFromTransactionsAsync } from "./realizedGainsCompute";
 import { sumCloseTradeCashFlowEurFromRows } from "@shared/cashFromTransactions";
 import { dividendNetEur } from "./pnlBreakdown";
 import { enrichHoldingsWithCostCurrency } from "@shared/holdingCostCurrency";
@@ -1042,12 +1042,11 @@ export class DatabaseStorage implements IStorage {
       visibleIds.map(async (id) => {
         const list = txnsByPid.get(id) ?? [];
 
-        const totalRealized = computeFifoRealizedGainsFromTransactions(
-          list,
-          eurM,
-          now,
-        ).summary.totalRealized;
-        const closeTradeNetEur = sumCloseTradeCashFlowEurFromRows(list);
+        const { summary: realizedSummary, mergedPairedCloseTradeEur } =
+          await computeRealizedGainsFromTransactionsAsync(list, now);
+        const totalRealized = realizedSummary.totalRealized;
+        const closeTradeNetEur =
+          sumCloseTradeCashFlowEurFromRows(list) - mergedPairedCloseTradeEur;
 
         const dividendNet = dividendNetEur(list, rates);
         const cutoff = new Date(now);
