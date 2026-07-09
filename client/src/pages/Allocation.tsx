@@ -614,9 +614,9 @@ function AllocationPieCard({
   const [showAllLegendItems, setShowAllLegendItems] = useState(false);
   const chartData = data.map((d) => ({ ...d }));
 
-  const innerR = narrow ? "42%" : "48%";
-  const outerR = narrow ? "92%" : "88%";
-  const mobileLegendLimit = denseLegend ? 6 : 5;
+  const innerR = narrow ? "44%" : "48%";
+  const outerR = narrow ? "88%" : "88%";
+  const mobileLegendLimit = denseLegend ? 10 : 8;
   const hasMoreLegendItems = narrow && chartData.length > mobileLegendLimit;
   const visibleLegendSlices =
     narrow && !showAllLegendItems ? chartData.slice(0, mobileLegendLimit) : chartData;
@@ -628,11 +628,11 @@ function AllocationPieCard({
         "bg-card/80 backdrop-blur-[2px]"
       )}
     >
-      <CardHeader className="p-2.5 md:p-6 pb-2 space-y-1">
-        <CardTitle className="text-base md:text-lg tracking-tight">{title}</CardTitle>
-        <CardDescription className="text-xs md:text-sm leading-snug">{description}</CardDescription>
+      <CardHeader className="p-2 md:p-6 pb-1.5 space-y-0.5">
+        <CardTitle className="text-sm md:text-lg tracking-tight">{title}</CardTitle>
+        <CardDescription className="text-[11px] md:text-sm leading-snug">{description}</CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-3 md:gap-4 p-2.5 pt-0 md:p-6 md:pt-0 pb-4 md:pb-6">
+      <CardContent className="flex flex-col gap-2 md:gap-4 p-2 pt-0 md:p-6 md:pt-0 pb-3 md:pb-6">
         {chartData.length === 0 ? (
           <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
             Nedostatok dát
@@ -640,16 +640,18 @@ function AllocationPieCard({
         ) : (
           <>
             <div className="text-center">
-              <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              <span className="text-[10px] md:text-[11px] uppercase tracking-wide text-muted-foreground">
                 Celkom
               </span>
-              <div className="text-lg font-semibold tabular-nums">{mask(formatCurrency(total))}</div>
+              <div className="text-base md:text-lg font-semibold tabular-nums leading-tight">
+                {mask(formatCurrency(total))}
+              </div>
             </div>
 
             <div className="flex justify-center w-full min-w-0 -mx-0.5">
               <div
                 className={cn(
-                  "w-full aspect-square max-h-[min(88vw,360px)] sm:max-w-[320px] sm:max-h-[300px]",
+                  "w-full aspect-square max-h-[min(68vw,240px)] sm:max-w-[320px] sm:max-h-[300px]",
                   !chartReady && "opacity-0 pointer-events-none"
                 )}
               >
@@ -698,7 +700,7 @@ function AllocationPieCard({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-8 px-3 text-xs"
+                  className="h-7 px-2.5 text-[11px]"
                   onClick={() => setShowAllLegendItems((prev) => !prev)}
                 >
                   {showAllLegendItems
@@ -729,34 +731,64 @@ function AllocationLegend({
   formatCurrency: (n: number) => string;
   dense?: boolean;
 }) {
+  const narrow = useIsNarrowScreen();
+
   return (
     <div
       className={cn(
-        "rounded-xl border border-border/70 bg-muted/25 px-1.5 py-2 sm:px-3",
-        "space-y-1"
+        "rounded-lg border border-border/70 bg-muted/25",
+        narrow ? "px-1 py-1 space-y-0" : "rounded-xl px-1.5 py-2 sm:px-3 space-y-1",
       )}
       role="list"
     >
       {slices.map((slice, i) => {
         const pct = total > 0 ? (slice.value / total) * 100 : 0;
-        const secondary =
-          displayMode === "percent"
-            ? `${pct.toFixed(1)} %`
-            : mask(formatCurrency(slice.value));
-        const primary =
-          displayMode === "percent"
-            ? mask(formatCurrency(slice.value))
-            : `${pct.toFixed(1)} %`;
+        const valueStr = mask(formatCurrency(slice.value));
+        const pctStr = `${pct.toFixed(1)} %`;
+
+        if (narrow) {
+          return (
+            <div
+              key={`${slice.name}-${i}`}
+              role="listitem"
+              className="flex items-center gap-1.5 rounded px-1 py-0.5 min-h-[22px]"
+            >
+              <span
+                className="h-2 w-2 shrink-0 rounded-sm ring-1 ring-border/50"
+                style={{ backgroundColor: sliceFill(i) }}
+                aria-hidden
+              />
+              <span
+                className="min-w-0 flex-1 truncate text-[11px] font-medium leading-none"
+                title={slice.name}
+              >
+                {slice.name}
+              </span>
+              <span className="shrink-0 text-[10px] tabular-nums leading-none whitespace-nowrap">
+                <span className={displayMode === "value" ? "text-foreground font-medium" : "text-muted-foreground"}>
+                  {valueStr}
+                </span>
+                <span className="text-muted-foreground/80 mx-0.5">·</span>
+                <span className={displayMode === "percent" ? "text-foreground font-medium" : "text-muted-foreground"}>
+                  {pctStr}
+                </span>
+              </span>
+            </div>
+          );
+        }
 
         return (
           <div
             key={`${slice.name}-${i}`}
             role="listitem"
-            className="flex items-start justify-between gap-2 rounded-md px-1.5 py-1.5 hover:bg-muted/60 transition-colors"
+            className={cn(
+              "flex items-center justify-between gap-2 rounded-md hover:bg-muted/60 transition-colors",
+              dense ? "px-1.5 py-1" : "px-1.5 py-1.5",
+            )}
           >
-            <span className="flex items-start gap-2 min-w-0 flex-1">
+            <span className="flex items-center gap-2 min-w-0 flex-1">
               <span
-                className="mt-1 h-2.5 w-2.5 shrink-0 rounded-sm ring-1 ring-border/60"
+                className="h-2.5 w-2.5 shrink-0 rounded-sm ring-1 ring-border/60"
                 style={{ backgroundColor: sliceFill(i) }}
                 aria-hidden
               />
@@ -764,9 +796,14 @@ function AllocationLegend({
                 {slice.name}
               </span>
             </span>
-            <span className="shrink-0 text-right text-xs tabular-nums leading-tight">
-              <span className="block text-foreground">{secondary}</span>
-              <span className="block text-muted-foreground">{primary}</span>
+            <span className="shrink-0 text-right text-xs tabular-nums leading-tight whitespace-nowrap">
+              <span className={displayMode === "value" ? "text-foreground font-medium" : "text-muted-foreground"}>
+                {valueStr}
+              </span>
+              <span className="text-muted-foreground/70 mx-1">·</span>
+              <span className={displayMode === "percent" ? "text-foreground font-medium" : "text-muted-foreground"}>
+                {pctStr}
+              </span>
             </span>
           </div>
         );
