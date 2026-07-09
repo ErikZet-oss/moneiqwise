@@ -18,6 +18,7 @@ import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
 import { useToast } from "@/hooks/use-toast";
 import type { Holding } from "@shared/schema";
+import { CASH_INTEREST_DISPLAY_NAME, CASH_INTEREST_TICKER } from "@shared/tickerCurrency";
 import { cn } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
@@ -79,6 +80,39 @@ function aggregateSlices(rows: Slice[]): Slice[] {
   }
   return Array.from(m.entries())
     .map(([name, value]) => ({ name, value }))
+    .filter((x) => x.value > 0)
+    .sort((a, b) => b.value - a.value);
+}
+
+/** Celý názov emitenta + ticker s burzovou príponou (napr. P911.DE). */
+function allocationAssetLabel(holding: Holding): string {
+  const ticker = holding.ticker.trim();
+  const tickerUpper = ticker.toUpperCase();
+  const company = (holding.companyName || "").trim();
+
+  if (tickerUpper === "CASH") return "Hotovosť";
+  if (tickerUpper === CASH_INTEREST_TICKER) return CASH_INTEREST_DISPLAY_NAME;
+  if (!company || company.toUpperCase() === tickerUpper) return ticker;
+
+  const companyHasTicker =
+    company.toUpperCase().includes(tickerUpper) ||
+    company.toUpperCase().includes(`(${tickerUpper})`);
+  if (companyHasTicker) return company;
+
+  return `${company} (${ticker})`;
+}
+
+function aggregateTickerSlices(holdings: Holding[], valueByTickerKey: Map<string, number>): Slice[] {
+  const labels = new Map<string, string>();
+  for (const h of holdings) {
+    const key = h.ticker.toUpperCase();
+    if (!labels.has(key)) labels.set(key, allocationAssetLabel(h));
+  }
+  return Array.from(valueByTickerKey.entries())
+    .map(([key, value]) => ({
+      name: key === "HOTOVOST" ? "Hotovosť" : labels.get(key) ?? key,
+      value,
+    }))
     .filter((x) => x.value > 0)
     .sort((a, b) => b.value - a.value);
 }
@@ -261,7 +295,7 @@ export default function Allocation() {
     const sectorRows: Slice[] = [];
     const countryRows: Slice[] = [];
     const typeRows: Slice[] = [];
-    const tickerRows: Slice[] = [];
+    const tickerValues = new Map<string, number>();
     let sum = 0;
     let cashTotal = cashValueConv;
 
@@ -296,27 +330,30 @@ export default function Allocation() {
     }
 
     for (const h of holdings) {
-      const t = h.ticker.toUpperCase();
+      const tickerKey = h.ticker.toUpperCase();
       const shares = parseFloat(h.shares);
       if (!Number.isFinite(shares) || shares <= 0) continue;
 
-      const quote = quotes?.[t];
-      if (t === "CASH") {
+      const quote = quotes?.[h.ticker] ?? quotes?.[tickerKey];
+      if (tickerKey === "CASH") {
         const v = shares * (quote?.price ?? 1);
-        const tc = getTickerCurrency(t);
+        const tc = getTickerCurrency(h.ticker);
         cashTotal += convertPrice(v, tc);
         continue;
       }
 
       if (!quote) continue;
-      const tc = getTickerCurrency(t);
+      const tc = getTickerCurrency(h.ticker);
       const rawVal = shares * quote.price;
       const conv = convertPrice(rawVal, tc);
       sum += conv;
 
-      tickerRows.push({ name: t, value: conv });
+      tickerValues.set(tickerKey, (tickerValues.get(tickerKey) ?? 0) + conv);
 
-      const pr = profiles[t] ?? { sector: "Neznáme", country: "Neznáme", assetType: "AKCIA" as AssetType };
+      const pr =
+        profiles[tickerKey] ??
+        profiles[h.ticker] ??
+        { sector: "Neznáme", country: "Neznáme", assetType: "AKCIA" as AssetType };
       sectorRows.push({ name: pr.sector, value: conv });
       countryRows.push({ name: pr.country, value: conv });
       typeRows.push({ name: ASSET_TYPE_LABELS[pr.assetType] ?? "Iné", value: conv });
@@ -325,15 +362,17 @@ export default function Allocation() {
     if (Math.abs(cashTotal) > 0.005) {
       sum += cashTotal;
       if (cashTotal > 0.005) {
-        tickerRows.push({ name: "Hotovosť", value: cashTotal });
+        tickerValues.set("HOTOVOST", (tickerValues.get("HOTOVOST") ?? 0) + cashTotal);
         sectorRows.push({ name: "Hotovosť", value: cashTotal });
         countryRows.push({ name: "—", value: cashTotal });
         typeRows.push({ name: "Hotovosť", value: cashTotal });
       }
     }
 
+    const byTicker = aggregateTickerSlices(holdings, tickerValues);
+
     return {
-      byTicker: aggregateSlices(tickerRows),
+      byTicker,
       bySector: aggregateSlices(sectorRows),
       byCountry: aggregateSlices(countryRows),
       byType: aggregateSlices(typeRows),
@@ -751,20 +790,34 @@ function AllocationLegend({
             <div
               key={`${slice.name}-${i}`}
               role="listitem"
-              className="flex items-center gap-1.5 rounded px-1 py-0.5 min-h-[22px]"
+              className={cn(
+                "flex gap-1.5 rounded px-1 py-0.5",
+                dense ? "items-start min-h-[24px]" : "items-center min-h-[22px]",
+              )}
             >
               <span
-                className="h-2 w-2 shrink-0 rounded-sm ring-1 ring-border/50"
+                className={cn(
+                  "h-2 w-2 shrink-0 rounded-sm ring-1 ring-border/50",
+                  dense ? "mt-0.5" : "",
+                )}
                 style={{ backgroundColor: sliceFill(i) }}
                 aria-hidden
               />
               <span
-                className="min-w-0 flex-1 truncate text-[11px] font-medium leading-none"
+                className={cn(
+                  "min-w-0 flex-1 text-[11px] font-medium",
+                  dense ? "leading-snug break-words" : "truncate leading-none",
+                )}
                 title={slice.name}
               >
                 {slice.name}
               </span>
-              <span className="shrink-0 text-[10px] tabular-nums leading-none whitespace-nowrap">
+              <span
+                className={cn(
+                  "shrink-0 text-[10px] tabular-nums leading-none whitespace-nowrap",
+                  dense ? "pt-0.5" : "",
+                )}
+              >
                 <span className={displayMode === "value" ? "text-foreground font-medium" : "text-muted-foreground"}>
                   {valueStr}
                 </span>
@@ -782,21 +835,32 @@ function AllocationLegend({
             key={`${slice.name}-${i}`}
             role="listitem"
             className={cn(
-              "flex items-center justify-between gap-2 rounded-md hover:bg-muted/60 transition-colors",
-              dense ? "px-1.5 py-1" : "px-1.5 py-1.5",
+              "flex justify-between gap-2 rounded-md hover:bg-muted/60 transition-colors",
+              dense ? "items-start px-1.5 py-1" : "items-center px-1.5 py-1.5",
             )}
           >
-            <span className="flex items-center gap-2 min-w-0 flex-1">
+            <span className="flex items-start gap-2 min-w-0 flex-1">
               <span
-                className="h-2.5 w-2.5 shrink-0 rounded-sm ring-1 ring-border/60"
+                className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-sm ring-1 ring-border/60"
                 style={{ backgroundColor: sliceFill(i) }}
                 aria-hidden
               />
-              <span className="truncate text-sm font-medium leading-tight" title={slice.name}>
+              <span
+                className={cn(
+                  "text-sm font-medium leading-tight",
+                  dense ? "break-words" : "truncate",
+                )}
+                title={slice.name}
+              >
                 {slice.name}
               </span>
             </span>
-            <span className="shrink-0 text-right text-xs tabular-nums leading-tight whitespace-nowrap">
+            <span
+              className={cn(
+                "shrink-0 text-right text-xs tabular-nums leading-tight whitespace-nowrap",
+                dense ? "pt-0.5" : "",
+              )}
+            >
               <span className={displayMode === "value" ? "text-foreground font-medium" : "text-muted-foreground"}>
                 {valueStr}
               </span>
