@@ -66,7 +66,7 @@ interface StockQuote {
   price: number;
 }
 
-type Slice = { name: string; value: number };
+type Slice = { name: string; value: number; hint?: string };
 
 function sliceFill(i: number): string {
   const n = (i % 5) + 1;
@@ -84,35 +84,35 @@ function aggregateSlices(rows: Slice[]): Slice[] {
     .sort((a, b) => b.value - a.value);
 }
 
-/** Celý názov emitenta + ticker s burzovou príponou (napr. P911.DE). */
-function allocationAssetLabel(holding: Holding): string {
+/** Krátky ticker s burzovou príponou; celý názov emitenta je v `hint` (tooltip). */
+function allocationAssetLabel(holding: Holding): { name: string; hint?: string } {
   const ticker = holding.ticker.trim();
   const tickerUpper = ticker.toUpperCase();
   const company = (holding.companyName || "").trim();
 
-  if (tickerUpper === "CASH") return "Hotovosť";
-  if (tickerUpper === CASH_INTEREST_TICKER) return CASH_INTEREST_DISPLAY_NAME;
-  if (!company || company.toUpperCase() === tickerUpper) return ticker;
+  if (tickerUpper === "CASH") return { name: "Hotovosť" };
+  if (tickerUpper === CASH_INTEREST_TICKER) return { name: CASH_INTEREST_DISPLAY_NAME };
 
-  const companyHasTicker =
-    company.toUpperCase().includes(tickerUpper) ||
-    company.toUpperCase().includes(`(${tickerUpper})`);
-  if (companyHasTicker) return company;
+  const hint =
+    company && company.toUpperCase() !== tickerUpper && !company.toUpperCase().includes(tickerUpper)
+      ? company
+      : undefined;
 
-  return `${company} (${ticker})`;
+  return { name: ticker, hint };
 }
 
 function aggregateTickerSlices(holdings: Holding[], valueByTickerKey: Map<string, number>): Slice[] {
-  const labels = new Map<string, string>();
+  const labels = new Map<string, { name: string; hint?: string }>();
   for (const h of holdings) {
     const key = h.ticker.toUpperCase();
     if (!labels.has(key)) labels.set(key, allocationAssetLabel(h));
   }
   return Array.from(valueByTickerKey.entries())
-    .map(([key, value]) => ({
-      name: key === "HOTOVOST" ? "Hotovosť" : labels.get(key) ?? key,
-      value,
-    }))
+    .map(([key, value]) => {
+      if (key === "HOTOVOST") return { name: "Hotovosť", value };
+      const row = labels.get(key);
+      return { name: row?.name ?? key, hint: row?.hint, value };
+    })
     .filter((x) => x.value > 0)
     .sort((a, b) => b.value - a.value);
 }
@@ -394,11 +394,12 @@ export default function Allocation() {
     if (!props.active || !props.payload?.length) return null;
     const row = props.payload[0];
     const name = row.name ?? row.payload?.name;
+    const hint = row.payload?.hint;
     const value = row.value ?? row.payload?.value ?? 0;
     const pct = totalMarket > 0 ? (value / totalMarket) * 100 : 0;
     return (
       <div className="rounded-lg border bg-popover px-3 py-2 text-sm shadow-lg">
-        <div className="font-medium">{name}</div>
+        <div className="font-medium">{hint ? `${name} — ${hint}` : name}</div>
         <div className="text-muted-foreground">
           {mask(formatCurrency(value))}
           {" · "}
@@ -790,34 +791,20 @@ function AllocationLegend({
             <div
               key={`${slice.name}-${i}`}
               role="listitem"
-              className={cn(
-                "flex gap-1.5 rounded px-1 py-0.5",
-                dense ? "items-start min-h-[24px]" : "items-center min-h-[22px]",
-              )}
+              className="flex items-center gap-1.5 rounded px-1 py-0.5 min-h-[22px]"
             >
               <span
-                className={cn(
-                  "h-2 w-2 shrink-0 rounded-sm ring-1 ring-border/50",
-                  dense ? "mt-0.5" : "",
-                )}
+                className="h-2 w-2 shrink-0 rounded-sm ring-1 ring-border/50"
                 style={{ backgroundColor: sliceFill(i) }}
                 aria-hidden
               />
               <span
-                className={cn(
-                  "min-w-0 flex-1 text-[11px] font-medium",
-                  dense ? "leading-snug break-words" : "truncate leading-none",
-                )}
-                title={slice.name}
+                className="min-w-0 flex-1 truncate text-[11px] font-medium leading-none"
+                title={slice.hint ? `${slice.name} — ${slice.hint}` : slice.name}
               >
                 {slice.name}
               </span>
-              <span
-                className={cn(
-                  "shrink-0 text-[10px] tabular-nums leading-none whitespace-nowrap",
-                  dense ? "pt-0.5" : "",
-                )}
-              >
+              <span className="shrink-0 text-[10px] tabular-nums leading-none whitespace-nowrap">
                 <span className={displayMode === "value" ? "text-foreground font-medium" : "text-muted-foreground"}>
                   {valueStr}
                 </span>
@@ -835,32 +822,24 @@ function AllocationLegend({
             key={`${slice.name}-${i}`}
             role="listitem"
             className={cn(
-              "flex justify-between gap-2 rounded-md hover:bg-muted/60 transition-colors",
-              dense ? "items-start px-1.5 py-1" : "items-center px-1.5 py-1.5",
+              "flex items-center justify-between gap-2 rounded-md hover:bg-muted/60 transition-colors",
+              dense ? "px-1.5 py-1" : "px-1.5 py-1.5",
             )}
           >
-            <span className="flex items-start gap-2 min-w-0 flex-1">
+            <span className="flex items-center gap-2 min-w-0 flex-1">
               <span
-                className="mt-0.5 h-2.5 w-2.5 shrink-0 rounded-sm ring-1 ring-border/60"
+                className="h-2.5 w-2.5 shrink-0 rounded-sm ring-1 ring-border/60"
                 style={{ backgroundColor: sliceFill(i) }}
                 aria-hidden
               />
               <span
-                className={cn(
-                  "text-sm font-medium leading-tight",
-                  dense ? "break-words" : "truncate",
-                )}
-                title={slice.name}
+                className="truncate text-sm font-medium leading-tight"
+                title={slice.hint ? `${slice.name} — ${slice.hint}` : slice.name}
               >
                 {slice.name}
               </span>
             </span>
-            <span
-              className={cn(
-                "shrink-0 text-right text-xs tabular-nums leading-tight whitespace-nowrap",
-                dense ? "pt-0.5" : "",
-              )}
-            >
+            <span className="shrink-0 text-right text-xs tabular-nums leading-tight whitespace-nowrap">
               <span className={displayMode === "value" ? "text-foreground font-medium" : "text-muted-foreground"}>
                 {valueStr}
               </span>
