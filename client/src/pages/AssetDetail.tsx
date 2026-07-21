@@ -27,8 +27,7 @@ import { useChartSettings } from "@/hooks/useChartSettings";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { HelpTip } from "@/components/HelpTip";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import type { BrokerCode, Currency, Transaction } from "@shared/schema";
 import type { TradeCurrency } from "@shared/transactionEur";
 import { cn, formatShareQuantity } from "@/lib/utils";
@@ -430,9 +429,6 @@ export default function AssetDetail() {
   const costCurrency = data.costCurrency ?? resolveHoldingCostCurrency({ ticker: data.ticker });
   const changePositive = quote != null && quote.change >= 0;
   const canToggleQuoteCurrency = quoteCurrency !== currency;
-  const quoteDisplayCurrency: Currency | TradeCurrency = quoteInPreferredCurrency
-    ? currency
-    : quoteCurrency;
   const formatQuoteAmount = (amount: number) =>
     quoteInPreferredCurrency
       ? formatCurrency(convertPrice(amount, quoteCurrency))
@@ -492,28 +488,42 @@ export default function AssetDetail() {
                           {(quote.changePercent ?? 0).toFixed(2)}%)
                         </span>
                       </div>
-                      <div className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                      <div className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1">
                         <span>Menovka kotácie: {quoteCurrency}</span>
                         {canToggleQuoteCurrency ? (
                           <>
                             <span aria-hidden>·</span>
-                            <span className="inline-flex items-center gap-1">
+                            <span className="inline-flex items-center gap-1.5">
                               <span>zobrazenie:</span>
-                              <Checkbox
-                                id={`quote-display-ccy-${data.ticker}`}
+                              <span
+                                className={cn(
+                                  "font-medium tabular-nums",
+                                  !quoteInPreferredCurrency && "text-foreground",
+                                )}
+                              >
+                                {quoteCurrency}
+                              </span>
+                              <Switch
                                 checked={quoteInPreferredCurrency}
                                 onCheckedChange={(checked) =>
                                   setQuoteInPreferredCurrency(checked === true)
                                 }
-                                className="h-3 w-3"
-                                data-testid="checkbox-quote-display-currency"
+                                className="scale-[0.72] origin-center"
+                                aria-label={
+                                  quoteInPreferredCurrency
+                                    ? `Zobraziť cenu v ${quoteCurrency}`
+                                    : `Zobraziť cenu v ${currency}`
+                                }
+                                data-testid="switch-quote-display-currency"
                               />
-                              <Label
-                                htmlFor={`quote-display-ccy-${data.ticker}`}
-                                className="text-xs font-normal text-muted-foreground cursor-pointer leading-none"
+                              <span
+                                className={cn(
+                                  "font-medium tabular-nums",
+                                  quoteInPreferredCurrency && "text-foreground",
+                                )}
                               >
-                                {quoteDisplayCurrency}
-                              </Label>
+                                {currency}
+                              </span>
                             </span>
                           </>
                         ) : (
