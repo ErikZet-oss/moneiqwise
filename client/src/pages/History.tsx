@@ -636,12 +636,12 @@ export default function History() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-3 md:gap-6">
       <Card>
         <CardHeader>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <CardTitle>História transakcií</CardTitle>
+              <CardTitle className="text-sm font-medium">História transakcií</CardTitle>
               <CardDescription>
                 <span className="text-foreground font-medium block sm:inline">
                   {isAllPortfolios
@@ -829,7 +829,7 @@ export default function History() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="px-3 sm:px-6">
+        <CardContent className="p-4 pt-3 sm:px-6">
           <div className="flex flex-col gap-3 mb-6 md:flex-row md:flex-wrap md:items-center md:gap-4">
             <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2 md:flex-row">
               <span className="text-sm text-muted-foreground shrink-0">Typ</span>
@@ -966,7 +966,7 @@ export default function History() {
                   return (
                     <div 
                       key={transaction.id} 
-                      className={`rounded-xl border border-border/80 bg-card/60 px-3.5 py-3.5 shadow-sm ${
+                      className={`rounded-xl border border-border/80 bg-card/60 px-3.5 py-2 shadow-sm ${
                         isSelected ? "ring-2 ring-primary/25 bg-muted/50" : ""
                       }`}
                       data-testid={`row-mobile-transaction-${transaction.id}`}
@@ -992,10 +992,10 @@ export default function History() {
                               />
                               <div className="min-w-0 flex-1 space-y-1">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="font-semibold text-sm">{tickerLabel}</span>
+                                  <span className="text-xs font-semibold">{tickerLabel}</span>
                                   <Badge 
                                     variant={transaction.type === "SELL" || transaction.type === "WITHDRAWAL" ? "destructive" : "default"}
-                                    className={`text-xs px-2 py-0.5 h-6 font-medium ${
+                                    className={`text-[9px] px-1.5 py-0 h-4 font-medium ${
                                       transaction.type === "BUY" 
                                         ? "bg-green-500/20 text-green-600 border-green-500/30" 
                                         : transaction.type === "DIVIDEND"
@@ -1016,7 +1016,7 @@ export default function History() {
                               </div>
                             </div>
                             <div className="text-right shrink-0 space-y-0.5">
-                              <div className="text-base font-bold tabular-nums leading-tight">{formatCurrency(total)}</div>
+                              <div className="text-xs font-semibold tabular-nums leading-tight">{formatCurrency(total)}</div>
                               {(transaction.type === "BUY" || transaction.type === "SELL") && !isCash && (
                                 <div className="text-xs text-muted-foreground tabular-nums">
                                   {formatShareQuantity(shares)} ks
@@ -1044,7 +1044,7 @@ export default function History() {
                             </div>
                           </div>
                           <div className="flex items-end justify-between gap-3 pt-1 border-t border-border/50">
-                            <div className="min-w-0 space-y-1 text-xs text-muted-foreground leading-relaxed">
+                            <div className="min-w-0 space-y-1 text-[9px] text-muted-foreground leading-relaxed">
                               <div className="font-medium text-foreground/90">{formatDate(transaction.transactionDate)}</div>
                               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                                 <span>{isCash ? `Suma: ${formatCurrency(Math.abs(price))}` : `${formatCurrency(price)} / ks`}</span>

@@ -286,26 +286,26 @@ export default function EventsCalendar() {
   };
 
   return (
-    <div className="space-y-4 md:space-y-6 pb-6 md:pb-8">
+    <div className="flex flex-col gap-3 md:gap-6 pb-6 md:pb-8">
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold flex items-center gap-2 flex-wrap">
+        <h1 className="text-lg font-semibold flex items-center gap-2 flex-wrap">
           <CalendarClock className="h-5 w-5 sm:h-6 sm:w-6 text-primary shrink-0" />
           Trhovy kalendar
           <HelpTip title="Interaktivny kalendar udalosti">
             <p>Earnings, dividend events a macro data na jednom mieste. Kliknite na den pre detail.</p>
           </HelpTip>
         </h1>
-        <p className="text-sm sm:text-base text-muted-foreground mt-1">
+        <p className="text-xs text-muted-foreground mt-1">
           {isAllPortfolios ? "Vsetky portfolia" : `Portfolio: ${selectedPortfolio?.name ?? "Vybrane"}`}
         </p>
       </div>
 
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base sm:text-lg">Filtre udalosti</CardTitle>
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="text-sm font-medium">Filtre udalosti</CardTitle>
           <CardDescription>Vyberte, ktore typy udalosti sa maju zobrazovat v kalendari.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="p-4 pt-3 space-y-3">
           <div className="flex flex-wrap gap-2">
             <Button variant={showEarnings ? "default" : "outline"} size="sm" onClick={() => setShowEarnings((v) => !v)}>
               <span className="mr-1">E</span> Earnings
@@ -321,10 +321,10 @@ export default function EventsCalendar() {
       </Card>
 
       <Card>
-        <CardHeader className="px-3 sm:px-6">
+        <CardHeader className="p-4 pb-2">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle className="text-base sm:text-lg">Kalendar udalosti</CardTitle>
+              <CardTitle className="text-sm font-medium">Kalendar udalosti</CardTitle>
               <CardDescription>Klikni na den pre detail udalosti.</CardDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -340,7 +340,7 @@ export default function EventsCalendar() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="px-3 sm:px-6">
+        <CardContent className="p-4 pt-3">
           {loading ? (
             <Skeleton className="h-[420px] w-full" />
           ) : (

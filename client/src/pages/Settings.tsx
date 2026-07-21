@@ -431,25 +431,25 @@ export default function Settings() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-2xl mx-auto flex flex-col gap-3 md:gap-6">
       <div>
-        <h1 className="text-2xl font-bold" data-testid="text-settings-title">Údaje</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-lg font-semibold" data-testid="text-settings-title">Údaje</h1>
+        <p className="text-xs text-muted-foreground">
           Portfóliá, zobrazenie, menu a mena pre prehľad.
         </p>
       </div>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="p-4 pb-2">
           <div className="flex items-center gap-2">
             <Briefcase className="h-5 w-5 text-primary" />
-            <CardTitle>Správa portfólií</CardTitle>
+            <CardTitle className="text-sm font-medium">Správa portfólií</CardTitle>
           </div>
           <CardDescription>
             Vytvárajte a spravujte svoje investičné portfóliá. Poradie v tomto zozname (šípky nahor/nadol) určuje aj poradie v menu aplikácie.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="p-4 pt-3 space-y-4">
           <div className="flex items-center gap-2">
             <Input
               placeholder="Názov nového portfólia..."
@@ -702,16 +702,16 @@ export default function Settings() {
       </Dialog>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="p-4 pb-2">
           <div className="flex items-center gap-2">
             <Coins className="h-5 w-5 text-primary" />
-            <CardTitle>Mena zobrazenia</CardTitle>
+            <CardTitle className="text-sm font-medium">Mena zobrazenia</CardTitle>
           </div>
           <CardDescription>
             Vyberte menu, v ktorej sa budú zobrazovať všetky hodnoty. Ceny amerických akcií sa automaticky prepočítajú aktuálnym kurzom.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="p-4 pt-3 space-y-4">
           <div className="flex items-center gap-4">
             <Select 
               value={settings?.preferredCurrency || "EUR"} 
@@ -745,17 +745,17 @@ export default function Settings() {
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="p-4 pb-2">
           <div className="flex items-center gap-2">
             <Calculator className="h-5 w-5 text-primary" />
-            <CardTitle>Priemerné nákupné ceny</CardTitle>
+            <CardTitle className="text-sm font-medium">Priemerné nákupné ceny</CardTitle>
           </div>
           <CardDescription>
             Mena zobrazenia portfólia zostáva z predchádzajúceho bloku. Tu volíte len menu, v ktorej sa zobrazí{" "}
             <span className="font-medium">priemerná nákupná cena</span> (prepočet cez kurz z ECB).
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="p-4 pt-3 space-y-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
             <Select
               value={
@@ -783,16 +783,16 @@ export default function Settings() {
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="p-4 pb-2">
           <div className="flex items-center gap-2">
             <LineChart className="h-5 w-5 text-primary" />
-            <CardTitle>Zobrazenie na prehľade</CardTitle>
+            <CardTitle className="text-sm font-medium">Zobrazenie na prehľade</CardTitle>
           </div>
           <CardDescription>
             Nastavte, čo sa zobrazí na hlavnej stránke a v Prehľade. Vypnutie sekcií môže urýchliť načítanie.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="p-4 pt-3 space-y-4">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
               <div className="text-sm font-medium">Zobraziť graf</div>
@@ -926,16 +926,16 @@ export default function Settings() {
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="p-4 pb-2">
           <div className="flex items-center gap-2">
             <Calculator className="h-5 w-5 text-primary" />
-            <CardTitle>Prepočet realizovaného zisku</CardTitle>
+            <CardTitle className="text-sm font-medium">Prepočet realizovaného zisku</CardTitle>
           </div>
           <CardDescription>
             Prepočítajte realizovaný zisk/stratu pre všetky existujúce predajné transakcie na základe histórie nákupov.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="p-4 pt-3 space-y-4">
           <p className="text-sm text-muted-foreground">
             Táto funkcia prepočíta realizovaný zisk pre všetky vaše SELL transakcie. 
             Zisk sa počíta ako: <span className="font-medium">(predajná cena - priemerná nákupná cena) × počet akcií - poplatky</span>
@@ -966,10 +966,10 @@ export default function Settings() {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Informácie o API</CardTitle>
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="text-sm font-medium">Informácie o API</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4 text-sm text-muted-foreground">
+        <CardContent className="p-4 pt-3 space-y-4 text-sm text-muted-foreground">
           <div>
             <h4 className="font-medium text-foreground mb-1">Alpha Vantage</h4>
             <p>
@@ -995,13 +995,13 @@ export default function Settings() {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Údržba údajov</CardTitle>
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="text-sm font-medium">Údržba údajov</CardTitle>
           <CardDescription>
             Odstránenie záznamov, ktoré nie sú prepojené na žiadne tvoje portfólio (napr. po staršom importe alebo technickej chybe).
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="p-4 pt-3 space-y-3">
           <p className="text-sm text-muted-foreground">
             Vymaže len transakcie, holdingy a opčné obchody s prázdnym portfóliom alebo s ID portfólia, ktoré už neexistuje.
             <span className="font-medium text-foreground"> Aktívne portfóliá a ich riadky ostanú.</span> Ak chceš zmazať všetko, použij nižšie „Vymazať všetky transakcie“.
@@ -1029,16 +1029,16 @@ export default function Settings() {
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="p-4 pb-2">
           <div className="flex items-center gap-2">
             <Code2 className="h-5 w-5 text-primary" />
-            <CardTitle>Developer</CardTitle>
+            <CardTitle className="text-sm font-medium">Developer</CardTitle>
           </div>
           <CardDescription>
             Dočasný debug náhľad snapshotov histórie portfólia (čo sa ukladá do `portfolio_snapshots`) a export výpočtov do Excelu.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="p-4 pt-3 space-y-3">
           <div className="rounded-lg border border-dashed bg-muted/20 p-3 space-y-2">
             <div className="flex items-center gap-1.5 flex-wrap">
               <p className="text-sm font-medium">Audit výpočtov (Excel)</p>
@@ -1192,17 +1192,17 @@ export default function Settings() {
       </Card>
 
       <Card className="border-destructive/50">
-        <CardHeader>
+        <CardHeader className="p-4 pb-2">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-destructive" />
-            <CardTitle className="text-destructive">Nebezpečná zóna</CardTitle>
+            <CardTitle className="text-sm font-medium text-destructive">Nebezpečná zóna</CardTitle>
           </div>
           <CardDescription>
             Nezvratné operácie nad vašimi dátami. Používajte len ak viete, čo
             robíte.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="p-4 pt-3 space-y-4">
           <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 space-y-3">
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />

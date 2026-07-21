@@ -421,7 +421,7 @@ export default function AssetDetail() {
     p == null || !Number.isFinite(p) ? "—" : `${p >= 0 ? "+" : ""}${p.toFixed(2)}%`;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-10">
+    <div className="max-w-4xl mx-auto flex flex-col gap-3 md:gap-6 pb-10">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div className="space-y-2 min-w-0">
           <Button variant="ghost" size="sm" className="gap-2 -ml-2 w-fit" onClick={() => setLocation("/")}>
@@ -431,7 +431,7 @@ export default function AssetDetail() {
           <div className="flex items-start gap-3">
             <CompanyLogo ticker={data.ticker} companyName={data.companyName} size="lg" className="shrink-0" />
             <div className="min-w-0">
-              <h1 className="text-2xl font-bold truncate" data-testid="asset-detail-title">
+              <h1 className="text-lg font-semibold truncate" data-testid="asset-detail-title">
                 {data.companyName}
               </h1>
               <div className="flex flex-wrap items-center gap-2 text-muted-foreground text-sm">
@@ -454,11 +454,11 @@ export default function AssetDetail() {
           {data.ticker !== "CASH" && (
             <>
               <Card className="shrink-0 w-full sm:w-auto sm:min-w-[280px]">
-                <CardContent className="p-3 sm:p-4">
+                <CardContent className="p-4 pt-3">
                   {quote ? (
                     <>
                       <div className="text-xs text-muted-foreground uppercase tracking-wide">Aktuálna cena</div>
-                      <div className="text-2xl font-bold">
+                      <div className="text-2xl font-semibold leading-tight tracking-tight">
                         {mask(formatWithConversion(quote.price, data.ticker))}
                       </div>
                       <div
@@ -489,7 +489,7 @@ export default function AssetDetail() {
                   className="shrink-0 w-full border-amber-500/25 bg-amber-500/[0.06] dark:bg-amber-500/10 sm:w-auto sm:min-w-[220px]"
                   title="Očakávaný dátum (Yahoo alebo Finnhub), môže sa zmeniť."
                 >
-                  <CardContent className="p-3 sm:p-4">
+                  <CardContent className="p-4 pt-3">
                     <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wide">
                       <Calendar className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                       Najbližšie earnings
@@ -509,7 +509,7 @@ export default function AssetDetail() {
                   className="shrink-0 w-full border-dashed border-muted-foreground/25 sm:w-auto sm:min-w-[220px]"
                   title="Yahoo často blokuje API; so FINNHUB_API_KEY na serveri sa použije záložný kalendár Finnhub."
                 >
-                  <CardContent className="p-3 sm:p-4">
+                  <CardContent className="p-4 pt-3">
                     <div className="flex items-start gap-2 text-[10px] sm:text-xs text-muted-foreground leading-snug">
                       <Calendar className="h-3.5 w-3.5 shrink-0 mt-0.5 opacity-70" />
                       <span>
@@ -527,11 +527,11 @@ export default function AssetDetail() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Súhrn pozície</CardTitle>
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="text-sm font-medium">Súhrn pozície</CardTitle>
           <CardDescription>Celkom naprieč viditeľnými portfóliami</CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <CardContent className="p-4 pt-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <div className="text-xs text-muted-foreground">Počet kusov</div>
             <div className="text-lg font-semibold">{formatShareQuantity(data.totals.shares)}</div>
@@ -552,11 +552,11 @@ export default function AssetDetail() {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Podľa portfólia</CardTitle>
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="text-sm font-medium">Podľa portfólia</CardTitle>
           <CardDescription>Držané množstvo a priemerná nákupná cena v každom portfóliu</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4 pt-3">
           {data.positions.length === 0 ? (
             <p className="text-sm text-muted-foreground">Momentálne nemáte otvorenú pozíciu (všetko predané).</p>
           ) : (
@@ -598,14 +598,14 @@ export default function AssetDetail() {
 
       {data.ticker !== "CASH" && data.positions.length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle>Otvorené pozície (FIFO loty)</CardTitle>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-medium">Otvorené pozície (FIFO loty)</CardTitle>
             <CardDescription>
               Nákupné dávky v poradí FIFO; PnL je nerealizovaný podľa aktuálnej kotácie a kurzov. Oslobodenie: orient. 365 dní
               držby.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-3">
             {anyLotsLoading && fifoLotRows.length === 0 ? (
               <Skeleton className="h-32 w-full" />
             ) : lotsError ? (
@@ -801,11 +801,11 @@ export default function AssetDetail() {
 
       {data.dividends.paymentCount > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle>Dividendy</CardTitle>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-medium">Dividendy</CardTitle>
             <CardDescription>Čo ste od tohto aktíva dostali (viditeľné portfóliá)</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="p-4 pt-3 space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
               <div>
                 <div className="text-muted-foreground">Hrubá suma ({currency})</div>
@@ -855,11 +855,11 @@ export default function AssetDetail() {
       )}
 
       <Card>
-        <CardHeader>
+        <CardHeader className="p-4 pb-2">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div className="space-y-1 min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <CardTitle className="text-lg sm:text-xl">Vývoj ceny a obchody</CardTitle>
+                <CardTitle className="text-sm font-medium">Vývoj ceny a obchody</CardTitle>
                 <HelpTip title="Návratnosť a graf">
                   <p>
                     <strong>ROI pozície</strong> je pomer aktuálnej kotácie k váženému priemernému nákupu (v mene
@@ -900,7 +900,7 @@ export default function AssetDetail() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="p-4 pt-3 space-y-4">
           {chartData.length === 0 ? (
             <p className="text-sm text-muted-foreground py-8 text-center">
               Historické ceny nie sú k dispozícii (alebo ide o hotovosť).
@@ -1072,11 +1072,11 @@ export default function AssetDetail() {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>História transakcií</CardTitle>
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="text-sm font-medium">História transakcií</CardTitle>
           <CardDescription>Všetky záznamy pre tento ticker</CardDescription>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="p-4 pt-3 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>

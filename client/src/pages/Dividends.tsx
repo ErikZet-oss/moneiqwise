@@ -571,7 +571,7 @@ export default function Dividends() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6">
+      <div className="flex flex-col gap-3 md:gap-6">
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-80 w-full" />
         <Skeleton className="h-96 w-full" />
@@ -580,10 +580,10 @@ export default function Dividends() {
   }
 
   return (
-    <div className="space-y-4 md:space-y-6 pb-6 md:pb-8 px-0 sm:px-0">
+    <div className="flex flex-col gap-3 md:gap-6 pb-6 md:pb-8">
       <div>
         <h1
-          className="text-xl sm:text-2xl font-bold flex items-center gap-2 flex-wrap"
+          className="text-lg font-semibold flex items-center gap-2 flex-wrap"
           data-testid="text-page-title"
         >
           <Banknote className="h-5 w-5 sm:h-6 sm:w-6 text-primary shrink-0" />
@@ -595,14 +595,14 @@ export default function Dividends() {
             </p>
           </HelpTip>
         </h1>
-        <p className="text-sm sm:text-base text-muted-foreground mt-1">
+        <p className="text-xs text-muted-foreground mt-1">
           Kalendár, ročný prehľad a yield analytika
         </p>
       </div>
 
       <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
         <Card className="shadow-sm">
-          <CardContent className="px-2 py-2 sm:px-6 sm:py-5">
+          <CardContent className="p-4 pt-3">
             <p className="text-[9px] sm:text-xs text-muted-foreground leading-tight line-clamp-2 sm:line-clamp-none flex items-center gap-1">
               <span className="min-w-0">
                 <span className="sm:hidden">12M príjem</span>
@@ -615,13 +615,13 @@ export default function Dividends() {
                 </p>
               </HelpTip>
             </p>
-            <p className="text-[11px] sm:text-xl font-semibold tabular-nums leading-tight mt-0.5 sm:mt-1 break-all sm:break-normal">
+            <p className="text-[11px] sm:text-2xl font-semibold tabular-nums leading-tight tracking-tight mt-0.5 sm:mt-1 break-all sm:break-normal">
               {formatCurrency(yieldMetrics.annualIncome)}
             </p>
           </CardContent>
         </Card>
         <Card className="shadow-sm">
-          <CardContent className="px-2 py-2 sm:px-6 sm:py-5">
+          <CardContent className="p-4 pt-3">
             <p className="text-[9px] sm:text-xs text-muted-foreground leading-tight line-clamp-2 sm:line-clamp-none flex items-center gap-1">
               <span className="min-w-0">
                 <span className="sm:hidden">Yield</span>
@@ -634,13 +634,13 @@ export default function Dividends() {
                 </p>
               </HelpTip>
             </p>
-            <p className="text-[11px] sm:text-xl font-semibold tabular-nums leading-tight mt-0.5 sm:mt-1">
+            <p className="text-[11px] sm:text-2xl font-semibold tabular-nums leading-tight tracking-tight mt-0.5 sm:mt-1">
               {yieldMetrics.dividendYieldCurrent.toFixed(2)}%
             </p>
           </CardContent>
         </Card>
         <Card className="shadow-sm">
-          <CardContent className="px-2 py-2 sm:px-6 sm:py-5">
+          <CardContent className="p-4 pt-3">
             <p className="text-[9px] sm:text-xs text-muted-foreground leading-tight line-clamp-2 sm:line-clamp-none flex items-center gap-1">
               <span className="min-w-0">
                 <span className="sm:hidden">YOC</span>
@@ -653,7 +653,7 @@ export default function Dividends() {
                 </p>
               </HelpTip>
             </p>
-            <p className="text-[11px] sm:text-xl font-semibold tabular-nums leading-tight mt-0.5 sm:mt-1">
+            <p className="text-[11px] sm:text-2xl font-semibold tabular-nums leading-tight tracking-tight mt-0.5 sm:mt-1">
               {yieldMetrics.yieldOnCost.toFixed(2)}%
             </p>
           </CardContent>
@@ -661,10 +661,10 @@ export default function Dividends() {
       </div>
 
       <Card>
-        <CardHeader className="px-3 sm:px-6">
+        <CardHeader className="p-4 pb-2">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle className="text-base sm:text-lg flex items-center gap-1 flex-wrap">
+              <CardTitle className="text-sm font-medium flex items-center gap-1 flex-wrap">
                 Dividendový kalendár (interaktívny)
                 <HelpTip title="Dividendový kalendár">
                   <p>
@@ -690,7 +690,7 @@ export default function Dividends() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="px-3 sm:px-6">
+        <CardContent className="p-4 pt-3">
           <div className="rounded-lg border overflow-hidden touch-manipulation">
             <div className="grid grid-cols-7 gap-px bg-border">
               {["Po", "Ut", "St", "Št", "Pi", "So", "Ne"].map((d) => (
@@ -758,10 +758,10 @@ export default function Dividends() {
       </Card>
 
       <Card>
-        <CardHeader className="px-3 sm:px-6 space-y-3">
+        <CardHeader className="p-4 pb-2 space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
-              <CardTitle className="text-base sm:text-lg leading-snug flex items-center gap-1 flex-wrap">
+              <CardTitle className="text-sm font-medium leading-snug flex items-center gap-1 flex-wrap">
                 Dividendy podľa mesiacov
                 <HelpTip title="Graf podľa mesiacov">
                   <p>
@@ -817,7 +817,7 @@ export default function Dividends() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="px-2 sm:px-6">
+        <CardContent className="p-4 pt-3">
           {(() => {
             const today = new Date();
             const isCurrentMonthBar = (monthIndex: number) =>
@@ -1039,8 +1039,8 @@ export default function Dividends() {
 
       {dividends && dividends.byTicker.length > 0 && (
         <Card>
-          <CardHeader className="px-3 sm:px-6">
-            <CardTitle className="text-base sm:text-lg flex items-center gap-1 flex-wrap">
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-1 flex-wrap">
               Dividendy podľa spoločností
               <HelpTip title="Tabuľka podľa spoločností">
                 <p>
@@ -1051,7 +1051,7 @@ export default function Dividends() {
             </CardTitle>
             <CardDescription className="text-xs sm:text-sm">Historický prehľad vyplatených dividend</CardDescription>
           </CardHeader>
-          <CardContent className="px-3 sm:px-6">
+          <CardContent className="p-4 pt-3">
             <div className="md:hidden space-y-2">
               {dividends.byTicker.map((item) => (
                 <div key={item.ticker} className="rounded-lg border p-3 space-y-2">

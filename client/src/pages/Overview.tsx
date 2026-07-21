@@ -450,13 +450,13 @@ export default function Overview() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl mx-auto">
+    <div className="flex flex-col gap-3 md:gap-6 max-w-6xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-overview-title">
+          <h1 className="text-lg font-semibold" data-testid="text-overview-title">
             Prehľad portfólií
           </h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Rýchly prehľad výkonnosti všetkých vašich portfólií.
           </p>
         </div>
@@ -467,7 +467,7 @@ export default function Overview() {
             </div>
             <div className="flex items-center justify-end gap-1">
               <div
-                className="text-2xl font-bold"
+                className="text-2xl font-semibold leading-tight tracking-tight"
                 data-testid="text-overview-grand-total"
               >
                 {maskAmount(formatCurrency(grandTotal))}
@@ -497,7 +497,7 @@ export default function Overview() {
 
       {portfolios.length === 0 ? (
         <Card>
-          <CardContent className="p-8 text-center text-muted-foreground">
+          <CardContent className="p-4 py-6 text-center text-muted-foreground text-xs">
             Zatiaľ nemáte žiadne portfóliá. Vytvorte si prvé v sekcii Nastavenia.
           </CardContent>
         </Card>
@@ -529,7 +529,7 @@ export default function Overview() {
                 }}
                 data-testid={`overview-card-${portfolio.id}`}
               >
-                <CardContent className="p-5 space-y-4">
+                <CardContent className="p-4 pt-3 space-y-3">
                   <div className="flex items-center gap-2">
                     {portfolio.brokerCode ? (
                       <BrokerLogo brokerCode={portfolio.brokerCode} size="xs" />
@@ -547,7 +547,7 @@ export default function Overview() {
                     <div>
                       <div className="flex items-center gap-1 flex-wrap">
                         <div
-                          className="text-2xl md:text-3xl font-bold"
+                          className="text-2xl font-semibold leading-tight tracking-tight"
                           data-testid={`overview-value-${portfolio.id}`}
                         >
                           {maskAmount(formatCurrency(m.totalValue))}
@@ -591,7 +591,7 @@ export default function Overview() {
                   {overviewLoading || !m ? (
                     <Skeleton className="h-16 w-full mt-1" />
                   ) : hasAnyActivity ? (
-                    <div className="space-y-1.5 text-sm">
+                    <div className="space-y-1.5 text-xs">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-muted-foreground">Celkový zisk</span>
                         <span className={`font-medium ${getChangeTone(m.totalProfit)}`}>
@@ -657,7 +657,7 @@ export default function Overview() {
                       </div>
                     </div>
                   ) : (
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       V tomto portfóliu zatiaľ nie sú žiadne transakcie.
                     </p>
                   )}

@@ -446,16 +446,16 @@ export default function Import() {
   return (
     <div className="container mx-auto py-6 px-4 max-w-6xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold mb-2">Import z XTB</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-lg font-semibold mb-1">Import z XTB</h1>
+        <p className="text-xs text-muted-foreground">
           Nahrajte súbor exportu z XTB brokera (CSV alebo XLSX) pre automatický import transakcií.
         </p>
       </div>
 
-      <div className="grid gap-6">
+      <div className="flex flex-col gap-3 md:gap-6">
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
               <FileSpreadsheet className="h-5 w-5" />
               Nahrať súbor
             </CardTitle>
@@ -463,7 +463,7 @@ export default function Import() {
               Podporované formáty: CSV, XLSX, XLS. Maximálna veľkosť: 10 MB.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-3">
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row gap-4">
                 <div className="flex-1">
@@ -526,9 +526,9 @@ export default function Import() {
         {parseResult && (
           <>
             <Card>
-              <CardHeader>
+              <CardHeader className="p-4 pb-2">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <CardTitle>Výsledok spracovania</CardTitle>
+                  <CardTitle className="text-sm font-medium">Výsledok spracovania</CardTitle>
                   <div className="flex flex-wrap gap-2">
                     <Badge variant="default" className="bg-green-500">
                       {parseResult.summary.success} úspešných
@@ -549,7 +549,7 @@ export default function Import() {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-4 pt-3">
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
                   <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="transactions" data-testid="tab-transactions">
@@ -688,10 +688,10 @@ export default function Import() {
         )}
 
         <Card>
-          <CardHeader>
-            <CardTitle>Podporované typy transakcií</CardTitle>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-medium">Podporované typy transakcií</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-3">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="flex items-start gap-3">
                 <Badge variant="default">Nákup</Badge>
@@ -722,8 +722,8 @@ export default function Import() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Wrench className="h-5 w-5" />
               Opraviť nezaradené transakcie
             </CardTitle>
@@ -734,7 +734,7 @@ export default function Import() {
               nenastaveným portfóliom do vybraného cieľa.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-3">
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="flex-1">
                 <label className="text-sm font-medium mb-2 block">
@@ -778,8 +778,8 @@ export default function Import() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Wrench className="h-5 w-5" />
               Prepočítať akciové pozície
             </CardTitle>
@@ -789,7 +789,7 @@ export default function Import() {
               ceny z výpisu transakcií (BUY/SELL) v zvolenom portfóliu.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-3">
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="flex-1">
                 <label className="text-sm font-medium mb-2 block">Portfólio</label>
@@ -835,8 +835,8 @@ export default function Import() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
               <ListTree className="h-5 w-5" />
               Rozpad hotovosti (kontrola denníka)
             </CardTitle>
@@ -847,7 +847,7 @@ export default function Import() {
               hotovosť.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-3">
             <div className="flex flex-col sm:flex-row gap-4 mb-4">
               <div className="flex-1 max-w-md">
                 <label className="text-sm font-medium mb-2 block">Rozsah</label>

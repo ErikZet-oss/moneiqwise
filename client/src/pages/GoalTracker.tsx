@@ -198,9 +198,9 @@ export default function GoalTracker() {
   }, [projection, selectedMonthKey, yearRows]);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 px-3 sm:px-0 pb-4 sm:pb-0">
+    <div className="max-w-6xl mx-auto flex flex-col gap-3 md:gap-6 px-3 sm:px-0 pb-4 sm:pb-0">
       <div className="space-y-1">
-        <h1 className="text-xl sm:text-2xl font-semibold tracking-tight flex items-center gap-2">
+        <h1 className="text-lg font-semibold flex items-center gap-2">
           <Target className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
           Môj cieľ
           <HelpTip title="Ako funguje sekcia Môj cieľ">
@@ -208,14 +208,14 @@ export default function GoalTracker() {
             <p>Plán sa počíta mesačne zo zadaných inputov (počiatočná suma, mesačný vklad, ročný úrok, roky).</p>
           </HelpTip>
         </h1>
-        <p className="text-xs sm:text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           {isAllPortfolios ? "Všetky portfóliá" : `Portfólio: ${selectedPortfolio?.name ?? "Vybrané"}`}
         </p>
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-1">
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="text-sm font-medium flex items-center gap-1">
             Nastavenie simulácie
             <HelpTip title="Vstupy simulácie">
               <p>Počiatočná suma = štartový kapitál.</p>
@@ -228,7 +228,7 @@ export default function GoalTracker() {
             Zadaj cieľovú hodnotu, mesačný vklad a ročný výnos. Výpočet určí kedy (mesiac/rok) by si mal cieľ dosiahnuť.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+        <CardContent className="p-4 pt-3 grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-2">
             <Label htmlFor="goal-initial" className="text-xs sm:text-sm">Počiatočná suma</Label>
             <Input
@@ -303,8 +303,8 @@ export default function GoalTracker() {
       </Card>
 
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-1">
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="text-sm font-medium flex items-center gap-1">
             Odhad na konci cieľa
             <HelpTip title="Ako čítať tento odhad">
               <p>
@@ -316,8 +316,8 @@ export default function GoalTracker() {
             </HelpTip>
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
-          <p className="text-2xl sm:text-3xl font-bold tracking-tight" data-testid="text-goal-projected-final-value">
+        <CardContent className="p-4 pt-3 space-y-2">
+          <p className="text-2xl font-semibold leading-tight tracking-tight" data-testid="text-goal-projected-final-value">
             {formatCurrency(projectionSummary.projectedFinalValue)}
           </p>
           <p className="text-xs sm:text-sm text-muted-foreground" data-testid="text-goal-hit-date">
@@ -349,8 +349,8 @@ export default function GoalTracker() {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-1">
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="text-sm font-medium flex items-center gap-1">
             Cieľ vs realita
             <HelpTip title="Graf cieľ vs realita">
               <p>Prerušovaná čiara je plán (target), plocha je skutočný stav portfólia (actual).</p>
@@ -440,10 +440,10 @@ export default function GoalTracker() {
       </Card>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="p-4 pb-2">
           <div className="flex items-end justify-between gap-3 flex-wrap">
             <div>
-              <CardTitle className="text-base flex items-center gap-1">
+              <CardTitle className="text-sm font-medium flex items-center gap-1">
                 Mesačný kalendár (4 × 3)
                 <HelpTip title="Ako čítať mesačný grid">
                   <p>Zelený mesiac = v danom mesiaci tvoja realita dosiahla alebo prekonala cieľovú sumu.</p>
@@ -469,7 +469,7 @@ export default function GoalTracker() {
             </Select>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="p-4 pt-3 space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
             {Array.from({ length: 12 }, (_, m) => {
               const row = yearRows.find((p) => p.month === m) ?? null;

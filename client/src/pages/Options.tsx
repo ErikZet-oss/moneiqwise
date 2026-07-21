@@ -201,11 +201,11 @@ export default function Options() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-3 md:gap-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold" data-testid="text-options-title">Opcie</h1>
-          <p className="text-muted-foreground">Sledovanie opčných obchodov</p>
+          <h1 className="text-lg font-semibold" data-testid="text-options-title">Opcie</h1>
+          <p className="text-xs text-muted-foreground">Sledovanie opčných obchodov</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={handleDownloadTemplate} data-testid="button-download-template">
@@ -268,10 +268,10 @@ export default function Options() {
         <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
             <Card key={i}>
-              <CardHeader className="pb-2 p-3 md:p-6">
+              <CardHeader className="p-4 pb-2">
                 <Skeleton className="h-4 w-20" />
               </CardHeader>
-              <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
+              <CardContent className="p-4 pt-3">
                 <Skeleton className="h-6 w-24" />
               </CardContent>
             </Card>
@@ -280,64 +280,64 @@ export default function Options() {
       ) : stats ? (
         <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 gap-1 p-3 md:p-6 md:pb-2">
-              <CardTitle className="text-xs md:text-sm font-medium">Celkový zisk</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 gap-1 p-4 pb-2">
+              <CardTitle className="text-sm font-medium">Celkový zisk</CardTitle>
               {parseFloat(stats.totalRealizedGain) >= 0 ? (
                 <TrendingUp className="h-3 w-3 md:h-4 md:w-4 text-green-500" />
               ) : (
                 <TrendingDown className="h-3 w-3 md:h-4 md:w-4 text-red-500" />
               )}
             </CardHeader>
-            <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
-              <div className={`text-lg md:text-2xl font-bold truncate ${parseFloat(stats.totalRealizedGain) >= 0 ? "text-green-600" : "text-red-600"}`} data-testid="text-options-total-gain">
+            <CardContent className="p-4 pt-3">
+              <div className={`text-2xl font-semibold leading-tight tracking-tight truncate ${parseFloat(stats.totalRealizedGain) >= 0 ? "text-green-600" : "text-red-600"}`} data-testid="text-options-total-gain">
                 {formatUSD(parseFloat(stats.totalRealizedGain))}
               </div>
-              <p className="text-[10px] md:text-xs text-muted-foreground mt-1 truncate">
+              <p className="text-xs text-muted-foreground mt-1 truncate">
                 <span className="hidden md:inline">Zisky: </span>{formatUSD(parseFloat(stats.totalWins))} | <span className="hidden md:inline">Straty: </span>{formatUSD(parseFloat(stats.totalLosses))}
               </p>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 gap-1 p-3 md:p-6 md:pb-2">
-              <CardTitle className="text-xs md:text-sm font-medium">Win Rate</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 gap-1 p-4 pb-2">
+              <CardTitle className="text-sm font-medium">Win Rate</CardTitle>
               <Target className="h-3 w-3 md:h-4 md:w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
-              <div className="text-lg md:text-2xl font-bold" data-testid="text-options-win-rate">
+            <CardContent className="p-4 pt-3">
+              <div className="text-2xl font-semibold leading-tight tracking-tight" data-testid="text-options-win-rate">
                 {stats.winRate}%
               </div>
-              <p className="text-[10px] md:text-xs text-muted-foreground mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 {stats.winningTrades}W/{stats.losingTrades}L <span className="hidden md:inline">z {stats.closedTrades} uzatvorených</span>
               </p>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 gap-1 p-3 md:p-6 md:pb-2">
-              <CardTitle className="text-xs md:text-sm font-medium">Otvorené</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 gap-1 p-4 pb-2">
+              <CardTitle className="text-sm font-medium">Otvorené</CardTitle>
               <Clock className="h-3 w-3 md:h-4 md:w-4 text-blue-500" />
             </CardHeader>
-            <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
-              <div className="text-lg md:text-2xl font-bold" data-testid="text-options-open">
+            <CardContent className="p-4 pt-3">
+              <div className="text-2xl font-semibold leading-tight tracking-tight" data-testid="text-options-open">
                 {stats.openTrades}
               </div>
-              <p className="text-[10px] md:text-xs text-muted-foreground mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 z {stats.totalTrades} celkovo
               </p>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 gap-1 p-3 md:p-6 md:pb-2">
-              <CardTitle className="text-xs md:text-sm font-medium">Priem. obchod</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 gap-1 p-4 pb-2">
+              <CardTitle className="text-sm font-medium">Priem. obchod</CardTitle>
               <TrendingUp className="h-3 w-3 md:h-4 md:w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
-              <div className="text-lg md:text-2xl font-bold truncate" data-testid="text-options-avg">
+            <CardContent className="p-4 pt-3">
+              <div className="text-2xl font-semibold leading-tight tracking-tight truncate" data-testid="text-options-avg">
                 {formatUSD(parseFloat(stats.avgWin))}
               </div>
-              <p className="text-[10px] md:text-xs text-muted-foreground mt-1 truncate">
+              <p className="text-xs text-muted-foreground mt-1 truncate">
                 <span className="hidden md:inline">Priem. strata: </span>{formatUSD(parseFloat(stats.avgLoss))}
               </p>
             </CardContent>
@@ -346,9 +346,9 @@ export default function Options() {
       ) : null}
 
       <Card>
-        <CardHeader className="p-3 md:p-6">
+        <CardHeader className="p-4 pb-2">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <CardTitle className="text-base md:text-lg">Opčné obchody</CardTitle>
+            <CardTitle className="text-sm font-medium">Opčné obchody</CardTitle>
             <div className="flex gap-1 md:gap-2">
               <Button
                 variant={filter === "all" ? "default" : "outline"}
@@ -380,7 +380,7 @@ export default function Options() {
             </div>
           </div>
         </CardHeader>
-        <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
+        <CardContent className="p-4 pt-3">
           {tradesLoading ? (
             <div className="space-y-4">
               {[1, 2, 3].map((i) => (
@@ -425,13 +425,13 @@ export default function Options() {
                 return (
                   <div 
                     key={trade.id} 
-                    className="p-4 rounded-lg border bg-card hover-elevate"
+                    className="p-3 rounded-lg border bg-card hover-elevate"
                     data-testid={`option-trade-${trade.id}`}
                   >
                     <div className="flex flex-col md:flex-row gap-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-1.5 md:gap-2 mb-2">
-                          <span className="font-bold text-lg">{trade.underlying}</span>
+                          <span className="font-semibold text-xs">{trade.underlying}</span>
                           {getDirectionBadge(trade.direction, trade.optionType)}
                           {getStatusBadge(trade.status)}
                         </div>
@@ -440,14 +440,14 @@ export default function Options() {
                           <div className="flex items-center gap-1.5">
                             <DollarSign className="h-4 w-4 text-muted-foreground" />
                             <div>
-                              <div className="text-muted-foreground text-xs">Strike</div>
+                              <div className="text-muted-foreground text-[10px]">Strike</div>
                               <div className="font-medium">{formatUSD(parseFloat(trade.strikePrice))}</div>
                             </div>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <Calendar className="h-4 w-4 text-muted-foreground" />
                             <div>
-                              <div className="text-muted-foreground text-xs">Expirácia</div>
+                              <div className="text-muted-foreground text-[10px]">Expirácia</div>
                               <div className="font-medium">
                                 {format(new Date(trade.expirationDate), "d.M.yyyy", { locale: sk })}
                                 {trade.status === "OPEN" && (
@@ -461,14 +461,14 @@ export default function Options() {
                           <div className="flex items-center gap-1.5">
                             <Hash className="h-4 w-4 text-muted-foreground" />
                             <div>
-                              <div className="text-muted-foreground text-xs">Kontrakty</div>
+                              <div className="text-muted-foreground text-[10px]">Kontrakty</div>
                               <div className="font-medium">{trade.contracts}</div>
                             </div>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <TrendingUp className="h-4 w-4 text-muted-foreground" />
                             <div>
-                              <div className="text-muted-foreground text-xs">Prémia</div>
+                              <div className="text-muted-foreground text-[10px]">Prémia</div>
                               <div className="font-medium">
                                 ${parseFloat(trade.premium).toFixed(2)}/akcia
                                 <span className="text-muted-foreground text-xs ml-1">({formatUSD(totalPremium)})</span>
@@ -477,7 +477,7 @@ export default function Options() {
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-4 mt-2 text-xs text-muted-foreground">
+                        <div className="flex flex-wrap items-center gap-4 mt-1.5 text-[10px] text-muted-foreground">
                           <span>Otvorené: {format(new Date(trade.openDate), "d.M.yyyy", { locale: sk })}</span>
                           {trade.closeDate && (
                             <span>Zatvorené: {format(new Date(trade.closeDate), "d.M.yyyy", { locale: sk })}</span>
@@ -496,13 +496,13 @@ export default function Options() {
 
                       <div className="flex flex-row md:flex-col items-center md:items-end justify-between md:justify-start gap-2 md:gap-3 md:min-w-[140px]">
                         <div className="text-right">
-                          <div className={`text-xl font-bold ${parseFloat(trade.realizedGain || "0") >= 0 ? "text-green-600" : "text-red-600"}`}>
+                          <div className={`text-sm font-semibold leading-tight tabular-nums ${parseFloat(trade.realizedGain || "0") >= 0 ? "text-green-600" : "text-red-600"}`}>
                             {trade.status !== "OPEN" 
                               ? formatUSD(parseFloat(trade.realizedGain || "0"))
                               : "-"
                             }
                           </div>
-                          <div className="text-xs text-muted-foreground">
+                          <div className="text-[10px] text-muted-foreground">
                             {trade.status !== "OPEN" ? "Realizované" : "Otvorená pozícia"}
                           </div>
                         </div>

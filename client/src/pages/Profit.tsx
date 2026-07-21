@@ -201,11 +201,11 @@ export default function Profit() {
     return (
       <div className="max-w-full space-y-3 overflow-x-hidden md:space-y-6">
         <Card>
-          <CardHeader className="p-3 md:p-6">
+          <CardHeader className="p-4 pb-2">
             <Skeleton className="h-5 w-40 md:h-6 md:w-48" />
             <Skeleton className="h-3 w-56 md:h-4 md:w-64" />
           </CardHeader>
-          <CardContent className="px-3 pb-3 pt-0 md:p-6 md:pt-0">
+          <CardContent className="p-4 pt-3">
             <Skeleton className="h-48 w-full md:h-64" />
           </CardContent>
         </Card>
@@ -216,13 +216,13 @@ export default function Profit() {
   if (!transactions || transactions.length === 0) {
     return (
       <Card className="max-w-full overflow-x-hidden">
-        <CardHeader className="p-3 md:p-6">
-          <CardTitle className="text-base md:text-2xl">Zisk v čase</CardTitle>
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="text-sm font-medium">Zisk v čase</CardTitle>
           <CardDescription className="text-xs md:text-sm">
             Štatistika vášho zisku podľa období
           </CardDescription>
         </CardHeader>
-        <CardContent className="px-3 pb-3 md:p-6 md:pt-0">
+        <CardContent className="p-4 pt-3">
           <div className="py-8 text-center text-muted-foreground md:py-12">
             <p className="text-sm md:text-base">Zatiaľ žiadne transakcie na zobrazenie.</p>
             <p className="mt-2 text-xs md:text-sm">Začnite nákupom akcií aby ste videli štatistiku.</p>
@@ -251,7 +251,7 @@ export default function Profit() {
         </Alert>
       )}
 
-      <h2 className="text-lg font-semibold md:text-xl">Analýza zisku</h2>
+      <h2 className="text-lg font-semibold">Analýza zisku</h2>
 
       {/* Year / month performance breakdown (server-aggregated, cached) */}
       <YearMonthPerformance
@@ -263,16 +263,16 @@ export default function Profit() {
 
       {/* Realized Gains Section */}
       <Card className="max-w-full overflow-x-hidden">
-        <CardHeader className="space-y-1 p-3 md:p-6">
-          <CardTitle className="flex items-center gap-1.5 text-base font-semibold md:gap-2 md:text-2xl">
-            <Wallet className="h-4 w-4 shrink-0 md:h-5 md:w-5" />
+        <CardHeader className="space-y-1 p-4 pb-2">
+          <CardTitle className="flex items-center gap-1.5 text-sm font-medium">
+            <Wallet className="h-4 w-4 shrink-0" />
             Realizovaný zisk/strata
           </CardTitle>
           <CardDescription className="text-xs leading-snug md:text-sm">
             Z predajov podľa histórie; celkom vrátane príp. XTB „close trade“.
           </CardDescription>
         </CardHeader>
-        <CardContent className="px-3 pb-3 pt-0 md:p-6 md:pt-0">
+        <CardContent className="p-4 pt-3">
           {realizedGains &&
           (realizedGains.transactionCount > 0 ||
             Math.abs(realizedGains.closeTradeNetEur ?? 0) > 1e-9) ? (
@@ -280,26 +280,26 @@ export default function Profit() {
               <div className="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-4">
                 <div className="rounded-lg bg-muted/50 p-2 md:p-4">
                   <div className="mb-0.5 text-[10px] text-muted-foreground md:text-sm">Dnes</div>
-                  <div className={`text-sm font-bold tabular-nums md:text-lg ${realizedGains.realizedToday >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-today">
+                  <div className={`text-sm font-semibold tabular-nums leading-tight tracking-tight md:text-2xl ${realizedGains.realizedToday >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-today">
                     {formatCurrency(realizedGains.realizedToday)}
                   </div>
                 </div>
                 <div className="rounded-lg bg-muted/50 p-2 md:p-4">
                   <div className="mb-0.5 text-[10px] text-muted-foreground md:text-sm">Mesiac</div>
-                  <div className={`text-sm font-bold tabular-nums md:text-lg ${realizedGains.realizedThisMonth >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-month">
+                  <div className={`text-sm font-semibold tabular-nums leading-tight tracking-tight md:text-2xl ${realizedGains.realizedThisMonth >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-month">
                     {formatCurrency(realizedGains.realizedThisMonth)}
                   </div>
                 </div>
                 <div className="rounded-lg bg-muted/50 p-2 md:p-4">
                   <div className="mb-0.5 text-[10px] text-muted-foreground md:text-sm">YTD</div>
-                  <div className={`text-sm font-bold tabular-nums md:text-lg ${realizedGains.realizedYTD >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-ytd">
+                  <div className={`text-sm font-semibold tabular-nums leading-tight tracking-tight md:text-2xl ${realizedGains.realizedYTD >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-ytd">
                     {formatCurrency(realizedGains.realizedYTD)}
                   </div>
                 </div>
                 <div className="rounded-lg bg-muted/50 p-2 md:p-4">
                   <div className="mb-0.5 text-[10px] text-muted-foreground md:text-sm">Celkovo</div>
                   <div
-                    className={`text-sm font-bold tabular-nums md:text-lg ${(realizedGains.realizedGainTotal ?? realizedGains.totalRealized) >= 0 ? "text-green-500" : "text-red-500"}`}
+                    className={`text-sm font-semibold tabular-nums leading-tight tracking-tight md:text-2xl ${(realizedGains.realizedGainTotal ?? realizedGains.totalRealized) >= 0 ? "text-green-500" : "text-red-500"}`}
                     data-testid="text-realized-total"
                   >
                     {formatCurrency(
@@ -381,11 +381,11 @@ export default function Profit() {
       </Card>
 
       <Card className="max-w-full overflow-x-hidden">
-        <CardHeader className="space-y-1 p-3 md:p-6">
-          <CardTitle className="text-base md:text-2xl">Vývoj hodnoty portfólia</CardTitle>
+        <CardHeader className="space-y-1 p-4 pb-2">
+          <CardTitle className="text-sm font-medium">Vývoj hodnoty portfólia</CardTitle>
           <CardDescription className="text-xs md:text-sm">Od prvého obchodu po dnes (obchodné dni)</CardDescription>
         </CardHeader>
-        <CardContent className="px-2 pb-3 pt-0 md:px-6 md:pb-6 md:pt-0">
+        <CardContent className="p-4 pt-3">
           <div className="h-[200px] w-full max-w-full min-w-0 md:h-[280px]">
             <ResponsiveContainer width="100%" height="100%">
             <LineChart data={dailyData} margin={{ top: 4, right: 4, left: -8, bottom: 4 }}>
@@ -438,11 +438,11 @@ export default function Profit() {
       </Card>
 
       <Card className="max-w-full overflow-x-hidden">
-        <CardHeader className="space-y-1 p-3 md:p-6">
-          <CardTitle className="text-base md:text-2xl">Mesačný zisk/strata</CardTitle>
+        <CardHeader className="space-y-1 p-4 pb-2">
+          <CardTitle className="text-sm font-medium">Mesačný zisk/strata</CardTitle>
           <CardDescription className="text-xs md:text-sm">Zisk alebo strata za obdobie</CardDescription>
         </CardHeader>
-        <CardContent className="px-2 pb-3 pt-0 md:px-6 md:pb-6 md:pt-0">
+        <CardContent className="p-4 pt-3">
           <div className="h-[200px] w-full max-w-full min-w-0 md:h-[280px]">
             <ResponsiveContainer width="100%" height="100%">
             <BarChart
@@ -491,11 +491,11 @@ export default function Profit() {
       </Card>
 
       <Card className="max-w-full overflow-x-hidden">
-        <CardHeader className="space-y-1 p-3 md:p-6">
-          <CardTitle className="text-base md:text-2xl">Mesačné štatistiky</CardTitle>
+        <CardHeader className="space-y-1 p-4 pb-2">
+          <CardTitle className="text-sm font-medium">Mesačné štatistiky</CardTitle>
           <CardDescription className="text-xs md:text-sm">Detailný prehľad za obdobie</CardDescription>
         </CardHeader>
-        <CardContent className="px-2 pb-3 pt-0 md:px-6 md:pb-6 md:pt-0">
+        <CardContent className="p-4 pt-3">
           <div className="w-full max-w-full overflow-x-hidden">
             <Table className="w-full min-w-0 text-xs md:text-sm">
               <TableHeader>
@@ -562,16 +562,16 @@ function YearMonthPerformance({
   if (loading && !data) {
     return (
       <Card className="max-w-full overflow-x-hidden">
-        <CardHeader className="space-y-1 p-4 md:space-y-1.5 md:p-6">
-          <CardTitle className="flex items-center gap-1.5 text-base font-semibold leading-tight md:gap-2 md:text-2xl">
-            <CalendarDays className="h-4 w-4 shrink-0 md:h-5 md:w-5" />
+        <CardHeader className="space-y-1 p-4 pb-2">
+          <CardTitle className="flex items-center gap-1.5 text-sm font-medium">
+            <CalendarDays className="h-4 w-4 shrink-0" />
             Výkonnosť podľa rokov a mesiacov
           </CardTitle>
           <CardDescription className="text-xs leading-snug md:text-sm">
             Ročný a mesačný prehľad výnosov portfólia
           </CardDescription>
         </CardHeader>
-        <CardContent className="px-4 pb-4 pt-0 md:p-6 md:pt-0">
+        <CardContent className="p-4 pt-3">
           <Skeleton className="h-40 w-full" />
         </CardContent>
       </Card>
@@ -601,9 +601,9 @@ function YearMonthPerformance({
 
   return (
     <Card className="max-w-full overflow-x-hidden">
-      <CardHeader className="space-y-1 p-4 md:space-y-1.5 md:p-6">
-        <CardTitle className="flex items-center gap-1.5 text-base font-semibold leading-tight md:gap-2 md:text-2xl">
-          <CalendarDays className="h-4 w-4 shrink-0 md:h-5 md:w-5" />
+      <CardHeader className="space-y-1 p-4 pb-2">
+        <CardTitle className="flex items-center gap-1.5 text-sm font-medium">
+          <CalendarDays className="h-4 w-4 shrink-0" />
           Výkonnosť podľa rokov a mesiacov
         </CardTitle>
         <CardDescription className="text-xs leading-snug md:text-sm">
@@ -611,7 +611,7 @@ function YearMonthPerformance({
           takže opakované otvorenia sú okamžité.
         </CardDescription>
       </CardHeader>
-      <CardContent className="px-2 pb-3 pt-0 md:p-6 md:pt-0">
+      <CardContent className="p-4 pt-3">
         <div className="w-full max-w-full overflow-x-hidden">
           <Table className="w-full min-w-0 text-[10px] md:text-sm">
             <TableHeader className="[&_th]:h-8 [&_th]:px-1.5 [&_th]:py-1.5 md:[&_th]:h-12 md:[&_th]:px-4 md:[&_th]:py-3">

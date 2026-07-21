@@ -4,7 +4,7 @@ import { Separator } from "@/components/ui/separator";
 
 function Formula({ children }: { children: ReactNode }) {
   return (
-    <div className="font-mono text-sm bg-muted/60 border border-border/80 p-3 rounded-md overflow-x-auto my-3 text-foreground">
+    <div className="font-mono text-xs bg-muted/60 border border-border/80 p-3 rounded-md overflow-x-auto my-3 text-foreground">
       {children}
     </div>
   );
@@ -12,27 +12,27 @@ function Formula({ children }: { children: ReactNode }) {
 
 export default function FaqPage() {
   return (
-    <div className="max-w-3xl mx-auto space-y-8 pb-12">
+    <div className="max-w-3xl mx-auto flex flex-col gap-3 md:gap-6 pb-12">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight" data-testid="text-faq-title">
+        <h1 className="text-lg font-semibold" data-testid="text-faq-title">
           FAQ — ako Moneiqwise funguje
         </h1>
-        <p className="text-muted-foreground text-sm mt-2">
+        <p className="text-xs text-muted-foreground mt-2">
           Metodika výpočtov, dáta, import a pojmy. Text je informatívny; pri daňových a právnych záležitostiach sa spoľahni na odborníka.
         </p>
       </div>
 
-      <div className="prose prose-sm dark:prose-invert max-w-none space-y-8">
+      <div className="prose prose-sm dark:prose-invert max-w-none flex flex-col gap-3 md:gap-6">
         <Card>
-          <CardHeader>
-            <CardTitle>1. Metodika výpočtov</CardTitle>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-medium">1. Metodika výpočtov</CardTitle>
             <CardDescription>
               Aplikácia nie je len jednoduchá kalkulačka — zohľadňuje čas peňažných tokov, FIFO náklady a meny.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6 text-sm text-foreground leading-relaxed">
+          <CardContent className="p-4 pt-3 space-y-4 text-sm text-foreground leading-relaxed">
             <section>
-              <h3 className="text-base font-semibold mb-2">Ako sa počíta výkonnosť portfólia (TWR)?</h3>
+              <h3 className="text-sm font-semibold mb-2">Ako sa počíta výkonnosť portfólia (TWR)?</h3>
               <p>
                 Pre reťazenú výkonnosť používame prístup zarovnateľný s princípmi{" "}
                 <strong>Time-Weighted Return (TWR)</strong> v duchu{" "}
@@ -58,7 +58,7 @@ export default function FaqPage() {
             <Separator />
 
             <section>
-              <h3 className="text-base font-semibold mb-2">Čo je FIFO a ako ovplyvňuje zisk?</h3>
+              <h3 className="text-sm font-semibold mb-2">Čo je FIFO a ako ovplyvňuje zisk?</h3>
               <p>
                 <strong>FIFO (First-In, First-Out)</strong> znamená, že pri predaji sa najprv „spotrebujú“ najstaršie nakúpené kusy — presne v poradí nákupov.
               </p>
@@ -73,7 +73,7 @@ export default function FaqPage() {
             <Separator />
 
             <section>
-              <h3 className="text-base font-semibold mb-2">Ako sa počíta celková hodnota (Total Value)?</h3>
+              <h3 className="text-sm font-semibold mb-2">Ako sa počíta celková hodnota (Total Value)?</h3>
               <Formula>
                 Celková hodnota ≈ súčet (aktuálna cena × počet kusov) po tituloch + hotovosť / margin
               </Formula>
@@ -85,7 +85,7 @@ export default function FaqPage() {
             <Separator />
 
             <section>
-              <h3 className="text-base font-semibold mb-2">Ako riešime menové konverzie (FX)?</h3>
+              <h3 className="text-sm font-semibold mb-2">Ako riešime menové konverzie (FX)?</h3>
               <ul className="list-disc pl-5 space-y-2 mt-2">
                 <li>
                   <strong>Historicky pri transakcii:</strong> nákup/predaj v USD (a iných menách) sa prepočítava do EUR (a do meny zobrazenia) kurzom platným pri <strong>dátume transakcie</strong> — z uloženého kurzu v zázname, z EUR ekvivalentu, alebo z doplneného ECB kurzu (Frankfurter) pre daný deň. Tak sa snažíme, aby hotovosť a FIFO náklady sedeli s realitou obchodu.
@@ -102,13 +102,13 @@ export default function FaqPage() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>2. Spracovanie dát a import</CardTitle>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-medium">2. Spracovanie dát a import</CardTitle>
             <CardDescription>Hotovosť, úroky, dividendy a súbory z brokera.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6 text-sm text-foreground leading-relaxed">
+          <CardContent className="p-4 pt-3 space-y-4 text-sm text-foreground leading-relaxed">
             <section>
-              <h3 className="text-base font-semibold mb-2">Prečo mi nesedí hotovosť o pár eur?</h3>
+              <h3 className="text-sm font-semibold mb-2">Prečo mi nesedí hotovosť o pár eur?</h3>
               <p>
                 Úprimne: <strong>zaokrúhľovanie</strong> (napr. na 2 desatinné miesta v importe aj v prepočtoch), <strong>odlišný kurz</strong> medzi brokerom a naším dátovým zdrojom (ECB / Frankfurter) a rôzne zaokrúhľovacie pravidlá u brokera môžu dať rozdiel v rádoch jednotiek až desiatok eur pri veľkom objeme transakcií. Ak je rozdiel systematicky väčší, skontroluj import a chýbajúce riadky (vklady, poplatky, dividendy).
               </p>
@@ -117,7 +117,7 @@ export default function FaqPage() {
             <Separator />
 
             <section>
-              <h3 className="text-base font-semibold mb-2">Započítavajú sa do zisku aj úroky z hotovosti?</h3>
+              <h3 className="text-sm font-semibold mb-2">Započítavajú sa do zisku aj úroky z hotovosti?</h3>
               <p>
                 <strong>Áno.</strong> Položky <strong>Úrok z cash XTB</strong> (v dátach ticker <code>CASH_INTEREST</code>, úrok z free cash z importu XTB) sa evidujú ako peňažné toky zvyšujúce hotovosť. Zvyšujú celkovú hodnotu portfólia a tým aj celkový výnos (P&amp;L) v čase, keď sú pripísané — rovnako ako iné cash toky, ktoré zvyšujú disponibilnú sumu.
               </p>
@@ -126,7 +126,7 @@ export default function FaqPage() {
             <Separator />
 
             <section>
-              <h3 className="text-base font-semibold mb-2">Čo sa deje s dividendami?</h3>
+              <h3 className="text-sm font-semibold mb-2">Čo sa deje s dividendami?</h3>
               <p>
                 Dividendy evidujeme ako transakcie; <strong>čistá suma</strong> po zrážke (pole provízia / daň podľa zápisu) zvyčajne <strong>zvýši hotovosť</strong> v zúčtovaní rovnako ako pri brokeroch. V Prehľade a v P&amp;L sa dividendy ukazujú ako samostatná zložka zisku. Presné daňové zaobchádzanie v reálnom živote rieš s poradcom — v aplikácii ide o prehľad a orientáciu.
               </p>
@@ -135,13 +135,13 @@ export default function FaqPage() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>3. Zabezpečenie dát klienta</CardTitle>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-medium">3. Zabezpečenie dát klienta</CardTitle>
             <CardDescription>Čo je chránené a čo odporúčame nastaviť v produkcii.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6 text-sm text-foreground leading-relaxed">
+          <CardContent className="p-4 pt-3 space-y-4 text-sm text-foreground leading-relaxed">
             <section>
-              <h3 className="text-base font-semibold mb-2">Ako chránime prihlásenie a heslá?</h3>
+              <h3 className="text-sm font-semibold mb-2">Ako chránime prihlásenie a heslá?</h3>
               <ul className="list-disc pl-5 space-y-2">
                 <li>
                   Heslá sa neukladajú v čitateľnej podobe; ukladajú sa ako <strong>hash + salt</strong> (scrypt).
@@ -158,7 +158,7 @@ export default function FaqPage() {
             <Separator />
 
             <section>
-              <h3 className="text-base font-semibold mb-2">Môžem obmedziť registrácie len na schválené emaily?</h3>
+              <h3 className="text-sm font-semibold mb-2">Môžem obmedziť registrácie len na schválené emaily?</h3>
               <p>
                 Áno. V produkcii vieš zapnúť email allowlist cez{" "}
                 <code>LOCAL_AUTH_EMAIL_ALLOWLIST</code> (zoznam emailov oddelených čiarkou). Registrácia mimo zoznamu bude odmietnutá.
@@ -168,7 +168,7 @@ export default function FaqPage() {
             <Separator />
 
             <section>
-              <h3 className="text-base font-semibold mb-2">Čo odporúčame pre čo najvyššiu bezpečnosť?</h3>
+              <h3 className="text-sm font-semibold mb-2">Čo odporúčame pre čo najvyššiu bezpečnosť?</h3>
               <ul className="list-disc pl-5 space-y-2">
                 <li>
                   V produkcii nastav silný <code>SESSION_SECRET</code> (dlhý náhodný reťazec, aspoň 32 znakov).
@@ -188,7 +188,7 @@ export default function FaqPage() {
             <Separator />
 
             <section>
-              <h3 className="text-base font-semibold mb-2">Aké sú otváracie hodiny a čo znamená ikona mesiaca?</h3>
+              <h3 className="text-sm font-semibold mb-2">Aké sú otváracie hodiny a čo znamená ikona mesiaca?</h3>
               <p>
                 Pre americký trh používame orientačné časové pásma podľa času v Bratislave:
               </p>
@@ -211,11 +211,11 @@ export default function FaqPage() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>4. Slovník pojmov</CardTitle>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-medium">4. Slovník pojmov</CardTitle>
             <CardDescription>Stručné definície.</CardDescription>
           </CardHeader>
-          <CardContent className="text-sm space-y-3 text-foreground leading-relaxed">
+          <CardContent className="p-4 pt-3 text-sm space-y-3 text-foreground leading-relaxed">
             <dl className="space-y-3">
               <div>
                 <dt className="font-semibold">Realized P&amp;L (realizovaný zisk)</dt>
@@ -246,13 +246,13 @@ export default function FaqPage() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>5. Riešenie problémov</CardTitle>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-medium">5. Riešenie problémov</CardTitle>
             <CardDescription>Keď niečo nenájdeš alebo import zlyhá.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6 text-sm text-foreground leading-relaxed">
+          <CardContent className="p-4 pt-3 space-y-4 text-sm text-foreground leading-relaxed">
             <section>
-              <h3 className="text-base font-semibold mb-2">Nenašlo to môj ticker — čo robiť?</h3>
+              <h3 className="text-sm font-semibold mb-2">Nenašlo to môj ticker — čo robiť?</h3>
               <ul className="list-disc pl-5 space-y-2">
                 <li>
                   Skontroluj, či symbol z brokera zodpovedá tomu, čo očakávajú dátové zdroje (napr. prípona burzy <code>.DE</code>, <code>.AS</code> atď.).
@@ -269,7 +269,7 @@ export default function FaqPage() {
             <Separator />
 
             <section>
-              <h3 className="text-base font-semibold mb-2">Import z XTB zlyhal — prečo?</h3>
+              <h3 className="text-sm font-semibold mb-2">Import z XTB zlyhal — prečo?</h3>
               <ul className="list-disc pl-5 space-y-2">
                 <li>
                   Použi export z XTB v podporovanom formáte — stránka Import uvádza očakávané stĺpce (napr. čas, typ, symbol, suma, komentár podľa typu exportu). <strong>CSV / XLSX</strong> musí zodpovedať šablóne „Cash operation history“ alebo podporovanému reportu, nie ľubovoľnému výstrižku.

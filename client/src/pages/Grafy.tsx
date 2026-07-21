@@ -184,9 +184,9 @@ export default function Grafy() {
     : { wrapperStyle: { fontSize: 12 }, iconSize: 10 };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-5 sm:space-y-6 px-3 sm:px-4 md:px-6 pb-6">
+    <div className="max-w-6xl mx-auto flex flex-col gap-3 md:gap-6 pb-6">
       <div className="space-y-1">
-        <h1 className="text-xl sm:text-2xl font-semibold tracking-tight flex items-center gap-2 flex-wrap">
+        <h1 className="text-lg font-semibold flex items-center gap-2 flex-wrap">
           <Activity className="h-6 w-6 sm:h-7 sm:w-7 shrink-0 text-primary" />
           Grafy
           <HelpTip title="Stránka Grafy">
@@ -196,15 +196,15 @@ export default function Grafy() {
             </p>
           </HelpTip>
         </h1>
-        <p className="text-muted-foreground text-xs sm:text-sm max-w-3xl leading-relaxed">
+        <p className="text-xs text-muted-foreground max-w-3xl leading-relaxed">
           Dáta z toho istého oceňovania a tokov (MTM, vklady/výbery) ako TWR. Benchmark: S&amp;P 500 (^GSPC)
           v rovnakom časovom režime.
         </p>
       </div>
 
       <Card className="border-border/80 shadow-sm">
-        <CardHeader className="space-y-4 pb-4 pt-4 sm:pt-6">
-          <CardTitle className="text-base sm:text-lg flex items-center gap-1 flex-wrap">
+        <CardHeader className="space-y-4 p-4 pb-4">
+          <CardTitle className="text-sm font-medium flex items-center gap-1 flex-wrap">
             Zobrazenie
             <HelpTip title="Filtre grafu">
               <p>
@@ -275,8 +275,8 @@ export default function Grafy() {
 
       {/* 1) Success chart */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-1 flex-wrap">
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="text-sm font-medium flex items-center gap-1 flex-wrap">
             Celková hodnota vs. investované
             <HelpTip title="Hodnota vs. čisté vklady">
               <p>
@@ -393,8 +393,8 @@ export default function Grafy() {
 
       {/* 2) TWR vs S&P % */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-1 flex-wrap">
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="text-sm font-medium flex items-center gap-1 flex-wrap">
             Výkon v % oproti S&amp;P 500
             <HelpTip title="Kumulatívny výnos v %">
               <p>

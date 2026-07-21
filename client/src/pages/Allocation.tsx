@@ -423,11 +423,11 @@ export default function Allocation() {
     <div className="flex flex-col gap-3 md:gap-6 max-w-7xl mx-auto pb-10 -mx-6 px-0 md:mx-auto md:px-0">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-2.5 md:px-0">
         <div>
-          <h1 className="text-xl md:text-2xl font-bold tracking-tight flex items-center gap-2">
+          <h1 className="text-lg font-semibold flex items-center gap-2">
             <PieChartIcon className="h-6 w-6 md:h-7 md:w-7 text-primary" />
             Rozloženie portfólia
           </h1>
-          <p className="text-muted-foreground text-xs md:text-sm mt-1">
+          <p className="text-muted-foreground text-xs mt-1">
             Podľa tickerov, sektorov, krajín a typu aktíva. Sektor/krajina/typ vieš manuálne prepísať
             nižšie pre presnejšie koláče.
           </p>
@@ -453,11 +453,11 @@ export default function Allocation() {
         <div className="grid gap-3 md:gap-6 md:grid-cols-2 xl:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
             <Card key={i}>
-              <CardHeader className="p-2.5 md:p-6">
+              <CardHeader className="p-2.5 md:p-4">
                 <Skeleton className="h-5 w-40" />
                 <Skeleton className="h-4 w-full mt-2" />
               </CardHeader>
-              <CardContent className="p-2.5 pt-0 md:p-6 md:pt-0">
+              <CardContent className="p-2.5 pt-0 md:p-4 md:pt-0">
                 <Skeleton className="h-[280px] w-full rounded-lg" />
               </CardContent>
             </Card>
@@ -520,13 +520,13 @@ export default function Allocation() {
       )}
 
       <Card>
-        <CardHeader className="p-2.5 md:p-6">
-          <CardTitle className="text-base md:text-lg">Manuálne metadáta aktív</CardTitle>
+        <CardHeader className="p-2.5 md:p-4">
+          <CardTitle className="text-sm font-medium">Manuálne metadáta aktív</CardTitle>
           <CardDescription className="text-xs md:text-sm">
             Prepíše sektor, krajinu a typ z Yahoo pre vybraný ticker (necháš prázdne = použije sa Yahoo).
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3 p-2.5 pt-0 md:p-6 md:pt-0">
+        <CardContent className="space-y-3 p-2.5 pt-0 md:p-4 md:pt-0">
           {metadataLoading && equityTickers.length > 0 ? (
             <Skeleton className="h-24 w-full" />
           ) : equityTickers.length === 0 ? (
@@ -668,11 +668,11 @@ function AllocationPieCard({
         "bg-card/80 backdrop-blur-[2px]"
       )}
     >
-      <CardHeader className="p-2 md:p-6 pb-1.5 space-y-0.5">
-        <CardTitle className="text-sm md:text-lg tracking-tight">{title}</CardTitle>
+      <CardHeader className="p-2 md:p-4 pb-1.5 space-y-0.5">
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
         <CardDescription className="text-[11px] md:text-sm leading-snug">{description}</CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-2 md:gap-4 p-2 pt-0 md:p-6 md:pt-0 pb-3 md:pb-6">
+      <CardContent className="flex flex-col gap-2 md:gap-4 p-2 pt-0 md:p-4 md:pt-0 pb-3 md:pb-6">
         {chartData.length === 0 ? (
           <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
             Nedostatok dát
@@ -683,7 +683,7 @@ function AllocationPieCard({
               <span className="text-[10px] md:text-[11px] uppercase tracking-wide text-muted-foreground">
                 Celkom
               </span>
-              <div className="text-base md:text-lg font-semibold tabular-nums leading-tight">
+              <div className="text-base md:text-2xl font-semibold tabular-nums leading-tight tracking-tight">
                 {mask(formatCurrency(total))}
               </div>
             </div>

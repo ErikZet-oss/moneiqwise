@@ -198,10 +198,10 @@ export default function TaxSummaryPage() {
   );
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 pb-8">
+    <div className="max-w-4xl mx-auto flex flex-col gap-3 md:gap-6 pb-8">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Daňový asistent</h1>
-        <p className="text-muted-foreground text-sm mt-1">
+        <h1 className="text-lg font-semibold">Daňový asistent</h1>
+        <p className="text-xs text-muted-foreground mt-1">
           Ročné súčty pre orientáciu pred podaním a účtovníctvom. Čísla sú v EUR z backendu.
         </p>
       </div>
@@ -254,7 +254,7 @@ export default function TaxSummaryPage() {
 
       {query.isError && (
         <Card className="border-destructive/50">
-          <CardContent className="pt-6 text-destructive text-sm">
+          <CardContent className="p-4 text-destructive text-sm">
             {(query.error as Error).message}
           </CardContent>
         </Card>
@@ -271,16 +271,16 @@ export default function TaxSummaryPage() {
                   : "border-border")
               }
             >
-              <CardHeader className="pb-2">
+              <CardHeader className="p-4 pb-2">
                 <div className="flex items-center gap-2 text-emerald-600">
                   <ShieldCheck className="h-5 w-5" />
                   <span className="text-xs font-medium uppercase">V suchu (orient.)</span>
                 </div>
-                <CardTitle className="text-base">{longTermLabel}</CardTitle>
+                <CardTitle className="text-sm font-medium">{longTermLabel}</CardTitle>
                 <CardDescription>holding ≥ 365 dní, realiz. zisk v EUR (FIFO diely)</CardDescription>
               </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold tabular-nums text-emerald-700 dark:text-emerald-400">
+              <CardContent className="p-4 pt-3">
+                <p className="text-2xl font-semibold leading-tight tracking-tight tabular-nums text-emerald-700 dark:text-emerald-400">
                   {formatCurrency(finiteEur(d.forForms?.taxExempt?.realizedGainsEur))}
                 </p>
                 {finiteEur(d.forForms?.taxExempt?.realizedLossesEur) > 0.01 && (
@@ -300,16 +300,16 @@ export default function TaxSummaryPage() {
                   : "border-border")
               }
             >
-              <CardHeader className="pb-2">
+              <CardHeader className="p-4 pb-2">
                 <div className="flex items-center gap-2 text-orange-600">
                   <BarChart2 className="h-5 w-5" />
                   <span className="text-xs font-medium uppercase">Krátkodobé</span>
                 </div>
-                <CardTitle className="text-base">{shortTermLabel}</CardTitle>
+                <CardTitle className="text-sm font-medium">{shortTermLabel}</CardTitle>
                 <CardDescription>Zápočet kladné − straty v rámci roka</CardDescription>
               </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-bold tabular-nums">
+              <CardContent className="p-4 pt-3">
+                <p className="text-2xl font-semibold leading-tight tracking-tight tabular-nums">
                   {formatCurrency(finiteEur(d.realized?.netShortTermTaxableEur))}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
@@ -327,7 +327,7 @@ export default function TaxSummaryPage() {
                   : "border-border")
               }
             >
-              <CardHeader className="pb-2">
+              <CardHeader className="p-4 pb-2">
                 <div
                   className={
                     "flex items-center gap-2 " +
@@ -339,13 +339,13 @@ export default function TaxSummaryPage() {
                   <AlertTriangle className="h-5 w-5" />
                   <span className="text-xs font-medium uppercase">Marec / dane</span>
                 </div>
-                <CardTitle className="text-base">Odhadovaná daň (19 % / pásy)</CardTitle>
+                <CardTitle className="text-sm font-medium">Odhadovaná daň (19 % / pásy)</CardTitle>
                 <CardDescription>Orient. podľa kratk. základu, nie konečné rozhodnutie</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-4 pt-3">
                 <p
                   className={
-                    "text-2xl font-bold tabular-nums " +
+                    "text-2xl font-semibold leading-tight tracking-tight tabular-nums " +
                     (finiteEur(d.skEstimate?.estimatedTotalTaxEur) > 0 ? "text-destructive" : "")
                   }
                 >
@@ -374,13 +374,13 @@ export default function TaxSummaryPage() {
           </div>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Dividendy v roku {d.year}</CardTitle>
+            <CardHeader className="p-4 pb-2">
+              <CardTitle className="text-sm font-medium">Dividendy v roku {d.year}</CardTitle>
               <CardDescription>
                 Hrubá, zrazená (pole commission v appke), čisté – v EUR. Zahraničné DTT nie sú automatická.
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 pt-3">
               {(d.dividends?.items ?? []).length === 0 ? (
                 <p className="text-sm text-muted-foreground">V tomto roku žiadne dividendy v dátach.</p>
               ) : (
