@@ -85,6 +85,7 @@ type MobileOpenFifoLot = {
   remainingShares: number;
   pricePerShareLocal: number;
   purchaseCurrency: string;
+  investedAmount: number;
   currentPnl: number;
   currentPriceAvailable: boolean;
 };
@@ -176,18 +177,21 @@ function MobileHoldingBuyLotsPanel({
             ? ccyRaw
             : "EUR";
         const openPrice = convertAverageCostPriceFn(lot.pricePerShareLocal, ccy);
-        // XTB „Čistý zisk %“ = P&L / investované v mene účtu (nie (cena−open)/open v USD).
+        // XTB „Čistý zisk %“ = (hodnota − investované) / investované v mene účtu.
+        const invested = Number.isFinite(lot.investedAmount) ? lot.investedAmount : null;
         const lotValue =
           currentPrice != null && Number.isFinite(currentPrice)
             ? lot.remainingShares * currentPrice
             : null;
         const lotGain =
-          lot.currentPriceAvailable && Number.isFinite(lot.currentPnl) ? lot.currentPnl : null;
-        const lotInvested =
-          lotValue != null && lotGain != null ? lotValue - lotGain : null;
+          lotValue != null && invested != null && Math.abs(invested) > 1e-9
+            ? lotValue - invested
+            : lot.currentPriceAvailable && Number.isFinite(lot.currentPnl)
+              ? lot.currentPnl
+              : null;
         const lotGainPercent =
-          lotInvested != null && lotGain != null && Math.abs(lotInvested) > 1e-9
-            ? (lotGain / lotInvested) * 100
+          lotGain != null && invested != null && Math.abs(invested) > 1e-9
+            ? (lotGain / invested) * 100
             : null;
         let dateLabel = lot.acquiredAt;
         try {
@@ -2819,7 +2823,7 @@ export default function Dashboard() {
                   const avgCostPortfolio = convertPrice(parseFloat(holding.averageCost), costCurrency);
                   const avgCostForDisplay = convertAverageCostPrice(parseFloat(holding.averageCost), costCurrency);
                   const investedDisplay = pnlInvestedForDisplay(holding);
-                  const currentPrice = quote ? convertPrice(quote.price, quoteCurrency) : avgCostPortfolio;
+                  const regularPrice = quote ? convertPrice(quote.price, quoteCurrency) : avgCostPortfolio;
                   const preMarketPrice =
                     quote?.preMarketPrice != null ? convertPrice(quote.preMarketPrice, quoteCurrency) : null;
                   const showPremarketPrice =
@@ -2836,7 +2840,10 @@ export default function Dashboard() {
                     quote?.marketState,
                     quote?.preMarketChangePercent,
                   );
-                  const currentValue = shares * currentPrice;
+                  // XTB „Otvorené pozície“ valuuje aktuálnou (aj pre/post) cenou — nie len RTH close.
+                  const valuationPrice = showPremarketPrice ? (preMarketPrice as number) : regularPrice;
+                  const currentPrice = regularPrice;
+                  const currentValue = shares * valuationPrice;
                   const gainLoss = currentValue - investedDisplay;
                   const gainLossPercent = investedDisplay > 0 ? (gainLoss / investedDisplay) * 100 : 0;
                   const canExpandLots = canExpandMobileHoldingLots(holding);
@@ -3034,7 +3041,7 @@ export default function Dashboard() {
                           portfolioId={holding.portfolioId}
                           allPortfolios={isAllPortfolios}
                           ticker={holding.ticker}
-                          currentPrice={Number.isFinite(currentPrice) ? currentPrice : null}
+                          currentPrice={Number.isFinite(valuationPrice) ? valuationPrice : null}
                           maskAmount={maskAmount}
                           formatShareQuantityFn={formatShareQuantity}
                           formatAverageCostCurrencyFn={formatAverageCostCurrency}

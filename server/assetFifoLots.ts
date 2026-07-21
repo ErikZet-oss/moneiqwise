@@ -23,6 +23,8 @@ export type OpenFifoLotApiRow = {
   purchaseCurrency: string;
   /** EUR za 1 jednotku cudzej meny (ECB) v deň nákupu. */
   eurPerUnitAtPurchase: number;
+  /** Náklad lotu v zobrazovacej mene (skutočne zaplatené). */
+  investedAmount: number;
   currentPriceAvailable: boolean;
   /** PnL v zobrazovacej mene. */
   currentPnl: number;
@@ -98,7 +100,7 @@ export function buildOpenFifoLotRowList(
   if (queue.length === 0) return [];
 
   return queue.map((lot) => {
-    const { pnlEur } = pnlEurForLot(lot, pUse, rates);
+    const { pnlEur, bookEur } = pnlEurForLot(lot, pUse, rates);
     const t = taxInfo(lot.acquiredAt, now);
     const pnlReady = pnlEur;
     return {
@@ -107,6 +109,7 @@ export function buildOpenFifoLotRowList(
       pricePerShareLocal: lot.priceLocal,
       purchaseCurrency: String(lot.ccy),
       eurPerUnitAtPurchase: lot.eurPerUnit,
+      investedAmount: convertAmountBetween(bookEur, "EUR", userCcy, rates),
       currentPriceAvailable: priceOk,
       currentPnl: priceOk
         ? convertAmountBetween(pnlReady, "EUR", userCcy, rates)
