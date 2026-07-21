@@ -27,7 +27,9 @@ import { useChartSettings } from "@/hooks/useChartSettings";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { HelpTip } from "@/components/HelpTip";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { BrokerCode, Transaction } from "@shared/schema";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import type { BrokerCode, Currency, Transaction } from "@shared/schema";
 import type { TradeCurrency } from "@shared/transactionEur";
 import { cn, formatShareQuantity } from "@/lib/utils";
 
@@ -159,6 +161,15 @@ function txnCurrency(tx: Transaction): "EUR" | "USD" | "GBP" | "CZK" | "PLN" {
   return "EUR";
 }
 
+function formatAmountInCurrency(value: number, ccy: Currency | TradeCurrency): string {
+  return new Intl.NumberFormat("sk-SK", {
+    style: "currency",
+    currency: ccy,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
 function codeToCurrency(c: string): "EUR" | "USD" | "GBP" | "CZK" | "PLN" {
   const x = (c || "EUR").toUpperCase();
   if (x === "USD" || x === "GBP" || x === "CZK" || x === "PLN" || x === "EUR") return x;
@@ -170,11 +181,13 @@ export default function AssetDetail() {
   const rawTicker = (params as { ticker?: string }).ticker ?? "";
   const ticker = rawTicker ? decodeURIComponent(rawTicker) : "";
   const [, setLocation] = useLocation();
-  const { currency, convertPrice, convertAverageCostPrice, getTickerCurrency, resolveHoldingCostCurrency, formatCurrency, formatAverageCostCurrency, formatWithConversion } = useCurrency();
+  const { currency, convertPrice, convertAverageCostPrice, getTickerCurrency, resolveHoldingCostCurrency, formatCurrency, formatAverageCostCurrency } = useCurrency();
   const { hideAmounts } = useChartSettings();
   const isMobile = useIsMobile();
   const [tradePortfolioFilter, setTradePortfolioFilter] = useState<string>("all");
   const [priceChartRange, setPriceChartRange] = useState<PriceChartRange>("1y");
+  /** Aktuálna cena: true = v mene zobrazenia (EUR), false = v mene kotácie (USD). */
+  const [quoteInPreferredCurrency, setQuoteInPreferredCurrency] = useState(true);
 
   const mask = (s: string) => (hideAmounts ? "••••••" : s);
 
@@ -416,6 +429,14 @@ export default function AssetDetail() {
   const quoteCurrency = getTickerCurrency(data.ticker);
   const costCurrency = data.costCurrency ?? resolveHoldingCostCurrency({ ticker: data.ticker });
   const changePositive = quote != null && quote.change >= 0;
+  const canToggleQuoteCurrency = quoteCurrency !== currency;
+  const quoteDisplayCurrency: Currency | TradeCurrency = quoteInPreferredCurrency
+    ? currency
+    : quoteCurrency;
+  const formatQuoteAmount = (amount: number) =>
+    quoteInPreferredCurrency
+      ? formatCurrency(convertPrice(amount, quoteCurrency))
+      : formatAmountInCurrency(amount, quoteCurrency);
 
   const formatRoiPct = (p: number | null) =>
     p == null || !Number.isFinite(p) ? "—" : `${p >= 0 ? "+" : ""}${p.toFixed(2)}%`;
@@ -459,20 +480,45 @@ export default function AssetDetail() {
                     <>
                       <div className="text-xs text-muted-foreground uppercase tracking-wide">Aktuálna cena</div>
                       <div className="text-2xl font-semibold leading-tight tracking-tight">
-                        {mask(formatWithConversion(quote.price, data.ticker))}
+                        {mask(formatQuoteAmount(quote.price))}
                       </div>
                       <div
                         className={`text-sm flex items-center gap-1 ${changePositive ? "text-green-500" : "text-red-500"}`}
                       >
                         {changePositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                        {mask(formatCurrency(convertPrice(quote.change, quoteCurrency)))}{" "}
+                        {mask(formatQuoteAmount(quote.change))}{" "}
                         <span className="text-xs">
                           ({changePositive ? "+" : ""}
                           {(quote.changePercent ?? 0).toFixed(2)}%)
                         </span>
                       </div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        Menovka kotácie: {quoteCurrency} · zobrazenie: {currency}
+                      <div className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                        <span>Menovka kotácie: {quoteCurrency}</span>
+                        {canToggleQuoteCurrency ? (
+                          <>
+                            <span aria-hidden>·</span>
+                            <span className="inline-flex items-center gap-1">
+                              <span>zobrazenie:</span>
+                              <Checkbox
+                                id={`quote-display-ccy-${data.ticker}`}
+                                checked={quoteInPreferredCurrency}
+                                onCheckedChange={(checked) =>
+                                  setQuoteInPreferredCurrency(checked === true)
+                                }
+                                className="h-3 w-3"
+                                data-testid="checkbox-quote-display-currency"
+                              />
+                              <Label
+                                htmlFor={`quote-display-ccy-${data.ticker}`}
+                                className="text-xs font-normal text-muted-foreground cursor-pointer leading-none"
+                              >
+                                {quoteDisplayCurrency}
+                              </Label>
+                            </span>
+                          </>
+                        ) : (
+                          <span>· zobrazenie: {currency}</span>
+                        )}
                       </div>
                     </>
                   ) : (
@@ -1024,7 +1070,7 @@ export default function AssetDetail() {
                               </div>
                               <div className="text-muted-foreground text-[10px]">{row.date}</div>
                               <div className="mt-1 font-medium">
-                                {mask(formatWithConversion(row.price, data.ticker))}
+                                {mask(formatQuoteAmount(row.price))}
                               </div>
                             </div>
                           );
