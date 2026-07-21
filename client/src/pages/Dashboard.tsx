@@ -105,15 +105,11 @@ function MobileHoldingBuyLotsPanel({
   currentPrice,
   shares,
   investedDisplay,
-  currentValue,
-  usedPremarket,
-  quoteCurrency,
   maskAmount,
   formatShareQuantityFn,
   formatAverageCostCurrencyFn,
   convertAverageCostPriceFn,
   convertPriceFn,
-  formatCurrencyFn,
   formatPercentFn,
   getChangeColorFn,
 }: {
@@ -125,9 +121,6 @@ function MobileHoldingBuyLotsPanel({
   currentPrice: number | null;
   shares: number;
   investedDisplay: number;
-  currentValue: number;
-  usedPremarket: boolean;
-  quoteCurrency: string;
   maskAmount: (s: string) => string;
   formatShareQuantityFn: (n: number) => string;
   formatAverageCostCurrencyFn: (n: number) => string;
@@ -139,7 +132,6 @@ function MobileHoldingBuyLotsPanel({
     price: number,
     fromCurrency: "EUR" | "USD" | "GBP" | "CZK" | "PLN",
   ) => number;
-  formatCurrencyFn: (n: number) => string;
   formatPercentFn: (value: number) => string;
   getChangeColorFn: (value: number) => string;
 }) {
@@ -193,44 +185,6 @@ function MobileHoldingBuyLotsPanel({
 
   return (
     <div className="mt-1.5 pl-5 space-y-1" data-testid={`lots-panel-${ticker}`}>
-      <div
-        className="rounded-md bg-muted/40 px-1.5 py-1 text-[9px] text-muted-foreground tabular-nums leading-snug space-y-0.5"
-        data-testid={`lots-pnl-breakdown-${ticker}`}
-      >
-        <div>
-          Vzorec %: (hodnota − náklad) / náklad
-        </div>
-        <div>
-          Kusy: <span className="text-foreground">{formatShareQuantityFn(shares)}</span>
-          {" · "}
-          Cena:{" "}
-          <span className="text-foreground">
-            {currentPrice != null ? maskAmount(formatCurrencyFn(currentPrice)) : "—"}
-          </span>
-          <span className="text-muted-foreground">
-            {" "}({quoteCurrency}
-            {usedPremarket ? ", pre/post" : ", RTH"})
-          </span>
-        </div>
-        <div>
-          Hodnota: <span className="text-foreground">{maskAmount(formatCurrencyFn(currentValue))}</span>
-          {" · "}
-          Náklad: <span className="text-foreground">{maskAmount(formatCurrencyFn(investedDisplay))}</span>
-        </div>
-        <div>
-          P&amp;L:{" "}
-          <span className={getChangeColorFn(currentValue - investedDisplay)}>
-            {maskAmount(formatCurrencyFn(currentValue - investedDisplay))}
-          </span>
-          {" · "}
-          %:{" "}
-          <span className={getChangeColorFn(currentValue - investedDisplay)}>
-            {investedDisplay > 0
-              ? formatPercentFn(((currentValue - investedDisplay) / investedDisplay) * 100)
-              : "—"}
-          </span>
-        </div>
-      </div>
       {lots.map((lot, idx) => {
         const ccyRaw = (lot.purchaseCurrency || "EUR").toUpperCase();
         const ccy =
@@ -3125,15 +3079,11 @@ export default function Dashboard() {
                           currentPrice={Number.isFinite(valuationPrice) ? valuationPrice : null}
                           shares={shares}
                           investedDisplay={investedDisplay}
-                          currentValue={currentValue}
-                          usedPremarket={useExtendedForValuation}
-                          quoteCurrency={quoteCurrency}
                           maskAmount={maskAmount}
                           formatShareQuantityFn={formatShareQuantity}
                           formatAverageCostCurrencyFn={formatAverageCostCurrency}
                           convertAverageCostPriceFn={convertAverageCostPrice}
                           convertPriceFn={convertPrice}
-                          formatCurrencyFn={formatCurrency}
                           formatPercentFn={formatPercent}
                           getChangeColorFn={getChangeColor}
                         />
