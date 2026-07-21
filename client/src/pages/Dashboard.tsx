@@ -186,6 +186,11 @@ function MobileHoldingBuyLotsPanel({
     );
   }
 
+  // Jedna dávka = celá pozícia → rovnaký náklad ako riadok holdingu (žiadne dvojité %).
+  const singleLotCoversPosition =
+    lots.length === 1 &&
+    Math.abs(lots[0]!.remainingShares - shares) <= Math.max(1e-4, shares * 1e-2);
+
   return (
     <div className="mt-1.5 pl-5 space-y-1" data-testid={`lots-panel-${ticker}`}>
       <div
@@ -238,8 +243,10 @@ function MobileHoldingBuyLotsPanel({
           lot.investedAmountEur != null && Number.isFinite(lot.investedAmountEur)
             ? lot.investedAmountEur
             : null;
-        const invested =
+        const investedFromLot =
           investedRawEur != null ? convertPriceFn(investedRawEur, "EUR") : null;
+        const invested =
+          singleLotCoversPosition && investedDisplay > 0 ? investedDisplay : investedFromLot;
         const lotValue =
           currentPrice != null && Number.isFinite(currentPrice)
             ? lot.remainingShares * currentPrice
@@ -2877,8 +2884,21 @@ export default function Dashboard() {
                   const shares = parseFloat(holding.shares);
                   const quoteCurrency = getTickerCurrency(holding.ticker);
                   const costCurrency = resolveHoldingCostCurrency(holding);
-                  const avgCostPortfolio = convertPrice(parseFloat(holding.averageCost), costCurrency);
-                  const avgCostForDisplay = convertAverageCostPrice(parseFloat(holding.averageCost), costCurrency);
+                  const openAvgLocal =
+                    holding.openAvgPriceLocal != null &&
+                    Number.isFinite(holding.openAvgPriceLocal) &&
+                    holding.openAvgPriceLocal > 0
+                      ? holding.openAvgPriceLocal
+                      : null;
+                  const openAvgCcy = holding.openPriceCurrency ?? costCurrency;
+                  const avgCostPortfolio = convertPrice(
+                    openAvgLocal ?? parseFloat(holding.averageCost),
+                    openAvgLocal != null ? openAvgCcy : costCurrency,
+                  );
+                  const avgCostForDisplay = convertAverageCostPrice(
+                    openAvgLocal ?? parseFloat(holding.averageCost),
+                    openAvgLocal != null ? openAvgCcy : costCurrency,
+                  );
                   const investedDisplay = pnlInvestedForDisplay(holding);
                   const regularPrice = quote ? convertPrice(quote.price, quoteCurrency) : avgCostPortfolio;
                   const preMarketPrice =
@@ -3206,8 +3226,21 @@ export default function Dashboard() {
                       const shares = parseFloat(holding.shares);
                       const quoteCurrency = getTickerCurrency(holding.ticker);
                       const costCurrency = resolveHoldingCostCurrency(holding);
-                      const avgCostPortfolio = convertPrice(parseFloat(holding.averageCost), costCurrency);
-                      const avgCostForDisplay = convertAverageCostPrice(parseFloat(holding.averageCost), costCurrency);
+                      const openAvgLocal =
+                        holding.openAvgPriceLocal != null &&
+                        Number.isFinite(holding.openAvgPriceLocal) &&
+                        holding.openAvgPriceLocal > 0
+                          ? holding.openAvgPriceLocal
+                          : null;
+                      const openAvgCcy = holding.openPriceCurrency ?? costCurrency;
+                      const avgCostPortfolio = convertPrice(
+                        openAvgLocal ?? parseFloat(holding.averageCost),
+                        openAvgLocal != null ? openAvgCcy : costCurrency,
+                      );
+                      const avgCostForDisplay = convertAverageCostPrice(
+                        openAvgLocal ?? parseFloat(holding.averageCost),
+                        openAvgLocal != null ? openAvgCcy : costCurrency,
+                      );
                       const investedDisplay = pnlInvestedForDisplay(holding);
                       const currentPrice = quote ? convertPrice(quote.price, quoteCurrency) : avgCostPortfolio;
                       const preMarketPrice =

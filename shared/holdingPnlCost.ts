@@ -1,5 +1,6 @@
 import type { Holding, Transaction } from "./schema";
 import { computeFifoRealizedGainsFromTransactions } from "./fifoRealizedGains";
+import type { TradeCurrency } from "./transactionEur";
 
 export type HoldingPnlRates = {
   usdToEur: number;
@@ -8,22 +9,40 @@ export type HoldingPnlRates = {
   plnToEur: number;
 };
 
+export type OpenHoldingPnlCost = {
+  /** Náklad otvorenej pozície v EUR (FIFO book). */
+  investedEur: number;
+  /**
+   * Vážený priemer otváracej ceny / ks v mene inštrumentu (ako XTB open),
+   * nie prepočet EUR nákladu cez aktuálny FX.
+   */
+  openAvgPriceLocal: number | null;
+  openPriceCurrency: TradeCurrency | null;
+};
+
 /**
- * Nákladová základňa pre zisk % (ako XTB „Čistý zisk %“):
+ * Nákladová základňa + otváracia cena pre zisk % (ako XTB „Čistý zisk %“):
  * súčet FIFO nákladov otvorených lotov v EUR (rovnaké ako rozbalené nákupy).
  * Záloha: `totalInvested` z holdingu.
+ *
+ * `eurPerUnitByTxnId` — historické kurzy (Frankfurter / DB); rovnaké ako asset-lots API.
  */
-export function computePnlInvestedEur(
+export function computeOpenHoldingPnlCost(
   holding: Pick<Holding, "ticker" | "shares" | "totalInvested" | "portfolioId">,
   portfolioTransactions: Transaction[],
   _rates: HoldingPnlRates,
-): number {
+  eurPerUnitByTxnId?: Map<string, number | null>,
+): OpenHoldingPnlCost {
   const holdingShares = parseFloat(String(holding.shares));
   const eurPaid = parseFloat(String(holding.totalInvested));
-  if (!(holdingShares > 0)) return 0;
+  if (!(holdingShares > 0)) {
+    return { investedEur: 0, openAvgPriceLocal: null, openPriceCurrency: null };
+  }
 
-  const eurM = new Map<string, number | null>();
-  for (const t of portfolioTransactions) eurM.set(t.id, null);
+  const eurM = eurPerUnitByTxnId ?? new Map<string, number | null>();
+  if (!eurPerUnitByTxnId) {
+    for (const t of portfolioTransactions) eurM.set(t.id, null);
+  }
 
   const { openLots } = computeFifoRealizedGainsFromTransactions(
     portfolioTransactions,
@@ -36,6 +55,8 @@ export function computePnlInvestedEur(
 
   let fifoBook = 0;
   let fifoShares = 0;
+  let openNotional = 0;
+  let openCcy: TradeCurrency | null = null;
   for (const [key, lots] of Object.entries(openLots)) {
     // Pri konkrétnom portfóliu len jeho loty; pri agregácii (portfolioId null) všetky.
     if (holding.portfolioId != null) {
@@ -47,15 +68,45 @@ export function computePnlInvestedEur(
       if (lot.remainingShares <= 1e-8) continue;
       fifoBook += lot.remainingShares * lot.costPerShareEur;
       fifoShares += lot.remainingShares;
+      if (lot.priceLocal > 0) {
+        openNotional += lot.remainingShares * lot.priceLocal;
+        openCcy = lot.ccy;
+      }
     }
   }
 
-  if (fifoShares > 1e-8) {
-    const sharesMatch =
-      Math.abs(fifoShares - holdingShares) <= Math.max(1e-4, holdingShares * 1e-2);
-    if (sharesMatch && fifoBook > 0) return fifoBook;
+  const sharesMatch =
+    fifoShares > 1e-8 &&
+    Math.abs(fifoShares - holdingShares) <= Math.max(1e-4, holdingShares * 1e-2);
+  const openAvgPriceLocal =
+    fifoShares > 1e-8 && openNotional > 0 ? openNotional / fifoShares : null;
+  const openPriceCurrency = fifoShares > 1e-8 ? openCcy : null;
+
+  if (fifoBook > 0 && fifoShares > 1e-8) {
+    const investedEur = sharesMatch
+      ? fifoBook
+      : fifoBook * (holdingShares / fifoShares);
+    return {
+      investedEur,
+      openAvgPriceLocal,
+      openPriceCurrency,
+    };
   }
 
-  if (Number.isFinite(eurPaid) && eurPaid > 0) return eurPaid;
-  return fifoBook > 0 ? fifoBook : 0;
+  const investedEur =
+    Number.isFinite(eurPaid) && eurPaid > 0 ? eurPaid : 0;
+  return { investedEur, openAvgPriceLocal: null, openPriceCurrency: null };
+}
+
+/**
+ * Nákladová základňa pre zisk % — len EUR suma (spätná kompatibilita).
+ */
+export function computePnlInvestedEur(
+  holding: Pick<Holding, "ticker" | "shares" | "totalInvested" | "portfolioId">,
+  portfolioTransactions: Transaction[],
+  rates: HoldingPnlRates,
+  eurPerUnitByTxnId?: Map<string, number | null>,
+): number {
+  return computeOpenHoldingPnlCost(holding, portfolioTransactions, rates, eurPerUnitByTxnId)
+    .investedEur;
 }

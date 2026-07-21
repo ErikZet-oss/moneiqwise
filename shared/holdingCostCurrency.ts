@@ -1,7 +1,7 @@
 import type { Holding, Transaction } from "./schema";
 import { inferTradeCurrency, type TradeCurrency } from "./transactionEur";
 import { getTickerCostCurrency } from "./tickerCurrency";
-import { computePnlInvestedEur, type HoldingPnlRates } from "./holdingPnlCost";
+import { computeOpenHoldingPnlCost, type HoldingPnlRates } from "./holdingPnlCost";
 
 /**
  * Mena, v ktorej sú uložené `averageCost` / `totalInvested` v holdingu
@@ -52,12 +52,16 @@ export type HoldingWithCostCurrency = Holding & {
   costCurrency?: TradeCurrency;
   /** Náklad v EUR pre výpočet zisku % (FIFO otvorené loty, ako XTB). */
   pnlInvestedEur?: number;
+  /** Vážený priemer otváracej ceny lotov v mene inštrumentu. */
+  openAvgPriceLocal?: number | null;
+  openPriceCurrency?: TradeCurrency | null;
 };
 
 export function enrichHoldingsWithCostCurrency(
   holdings: Holding[],
   allTransactions: Transaction[],
   rates?: HoldingPnlRates,
+  eurPerUnitByTxnId?: Map<string, number | null>,
 ): HoldingWithCostCurrency[] {
   return holdings.map((h) => {
     const pid = h.portfolioId;
@@ -65,12 +69,19 @@ export function enrichHoldingsWithCostCurrency(
       pid == null
         ? allTransactions
         : allTransactions.filter((t) => t.portfolioId === pid || t.portfolioId == null);
+    if (!rates) {
+      return {
+        ...h,
+        costCurrency: inferHoldingCostCurrency(h.ticker, relevant),
+      };
+    }
+    const pnl = computeOpenHoldingPnlCost(h, relevant, rates, eurPerUnitByTxnId);
     return {
       ...h,
       costCurrency: inferHoldingCostCurrency(h.ticker, relevant),
-      ...(rates
-        ? { pnlInvestedEur: computePnlInvestedEur(h, relevant, rates) }
-        : {}),
+      pnlInvestedEur: pnl.investedEur,
+      openAvgPriceLocal: pnl.openAvgPriceLocal,
+      openPriceCurrency: pnl.openPriceCurrency,
     };
   });
 }

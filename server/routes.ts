@@ -3068,7 +3068,8 @@ export async function registerRoutes(
       const userHoldings = await storage.getHoldingsByUser(userId, portfolioId);
       const txns = await storage.getTransactionsByUser(userId, portfolioId ?? "all");
       const rates = await fetchAllExchangeRates();
-      res.json(enrichHoldingsWithCostCurrency(userHoldings, txns, rates));
+      const eurM = await buildEurPerUnitByTxnIdForTransactions(txns);
+      res.json(enrichHoldingsWithCostCurrency(userHoldings, txns, rates, eurM));
     } catch (error) {
       console.error("Error fetching holdings:", error);
       res.status(500).json({ message: "Failed to fetch holdings" });
