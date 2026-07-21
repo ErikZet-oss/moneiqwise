@@ -3378,8 +3378,36 @@ export async function registerRoutes(
         if (q && typeof (q as { price?: number }).price === "number" && Number.isFinite((q as { price: number }).price)) {
           pNow = (q as { price: number }).price;
         }
+        // Extended cenu len mimo RTH; pri zatvorenom trhu ostáva close (regularMarketPrice).
+        const usSession = (() => {
+          const parts = new Intl.DateTimeFormat("en-GB", {
+            timeZone: "Europe/Bratislava",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+            weekday: "short",
+          }).formatToParts(now);
+          const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
+          const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+          const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
+          const isWeekend = weekday.startsWith("Sat") || weekday.startsWith("Sun");
+          const m = hour * 60 + minute;
+          if (isWeekend) return "CLOSED" as const;
+          if (m >= 10 * 60 && m < 15 * 60 + 30) return "PRE_MARKET" as const;
+          if (m >= 15 * 60 + 30 && m < 22 * 60) return "LIVE" as const;
+          if (m >= 22 * 60 || m < 2 * 60) return "POST_MARKET" as const;
+          if (m >= 2 * 60 && m < 10 * 60) return "OVERNIGHT" as const;
+          return "CLOSED" as const;
+        })();
+        const useExtended =
+          usSession === "PRE_MARKET" || usSession === "POST_MARKET" || usSession === "OVERNIGHT";
         const pre = (q as { preMarketPrice?: number | null } | null)?.preMarketPrice;
-        if (typeof pre === "number" && Number.isFinite(pre) && pre > 0) {
+        if (
+          useExtended &&
+          typeof pre === "number" &&
+          Number.isFinite(pre) &&
+          pre > 0
+        ) {
           pNow = pre;
         }
 

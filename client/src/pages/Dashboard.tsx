@@ -2897,8 +2897,12 @@ export default function Dashboard() {
                     quote?.marketState,
                     quote?.preMarketChangePercent,
                   );
-                  // XTB „Otvorené pozície“ valuuje aktuálnou (aj pre/post) cenou — nie len RTH close.
-                  const valuationPrice = showPremarketPrice ? (preMarketPrice as number) : regularPrice;
+                  // P&L %: pri zatvorenom trhu vždy RTH close; pre/post/overnight len v extended session.
+                  const useExtendedForValuation =
+                    shouldUseExtendedQuotes(usSessionState) && showPremarketPrice;
+                  const valuationPrice = useExtendedForValuation
+                    ? (preMarketPrice as number)
+                    : regularPrice;
                   const currentPrice = regularPrice;
                   const currentValue = shares * valuationPrice;
                   const gainLoss = currentValue - investedDisplay;
@@ -3102,7 +3106,7 @@ export default function Dashboard() {
                           shares={shares}
                           investedDisplay={investedDisplay}
                           currentValue={currentValue}
-                          usedPremarket={showPremarketPrice}
+                          usedPremarket={useExtendedForValuation}
                           quoteCurrency={quoteCurrency}
                           maskAmount={maskAmount}
                           formatShareQuantityFn={formatShareQuantity}
