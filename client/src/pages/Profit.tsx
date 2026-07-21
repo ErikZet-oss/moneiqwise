@@ -276,30 +276,30 @@ export default function Profit() {
           {realizedGains &&
           (realizedGains.transactionCount > 0 ||
             Math.abs(realizedGains.closeTradeNetEur ?? 0) > 1e-9) ? (
-            <div className="space-y-4 md:space-y-6">
-              <div className="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-4">
-                <div className="rounded-lg bg-muted/50 p-2 md:p-4">
-                  <div className="mb-0.5 text-[10px] text-muted-foreground md:text-sm">Dnes</div>
-                  <div className={`text-sm font-semibold tabular-nums leading-tight tracking-tight md:text-2xl ${realizedGains.realizedToday >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-today">
+            <div className="space-y-3 md:space-y-4">
+              <div className="grid grid-cols-4 gap-1.5 md:gap-3">
+                <div className="rounded-md bg-muted/40 px-1.5 py-1.5 md:rounded-lg md:px-3 md:py-2.5">
+                  <div className="mb-0.5 text-[9px] text-muted-foreground md:text-xs">Dnes</div>
+                  <div className={`text-[11px] font-semibold tabular-nums leading-tight tracking-tight md:text-xl ${realizedGains.realizedToday >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-today">
                     {formatCurrency(realizedGains.realizedToday)}
                   </div>
                 </div>
-                <div className="rounded-lg bg-muted/50 p-2 md:p-4">
-                  <div className="mb-0.5 text-[10px] text-muted-foreground md:text-sm">Mesiac</div>
-                  <div className={`text-sm font-semibold tabular-nums leading-tight tracking-tight md:text-2xl ${realizedGains.realizedThisMonth >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-month">
+                <div className="rounded-md bg-muted/40 px-1.5 py-1.5 md:rounded-lg md:px-3 md:py-2.5">
+                  <div className="mb-0.5 text-[9px] text-muted-foreground md:text-xs">Mesiac</div>
+                  <div className={`text-[11px] font-semibold tabular-nums leading-tight tracking-tight md:text-xl ${realizedGains.realizedThisMonth >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-month">
                     {formatCurrency(realizedGains.realizedThisMonth)}
                   </div>
                 </div>
-                <div className="rounded-lg bg-muted/50 p-2 md:p-4">
-                  <div className="mb-0.5 text-[10px] text-muted-foreground md:text-sm">YTD</div>
-                  <div className={`text-sm font-semibold tabular-nums leading-tight tracking-tight md:text-2xl ${realizedGains.realizedYTD >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-ytd">
+                <div className="rounded-md bg-muted/40 px-1.5 py-1.5 md:rounded-lg md:px-3 md:py-2.5">
+                  <div className="mb-0.5 text-[9px] text-muted-foreground md:text-xs">YTD</div>
+                  <div className={`text-[11px] font-semibold tabular-nums leading-tight tracking-tight md:text-xl ${realizedGains.realizedYTD >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-ytd">
                     {formatCurrency(realizedGains.realizedYTD)}
                   </div>
                 </div>
-                <div className="rounded-lg bg-muted/50 p-2 md:p-4">
-                  <div className="mb-0.5 text-[10px] text-muted-foreground md:text-sm">Celkovo</div>
+                <div className="rounded-md bg-muted/40 px-1.5 py-1.5 md:rounded-lg md:px-3 md:py-2.5">
+                  <div className="mb-0.5 text-[9px] text-muted-foreground md:text-xs">Celkovo</div>
                   <div
-                    className={`text-sm font-semibold tabular-nums leading-tight tracking-tight md:text-2xl ${(realizedGains.realizedGainTotal ?? realizedGains.totalRealized) >= 0 ? "text-green-500" : "text-red-500"}`}
+                    className={`text-[11px] font-semibold tabular-nums leading-tight tracking-tight md:text-xl ${(realizedGains.realizedGainTotal ?? realizedGains.totalRealized) >= 0 ? "text-green-500" : "text-red-500"}`}
                     data-testid="text-realized-total"
                   >
                     {formatCurrency(
@@ -311,36 +311,48 @@ export default function Profit() {
 
               {realizedGains.byTicker.length > 0 && (
                 <div>
-                  <h4 className="mb-2 text-xs font-medium text-muted-foreground md:mb-3 md:text-sm">
+                  <h4 className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground md:mb-2 md:text-xs md:normal-case md:tracking-normal">
                     Podľa tickerov
                   </h4>
-                  <div className="space-y-2 md:hidden">
+                  <div className="space-y-0 md:hidden" data-testid="list-realized-by-ticker-mobile">
                     {realizedGains.byTicker.map((item) => (
                       <div
                         key={item.ticker}
-                        className="flex items-center gap-2 rounded-lg border bg-card/50 px-2 py-2 text-xs"
+                        className="flex items-center gap-2 border-b border-border/60 py-1.5 last:border-b-0"
                         data-testid={`row-realized-${item.ticker}`}
                       >
-                        <CompanyLogo ticker={item.ticker} companyName={item.companyName} size="sm" className="shrink-0" />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-baseline justify-between gap-2">
-                            <span className="font-mono font-semibold">{item.ticker}</span>
-                            <span className={`shrink-0 tabular-nums font-medium ${item.totalGain >= 0 ? "text-green-500" : "text-red-500"}`}>
-                              {item.totalGain >= 0 ? "+" : ""}
-                              {formatCurrency(item.totalGain)}
+                        <CompanyLogo
+                          ticker={item.ticker}
+                          companyName={item.companyName}
+                          size="xs"
+                          className="shrink-0"
+                        />
+                        <div className="min-w-0 flex-1 flex flex-col gap-0.5">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="truncate text-xs font-semibold font-mono leading-tight">
+                              {item.ticker}
+                            </span>
+                            <span className="truncate text-[9px] text-muted-foreground leading-tight">
+                              {item.companyName}
                             </span>
                           </div>
-                          <div className="mt-0.5 line-clamp-1 text-[10px] text-muted-foreground">{item.companyName}</div>
-                          <div className="mt-1 flex justify-between text-[10px] text-muted-foreground tabular-nums">
-                            <span>{item.transactions}× predaj</span>
-                            <span>{formatCurrency(item.totalSold)}</span>
+                          <div className="text-[9px] text-muted-foreground tabular-nums leading-tight">
+                            {item.transactions}× predaj · {formatCurrency(item.totalSold)}
                           </div>
+                        </div>
+                        <div
+                          className={`shrink-0 text-right text-xs font-semibold tabular-nums leading-tight ${
+                            item.totalGain >= 0 ? "text-green-500" : "text-red-500"
+                          }`}
+                        >
+                          {item.totalGain >= 0 ? "+" : ""}
+                          {formatCurrency(item.totalGain)}
                         </div>
                       </div>
                     ))}
                   </div>
-                  <Table className="hidden min-w-0 md:table">
-                    <TableHeader>
+                  <Table className="hidden min-w-0 text-xs md:table">
+                    <TableHeader className="[&_th]:h-8 [&_th]:px-2 [&_th]:py-1.5">
                       <TableRow>
                         <TableHead>Ticker</TableHead>
                         <TableHead>Spoločnosť</TableHead>
@@ -349,20 +361,29 @@ export default function Profit() {
                         <TableHead className="text-right">Zisk/Strata</TableHead>
                       </TableRow>
                     </TableHeader>
-                    <TableBody>
+                    <TableBody className="[&_td]:px-2 [&_td]:py-1.5">
                       {realizedGains.byTicker.map((item) => (
                         <TableRow key={item.ticker} data-testid={`row-realized-${item.ticker}-table`}>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <CompanyLogo ticker={item.ticker} companyName={item.companyName} size="sm" />
-                              <span className="font-medium">{item.ticker}</span>
+                              <CompanyLogo ticker={item.ticker} companyName={item.companyName} size="xs" />
+                              <span className="font-semibold font-mono">{item.ticker}</span>
                             </div>
                           </TableCell>
-                          <TableCell className="max-w-[200px] truncate text-muted-foreground">{item.companyName}</TableCell>
-                          <TableCell className="text-right">{item.transactions}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(item.totalSold)}</TableCell>
-                          <TableCell className={`text-right font-medium ${item.totalGain >= 0 ? "text-green-500" : "text-red-500"}`}>
-                            {item.totalGain >= 0 ? "+" : ""}{formatCurrency(item.totalGain)}
+                          <TableCell className="max-w-[200px] truncate text-muted-foreground">
+                            {item.companyName}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">{item.transactions}</TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {formatCurrency(item.totalSold)}
+                          </TableCell>
+                          <TableCell
+                            className={`text-right font-semibold tabular-nums ${
+                              item.totalGain >= 0 ? "text-green-500" : "text-red-500"
+                            }`}
+                          >
+                            {item.totalGain >= 0 ? "+" : ""}
+                            {formatCurrency(item.totalGain)}
                           </TableCell>
                         </TableRow>
                       ))}
