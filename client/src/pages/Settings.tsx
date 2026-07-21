@@ -441,22 +441,22 @@ export default function Settings() {
 
       <Card>
         <CardHeader className="p-4 pb-2">
-          <div className="flex items-center gap-2">
-            <Briefcase className="h-5 w-5 text-primary" />
+          <div className="flex items-center gap-1.5">
+            <Briefcase className="h-4 w-4 text-primary shrink-0" />
             <CardTitle className="text-sm font-medium">Správa portfólií</CardTitle>
           </div>
-          <CardDescription>
+          <CardDescription className="text-xs leading-snug">
             Vytvárajte a spravujte svoje investičné portfóliá. Poradie v tomto zozname (šípky nahor/nadol) určuje aj poradie v menu aplikácie.
           </CardDescription>
         </CardHeader>
-        <CardContent className="p-4 pt-3 space-y-4">
-          <div className="flex items-center gap-2">
+        <CardContent className="p-4 pt-3 space-y-3">
+          <div className="flex flex-wrap items-center gap-1.5">
             <Input
               placeholder="Názov nového portfólia..."
               value={newPortfolioName}
               onChange={(e) => setNewPortfolioName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleCreatePortfolio()}
-              className="flex-1"
+              className="h-8 flex-1 min-w-[140px] text-sm"
               data-testid="input-new-portfolio-name"
             />
             <Select
@@ -469,7 +469,7 @@ export default function Settings() {
                 }
               }}
             >
-              <SelectTrigger className="w-[180px]" data-testid="select-new-portfolio-broker">
+              <SelectTrigger className="h-8 w-full sm:w-[150px] text-xs" data-testid="select-new-portfolio-broker">
                 <SelectValue placeholder="Broker (voliteľné)">
                   {newPortfolioBroker ? <BrokerSelectItem brokerCode={newPortfolioBroker} /> : "Žiadny broker"}
                 </SelectValue>
@@ -491,71 +491,73 @@ export default function Settings() {
             <Button 
               onClick={handleCreatePortfolio}
               disabled={!newPortfolioName.trim() || isCreating}
+              className="h-8 w-8 shrink-0 p-0"
               data-testid="button-create-portfolio"
             >
-              {isCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              {isCreating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
             </Button>
           </div>
           
-          <div className="space-y-2">
+          <div className="space-y-1">
             {allPortfolios.map((portfolio, index) => (
               <div
                 key={portfolio.id}
-                className={`flex items-center justify-between gap-2 p-3 rounded-lg ${
-                  portfolio.isHidden ? "bg-muted/50 opacity-70" : "bg-muted"
+                className={`flex items-center justify-between gap-1.5 py-1.5 px-2 rounded-md ${
+                  portfolio.isHidden ? "bg-muted/50 opacity-70" : "bg-muted/60"
                 }`}
                 data-testid={`portfolio-item-${portfolio.id}`}
               >
-                <div className="flex flex-col gap-0.5 shrink-0">
+                <div className="flex items-center gap-0.5 shrink-0">
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7"
+                    className="h-6 w-6"
                     disabled={index === 0 || reorderingPortfolio}
                     onClick={() => handleMovePortfolio(index, "up")}
                     aria-label="Posunúť nahor"
                     title="Posunúť nahor"
                     data-testid={`button-portfolio-up-${portfolio.id}`}
                   >
-                    <ChevronUp className="h-4 w-4" />
+                    <ChevronUp className="h-3 w-3" />
                   </Button>
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7"
+                    className="h-6 w-6"
                     disabled={index === allPortfolios.length - 1 || reorderingPortfolio}
                     onClick={() => handleMovePortfolio(index, "down")}
                     aria-label="Posunúť nadol"
                     title="Posunúť nadol"
                     data-testid={`button-portfolio-down-${portfolio.id}`}
                   >
-                    <ChevronDown className="h-4 w-4" />
+                    <ChevronDown className="h-3 w-3" />
                   </Button>
                 </div>
-                <div className="flex items-center gap-3 min-w-0 flex-1">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
                   {portfolio.brokerCode ? (
-                    <BrokerLogo brokerCode={portfolio.brokerCode} size="sm" />
+                    <BrokerLogo brokerCode={portfolio.brokerCode} size="xs" />
                   ) : (
-                    <Briefcase className="h-6 w-6 text-muted-foreground shrink-0" />
+                    <Briefcase className="h-4 w-4 text-muted-foreground shrink-0" />
                   )}
-                  <span className={`font-medium truncate ${portfolio.isHidden ? "line-through" : ""}`}>
+                  <span className={`text-xs sm:text-sm font-semibold truncate leading-tight ${portfolio.isHidden ? "line-through" : ""}`}>
                     {portfolio.name}
                   </span>
                   {portfolio.isDefault && (
-                    <Badge variant="outline" className="text-xs">Predvolené</Badge>
+                    <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 leading-none shrink-0">Predvolené</Badge>
                   )}
                   {portfolio.isHidden && (
-                    <Badge variant="outline" className="text-xs text-muted-foreground">
+                    <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 leading-none text-muted-foreground shrink-0">
                       Skryté
                     </Badge>
                   )}
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex items-center gap-0.5 shrink-0">
                   <Button
                     variant="ghost"
                     size="icon"
+                    className="h-7 w-7"
                     onClick={() => handleToggleHidden(portfolio.id, !!portfolio.isHidden)}
                     disabled={togglingHiddenId === portfolio.id}
                     title={portfolio.isHidden ? "Odkryť portfólio" : "Skryť portfólio"}
@@ -563,38 +565,40 @@ export default function Settings() {
                     data-testid={`button-toggle-hidden-portfolio-${portfolio.id}`}
                   >
                     {togglingHiddenId === portfolio.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : portfolio.isHidden ? (
-                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
                     ) : (
-                      <Eye className="h-4 w-4" />
+                      <Eye className="h-3.5 w-3.5" />
                     )}
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon"
+                    className="h-7 w-7"
                     onClick={() => setEditingPortfolio({ id: portfolio.id, name: portfolio.name, brokerCode: portfolio.brokerCode })}
                     data-testid={`button-edit-portfolio-${portfolio.id}`}
                   >
-                    <Pencil className="h-4 w-4" />
+                    <Pencil className="h-3.5 w-3.5" />
                   </Button>
                   {allPortfolios.length > 1 && (
                     <Button
                       variant="ghost"
                       size="icon"
+                      className="h-7 w-7"
                       onClick={() => setDeletePortfolioId(portfolio.id)}
                       title="Vymazať portfólio"
                       aria-label="Vymazať portfólio"
                       data-testid={`button-delete-portfolio-${portfolio.id}`}
                     >
-                      <Trash2 className="h-4 w-4 text-destructive" />
+                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
                     </Button>
                   )}
                 </div>
               </div>
             ))}
             {allPortfolios.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-4">
+              <p className="text-xs text-muted-foreground text-center py-3">
                 Zatiaľ nemáte žiadne portfóliá.
               </p>
             )}
