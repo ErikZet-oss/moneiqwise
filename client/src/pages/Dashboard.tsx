@@ -2486,49 +2486,52 @@ export default function Dashboard() {
       {/* News Section */}
       {showNews && holdings && holdings.length > 0 && (
         <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <Newspaper className="h-5 w-5 text-muted-foreground" />
-              <CardTitle className="text-lg">Novinky k vašim aktívam</CardTitle>
+          <CardHeader className="p-2.5 md:p-4 pb-2">
+            <div className="flex items-center gap-1.5">
+              <Newspaper className="h-4 w-4 text-muted-foreground shrink-0" />
+              <CardTitle className="text-sm font-medium md:text-base">Novinky k vašim aktívam</CardTitle>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-2.5 pt-0 md:p-4 md:pt-0">
             {newsLoading ? (
-              <div className="flex gap-3 overflow-hidden">
+              <div className="flex gap-2 overflow-hidden">
                 {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="min-w-[280px] p-3 rounded-lg border bg-card">
-                    <Skeleton className="h-4 w-12 mb-2" />
-                    <Skeleton className="h-4 w-full mb-1" />
-                    <Skeleton className="h-4 w-3/4 mb-2" />
-                    <Skeleton className="h-3 w-24" />
+                  <div key={i} className="min-w-[210px] sm:min-w-[240px] p-2 rounded-md border bg-card">
+                    <Skeleton className="h-3 w-10 mb-1.5" />
+                    <Skeleton className="h-3 w-full mb-1" />
+                    <Skeleton className="h-3 w-4/5 mb-1.5" />
+                    <Skeleton className="h-2.5 w-20" />
                   </div>
                 ))}
               </div>
             ) : news && news.length > 0 ? (
               <ScrollArea className="w-full whitespace-nowrap">
-                <div className="flex gap-3 pb-3">
+                <div className="flex gap-2 pb-2">
                   {news.map((article, index) => (
                     <a
                       key={index}
                       href={article.link}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="min-w-[280px] max-w-[280px] p-3 rounded-lg border bg-card hover-elevate transition-all group block"
+                      className="min-w-[210px] max-w-[210px] sm:min-w-[240px] sm:max-w-[260px] p-2 md:p-2.5 rounded-md border bg-card hover-elevate transition-all group block"
                       data-testid={`link-news-${index}`}
                     >
-                      <div className="flex items-center gap-2 mb-2">
-                        <Badge variant="outline" className="text-xs font-medium flex items-center gap-1.5 pr-2">
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <Badge
+                          variant="outline"
+                          className="text-[9px] font-normal flex items-center gap-1 px-1 py-0 h-5 leading-none"
+                        >
                           <CompanyLogo ticker={article.ticker} companyName="" size="xs" />
                           {article.ticker}
                         </Badge>
-                        <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity ml-auto" />
+                        <ExternalLink className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity ml-auto shrink-0" />
                       </div>
-                      <h4 className="text-sm font-medium line-clamp-2 whitespace-normal mb-2 group-hover:text-primary transition-colors">
+                      <h4 className="text-xs font-semibold leading-snug line-clamp-2 whitespace-normal mb-1.5 group-hover:text-primary transition-colors">
                         {article.title}
                       </h4>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>{formatRelativeTime(article.publishedAt)}</span>
-                        <span>•</span>
+                      <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground tabular-nums">
+                        <span className="shrink-0">{formatRelativeTime(article.publishedAt)}</span>
+                        <span aria-hidden>•</span>
                         <span className="truncate">{article.publisher}</span>
                       </div>
                     </a>
@@ -2537,7 +2540,7 @@ export default function Dashboard() {
                 <ScrollBar orientation="horizontal" />
               </ScrollArea>
             ) : (
-              <div className="text-center py-4 text-muted-foreground text-sm">
+              <div className="text-center py-3 text-muted-foreground text-xs">
                 Žiadne novinky k dispozícii
               </div>
             )}
