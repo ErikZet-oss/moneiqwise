@@ -304,7 +304,7 @@ export function MobilePortfolioChart({
     : selectedPortfolio?.name ?? null;
 
   return (
-    <div className="md:hidden bg-background px-3 pt-4 pb-2" data-testid="mobile-portfolio-chart">
+    <div className="md:hidden bg-background px-3 pt-2 pb-2" data-testid="mobile-portfolio-chart">
       {portfolioLabel && (
         <div
           className="flex items-center gap-2 mb-1 min-w-0"
