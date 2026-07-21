@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { format, parse, startOfDay } from "date-fns";
+import { format, parse, parseISO, startOfDay } from "date-fns";
 import { sk } from "date-fns/locale";
 import { queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,6 +40,7 @@ import {
   RefreshCw,
   Moon,
   Calendar,
+  ChevronDown,
   ChevronRight,
   LayoutList,
   ArrowDownUp,
@@ -77,6 +78,117 @@ function mobileSimpleAssetBadgeLabel(holding: HoldingWithCostCurrency): string {
 function mobileSimpleAssetDisplayName(holding: HoldingWithCostCurrency): string {
   if (holding.ticker.toUpperCase() === CASH_INTEREST_TICKER) return CASH_INTEREST_DISPLAY_NAME;
   return (holding.companyName || holding.ticker).trim() || holding.ticker;
+}
+
+type MobileOpenFifoLot = {
+  acquiredAt: string;
+  remainingShares: number;
+  pricePerShareLocal: number;
+  purchaseCurrency: string;
+};
+
+function canExpandMobileHoldingLots(holding: HoldingWithCostCurrency): boolean {
+  const t = holding.ticker.toUpperCase();
+  if (t === "CASH" || t === CASH_INTEREST_TICKER) return false;
+  const shares = parseFloat(holding.shares);
+  return Number.isFinite(shares) && shares > 0;
+}
+
+function MobileHoldingBuyLotsPanel({
+  portfolioId,
+  ticker,
+  maskAmount,
+  formatShareQuantityFn,
+  formatAverageCostCurrencyFn,
+  convertAverageCostPriceFn,
+}: {
+  portfolioId: string | null | undefined;
+  ticker: string;
+  maskAmount: (s: string) => string;
+  formatShareQuantityFn: (n: number) => string;
+  formatAverageCostCurrencyFn: (n: number) => string;
+  convertAverageCostPriceFn: (
+    price: number,
+    fromCurrency: "EUR" | "USD" | "GBP" | "CZK" | "PLN",
+  ) => number;
+}) {
+  const pathSeg = portfolioId == null || portfolioId === "" ? "unassigned" : portfolioId;
+  const { data, isLoading, isError } = useQuery<{ lots: MobileOpenFifoLot[] }>({
+    queryKey: ["/api/portfolios", pathSeg, "asset-lots", ticker],
+    queryFn: async () => {
+      const u = encodeURIComponent(ticker);
+      const res = await fetch(
+        `/api/portfolios/${pathSeg === "unassigned" ? "unassigned" : encodeURIComponent(pathSeg)}/asset-lots?ticker=${u}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) throw new Error("asset-lots");
+      return res.json();
+    },
+    staleTime: 60 * 1000,
+  });
+
+  const lots = data?.lots ?? [];
+
+  if (isLoading) {
+    return (
+      <div className="mt-1.5 pl-5 space-y-1" data-testid={`lots-loading-${ticker}`}>
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-4/5" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <p className="mt-1.5 pl-5 text-[9px] text-destructive">Nákupy sa nepodarilo načítať.</p>
+    );
+  }
+
+  if (lots.length === 0) {
+    return (
+      <p className="mt-1.5 pl-5 text-[9px] text-muted-foreground">Žiadne otvorené nákupné dávky.</p>
+    );
+  }
+
+  return (
+    <div className="mt-1.5 pl-5 space-y-1" data-testid={`lots-panel-${ticker}`}>
+      {lots.map((lot, idx) => {
+        const ccyRaw = (lot.purchaseCurrency || "EUR").toUpperCase();
+        const ccy =
+          ccyRaw === "USD" || ccyRaw === "GBP" || ccyRaw === "CZK" || ccyRaw === "PLN" || ccyRaw === "EUR"
+            ? ccyRaw
+            : "EUR";
+        const openPrice = convertAverageCostPriceFn(lot.pricePerShareLocal, ccy);
+        let dateLabel = lot.acquiredAt;
+        try {
+          dateLabel = format(parseISO(`${lot.acquiredAt}T12:00:00Z`), "d. M. yyyy", { locale: sk });
+        } catch {
+          /* keep ISO */
+        }
+        return (
+          <div
+            key={`${lot.acquiredAt}-${lot.remainingShares}-${idx}`}
+            className="flex items-center justify-between gap-2 text-[9px] text-muted-foreground tabular-nums"
+          >
+            <span className="inline-flex items-center gap-1.5 min-w-0">
+              <Badge
+                variant="secondary"
+                className="shrink-0 px-1 py-0 text-[8px] font-normal leading-none bg-emerald-500/15 text-emerald-600 border-emerald-500/25"
+              >
+                Nákup
+              </Badge>
+              <span className="truncate">{dateLabel}</span>
+            </span>
+            <span className="shrink-0 text-right">
+              <span className="text-foreground">{formatShareQuantityFn(lot.remainingShares)}</span>
+              {" @ "}
+              <span className="text-foreground">{maskAmount(formatAverageCostCurrencyFn(openPrice))}</span>
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 interface RealizedGainSummary {
@@ -466,6 +578,7 @@ export default function Dashboard() {
   const [athDontShowAgainToday, setAthDontShowAgainToday] = useState(false);
   const [mobileAssetsSortDialogOpen, setMobileAssetsSortDialogOpen] = useState(false);
   const [mobileAssetsViewPopoverOpen, setMobileAssetsViewPopoverOpen] = useState(false);
+  const [expandedMobileHoldingId, setExpandedMobileHoldingId] = useState<string | null>(null);
   const [draftMobileSortBy, setDraftMobileSortBy] = useState<MobileAssetsSortBy>("name");
   const [draftMobileSortOrder, setDraftMobileSortOrder] = useState<SortDirection>("asc");
   const maskAmount = (amount: string) => hideAmounts ? "••••••" : amount;
@@ -2689,6 +2802,17 @@ export default function Dashboard() {
                   const currentValue = shares * currentPrice;
                   const gainLoss = currentValue - investedDisplay;
                   const gainLossPercent = investedDisplay > 0 ? (gainLoss / investedDisplay) * 100 : 0;
+                  const canExpandLots = canExpandMobileHoldingLots(holding);
+                  const isLotsExpanded = expandedMobileHoldingId === holding.id;
+
+                  const openAssetDetail = () => {
+                    setLocation(`/asset/${encodeURIComponent(holding.ticker)}`);
+                  };
+
+                  const toggleLotsExpand = () => {
+                    if (!canExpandLots) return;
+                    setExpandedMobileHoldingId((prev) => (prev === holding.id ? null : holding.id));
+                  };
 
                   const simpleDailyPctEl =
                     !quote
@@ -2723,17 +2847,26 @@ export default function Dashboard() {
                       tabIndex={0}
                       className="py-2 border-b last:border-b-0 cursor-pointer hover:bg-muted/40 rounded-md px-1 -mx-1 transition-colors"
                       data-testid={`row-holding-${holding.ticker}`}
-                      onClick={() => setLocation(`/asset/${encodeURIComponent(holding.ticker)}`)}
+                      aria-expanded={canExpandLots ? isLotsExpanded : undefined}
+                      onClick={toggleLotsExpand}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
-                          setLocation(`/asset/${encodeURIComponent(holding.ticker)}`);
+                          toggleLotsExpand();
                         }
                       }}
                     >
                       {mobileAssetsView === "simple" ? (
                         <div className="flex gap-2 items-start">
-                          <div className="shrink-0 pt-0.5">
+                          <div className="shrink-0 pt-0.5 flex items-center gap-0.5">
+                            {canExpandLots ? (
+                              <ChevronDown
+                                className={`h-3 w-3 text-muted-foreground transition-transform ${isLotsExpanded ? "" : "-rotate-90"}`}
+                                aria-hidden
+                              />
+                            ) : (
+                              <span className="w-3" aria-hidden />
+                            )}
                             <CompanyLogo
                               ticker={holding.ticker}
                               companyName={holding.companyName}
@@ -2742,9 +2875,17 @@ export default function Dashboard() {
                           </div>
                           <div className="min-w-0 flex-1 flex flex-col gap-0.5 pr-1">
                             <div className="flex items-center gap-1.5 min-w-0">
-                              <span className="font-semibold text-xs leading-tight truncate">
+                              <button
+                                type="button"
+                                className="font-semibold text-xs leading-tight truncate text-left hover:text-primary"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openAssetDetail();
+                                }}
+                                data-testid={`button-mobile-asset-name-${holding.ticker}`}
+                              >
                                 {mobileSimpleAssetDisplayName(holding)}
-                              </span>
+                              </button>
                               <Badge
                                 variant="secondary"
                                 className="shrink-0 px-1.5 py-0 text-[9px] font-normal leading-none text-muted-foreground border border-border/80"
@@ -2779,19 +2920,28 @@ export default function Dashboard() {
                         <>
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2 min-w-0 flex-1">
+                              {canExpandLots ? (
+                                <ChevronDown
+                                  className={`h-3 w-3 shrink-0 text-muted-foreground transition-transform ${isLotsExpanded ? "" : "-rotate-90"}`}
+                                  aria-hidden
+                                />
+                              ) : (
+                                <span className="w-3 shrink-0" aria-hidden />
+                              )}
                               <CompanyLogo ticker={holding.ticker} companyName={holding.companyName} size="xs" />
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5">
-                                  <a
-                                    href={`https://finance.yahoo.com/quote/${holding.ticker}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="font-semibold text-xs hover:text-primary"
-                                    data-testid={`link-ticker-${holding.ticker}`}
-                                    onClick={(e) => e.stopPropagation()}
+                                  <button
+                                    type="button"
+                                    className="font-semibold text-xs hover:text-primary truncate text-left"
+                                    data-testid={`button-mobile-asset-name-${holding.ticker}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openAssetDetail();
+                                    }}
                                   >
                                     {holding.ticker}
-                                  </a>
+                                  </button>
                                   <span className="text-[9px] text-muted-foreground">
                                     {formatShareQuantity(shares)} ks
                                   </span>
@@ -2842,6 +2992,16 @@ export default function Dashboard() {
                           </div>
                         </>
                       )}
+                      {isLotsExpanded && canExpandLots ? (
+                        <MobileHoldingBuyLotsPanel
+                          portfolioId={holding.portfolioId}
+                          ticker={holding.ticker}
+                          maskAmount={maskAmount}
+                          formatShareQuantityFn={formatShareQuantity}
+                          formatAverageCostCurrencyFn={formatAverageCostCurrency}
+                          convertAverageCostPriceFn={convertAverageCostPrice}
+                        />
+                      ) : null}
                     </div>
                   );
                 })}
