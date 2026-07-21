@@ -50,7 +50,7 @@ export function inferHoldingCostCurrency(
 
 export type HoldingWithCostCurrency = Holding & {
   costCurrency?: TradeCurrency;
-  /** Náklad v EUR pre výpočet zisku % (XTB: USD otváracia × aktuálny kurz). */
+  /** Náklad v EUR pre výpočet zisku % (FIFO otvorené loty, ako XTB). */
   pnlInvestedEur?: number;
 };
 
