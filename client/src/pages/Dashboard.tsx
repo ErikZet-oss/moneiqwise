@@ -97,13 +97,18 @@ function canExpandMobileHoldingLots(holding: HoldingWithCostCurrency): boolean {
 function MobileHoldingBuyLotsPanel({
   portfolioId,
   ticker,
+  currentPrice,
   maskAmount,
   formatShareQuantityFn,
   formatAverageCostCurrencyFn,
   convertAverageCostPriceFn,
+  formatPercentFn,
+  getChangeColorFn,
 }: {
   portfolioId: string | null | undefined;
   ticker: string;
+  /** Aktuálna trhová cena / ks v zobrazovacej mene. */
+  currentPrice: number | null;
   maskAmount: (s: string) => string;
   formatShareQuantityFn: (n: number) => string;
   formatAverageCostCurrencyFn: (n: number) => string;
@@ -111,6 +116,8 @@ function MobileHoldingBuyLotsPanel({
     price: number,
     fromCurrency: "EUR" | "USD" | "GBP" | "CZK" | "PLN",
   ) => number;
+  formatPercentFn: (value: number) => string;
+  getChangeColorFn: (value: number) => string;
 }) {
   const pathSeg = portfolioId == null || portfolioId === "" ? "unassigned" : portfolioId;
   const { data, isLoading, isError } = useQuery<{ lots: MobileOpenFifoLot[] }>({
@@ -159,6 +166,13 @@ function MobileHoldingBuyLotsPanel({
             ? ccyRaw
             : "EUR";
         const openPrice = convertAverageCostPriceFn(lot.pricePerShareLocal, ccy);
+        const lotGainPercent =
+          currentPrice != null &&
+          Number.isFinite(currentPrice) &&
+          Number.isFinite(openPrice) &&
+          openPrice > 0
+            ? ((currentPrice - openPrice) / openPrice) * 100
+            : null;
         let dateLabel = lot.acquiredAt;
         try {
           dateLabel = format(parseISO(`${lot.acquiredAt}T12:00:00Z`), "d. M. yyyy", { locale: sk });
@@ -179,10 +193,17 @@ function MobileHoldingBuyLotsPanel({
               </Badge>
               <span className="truncate">{dateLabel}</span>
             </span>
-            <span className="shrink-0 text-right">
-              <span className="text-foreground">{formatShareQuantityFn(lot.remainingShares)}</span>
-              {" @ "}
-              <span className="text-foreground">{maskAmount(formatAverageCostCurrencyFn(openPrice))}</span>
+            <span className="shrink-0 text-right inline-flex items-center gap-1.5">
+              <span>
+                <span className="text-foreground">{formatShareQuantityFn(lot.remainingShares)}</span>
+                {" @ "}
+                <span className="text-foreground">{maskAmount(formatAverageCostCurrencyFn(openPrice))}</span>
+              </span>
+              {lotGainPercent != null ? (
+                <span className={`font-medium ${getChangeColorFn(lotGainPercent)}`}>
+                  {formatPercentFn(lotGainPercent)}
+                </span>
+              ) : null}
             </span>
           </div>
         );
@@ -2996,10 +3017,13 @@ export default function Dashboard() {
                         <MobileHoldingBuyLotsPanel
                           portfolioId={holding.portfolioId}
                           ticker={holding.ticker}
+                          currentPrice={Number.isFinite(currentPrice) ? currentPrice : null}
                           maskAmount={maskAmount}
                           formatShareQuantityFn={formatShareQuantity}
                           formatAverageCostCurrencyFn={formatAverageCostCurrency}
                           convertAverageCostPriceFn={convertAverageCostPrice}
+                          formatPercentFn={formatPercent}
+                          getChangeColorFn={getChangeColor}
                         />
                       ) : null}
                     </div>
