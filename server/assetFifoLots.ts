@@ -23,7 +23,9 @@ export type OpenFifoLotApiRow = {
   purchaseCurrency: string;
   /** EUR za 1 jednotku cudzej meny (ECB) v deň nákupu. */
   eurPerUnitAtPurchase: number;
-  /** Náklad lotu v zobrazovacej mene (skutočne zaplatené). */
+  /** Náklad lotu v EUR (peňaženka / FIFO) — klient prepočíta do UI meny. */
+  investedAmountEur: number;
+  /** Náklad lotu v zobrazovacej mene (legacy / server userCcy). */
   investedAmount: number;
   currentPriceAvailable: boolean;
   /** PnL v zobrazovacej mene. */
@@ -109,6 +111,7 @@ export function buildOpenFifoLotRowList(
       pricePerShareLocal: lot.priceLocal,
       purchaseCurrency: String(lot.ccy),
       eurPerUnitAtPurchase: lot.eurPerUnit,
+      investedAmountEur: bookEur,
       investedAmount: convertAmountBetween(bookEur, "EUR", userCcy, rates),
       currentPriceAvailable: priceOk,
       currentPnl: priceOk

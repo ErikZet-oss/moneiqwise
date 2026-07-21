@@ -3378,6 +3378,10 @@ export async function registerRoutes(
         if (q && typeof (q as { price?: number }).price === "number" && Number.isFinite((q as { price: number }).price)) {
           pNow = (q as { price: number }).price;
         }
+        const pre = (q as { preMarketPrice?: number | null } | null)?.preMarketPrice;
+        if (typeof pre === "number" && Number.isFinite(pre) && pre > 0) {
+          pNow = pre;
+        }
 
         const lots = buildOpenFifoLotRowList(forFifo, eurM, now, rates, userCcy, pNow);
         return res.json({ currency: userCcy, lots });

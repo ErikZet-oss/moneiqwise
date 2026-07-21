@@ -85,6 +85,7 @@ type MobileOpenFifoLot = {
   remainingShares: number;
   pricePerShareLocal: number;
   purchaseCurrency: string;
+  investedAmountEur?: number;
   investedAmount: number;
   currentPnl: number;
   currentPriceAvailable: boolean;
@@ -106,6 +107,7 @@ function MobileHoldingBuyLotsPanel({
   formatShareQuantityFn,
   formatAverageCostCurrencyFn,
   convertAverageCostPriceFn,
+  convertPriceFn,
   formatPercentFn,
   getChangeColorFn,
 }: {
@@ -119,6 +121,10 @@ function MobileHoldingBuyLotsPanel({
   formatShareQuantityFn: (n: number) => string;
   formatAverageCostCurrencyFn: (n: number) => string;
   convertAverageCostPriceFn: (
+    price: number,
+    fromCurrency: "EUR" | "USD" | "GBP" | "CZK" | "PLN",
+  ) => number;
+  convertPriceFn: (
     price: number,
     fromCurrency: "EUR" | "USD" | "GBP" | "CZK" | "PLN",
   ) => number;
@@ -177,18 +183,19 @@ function MobileHoldingBuyLotsPanel({
             ? ccyRaw
             : "EUR";
         const openPrice = convertAverageCostPriceFn(lot.pricePerShareLocal, ccy);
-        // XTB „Čistý zisk %“ = (hodnota − investované) / investované v mene účtu.
-        const invested = Number.isFinite(lot.investedAmount) ? lot.investedAmount : null;
+        // Vždy EUR náklad → UI mena (rovnaký convertPrice ako hodnota pozície).
+        const investedRawEur =
+          lot.investedAmountEur != null && Number.isFinite(lot.investedAmountEur)
+            ? lot.investedAmountEur
+            : null;
+        const invested =
+          investedRawEur != null ? convertPriceFn(investedRawEur, "EUR") : null;
         const lotValue =
           currentPrice != null && Number.isFinite(currentPrice)
             ? lot.remainingShares * currentPrice
             : null;
         const lotGain =
-          lotValue != null && invested != null && Math.abs(invested) > 1e-9
-            ? lotValue - invested
-            : lot.currentPriceAvailable && Number.isFinite(lot.currentPnl)
-              ? lot.currentPnl
-              : null;
+          lotValue != null && invested != null ? lotValue - invested : null;
         const lotGainPercent =
           lotGain != null && invested != null && Math.abs(invested) > 1e-9
             ? (lotGain / invested) * 100
@@ -3046,6 +3053,7 @@ export default function Dashboard() {
                           formatShareQuantityFn={formatShareQuantity}
                           formatAverageCostCurrencyFn={formatAverageCostCurrency}
                           convertAverageCostPriceFn={convertAverageCostPrice}
+                          convertPriceFn={convertPrice}
                           formatPercentFn={formatPercent}
                           getChangeColorFn={getChangeColor}
                         />

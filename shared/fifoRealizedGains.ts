@@ -4,6 +4,8 @@ import type { RealizedGainsComputedSummary, RealizedTickerRow } from "./realized
 import { hasAuthoritativeStoredRealizedGain, shouldPreferCloseTradeGain } from "./sellCloseTradeFallback";
 import { inferTradeCurrency, type TradeCurrency } from "./transactionEur";
 import { eurPerUnitOfTradeCurrency, resolveBuySellLineEur } from "./transactionEur";
+import { resolveInstrumentPricePerShare } from "./instrumentPrice";
+import { getTickerCurrency } from "./tickerCurrency";
 
 /**
  * Otvorený nákupný lot (FIFO).
@@ -103,14 +105,20 @@ export function computeFifoRealizedGainsFromTransactions(
       if (!(sh > 0) || !Number.isFinite(lineEur) || lineEur <= 0) continue;
       const epu = eurPerUnitOfTradeCurrency(txn, lineEur, fb);
       const cps = lineEur / sh;
+      const instrumentPx = resolveInstrumentPricePerShare(txn);
+      const quoteCcy = getTickerCurrency(txn.ticker);
+      const useInstrumentOpen =
+        instrumentPx > 0 &&
+        quoteCcy !== "EUR" &&
+        (quoteCcy === "USD" || quoteCcy === "GBP" || quoteCcy === "CZK" || quoteCcy === "PLN");
       if (!lots[key]) lots[key] = [];
       lots[key].push({
         acquiredAt: txnIsoDate(txn),
         remainingShares: sh,
         costPerShareEur: cps,
-        priceLocal: epu.priceLocal,
+        priceLocal: useInstrumentOpen ? instrumentPx : epu.priceLocal,
         eurPerUnit: epu.eurPerUnit,
-        ccy: inferTradeCurrency(txn),
+        ccy: useInstrumentOpen ? quoteCcy : epu.ccy,
       });
     } else if (txnKind === "SELL") {
       const fb = eurPerUnitByTxnId.get(txn.id) ?? null;
