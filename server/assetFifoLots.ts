@@ -1,5 +1,4 @@
 import type { Transaction } from "@shared/schema";
-import { transactionLotKey } from "@shared/lotKey";
 import { computeFifoRealizedGainsFromTransactions, type OpenFifoLot } from "@shared/fifoRealizedGains";
 import { buildEurPerUnitByTxnIdForTransactions } from "./eurAtTransactionDate";
 import { convertAmountBetween, type AllExchangeRates } from "./convertAmountBetween";
