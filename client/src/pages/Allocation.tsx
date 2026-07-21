@@ -420,7 +420,7 @@ export default function Allocation() {
     cashValueConv <= 0;
 
   return (
-    <div className="flex flex-col gap-3 md:gap-6 max-w-7xl mx-auto pb-10 -mx-6 px-0 md:mx-auto md:px-0">
+    <div className="flex flex-col gap-3 md:gap-6 max-w-7xl mx-auto pb-10 -mx-2 px-0 md:mx-auto md:px-0">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-2.5 md:px-0">
         <div>
           <h1 className="text-lg font-semibold flex items-center gap-2">
