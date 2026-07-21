@@ -85,6 +85,8 @@ type MobileOpenFifoLot = {
   remainingShares: number;
   pricePerShareLocal: number;
   purchaseCurrency: string;
+  currentPnl: number;
+  currentPriceAvailable: boolean;
 };
 
 function canExpandMobileHoldingLots(holding: HoldingWithCostCurrency): boolean {
@@ -174,12 +176,18 @@ function MobileHoldingBuyLotsPanel({
             ? ccyRaw
             : "EUR";
         const openPrice = convertAverageCostPriceFn(lot.pricePerShareLocal, ccy);
+        // XTB „Čistý zisk %“ = P&L / investované v mene účtu (nie (cena−open)/open v USD).
+        const lotValue =
+          currentPrice != null && Number.isFinite(currentPrice)
+            ? lot.remainingShares * currentPrice
+            : null;
+        const lotGain =
+          lot.currentPriceAvailable && Number.isFinite(lot.currentPnl) ? lot.currentPnl : null;
+        const lotInvested =
+          lotValue != null && lotGain != null ? lotValue - lotGain : null;
         const lotGainPercent =
-          currentPrice != null &&
-          Number.isFinite(currentPrice) &&
-          Number.isFinite(openPrice) &&
-          openPrice > 0
-            ? ((currentPrice - openPrice) / openPrice) * 100
+          lotInvested != null && lotGain != null && Math.abs(lotInvested) > 1e-9
+            ? (lotGain / lotInvested) * 100
             : null;
         let dateLabel = lot.acquiredAt;
         try {
