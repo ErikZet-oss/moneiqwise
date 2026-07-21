@@ -3328,7 +3328,7 @@ export async function registerRoutes(
     }
   });
 
-  /** Otvorené FIFO loty v jednom portfóli (alebo unassigned) pre daný ticker. */
+  /** Otvorené FIFO loty v jednom portfóliu, unassigned, alebo naprieč všetkými (`all`). */
   app.get(
     "/api/portfolios/:portfolioId/asset-lots",
     isAuthenticated,
@@ -3351,7 +3351,9 @@ export async function registerRoutes(
         const now = new Date();
         let allTx: Transaction[] = [];
 
-        if (rawPid === "unassigned") {
+        if (rawPid === "all") {
+          allTx = await storage.getTransactionsByUser(userId, "all");
+        } else if (rawPid === "unassigned") {
           allTx = await db
             .select()
             .from(transactions)

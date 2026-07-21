@@ -69,7 +69,7 @@ function pnlEurForLot(
 }
 
 /**
- * Otvorené FIFO loty pre daný ticker a portfólio (kľúč = portfólio::ticker).
+ * Otvorené FIFO loty pre daný ticker (jeden alebo viac portfólií).
  * `pNow` = trhová cena / ks v mene `getTickerCurrency(ticker)`.
  */
 export function buildOpenFifoLotRowList(
@@ -85,11 +85,17 @@ export function buildOpenFifoLotRowList(
   const pUse = priceOk ? pNow! : 0;
 
   const { openLots } = computeFifoRealizedGainsFromTransactions(tradeTx, eurM, now);
-  const rep = tradeTx[0]!;
-  const key = transactionLotKey(rep);
-  const queue: OpenFifoLot[] = (openLots[key] ?? []).filter(
-    (l) => l.remainingShares > 1e-8,
-  );
+  const tickerUpper = String(tradeTx[0]!.ticker ?? "")
+    .trim()
+    .toUpperCase();
+  const queue: OpenFifoLot[] = [];
+  for (const [key, lots] of Object.entries(openLots)) {
+    if (!key.endsWith(`::${tickerUpper}`)) continue;
+    for (const lot of lots) {
+      if (lot.remainingShares > 1e-8) queue.push(lot);
+    }
+  }
+  queue.sort((a, b) => a.acquiredAt.localeCompare(b.acquiredAt));
   if (queue.length === 0) return [];
 
   return queue.map((lot) => {

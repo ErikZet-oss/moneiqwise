@@ -96,6 +96,7 @@ function canExpandMobileHoldingLots(holding: HoldingWithCostCurrency): boolean {
 
 function MobileHoldingBuyLotsPanel({
   portfolioId,
+  allPortfolios,
   ticker,
   currentPrice,
   maskAmount,
@@ -106,6 +107,8 @@ function MobileHoldingBuyLotsPanel({
   getChangeColorFn,
 }: {
   portfolioId: string | null | undefined;
+  /** Pri agregovanom zobrazení „Všetky portfóliá“ holding nemá portfolioId. */
+  allPortfolios: boolean;
   ticker: string;
   /** Aktuálna trhová cena / ks v zobrazovacej mene. */
   currentPrice: number | null;
@@ -119,13 +122,18 @@ function MobileHoldingBuyLotsPanel({
   formatPercentFn: (value: number) => string;
   getChangeColorFn: (value: number) => string;
 }) {
-  const pathSeg = portfolioId == null || portfolioId === "" ? "unassigned" : portfolioId;
+  const pathSeg =
+    allPortfolios || portfolioId === "all"
+      ? "all"
+      : portfolioId == null || portfolioId === ""
+        ? "unassigned"
+        : portfolioId;
   const { data, isLoading, isError } = useQuery<{ lots: MobileOpenFifoLot[] }>({
     queryKey: ["/api/portfolios", pathSeg, "asset-lots", ticker],
     queryFn: async () => {
       const u = encodeURIComponent(ticker);
       const res = await fetch(
-        `/api/portfolios/${pathSeg === "unassigned" ? "unassigned" : encodeURIComponent(pathSeg)}/asset-lots?ticker=${u}`,
+        `/api/portfolios/${pathSeg === "unassigned" || pathSeg === "all" ? pathSeg : encodeURIComponent(pathSeg)}/asset-lots?ticker=${u}`,
         { credentials: "include" },
       );
       if (!res.ok) throw new Error("asset-lots");
@@ -3016,6 +3024,7 @@ export default function Dashboard() {
                       {isLotsExpanded && canExpandLots ? (
                         <MobileHoldingBuyLotsPanel
                           portfolioId={holding.portfolioId}
+                          allPortfolios={isAllPortfolios}
                           ticker={holding.ticker}
                           currentPrice={Number.isFinite(currentPrice) ? currentPrice : null}
                           maskAmount={maskAmount}
