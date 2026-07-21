@@ -967,35 +967,6 @@ export default function Settings() {
 
       <Card>
         <CardHeader className="p-4 pb-2">
-          <CardTitle className="text-sm font-medium">Informácie o API</CardTitle>
-        </CardHeader>
-        <CardContent className="p-4 pt-3 space-y-4 text-sm text-muted-foreground">
-          <div>
-            <h4 className="font-medium text-foreground mb-1">Alpha Vantage</h4>
-            <p>
-              Primárny zdroj pre historické a aktuálne ceny akcií. Podporuje americké aj európske trhy 
-              (napr. VWCE.DEX pre XETRA, VUSA.L pre Londýn). Bezplatný plán má limit 25 požiadaviek denne.
-            </p>
-          </div>
-          <div>
-            <h4 className="font-medium text-foreground mb-1">Finnhub</h4>
-            <p>
-              Záložný zdroj, ktorý sa použije ak Alpha Vantage nedostupný. Poskytuje real-time ceny 
-              pre americké akcie. Bezplatný plán má limit 60 požiadaviek za minútu.
-            </p>
-          </div>
-          <div className="p-3 bg-muted rounded-lg">
-            <p className="font-medium text-foreground mb-1">Ako to funguje?</p>
-            <p>
-              Aplikácia najprv skúsi získať cenu z Alpha Vantage. Ak zlyhá (napr. prekročený limit), 
-              automaticky použije Finnhub ako zálohu. Pre najlepší zážitok odporúčame mať oba kľúče.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="p-4 pb-2">
           <CardTitle className="text-sm font-medium">Údržba údajov</CardTitle>
           <CardDescription>
             Odstránenie záznamov, ktoré nie sú prepojené na žiadne tvoje portfólio (napr. po staršom importe alebo technickej chybe).
