@@ -279,7 +279,7 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
       const promptFp = createHash("sha256").update(prompts.strategy).digest("hex").slice(0, 12);
       const evalKey = evaluateCacheKey(
         strategy.id,
-        `${tickersFingerprint(rowsForAi.map((r) => r.ticker))}|${promptFp}`,
+        `${tickersFingerprint(rowsForAi.map((r) => r.ticker))}|${promptFp}|v2`,
       );
       let evaluation: AiStrategyEvaluation | null = forceRefresh ? null : await getCachePayload(evalKey);
 
@@ -299,8 +299,10 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
             topPicks: rowsForAi.slice(0, 3).map((r) => ({
               ticker: r.ticker,
               companyName: r.companyName,
-              comment: "Bez AI komentára.",
+              comment: "AI evaluácia zlyhala — skús spustiť skener znova.",
               risk: "",
+              pros: [],
+              cons: [],
               metrics: {
                 price: r.price,
                 changePercent: r.changePercent,

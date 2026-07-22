@@ -11,16 +11,25 @@ export const DEFAULT_STRATEGY_PROMPT = `Si investičný analytik pre slovenskú 
 Tu je zoznam akcií vyfiltrovaných zo skenera "{{strategyLabel}}" ({{strategyDescription}}):
 {{stockListJson}}
 
-Preanalýzuj ich, vyber TOP 3 najzaujímavejšie investičné príležitosti.
-Pre každú napíš:
-- comment: 1–2 vety prečo je zaujímavá
-- risk: 1 veta hlavné riziko
+Vyber presne TOP 3 najzaujímavejšie investičné príležitosti z tohto zoznamu (ticker musí byť v zozname).
+Pre každú akciu napíš:
+- comment: 2–4 vety prečo je vhodná pre túto stratégiu (konkrétne metriky, rast, ocenenie, dividenda…)
+- pros: 2–4 krátke plusy (bullet body ako reťazce)
+- cons: 2–3 riziká / mínusy (bullet body ako reťazce)
+- risk: 1 veta hlavné riziko (súhrn)
 
-Odpovedaj PO SLOVENSKY. Vráť IBA čistý JSON (bez markdown) v tvare:
+Pole comment, pros aj cons musia byť neprázdne. Odpovedaj PO SLOVENSKY.
+Vráť IBA čistý JSON (bez markdown, bez \`\`\`) v presnom tvare:
 {
-  "insight": "2–3 vety celkový verdikt k výberu trhu / stratégie",
+  "insight": "2–3 vety celkový verdikt k trhu a stratégii",
   "topPicks": [
-    { "ticker": "XXX", "comment": "...", "risk": "..." }
+    {
+      "ticker": "AAPL",
+      "comment": "Prečo je vhodná…",
+      "pros": ["Plus 1", "Plus 2"],
+      "cons": ["Mínus 1", "Mínus 2"],
+      "risk": "Hlavné riziko…"
+    }
   ]
 }`;
 

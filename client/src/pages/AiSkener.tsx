@@ -26,6 +26,8 @@ type TopPick = {
   companyName: string;
   comment: string;
   risk: string;
+  pros?: string[];
+  cons?: string[];
   metrics: {
     price: number | null;
     changePercent: number | null;
@@ -323,7 +325,35 @@ export default function AiSkener() {
                       as="p"
                       className="text-[10px] leading-snug text-foreground/90"
                     />
-                    {pick.risk ? (
+                    {(pick.pros?.length || pick.cons?.length) ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+                        {pick.pros && pick.pros.length > 0 && (
+                          <div>
+                            <p className="text-[9px] font-medium text-green-600 dark:text-green-400 mb-0.5">Plusy</p>
+                            <ul className="text-[9px] text-muted-foreground space-y-0.5 list-disc pl-3">
+                              {pick.pros.map((p, i) => (
+                                <li key={i}>
+                                  <FinanceTermText text={p} className="inline" />
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {pick.cons && pick.cons.length > 0 && (
+                          <div>
+                            <p className="text-[9px] font-medium text-red-500 mb-0.5">Riziká</p>
+                            <ul className="text-[9px] text-muted-foreground space-y-0.5 list-disc pl-3">
+                              {pick.cons.map((c, i) => (
+                                <li key={i}>
+                                  <FinanceTermText text={c} className="inline" />
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                    {pick.risk && !pick.cons?.length ? (
                       <FinanceTermText
                         text={`Riziko: ${pick.risk}`}
                         as="p"

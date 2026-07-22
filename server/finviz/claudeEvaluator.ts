@@ -11,6 +11,8 @@ export type AiTopPick = {
   companyName: string;
   comment: string;
   risk: string;
+  pros: string[];
+  cons: string[];
   metrics: {
     price: number | null;
     changePercent: number | null;
@@ -85,6 +87,54 @@ function extractJsonObject(text: string): unknown {
 
 const MODEL = process.env.ANTHROPIC_MODEL?.trim().replace(/^["']|["']$/g, "") || "claude-sonnet-5";
 
+function normalizeTickerKey(ticker: string): string {
+  return ticker.trim().toUpperCase().replace(/\./g, "-");
+}
+
+type RawStrategyPick = {
+  ticker?: string;
+  symbol?: string;
+  comment?: string;
+  reason?: string;
+  summary?: string;
+  rationale?: string;
+  risk?: string;
+  pros?: unknown;
+  cons?: unknown;
+  negatives?: unknown;
+};
+
+function asStringList(value: unknown, max = 5): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((x) => String(x).trim()).filter(Boolean).slice(0, max);
+}
+
+function extractPickComment(pick: RawStrategyPick): string {
+  for (const value of [pick.comment, pick.reason, pick.summary, pick.rationale]) {
+    const text = String(value || "").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function buildCommentFromLists(pros: string[], cons: string[]): string {
+  const parts: string[] = [];
+  if (pros.length) parts.push(`Plusy: ${pros.join("; ")}.`);
+  if (cons.length) parts.push(`Riziká: ${cons.join("; ")}.`);
+  return parts.join(" ");
+}
+
+function resolveRowTicker(pick: RawStrategyPick, byTicker: Map<string, FinvizScreenerRow>): FinvizScreenerRow | null {
+  const candidates = [pick.ticker, pick.symbol]
+    .map((t) => String(t || "").trim())
+    .filter(Boolean);
+  for (const raw of candidates) {
+    const row = byTicker.get(normalizeTickerKey(raw));
+    if (row) return row;
+  }
+  return null;
+}
+
 export async function evaluateStrategyPicks(
   strategy: AiScannerStrategy,
   rows: FinvizScreenerRow[],
@@ -110,7 +160,7 @@ export async function evaluateStrategyPicks(
 
   const msg = await client.messages.create({
     model: MODEL,
-    max_tokens: 1200,
+    max_tokens: 2500,
     messages: [{ role: "user", content: prompt }],
   });
 
@@ -118,20 +168,29 @@ export async function evaluateStrategyPicks(
   const text = textBlock && textBlock.type === "text" ? textBlock.text : "";
   const parsed = extractJsonObject(text) as {
     insight?: string;
-    topPicks?: Array<{ ticker?: string; comment?: string; risk?: string }>;
+    topPicks?: RawStrategyPick[];
   };
 
-  const byTicker = new Map(limited.map((r) => [r.ticker.toUpperCase(), r]));
+  const byTicker = new Map(limited.map((r) => [normalizeTickerKey(r.ticker), r]));
   const topPicks: AiTopPick[] = [];
   for (const pick of parsed.topPicks ?? []) {
-    const t = String(pick.ticker || "").toUpperCase();
-    const row = byTicker.get(t);
+    const row = resolveRowTicker(pick, byTicker);
     if (!row) continue;
+
+    const pros = asStringList(pick.pros);
+    const cons = asStringList(pick.cons ?? pick.negatives);
+    let comment = extractPickComment(pick);
+    if (!comment && (pros.length || cons.length)) {
+      comment = buildCommentFromLists(pros, cons);
+    }
+
     topPicks.push({
       ticker: row.ticker,
       companyName: row.companyName,
-      comment: String(pick.comment || "").trim() || "Bez komentára.",
-      risk: String(pick.risk || "").trim() || "",
+      comment: comment || "Claude nevrátil komentár — skús spustiť skener znova (Obnoviť).",
+      risk: String(pick.risk || "").trim() || (cons[0] ?? ""),
+      pros,
+      cons,
       metrics: {
         price: row.price,
         changePercent: row.changePercent,
@@ -149,8 +208,10 @@ export async function evaluateStrategyPicks(
       topPicks.push({
         ticker: row.ticker,
         companyName: row.companyName,
-        comment: "Automatický výber podľa skenera (AI nevrátila platné tickery).",
+        comment: "Automatický výber podľa skenera (AI nevrátila platné tickery). Spusti skener znova pre Claude komentár.",
         risk: "",
+        pros: [],
+        cons: [],
         metrics: {
           price: row.price,
           changePercent: row.changePercent,
