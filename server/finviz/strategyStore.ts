@@ -1,6 +1,12 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db";
 import {
+  categoryIdFromFilters,
+  isFinvizCategoryId,
+  stripSectorFilters,
+  type FinvizCategoryId,
+} from "./categories";
+import {
   AI_SCANNER_STRATEGIES,
   type AiScannerStrategy,
   type AiScannerStrategyId,
@@ -14,6 +20,7 @@ export type StrategyOverride = {
   label?: string;
   shortLabel?: string;
   description?: string;
+  category?: FinvizCategoryId;
   filters?: string[];
 };
 
@@ -34,16 +41,25 @@ function parseOverrides(raw: unknown): StrategyOverrides {
   return raw as StrategyOverrides;
 }
 
+function normalizeCategory(raw: unknown, filters: string[]): FinvizCategoryId {
+  if (typeof raw === "string" && isFinvizCategoryId(raw)) return raw;
+  return categoryIdFromFilters(filters);
+}
+
 function mergeStrategy(id: AiScannerStrategyId, override?: StrategyOverride): AiScannerStrategy {
   const base = AI_SCANNER_STRATEGIES[id];
   if (!override) return { ...base };
 
-  const filters = override.filters ? normalizeStrategyFilters(override.filters) : base.filters;
+  const rawFilters = override.filters ? normalizeStrategyFilters(override.filters) : base.filters;
+  const filters = stripSectorFilters(rawFilters);
+  const category = normalizeCategory(override.category, rawFilters);
+
   return {
     id,
     label: override.label?.trim() || base.label,
     shortLabel: override.shortLabel?.trim() || base.shortLabel,
     description: override.description?.trim() || base.description,
+    category,
     filters: filters.length ? filters : base.filters,
   };
 }
@@ -96,6 +112,7 @@ export async function saveStrategiesForUser(
         label: s.label,
         shortLabel: s.shortLabel,
         description: s.description,
+        category: s.category,
         filters: s.filters,
       };
     }
@@ -108,7 +125,8 @@ export async function saveStrategiesForUser(
       label: next.label?.trim(),
       shortLabel: next.shortLabel?.trim(),
       description: next.description?.trim(),
-      filters: next.filters ? normalizeStrategyFilters(next.filters) : undefined,
+      category: next.category,
+      filters: next.filters ? stripSectorFilters(normalizeStrategyFilters(next.filters)) : undefined,
     };
   }
 
@@ -143,6 +161,7 @@ export async function resetStrategiesForUser(
         label: s.label,
         shortLabel: s.shortLabel,
         description: s.description,
+        category: s.category,
         filters: s.filters,
       };
     }

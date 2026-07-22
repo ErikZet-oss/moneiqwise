@@ -17,7 +17,8 @@ import {
   type AiTickerVerdict,
 } from "./finviz/claudeEvaluator";
 import { fetchQuoteSnapshot, fetchScreenerRows } from "./finviz/scraper";
-import { listStrategies, normalizeStrategyFilters, type AiScannerStrategyId } from "./finviz/strategies";
+import { listStrategies, normalizeStrategyFilters, strategyRuntimeFilters, type AiScannerStrategyId } from "./finviz/strategies";
+import { FINVIZ_CATEGORIES, isFinvizCategoryId, type FinvizCategoryId } from "./finviz/categories";
 import {
   getStrategiesForUser,
   getStrategyForUser,
@@ -60,29 +61,50 @@ function tickersFingerprint(tickers: string[]): string {
   return createHash("sha256").update(tickers.slice().sort().join(",")).digest("hex").slice(0, 24);
 }
 
+function mapStrategyResponse(s: {
+  id: string;
+  label: string;
+  shortLabel: string;
+  description: string;
+  category: string;
+  filters: string[];
+}) {
+  return {
+    id: s.id,
+    label: s.label,
+    shortLabel: s.shortLabel,
+    description: s.description,
+    category: s.category,
+    filters: s.filters,
+  };
+}
+
+function strategiesPayload(
+  strategies: Array<{
+    id: string;
+    label: string;
+    shortLabel: string;
+    description: string;
+    category: string;
+    filters: string[];
+  }>,
+  isCustom: Record<AiScannerStrategyId, boolean>,
+) {
+  return {
+    strategies: strategies.map(mapStrategyResponse),
+    isCustom,
+    defaults: listStrategies().map(mapStrategyResponse),
+    categories: FINVIZ_CATEGORIES.map((c) => ({ id: c.id, label: c.label })),
+  };
+}
+
 export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
   app.get("/api/ai-scanner/strategies", isAuthenticated, async (req: AuthReq, res) => {
     try {
       const userId = requireUserId(req, res);
       if (!userId) return;
       const data = await getStrategiesForUser(userId);
-      res.json({
-        strategies: data.strategies.map((s) => ({
-          id: s.id,
-          label: s.label,
-          shortLabel: s.shortLabel,
-          description: s.description,
-          filters: s.filters,
-        })),
-        isCustom: data.isCustom,
-        defaults: listStrategies().map((s) => ({
-          id: s.id,
-          label: s.label,
-          shortLabel: s.shortLabel,
-          description: s.description,
-          filters: s.filters,
-        })),
-      });
+      res.json(strategiesPayload(data.strategies, data.isCustom));
     } catch (error) {
       console.error("Get AI strategies error:", error);
       res.status(500).json({ message: "Nepodarilo sa načítať stratégie." });
@@ -101,7 +123,10 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
       }
 
       const patch: Partial<
-        Record<AiScannerStrategyId, { label: string; shortLabel: string; description: string; filters: string[] }>
+        Record<
+          AiScannerStrategyId,
+          { label: string; shortLabel: string; description: string; category: FinvizCategoryId; filters: string[] }
+        >
       > = {};
 
       for (const item of items) {
@@ -111,6 +136,8 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
         const label = String(item?.label || "").trim();
         const shortLabel = String(item?.shortLabel || "").trim();
         const description = String(item?.description || "").trim();
+        const categoryRaw = String(item?.category || "all").trim();
+        const category = isFinvizCategoryId(categoryRaw) ? categoryRaw : "all";
         const filters = normalizeStrategyFilters(item?.filters ?? item?.filtersText ?? "");
 
         if (label.length < 2) {
@@ -126,7 +153,7 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
           return res.status(400).json({ message: `Stratégia „${id}“: neplatný filter kód.` });
         }
 
-        patch[id] = { label, shortLabel, description, filters };
+        patch[id] = { label, shortLabel, description, category, filters };
       }
 
       if (!Object.keys(patch).length) {
@@ -135,23 +162,7 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
 
       const strategies = await saveStrategiesForUser(userId, patch);
       const data = await getStrategiesForUser(userId);
-      res.json({
-        strategies: strategies.map((s) => ({
-          id: s.id,
-          label: s.label,
-          shortLabel: s.shortLabel,
-          description: s.description,
-          filters: s.filters,
-        })),
-        isCustom: data.isCustom,
-        defaults: listStrategies().map((s) => ({
-          id: s.id,
-          label: s.label,
-          shortLabel: s.shortLabel,
-          description: s.description,
-          filters: s.filters,
-        })),
-      });
+      res.json(strategiesPayload(strategies, data.isCustom));
     } catch (error) {
       console.error("Save AI strategies error:", error);
       res.status(500).json({ message: "Nepodarilo sa uložiť stratégie." });
@@ -173,23 +184,7 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
 
       const strategies = await resetStrategiesForUser(userId, keys);
       const data = await getStrategiesForUser(userId);
-      res.json({
-        strategies: strategies.map((s) => ({
-          id: s.id,
-          label: s.label,
-          shortLabel: s.shortLabel,
-          description: s.description,
-          filters: s.filters,
-        })),
-        isCustom: data.isCustom,
-        defaults: listStrategies().map((s) => ({
-          id: s.id,
-          label: s.label,
-          shortLabel: s.shortLabel,
-          description: s.description,
-          filters: s.filters,
-        })),
-      });
+      res.json(strategiesPayload(strategies, data.isCustom));
     } catch (error) {
       console.error("Reset AI strategies error:", error);
       res.status(500).json({ message: "Nepodarilo sa obnoviť stratégie." });
@@ -217,7 +212,7 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
       }
 
       const forceRefresh = req.body?.refresh === true;
-      const filterFp = strategy.filters.join(",");
+      const filterFp = strategyRuntimeFilters(strategy).join(",");
       const scanKey = screenerCacheKey(strategy.id, filterFp);
 
       let screener: ScreenerCachePayload | null = forceRefresh ? null : await getCachePayload(scanKey);

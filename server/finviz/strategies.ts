@@ -1,3 +1,5 @@
+import { applyCategoryToFilters, type FinvizCategoryId } from "./categories";
+
 export type AiScannerStrategyId = "dip_buyer" | "garp" | "dividend";
 
 export type AiScannerStrategy = {
@@ -5,7 +7,9 @@ export type AiScannerStrategy = {
   label: string;
   shortLabel: string;
   description: string;
-  /** Finviz `f=` filter codes (comma-separated when joined). */
+  /** Finviz sector category (without sec_ in filters). */
+  category: FinvizCategoryId;
+  /** Finviz `f=` filter codes. Excludes sector filter — category is applied at runtime. */
   filters: string[];
 };
 
@@ -19,6 +23,7 @@ export const AI_SCANNER_STRATEGIES: Record<AiScannerStrategyId, AiScannerStrateg
     label: "The Dip Buyer",
     shortLabel: "Dip",
     description: "Akcie v poklese s prepredaným RSI — hľadanie zliav.",
+    category: "all",
     filters: [
       "cap_midover",
       "ta_rsi_nos30",
@@ -32,6 +37,7 @@ export const AI_SCANNER_STRATEGIES: Record<AiScannerStrategyId, AiScannerStrateg
     shortLabel: "GARP",
     description:
       "Rýchlo rastúce firmy za rozumnú cenu — nízky PEG, rast EPS/sales, Debt/Eq < 1.",
+    category: "all",
     filters: [
       "fa_peg_low", // PEG < 1 (Finviz nemá under 1.5)
       "fa_estltgrowth_o15", // EPS growth next 5Y > 15%
@@ -45,6 +51,7 @@ export const AI_SCANNER_STRATEGIES: Record<AiScannerStrategyId, AiScannerStrateg
     shortLabel: "Div.",
     description:
       "Stabilné dividendové mašiny — yield > 2 %, payout < 60 %, rastúce EPS, Large/Mega.",
+    category: "all",
     filters: [
       "cap_largeover", // Large + Mega
       "fa_div_o2", // Yield > 2 % (Finviz nemá o25 = 2.5 %)
@@ -74,4 +81,9 @@ export function normalizeStrategyFilters(raw: string[] | string): string[] {
         .map((s) => s.trim())
         .filter(Boolean);
   return parts.map((s) => s.replace(/\s+/g, ""));
+}
+
+/** Strategy with sector category merged into Finviz filter list for screener run. */
+export function strategyRuntimeFilters(strategy: AiScannerStrategy): string[] {
+  return applyCategoryToFilters(strategy.filters, strategy.category);
 }
