@@ -32,7 +32,6 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
-  getExtendedSessionLabel,
   getUsMarketSessionState,
   shouldShowExtendedQuote,
 } from "@/lib/usMarketSession";
@@ -478,17 +477,11 @@ export default function Watchlist() {
               quote.price > 0 &&
               quote.price <= item.targetPrice * 1.02;
 
-            const preMarketPriceNative = quote?.preMarketPrice ?? null;
-            const showExtendedQuote =
-              shouldShowExtendedQuote(
-                usSessionState,
-                quote?.marketState,
-                quote?.preMarketChangePercent,
-              ) &&
-              preMarketPriceNative != null &&
-              Number.isFinite(preMarketPriceNative) &&
-              preMarketPriceNative > 0;
-            const showRthDailyChange = usSessionState === "LIVE" || !showExtendedQuote;
+            const showOffHoursDailyChange = shouldShowExtendedQuote(
+              usSessionState,
+              quote?.marketState,
+              quote?.preMarketChangePercent,
+            );
 
             return (
               <Card
@@ -532,34 +525,26 @@ export default function Watchlist() {
                           <div className="text-xs font-semibold tabular-nums">
                             {formatWatchlistCurrency(quote.price, item.ticker)}
                           </div>
-                          {showRthDailyChange && (
+                          {usSessionState === "LIVE" && Number.isFinite(quote.changePercent) ? (
                             <div className={`text-[10px] tabular-nums ${getChangeColor(quote.change)}`}>
                               {formatPercent(quote.changePercent)}
                               <span className="text-muted-foreground mx-0.5">·</span>
                               {formatWatchlistCurrency(Math.abs(quote.change), item.ticker)}
                             </div>
-                          )}
-                          {showExtendedQuote && (
-                            <div className="mt-0.5 flex flex-col items-end gap-0.5">
-                              <span className="text-[9px] tabular-nums inline-flex items-center gap-0.5 text-muted-foreground leading-none">
-                                <Moon className={`h-2.5 w-2.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
-                                <span className="text-[8px]">{getExtendedSessionLabel(usSessionState)}</span>
-                                <span className="text-foreground font-medium">
-                                  {formatWatchlistCurrency(preMarketPriceNative, item.ticker)}
-                                </span>
-                              </span>
-                              <span
-                                className={`text-[10px] tabular-nums inline-flex items-center gap-0.5 leading-none ${getChangeColor(quote.preMarketChange ?? 0)}`}
-                              >
-                                {formatPercent(quote.preMarketChangePercent ?? 0)}
-                                <span className="text-muted-foreground mx-0.5">·</span>
-                                {formatWatchlistCurrency(
-                                  Math.abs(quote.preMarketChange ?? 0),
-                                  item.ticker,
-                                )}
-                              </span>
+                          ) : showOffHoursDailyChange ? (
+                            <div
+                              className={`text-[10px] tabular-nums inline-flex items-center justify-end gap-0.5 ${getChangeColor(quote.preMarketChange ?? 0)}`}
+                            >
+                              <Moon className={`h-2.5 w-2.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
+                              {formatPercent(quote.preMarketChangePercent ?? 0)}
                             </div>
-                          )}
+                          ) : Number.isFinite(quote.changePercent) ? (
+                            <div className={`text-[10px] tabular-nums ${getChangeColor(quote.change)}`}>
+                              {formatPercent(quote.changePercent)}
+                              <span className="text-muted-foreground mx-0.5">·</span>
+                              {formatWatchlistCurrency(Math.abs(quote.change), item.ticker)}
+                            </div>
+                          ) : null}
                         </>
                       ) : (
                         <span className="text-[10px] text-muted-foreground">—</span>
