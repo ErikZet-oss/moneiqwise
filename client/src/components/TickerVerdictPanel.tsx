@@ -44,6 +44,73 @@ function splitIntroAndSections(summary: string): { intro: string; sections: Arra
   return { intro: summary.trim(), sections: null };
 }
 
+const METRIC_LABELS =
+  "Market Cap|Forward P/E|P/E|PEG|EPS \\(ttm\\)|EPS|Debt/Eq|ROE|ROA|Dividend %|Dividend|Payout|Profit Margin|Oper\\. Margin|Gross Margin|Target Price|SMA200|SMA50|RSI|Short Float|Inst Own|Insider Own|Avg Volume|Price|Cap";
+
+function parseNumberedItems(body: string): string[] | null {
+  const inline = Array.from(body.matchAll(/\d+\)\s*([\s\S]*?)(?=\s*\d+\)|$)/g))
+    .map((m) => m[1].trim())
+    .filter(Boolean);
+  if (inline.length >= 2) return inline;
+
+  const lines = body
+    .split(/\n+/)
+    .map((line) => line.replace(/^\d+\)\s*/, "").replace(/^[-•*]\s*/, "").trim())
+    .filter(Boolean);
+  if (lines.length >= 2) return lines;
+
+  return null;
+}
+
+function parseMetricItems(body: string): string[] | null {
+  const labelRe = new RegExp(`\\b(?:${METRIC_LABELS})\\b`, "i");
+  if (!labelRe.test(body)) return null;
+
+  const splitRe = new RegExp(`\\s*(?:\\||;|,\\s*(?=\\b(?:${METRIC_LABELS})\\b))\\s*`, "i");
+  const splitParts = body
+    .split(splitRe)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (splitParts.length >= 2) return splitParts;
+
+  const pairRe = new RegExp(`((?:${METRIC_LABELS})\\s*:?\\s*[^,|;\\n]+)`, "gi");
+  const pairs = Array.from(body.matchAll(pairRe)).map((m) => m[1].trim());
+  if (pairs.length >= 2) return pairs;
+
+  return null;
+}
+
+function formatSectionItems(title: string, body: string): string[] | null {
+  if (/finanč|pitiev|fundament|metrik|valuáci/i.test(title)) {
+    return parseMetricItems(body) ?? parseNumberedItems(body);
+  }
+  if (/konkuren|rizik|hroz|konkurent/i.test(title)) {
+    return parseNumberedItems(body) ?? parseMetricItems(body);
+  }
+  return parseNumberedItems(body);
+}
+
+function SectionBody({ title, body }: { title: string; body: string }) {
+  const items = formatSectionItems(title, body);
+  const itemClass = "text-[10px] leading-relaxed text-muted-foreground";
+
+  if (items?.length) {
+    return (
+      <ul className={`${itemClass} space-y-1 list-disc pl-3.5 marker:text-foreground`}>
+        {items.map((item, i) => (
+          <li key={i}>
+            <FinanceTermText text={item} className="inline" />
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  return (
+    <FinanceTermText text={body} as="p" className={`${itemClass} whitespace-pre-line`} />
+  );
+}
+
 type Props = {
   data: TickerVerdictData;
 };
@@ -75,11 +142,7 @@ export function TickerVerdictPanel({ data }: Props) {
         {sections?.map((sec, i) => (
           <div key={i} className="rounded-md border border-border/60 bg-background/60 p-2 space-y-1">
             <p className="text-[10px] font-semibold text-foreground">{sec.title}</p>
-            <FinanceTermText
-              text={sec.body}
-              as="p"
-              className="text-[10px] leading-relaxed text-muted-foreground whitespace-pre-line"
-            />
+            <SectionBody title={sec.title} body={sec.body} />
           </div>
         ))}
 
