@@ -49,7 +49,12 @@ export function formatAnthropicError(err: unknown): string {
     if (err.status === 401) return `${status}: Neplatný ANTHROPIC_API_KEY.`;
     if (err.status === 403) return `${status}: Prístup zamietnutý (kľúč / organizácia).`;
     if (err.status === 429) return `${status}: Rate limit / kredity Anthropic.`;
-    if (err.status === 404) return `${status}: Neplatný model (${process.env.ANTHROPIC_MODEL || "default"}).`;
+    if (err.status === 404) {
+      const used =
+        process.env.ANTHROPIC_MODEL?.trim().replace(/^["']|["']$/g, "") ||
+        "claude-sonnet-5";
+      return `${status}: Neplatný model (${used}). Nastav ANTHROPIC_MODEL na Renderi.`;
+    }
     return `${status}: ${msg}`;
   }
   if (err instanceof Error) {
@@ -74,7 +79,7 @@ function extractJsonObject(text: string): unknown {
   return JSON.parse(raw.slice(start, end + 1));
 }
 
-const MODEL = process.env.ANTHROPIC_MODEL?.trim().replace(/^["']|["']$/g, "") || "claude-sonnet-4-20250514";
+const MODEL = process.env.ANTHROPIC_MODEL?.trim().replace(/^["']|["']$/g, "") || "claude-sonnet-5";
 
 export async function evaluateStrategyPicks(
   strategy: AiScannerStrategy,
