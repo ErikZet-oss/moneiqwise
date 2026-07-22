@@ -4,6 +4,7 @@ import {
   Eye,
   ExternalLink,
   Loader2,
+  Moon,
   Plus,
   Search,
   Tag,
@@ -30,6 +31,13 @@ import { CompanyLogo } from "@/components/CompanyLogo";
 import { useCurrency } from "@/hooks/useCurrency";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import {
+  getExtendedSessionLabel,
+  getUsMarketSessionState,
+  shouldShowExtendedQuote,
+} from "@/lib/usMarketSession";
+
+const premarketMoonClass = "text-amber-600 dark:text-amber-400";
 
 type WatchlistItem = {
   id: string;
@@ -50,6 +58,10 @@ type StockQuote = {
   low52: number;
   annualDividendPerShare: number;
   trailingPE: number | null;
+  marketState?: string | null;
+  preMarketPrice?: number | null;
+  preMarketChange?: number | null;
+  preMarketChangePercent?: number | null;
 };
 
 type SearchResult = {
@@ -102,17 +114,22 @@ function Range52Bar({
   formatLabel: (v: number) => string;
 }) {
   if (!Number.isFinite(low52) || !Number.isFinite(high52) || high52 <= low52 || price <= 0) {
-    return <p className="text-[9px] text-muted-foreground">52t rozpätie nedostupné</p>;
+    return <p className="text-[9px] text-muted-foreground">52w rozpätie nedostupné</p>;
   }
 
   const pct = Math.min(100, Math.max(0, ((price - low52) / (high52 - low52)) * 100));
 
   return (
     <div className="space-y-1">
-      <div className="flex items-center justify-between text-[9px] text-muted-foreground tabular-nums">
-        <span>{formatLabel(low52)}</span>
-        <span className="text-foreground/80">{pct.toFixed(0)}% rozpätia</span>
-        <span>{formatLabel(high52)}</span>
+      <div className="flex items-center gap-1.5">
+        <span className="text-[8px] font-medium uppercase tracking-wide text-muted-foreground shrink-0">
+          52w
+        </span>
+        <div className="flex flex-1 items-center justify-between text-[9px] text-muted-foreground tabular-nums min-w-0">
+          <span>{formatLabel(low52)}</span>
+          <span className="text-foreground/80 px-1">{pct.toFixed(0)}%</span>
+          <span>{formatLabel(high52)}</span>
+        </div>
       </div>
       <div className="relative h-1.5 rounded-full bg-muted overflow-hidden">
         <div
@@ -157,6 +174,7 @@ export default function Watchlist() {
   const { formatWithConversion, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const usSessionState = useMemo(() => getUsMarketSessionState(), []);
 
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search.trim(), 300);
@@ -459,6 +477,22 @@ export default function Watchlist() {
               quote.price > 0 &&
               quote.price <= item.targetPrice * 1.02;
 
+            const quoteCurrency = getTickerCurrency(item.ticker);
+            const preMarketPrice =
+              quote?.preMarketPrice != null
+                ? convertPrice(quote.preMarketPrice, quoteCurrency)
+                : null;
+            const showExtendedQuote =
+              shouldShowExtendedQuote(
+                usSessionState,
+                quote?.marketState,
+                quote?.preMarketChangePercent,
+              ) &&
+              preMarketPrice != null &&
+              Number.isFinite(preMarketPrice) &&
+              preMarketPrice > 0;
+            const showRthDailyChange = usSessionState === "LIVE" || !showExtendedQuote;
+
             return (
               <Card
                 key={item.id}
@@ -501,11 +535,34 @@ export default function Watchlist() {
                           <div className="text-xs font-semibold tabular-nums">
                             {formatWithConversion(quote.price, item.ticker)}
                           </div>
-                          <div className={`text-[10px] tabular-nums ${getChangeColor(quote.change)}`}>
-                            {formatPercent(quote.changePercent)}
-                            <span className="text-muted-foreground mx-0.5">·</span>
-                            {formatWithConversion(Math.abs(quote.change), item.ticker)}
-                          </div>
+                          {showRthDailyChange && (
+                            <div className={`text-[10px] tabular-nums ${getChangeColor(quote.change)}`}>
+                              {formatPercent(quote.changePercent)}
+                              <span className="text-muted-foreground mx-0.5">·</span>
+                              {formatWithConversion(Math.abs(quote.change), item.ticker)}
+                            </div>
+                          )}
+                          {showExtendedQuote && (
+                            <div className="mt-0.5 flex flex-col items-end gap-0.5">
+                              <span className="text-[9px] tabular-nums inline-flex items-center gap-0.5 text-muted-foreground leading-none">
+                                <Moon className={`h-2.5 w-2.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
+                                <span className="text-[8px]">{getExtendedSessionLabel(usSessionState)}</span>
+                                <span className="text-foreground font-medium">
+                                  {formatCurrency(preMarketPrice)}
+                                </span>
+                              </span>
+                              <span
+                                className={`text-[10px] tabular-nums inline-flex items-center gap-0.5 leading-none ${getChangeColor(quote.preMarketChange ?? 0)}`}
+                              >
+                                {formatPercent(quote.preMarketChangePercent ?? 0)}
+                                <span className="text-muted-foreground mx-0.5">·</span>
+                                {formatWithConversion(
+                                  Math.abs(quote.preMarketChange ?? 0),
+                                  item.ticker,
+                                )}
+                              </span>
+                            </div>
+                          )}
                         </>
                       ) : (
                         <span className="text-[10px] text-muted-foreground">—</span>
