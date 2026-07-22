@@ -4090,6 +4090,45 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/stocks/earnings/batch", isAuthenticated, async (req: any, res) => {
+    try {
+      const { tickers } = req.body;
+      if (!tickers || !Array.isArray(tickers)) {
+        return res.status(400).json({ message: "Tickers array required" });
+      }
+
+      const unique = Array.from(
+        new Set<string>(tickers.map((t: string) => String(t).trim().toUpperCase()).filter(Boolean)),
+      );
+      const earnings: Record<string, NextEarningsItem | null> = {};
+      const errors: Record<string, string> = {};
+      const CONCURRENCY = 4;
+
+      for (let i = 0; i < unique.length; i += CONCURRENCY) {
+        const batch = unique.slice(i, i + CONCURRENCY);
+        await Promise.all(
+          batch.map(async (ticker) => {
+            if (ticker === "CASH") {
+              earnings[ticker] = null;
+              return;
+            }
+            try {
+              earnings[ticker] = await fetchNextEarningsDateForAsset(ticker);
+            } catch {
+              errors[ticker] = "Nepodarilo sa načítať earnings";
+              earnings[ticker] = null;
+            }
+          }),
+        );
+      }
+
+      res.json({ earnings, errors, fetchedCount: Object.keys(earnings).length });
+    } catch (error) {
+      console.error("Error fetching batch earnings:", error);
+      res.status(500).json({ message: "Nepodarilo sa načítať earnings." });
+    }
+  });
+
   // Get historical prices for a ticker
   app.get("/api/stocks/history/:ticker", isAuthenticated, async (req: any, res) => {
     try {

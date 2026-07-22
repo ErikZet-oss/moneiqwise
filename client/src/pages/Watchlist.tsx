@@ -11,6 +11,8 @@ import {
   Trash2,
   Target,
 } from "lucide-react";
+import { format, parse } from "date-fns";
+import { sk } from "date-fns/locale";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -125,6 +127,14 @@ function getDisplayDailyChange(
     return quote.preMarketChange ?? 0;
   }
   return quote.change;
+}
+
+function formatEarningsDate(iso: string): string {
+  try {
+    return format(parse(iso, "yyyy-MM-dd", new Date()), "d.M.yyyy", { locale: sk });
+  } catch {
+    return iso;
+  }
 }
 
 function Range52Bar({
@@ -264,6 +274,25 @@ export default function Watchlist() {
   });
 
   const quotes = quotesData?.quotes ?? {};
+
+  const { data: earningsData } = useQuery<{ earnings: Record<string, { date: string } | null> }>({
+    queryKey: ["/api/earnings", "watchlist", tickers.join(",")],
+    enabled: tickers.length > 0,
+    staleTime: 45 * 60 * 1000,
+    queryFn: async () => {
+      const res = await fetch("/api/stocks/earnings/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ tickers }),
+      });
+      if (!res.ok) throw new Error("Failed to fetch earnings");
+      const data = await res.json();
+      return { earnings: data.earnings as Record<string, { date: string } | null> };
+    },
+  });
+
+  const earningsByTicker = earningsData?.earnings ?? {};
 
   const { data: searchResults, isFetching: searchLoading } = useQuery<SearchResult[]>({
     queryKey: ["/api/stocks/search", debouncedSearch],
@@ -609,40 +638,50 @@ export default function Watchlist() {
                     />
                   )}
 
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[8px] text-muted-foreground leading-tight">
-                    <span>
-                      P/E{" "}
-                      <span className="text-foreground font-medium tabular-nums">
-                        {quote?.trailingPE ? quote.trailingPE.toFixed(1) : "—"}
-                      </span>
-                    </span>
-                    <span>
-                      Div.{" "}
-                      <span className="text-foreground font-medium tabular-nums">
-                        {divYield != null ? `${divYield.toFixed(2)}%` : "—"}
-                      </span>
-                    </span>
-                    {item.targetPrice != null && (
-                      <span className="inline-flex items-center gap-0.5 flex-wrap">
-                        <Target className="h-3 w-3" />
+                  <div className="flex items-end justify-between gap-2 text-[8px] text-muted-foreground leading-tight">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0 flex-1">
+                      <span>
+                        P/E{" "}
                         <span className="text-foreground font-medium tabular-nums">
-                          {formatQuoteLabel(item.ticker, item.targetPrice)}
+                          {quote?.trailingPE ? quote.trailingPE.toFixed(1) : "—"}
                         </span>
-                        {dropToTargetPct != null && dropToTargetPct > 0 && (
-                          <span className="text-red-500 font-medium tabular-nums">
-                            −{dropToTargetPct.toFixed(1)}%
-                          </span>
-                        )}
-                        {dropToTargetPct === 0 && (
-                          <span className="text-green-500 font-medium">Na cieli</span>
-                        )}
-                        {nearTarget && dropToTargetPct != null && dropToTargetPct > 0 && (
-                          <Badge className="ml-0.5 h-4 px-1 text-[8px] bg-green-600 hover:bg-green-600">
-                            Blízko cieľa
-                          </Badge>
-                        )}
                       </span>
-                    )}
+                      <span>
+                        Div.{" "}
+                        <span className="text-foreground font-medium tabular-nums">
+                          {divYield != null ? `${divYield.toFixed(2)}%` : "—"}
+                        </span>
+                      </span>
+                      {item.targetPrice != null && (
+                        <span className="inline-flex items-center gap-0.5 flex-wrap">
+                          <Target className="h-3 w-3" />
+                          <span className="text-foreground font-medium tabular-nums">
+                            {formatQuoteLabel(item.ticker, item.targetPrice)}
+                          </span>
+                          {dropToTargetPct != null && dropToTargetPct > 0 && (
+                            <span className="text-red-500 font-medium tabular-nums">
+                              −{dropToTargetPct.toFixed(1)}%
+                            </span>
+                          )}
+                          {dropToTargetPct === 0 && (
+                            <span className="text-green-500 font-medium">Na cieli</span>
+                          )}
+                          {nearTarget && dropToTargetPct != null && dropToTargetPct > 0 && (
+                            <Badge className="ml-0.5 h-4 px-1 text-[8px] bg-green-600 hover:bg-green-600">
+                              Blízko cieľa
+                            </Badge>
+                          )}
+                        </span>
+                      )}
+                    </div>
+                    {earningsByTicker[item.ticker]?.date ? (
+                      <span className="shrink-0 text-right whitespace-nowrap">
+                        Earnings{" "}
+                        <span className="text-foreground font-medium tabular-nums">
+                          {formatEarningsDate(earningsByTicker[item.ticker]!.date)}
+                        </span>
+                      </span>
+                    ) : null}
                   </div>
 
                   {item.tags.length > 0 && (
