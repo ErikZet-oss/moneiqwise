@@ -41,6 +41,30 @@ type StrategiesResponse = {
 
 const STRATEGY_IDS: StrategyId[] = ["dip_buyer", "garp", "dividend"];
 
+const FALLBACK_DRAFTS: Record<StrategyId, StrategyDraft> = {
+  dip_buyer: {
+    id: "dip_buyer",
+    label: "The Dip Buyer",
+    shortLabel: "Dip",
+    description: "Akcie v poklese s prepredaným RSI — hľadanie zliav.",
+    filtersText: "cap_midover, ta_rsi_nos30, ta_perf4w_u-10, sh_avgvol_o200",
+  },
+  garp: {
+    id: "garp",
+    label: "The GARP Strategy",
+    shortLabel: "GARP",
+    description: "Rýchlo rastúce firmy za rozumnú cenu — nízky PEG, rast EPS/sales, Debt/Eq < 1.",
+    filtersText: "fa_peg_low, fa_estltgrowth_o15, fa_sales5years_o10, fa_debteq_u1",
+  },
+  dividend: {
+    id: "dividend",
+    label: "The Dividend Compounder",
+    shortLabel: "Div.",
+    description: "Stabilné dividendové mašiny — yield > 2 %, payout < 60 %, rastúce EPS, Large/Mega.",
+    filtersText: "cap_largeover, fa_div_o2, fa_payoutratio_u60, fa_epsqoq_pos",
+  },
+};
+
 const STRATEGY_ICONS: Record<StrategyId, typeof TrendingDown> = {
   dip_buyer: TrendingDown,
   garp: Gem,
@@ -48,19 +72,18 @@ const STRATEGY_ICONS: Record<StrategyId, typeof TrendingDown> = {
 };
 
 function toDrafts(strategies: StrategiesResponse["strategies"]): Record<StrategyId, StrategyDraft> {
-  return strategies.reduce(
-    (acc, s) => {
-      acc[s.id] = {
-        id: s.id,
-        label: s.label,
-        shortLabel: s.shortLabel,
-        description: s.description,
-        filtersText: s.filters.join(", "),
-      };
-      return acc;
-    },
-    {} as Record<StrategyId, StrategyDraft>,
-  );
+  const next = { ...FALLBACK_DRAFTS };
+  for (const s of strategies) {
+    if (s.id !== "dip_buyer" && s.id !== "garp" && s.id !== "dividend") continue;
+    next[s.id] = {
+      id: s.id,
+      label: s.label,
+      shortLabel: s.shortLabel,
+      description: s.description,
+      filtersText: Array.isArray(s.filters) ? s.filters.join(", ") : FALLBACK_DRAFTS[s.id].filtersText,
+    };
+  }
+  return next;
 }
 
 type Props = {
@@ -82,13 +105,14 @@ export function AiSkenerStrategiesPanel({
   const queryClient = useQueryClient();
   const [drafts, setDrafts] = useState<Record<StrategyId, StrategyDraft> | null>(null);
 
-  const { data, isLoading } = useQuery<StrategiesResponse>({
+  const { data, isLoading, isError, refetch } = useQuery<StrategiesResponse>({
     queryKey: ["/api/ai-scanner/strategies"],
     queryFn: async () => {
       const res = await fetch("/api/ai-scanner/strategies", { credentials: "include" });
       if (!res.ok) throw new Error("strategies");
       return res.json();
     },
+    retry: 1,
   });
 
   useEffect(() => {
@@ -99,23 +123,24 @@ export function AiSkenerStrategiesPanel({
 
   const dirty = useMemo(() => {
     if (!data?.strategies || !drafts) return false;
-    return data.strategies.some((s) => {
-      const d = drafts[s.id];
-      if (!d) return false;
+    return STRATEGY_IDS.some((id) => {
+      const s = data.strategies.find((x) => x.id === id);
+      const d = drafts[id];
+      if (!s || !d) return false;
       return (
         d.label !== s.label ||
         d.shortLabel !== s.shortLabel ||
         d.description !== s.description ||
-        d.filtersText !== s.filters.join(", ")
+        d.filtersText !== (Array.isArray(s.filters) ? s.filters.join(", ") : "")
       );
     });
   }, [data, drafts]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!drafts) throw new Error("nothing to save");
+      const source = drafts ?? FALLBACK_DRAFTS;
       const payload = STRATEGY_IDS.map((id) => {
-        const d = drafts[id];
+        const d = source[id];
         return {
           id,
           label: d.label,
@@ -159,7 +184,7 @@ export function AiSkenerStrategiesPanel({
     setDrafts((prev) => (prev ? { ...prev, [id]: { ...prev[id], ...patch } } : prev));
   };
 
-  if (isLoading || !data || !drafts) {
+  if (isLoading && !drafts) {
     return (
       <div className="flex items-center gap-2 py-6 text-xs text-muted-foreground justify-center">
         <Loader2 className="h-4 w-4 animate-spin" />
@@ -168,14 +193,32 @@ export function AiSkenerStrategiesPanel({
     );
   }
 
+  if (isError && !drafts) {
+    return (
+      <div className="flex flex-col items-center gap-2 py-6 text-xs text-muted-foreground">
+        <p>Nepodarilo sa načítať stratégie.</p>
+        <Button type="button" variant="outline" size="sm" className="h-8 text-[10px]" onClick={() => refetch()}>
+          Skúsiť znova
+        </Button>
+      </div>
+    );
+  }
+
+  const safeDrafts = drafts ?? FALLBACK_DRAFTS;
+  const customFlags = data?.isCustom ?? {
+    dip_buyer: false,
+    garp: false,
+    dividend: false,
+  };
+
   return (
     <div className="flex flex-col gap-3">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-3">
         {STRATEGY_IDS.map((id) => {
-          const draft = drafts[id];
+          const draft = safeDrafts[id];
           const Icon = STRATEGY_ICONS[id];
           const active = selectedId === id;
-          const isCustom = data.isCustom[id];
+          const isCustom = customFlags[id];
 
           return (
             <Card

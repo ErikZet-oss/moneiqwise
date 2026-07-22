@@ -147,10 +147,19 @@ export const FINANCE_TERM_GLOSSARY: Record<string, { title: string; explanation:
 /** Dlhšie frazy skôr, aby „EV/EBITDA“ vyhralo pred „EBITDA“. */
 const TERM_KEYS = Object.keys(FINANCE_TERM_GLOSSARY).sort((a, b) => b.length - a.length);
 
-const TERM_REGEX = new RegExp(
-  `(?<![A-Za-z0-9])(${TERM_KEYS.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})(?![A-Za-z0-9])`,
-  "gi",
-);
+const ESCAPED_TERM_KEYS = TERM_KEYS.map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+
+/** Bez lookbehind — starší mobile Safari (iOS <16.4) inak spadne pri importe modulu. */
+function buildTermRegex(): RegExp {
+  const pattern = `(^|[^A-Za-z0-9])(${ESCAPED_TERM_KEYS.join("|")})(?![A-Za-z0-9])`;
+  try {
+    return new RegExp(pattern, "gi");
+  } catch {
+    return /$^/g;
+  }
+}
+
+const TERM_REGEX = buildTermRegex();
 
 function lookupTerm(raw: string) {
   const exact = FINANCE_TERM_GLOSSARY[raw] ?? FINANCE_TERM_GLOSSARY[raw.toUpperCase()];
@@ -214,9 +223,13 @@ export function FinanceTermText({
 
   while ((match = re.exec(text)) !== null) {
     const start = match.index;
-    const term = match[1]!;
+    const prefix = match[1] ?? "";
+    const term = match[2]!;
     if (start > lastIndex) {
       nodes.push(text.slice(lastIndex, start));
+    }
+    if (prefix) {
+      nodes.push(prefix);
     }
     const entry = lookupTerm(term);
     if (entry) {
@@ -224,7 +237,7 @@ export function FinanceTermText({
     } else {
       nodes.push(term);
     }
-    lastIndex = start + term.length;
+    lastIndex = start + match[0].length;
   }
 
   if (lastIndex < text.length) {
