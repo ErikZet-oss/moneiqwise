@@ -28,28 +28,28 @@ export const AI_SCANNER_STRATEGIES: Record<AiScannerStrategyId, AiScannerStrateg
   },
   garp: {
     id: "garp",
-    label: "GARP Strategy",
+    label: "The GARP Strategy",
     shortLabel: "GARP",
-    description: "Rast za rozumnú cenu — EPS/sales growth + rozumné P/E.",
+    description:
+      "Rýchlo rastúce firmy za rozumnú cenu — nízky PEG, rast EPS/sales, Debt/Eq < 1.",
     filters: [
-      "cap_midover",
-      "fa_pe_u25",
-      "fa_eps5years_o15",
-      "fa_sales5years_o10",
-      "sh_avgvol_o200",
+      "fa_peg_low", // PEG < 1 (Finviz nemá under 1.5)
+      "fa_estltgrowth_o15", // EPS growth next 5Y > 15%
+      "fa_sales5years_o10", // Sales growth past 5Y > 10%
+      "fa_debteq_u1", // Debt/Equity < 1
     ],
   },
   dividend: {
     id: "dividend",
-    label: "Dividend Compounder",
+    label: "The Dividend Compounder",
     shortLabel: "Div.",
-    description: "Stabilné dividendy — yield, payout a veľkosť firmy.",
+    description:
+      "Stabilné dividendové mašiny — yield > 2 %, payout < 60 %, rastúce EPS, Large/Mega.",
     filters: [
-      "cap_midover",
-      "fa_div_o3",
-      "fa_payoutratio_u70",
-      "fa_pe_u30",
-      "sh_avgvol_o200",
+      "cap_largeover", // Large + Mega
+      "fa_div_o2", // Yield > 2 % (Finviz nemá o25 = 2.5 %)
+      "fa_payoutratio_u60",
+      "fa_epsqoq_pos", // EPS QoQ positive
     ],
   },
 };

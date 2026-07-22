@@ -151,7 +151,7 @@ export default function AiSkener() {
       setRunResult(data);
       toast({
         title: "Skener hotový",
-        description: data.cached ? "Výsledok z cache (24h)." : "Nové dáta z Finviz + Claude.",
+        description: data.cached ? "Výsledok z cache (12h)." : "Nové dáta z Finviz + Claude.",
       });
     },
     onError: (err: Error) => {
@@ -278,8 +278,8 @@ export default function AiSkener() {
             ? strategies
             : [
                 { id: "dip_buyer" as const, label: "The Dip Buyer", shortLabel: "Dip", description: "" },
-                { id: "garp" as const, label: "GARP Strategy", shortLabel: "GARP", description: "" },
-                { id: "dividend" as const, label: "Dividend Compounder", shortLabel: "Div.", description: "" },
+                { id: "garp" as const, label: "The GARP Strategy", shortLabel: "GARP", description: "" },
+                { id: "dividend" as const, label: "The Dividend Compounder", shortLabel: "Div.", description: "" },
               ]
           ).map((s) => {
             const Icon = STRATEGY_ICONS[s.id] ?? Sparkles;

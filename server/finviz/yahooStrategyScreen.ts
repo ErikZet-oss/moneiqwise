@@ -2,229 +2,187 @@ import type { AiScannerStrategy, AiScannerStrategyId } from "./strategies";
 import type { FinvizScreenerRow } from "./scraper";
 
 /**
- * Likvidný US universe pre Yahoo fallback, keď Finviz na cloude (Render) zlyhá.
- * Stačí na TOP 3 výber cez Claude.
+ * Finviz is often blocked from cloud hosts. Use Yahoo predefined screeners instead —
+ * one HTTP call returns ~25 ranked tickers with PE, price, change, etc.
  */
-const SCREEN_UNIVERSE: string[] = [
-  "AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "AVGO", "AMD", "INTC", "CRM",
-  "ORCL", "ADBE", "CSCO", "IBM", "QCOM", "TXN", "AMAT", "MU", "NOW", "SNOW",
-  "JPM", "BAC", "WFC", "GS", "MS", "C", "BLK", "SCHW", "AXP", "V",
-  "MA", "PYPL", "SOFI", "COIN", "SQ", "BRK-B", "JNJ", "UNH", "PFE", "MRK",
-  "ABBV", "LLY", "TMO", "ABT", "BMY", "AMGN", "GILD", "CVS", "CI", "MDT",
-  "XOM", "CVX", "COP", "SLB", "EOG", "OXY", "WMT", "COST", "TGT", "HD",
-  "LOW", "NKE", "SBUX", "MCD", "KO", "PEP", "PG", "UL", "CL", "MDLZ",
-  "DIS", "NFLX", "CMCSA", "T", "VZ", "TMUS", "BA", "CAT", "GE", "HON",
-  "UPS", "FDX", "DE", "LMT", "RTX", "NOC", "TSLA", "F", "GM", "UBER",
-  "ABNB", "SHOP", "MELI", "SE", "BABA", "NIO", "PLTR", "CRWD", "PANW", "ZS",
-  "O", "AMT", "PLD", "SPG", "CCI", "EQIX", "VICI", "WELL", "DLR", "PSA",
-  "NEE", "DUK", "SO", "D", "AEP", "SRE", "EXC", "XEL", "PCG", "ED",
-  "MO", "PM", "BTI", "TROW", "BEN", "MAIN", "ARCC", "JEPI", "SCHD", "VYM",
-];
+const UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 
-type YahooBundle = {
-  ticker: string;
-  companyName: string;
-  sector: string | null;
-  price: number | null;
-  changePercent: number | null;
-  pe: number | null;
-  marketCap: number | null;
-  marketCapLabel: string | null;
-  dividendYield: number | null;
-  payout: number | null;
-  earningsGrowth: number | null;
-  revenueGrowth: number | null;
-  monthPerfApprox: number | null;
+type YahooScreenerQuote = {
+  symbol?: string;
+  shortName?: string;
+  longName?: string;
+  quoteType?: string;
+  sector?: string;
+  industry?: string;
+  marketCap?: number;
+  trailingPE?: number;
+  forwardPE?: number;
+  peTTM?: number;
+  regularMarketPrice?: number;
+  regularMarketChangePercent?: number;
+  fiftyTwoWeekChangePercent?: number;
+  trailingAnnualDividendYield?: number;
+  dividendYield?: number;
+  averageDailyVolume3Month?: number;
+  averageVolume?: number;
+  regularMarketVolume?: number;
 };
 
-function num(v: unknown): number | null {
-  if (v == null) return null;
-  if (typeof v === "object" && v !== null && "raw" in v) {
-    const n = Number((v as { raw?: unknown }).raw);
-    return Number.isFinite(n) ? n : null;
+const SCREENER_IDS: Record<AiScannerStrategyId, string[]> = {
+  dip_buyer: ["day_losers"],
+  garp: ["undervalued_growth_stocks", "growth_technology_stocks"],
+  dividend: ["undervalued_large_caps", "portfolio_anchors"],
+};
+
+async function fetchPredefinedScreener(scrId: string, count = 40): Promise<YahooScreenerQuote[]> {
+  const url =
+    `https://query1.finance.yahoo.com/v1/finance/screener/predefined/saved` +
+    `?formatted=false&lang=en-US&region=US&scrIds=${encodeURIComponent(scrId)}&count=${count}`;
+
+  const res = await fetch(url, {
+    headers: {
+      "User-Agent": UA,
+      Accept: "application/json,text/plain,*/*",
+    },
+    signal: AbortSignal.timeout(25_000),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Yahoo screener ${scrId}: HTTP ${res.status}`);
   }
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
+
+  const data = (await res.json()) as {
+    finance?: { result?: Array<{ quotes?: YahooScreenerQuote[] }> };
+  };
+  return data?.finance?.result?.[0]?.quotes ?? [];
 }
 
-function formatCap(n: number | null): string | null {
-  if (n == null || n <= 0) return null;
+function formatMarketCap(n: number | undefined): string | null {
+  if (n == null || !Number.isFinite(n) || n <= 0) return null;
   if (n >= 1e12) return `${(n / 1e12).toFixed(2)}T`;
   if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
-  if (n >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
   return String(Math.round(n));
 }
 
-async function fetchYahooBundle(ticker: string): Promise<YahooBundle | null> {
-  const yahooTicker = ticker.replace(/\./g, "-");
-  const url =
-    `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(yahooTicker)}` +
-    `?modules=price,summaryDetail,defaultKeyStatistics,financialData,summaryProfile`;
-
-  try {
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "application/json",
-      },
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const r = data?.quoteSummary?.result?.[0];
-    if (!r) return null;
-
-    const priceMod = r.price ?? {};
-    const summary = r.summaryDetail ?? {};
-    const stats = r.defaultKeyStatistics ?? {};
-    const fin = r.financialData ?? {};
-    const profile = r.summaryProfile ?? {};
-
-    const price = num(priceMod.regularMarketPrice) ?? num(summary.regularMarketPrice);
-    const changePercent = num(priceMod.regularMarketChangePercent);
-    // Yahoo often returns change percent as fraction (0.01 = 1%) or already %
-    const changePct =
-      changePercent != null ? (Math.abs(changePercent) < 1 ? changePercent * 100 : changePercent) : null;
-
-    const pe = num(summary.trailingPE) ?? num(stats.trailingPE);
-    const marketCap = num(priceMod.marketCap) ?? num(summary.marketCap);
-    let dividendYield = num(summary.dividendYield) ?? num(summary.yield) ?? num(stats.yield);
-    if (dividendYield != null && dividendYield > 0 && dividendYield < 1) {
-      dividendYield = dividendYield * 100;
-    }
-    let payout = num(summary.payoutRatio);
-    if (payout != null && payout > 0 && payout <= 1.5) {
-      payout = payout * 100;
-    }
-    let earningsGrowth = num(fin.earningsGrowth) ?? num(stats.earningsGrowth);
-    if (earningsGrowth != null && Math.abs(earningsGrowth) < 5) {
-      earningsGrowth = earningsGrowth * 100;
-    }
-    let revenueGrowth = num(fin.revenueGrowth) ?? num(stats.revenueGrowth);
-    if (revenueGrowth != null && Math.abs(revenueGrowth) < 5) {
-      revenueGrowth = revenueGrowth * 100;
-    }
-
-    // Approx. 1-month move via 50d / price when available
-    const fiftyDay = num(summary.fiftyDayAverage) ?? num(stats.fiftyDayAverage);
-    let monthPerfApprox: number | null = null;
-    if (price != null && fiftyDay != null && fiftyDay > 0) {
-      monthPerfApprox = ((price - fiftyDay) / fiftyDay) * 100;
-    }
-
-    const companyName =
-      (typeof priceMod.longName === "string" && priceMod.longName) ||
-      (typeof priceMod.shortName === "string" && priceMod.shortName) ||
-      ticker;
-
-    return {
-      ticker,
-      companyName,
-      sector: typeof profile.sector === "string" ? profile.sector : null,
-      price,
-      changePercent: changePct,
-      pe,
-      marketCap,
-      marketCapLabel: formatCap(marketCap),
-      dividendYield,
-      payout,
-      earningsGrowth,
-      revenueGrowth,
-      monthPerfApprox,
-    };
-  } catch {
-    return null;
-  }
+function dividendYieldPct(q: YahooScreenerQuote): number | null {
+  const raw = q.trailingAnnualDividendYield ?? q.dividendYield;
+  if (raw == null || !Number.isFinite(raw)) return null;
+  // Yahoo sometimes returns 0.025 (ratio) and sometimes 2.5 (already %)
+  if (raw > 0 && raw < 1) return raw * 100;
+  return raw;
 }
 
-function passesStrategy(bundle: YahooBundle, strategyId: AiScannerStrategyId): boolean {
-  const midCapMin = 2e9; // ~$2B mid+
-  if (bundle.marketCap != null && bundle.marketCap < midCapMin) return false;
-  if (bundle.price == null || bundle.price <= 0) return false;
-
-  switch (strategyId) {
-    case "dip_buyer": {
-      const perf = bundle.monthPerfApprox ?? bundle.changePercent;
-      if (perf == null) return false;
-      // v poklese vs 50d priemer alebo denný mínus
-      return perf <= -5 || (bundle.changePercent != null && bundle.changePercent <= -2);
-    }
-    case "garp": {
-      if (bundle.pe == null || bundle.pe <= 0 || bundle.pe > 25) return false;
-      const eg = bundle.earningsGrowth;
-      const rg = bundle.revenueGrowth;
-      // aspoň jeden rastový signál
-      const growthOk =
-        (eg != null && eg >= 10) || (rg != null && rg >= 8) || (eg == null && rg == null && bundle.pe <= 18);
-      return growthOk;
-    }
-    case "dividend": {
-      if (bundle.dividendYield == null || bundle.dividendYield < 2.5) return false;
-      if (bundle.payout != null && bundle.payout > 85) return false;
-      if (bundle.pe != null && bundle.pe > 35) return false;
-      return true;
-    }
-    default:
-      return false;
-  }
+function isLikelyEquity(q: YahooScreenerQuote): boolean {
+  const t = (q.quoteType || "").toUpperCase();
+  if (t === "ETF" || t === "MUTUALFUND" || t === "INDEX") return false;
+  const sym = (q.symbol || "").toUpperCase();
+  if (!sym || sym.includes("=") || sym.includes("^")) return false;
+  if (t && t !== "EQUITY" && t !== "STOCK") return false;
+  return true;
 }
 
-function scoreRow(bundle: YahooBundle, strategyId: AiScannerStrategyId): number {
-  switch (strategyId) {
-    case "dip_buyer":
-      return -((bundle.monthPerfApprox ?? bundle.changePercent) ?? 0);
-    case "garp": {
-      const growth = Math.max(bundle.earningsGrowth ?? 0, bundle.revenueGrowth ?? 0);
-      const pe = bundle.pe ?? 25;
-      return growth / Math.max(pe, 1);
-    }
-    case "dividend":
-      return (bundle.dividendYield ?? 0) - (bundle.payout != null && bundle.payout > 60 ? 1 : 0);
-    default:
-      return 0;
-  }
-}
-
-function toScreenerRow(bundle: YahooBundle): FinvizScreenerRow {
+function toScreenerRow(q: YahooScreenerQuote): FinvizScreenerRow {
+  const pe = q.trailingPE ?? q.peTTM ?? q.forwardPE ?? null;
+  const vol = q.regularMarketVolume ?? q.averageDailyVolume3Month ?? q.averageVolume;
   return {
-    ticker: bundle.ticker,
-    companyName: bundle.companyName,
-    sector: bundle.sector,
-    industry: null,
-    marketCap: bundle.marketCapLabel,
-    pe: bundle.pe,
-    price: bundle.price,
-    changePercent: bundle.changePercent,
-    volume: null,
+    ticker: (q.symbol || "").toUpperCase(),
+    companyName: q.longName || q.shortName || q.symbol || "",
+    sector: q.sector || null,
+    industry: q.industry || null,
+    marketCap: formatMarketCap(q.marketCap),
+    pe: pe != null && Number.isFinite(pe) ? pe : null,
+    price: q.regularMarketPrice != null && Number.isFinite(q.regularMarketPrice) ? q.regularMarketPrice : null,
+    changePercent:
+      q.regularMarketChangePercent != null && Number.isFinite(q.regularMarketChangePercent)
+        ? q.regularMarketChangePercent
+        : null,
+    volume: vol != null && Number.isFinite(vol) ? String(Math.round(vol)) : null,
   };
 }
 
-async function mapPool<T, R>(items: T[], concurrency: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const out: R[] = [];
-  for (let i = 0; i < items.length; i += concurrency) {
-    const chunk = items.slice(i, i + concurrency);
-    const part = await Promise.all(chunk.map(fn));
-    out.push(...part);
+function filterForStrategy(strategyId: AiScannerStrategyId, quotes: YahooScreenerQuote[]): YahooScreenerQuote[] {
+  const equities = quotes.filter(isLikelyEquity);
+
+  if (strategyId === "dip_buyer") {
+    return equities
+      .filter((q) => (q.marketCap ?? 0) >= 2e9 || q.marketCap == null)
+      .filter((q) => (q.regularMarketChangePercent ?? 0) < -0.5)
+      .sort((a, b) => (a.regularMarketChangePercent ?? 0) - (b.regularMarketChangePercent ?? 0));
   }
-  return out;
+
+  if (strategyId === "garp") {
+    return equities
+      .filter((q) => {
+        const pe = q.trailingPE ?? q.peTTM ?? q.forwardPE;
+        if (pe != null && Number.isFinite(pe) && (pe <= 0 || pe > 45)) return false;
+        return true;
+      })
+      .sort((a, b) => {
+        const peA = a.forwardPE ?? a.trailingPE ?? 99;
+        const peB = b.forwardPE ?? b.trailingPE ?? 99;
+        return peA - peB;
+      });
+  }
+
+  // dividend — Large/Mega (~$10B+) + yield ~2.5%+
+  return equities
+    .filter((q) => (q.marketCap ?? 0) >= 1e10 || q.marketCap == null)
+    .filter((q) => {
+      const y = dividendYieldPct(q);
+      return y != null && y >= 2.5;
+    })
+    .sort((a, b) => (dividendYieldPct(b) ?? 0) - (dividendYieldPct(a) ?? 0));
 }
 
 /**
- * Yahoo-based strategy screen (fallback keď Finviz scrapovanie zlyhá na Renderi).
+ * Screen candidates via Yahoo predefined screener APIs (Finviz fallback).
  */
-export async function fetchYahooStrategyScreen(strategy: AiScannerStrategy): Promise<{
-  url: string;
-  rows: FinvizScreenerRow[];
-  source: "yahoo";
-}> {
-  const bundles = await mapPool(SCREEN_UNIVERSE, 6, fetchYahooBundle);
-  const ok = bundles.filter((b): b is YahooBundle => b != null && passesStrategy(b, strategy.id));
-  ok.sort((a, b) => scoreRow(b, strategy.id) - scoreRow(a, strategy.id));
-  const rows = ok.slice(0, 40).map(toScreenerRow);
+export async function fetchYahooStrategyScreen(
+  strategy: AiScannerStrategy,
+): Promise<{ url: string; rows: FinvizScreenerRow[] }> {
+  const screenerIds = SCREENER_IDS[strategy.id] ?? ["day_losers"];
+  const seen = new Set<string>();
+  const merged: YahooScreenerQuote[] = [];
+  const usedIds: string[] = [];
 
-  return {
-    url: `yahoo-fallback://${strategy.id}`,
-    rows,
-    source: "yahoo",
-  };
+  for (const scrId of screenerIds) {
+    try {
+      const quotes = await fetchPredefinedScreener(scrId, 40);
+      usedIds.push(scrId);
+      for (const q of quotes) {
+        const sym = (q.symbol || "").toUpperCase();
+        if (!sym || seen.has(sym)) continue;
+        seen.add(sym);
+        merged.push(q);
+      }
+    } catch (err) {
+      console.warn(`[yahoo-strategy] screener ${scrId} failed:`, err);
+    }
+  }
+
+  if (merged.length === 0) {
+    throw new Error("Yahoo predefined screener nevrátil žiadne tickery");
+  }
+
+  let filtered = filterForStrategy(strategy.id, merged);
+
+  // Soft fallback: if filters were too strict, still return equities from screener
+  if (filtered.length === 0) {
+    filtered = merged.filter(isLikelyEquity);
+  }
+  if (filtered.length === 0) {
+    filtered = merged;
+  }
+
+  const rows = filtered
+    .slice(0, 40)
+    .map(toScreenerRow)
+    .filter((r) => r.ticker.length > 0);
+
+  const url =
+    `https://finance.yahoo.com/screener/predefined/${encodeURIComponent(usedIds[0] ?? screenerIds[0])}`;
+
+  return { url, rows };
 }

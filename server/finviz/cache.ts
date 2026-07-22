@@ -3,7 +3,8 @@ import { sql } from "drizzle-orm";
 import { db } from "../db";
 import type { FinvizScreenerRow } from "./scraper";
 
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+/** 12h — menej requestov na Finviz/Yahoo, stále čerstvé screener dáta. */
+const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 
 export async function ensureAiScannerCacheTable() {
   await db.execute(sql`
