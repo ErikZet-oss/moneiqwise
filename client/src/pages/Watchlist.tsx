@@ -145,25 +145,25 @@ function Range52Bar({
   const pct = Math.min(100, Math.max(0, ((price - low52) / (high52 - low52)) * 100));
 
   return (
-    <div className="space-y-1">
-      <div className="flex items-center gap-1.5">
+    <div className="space-y-0.5">
+      <div className="flex items-center gap-1">
         <span className="text-[8px] font-medium uppercase tracking-wide text-muted-foreground shrink-0">
           52w
         </span>
-        <div className="flex flex-1 items-center justify-between text-[9px] text-muted-foreground tabular-nums min-w-0">
+        <div className="flex flex-1 items-center justify-between text-[8px] text-muted-foreground tabular-nums min-w-0">
           <span>{formatLabel(low52)}</span>
-          <span className="text-foreground/80 px-1">{pct.toFixed(0)}%</span>
+          <span className="text-foreground/80 px-0.5">{pct.toFixed(0)}%</span>
           <span>{formatLabel(high52)}</span>
         </div>
       </div>
-      <div className="relative h-1.5 rounded-full bg-muted overflow-hidden">
+      <div className="relative h-1 rounded-full bg-muted overflow-hidden">
         <div
           className="absolute inset-y-0 left-0 rounded-full bg-primary/25"
           style={{ width: `${pct}%` }}
         />
         <div
-          className="absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full border border-background bg-primary shadow-sm"
-          style={{ left: `calc(${pct}% - 5px)` }}
+          className="absolute top-1/2 h-2 w-2 -translate-y-1/2 rounded-full border border-background bg-primary shadow-sm"
+          style={{ left: `calc(${pct}% - 4px)` }}
         />
       </div>
     </div>
@@ -482,7 +482,7 @@ export default function Watchlist() {
       {listLoading ? (
         <div className="space-y-2">
           {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-36 w-full rounded-lg" />
+            <Skeleton key={i} className="h-24 w-full rounded-lg" />
           ))}
         </div>
       ) : filteredItems.length === 0 ? (
@@ -496,7 +496,7 @@ export default function Watchlist() {
           </CardContent>
         </Card>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-1.5">
           {filteredItems.map((item) => {
             const quote = quotes[item.ticker];
             const divYield =
@@ -537,62 +537,62 @@ export default function Watchlist() {
                     )}
                   />
                 )}
-                <CardContent className="relative p-3 space-y-2">
-                  <div className="flex items-start gap-2">
+                <CardContent className="relative p-2 space-y-1">
+                  <div className="flex items-center gap-2">
                     <a
                       href={yahooFinanceUrl(item.ticker)}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="flex min-w-0 flex-1 items-center gap-2 group"
+                      className="flex min-w-0 flex-1 items-center gap-1.5 group"
                       title="Otvoriť na Yahoo Finance"
                     >
                       <CompanyLogo
                         ticker={item.ticker}
                         companyName={item.companyName ?? item.ticker}
-                        size="sm"
+                        size="xs"
                       />
-                      <div className="min-w-0">
+                      <div className="min-w-0 leading-tight">
                         <div className="flex items-center gap-1">
                           <span className="text-xs font-semibold group-hover:text-primary">
                             {item.ticker}
                           </span>
-                          <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                          <ExternalLink className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                         </div>
-                        <p className="truncate text-[10px] text-muted-foreground">
+                        <p className="truncate text-[9px] text-muted-foreground">
                           {item.companyName || item.ticker}
                         </p>
                       </div>
                     </a>
 
-                    <div className="text-right shrink-0">
+                    <div className="shrink-0 flex items-center gap-1 leading-none">
                       {quotesLoading && !quote ? (
-                        <Skeleton className="h-4 w-16 ml-auto" />
+                        <Skeleton className="h-3.5 w-16" />
                       ) : quote ? (
                         <>
-                          <div className="text-xs font-semibold tabular-nums">
-                            {formatWatchlistCurrency(quote.price, item.ticker)}
-                          </div>
                           {usSessionState === "LIVE" && Number.isFinite(quote.changePercent) ? (
-                            <div className={`text-[10px] tabular-nums ${getChangeColor(quote.change)}`}>
-                              {formatPercent(quote.changePercent)}
-                              <span className="text-muted-foreground mx-0.5">·</span>
-                              {formatWatchlistCurrency(Math.abs(quote.change), item.ticker)}
-                            </div>
-                          ) : showOffHoursDailyChange ? (
-                            <div
-                              className={`text-[10px] tabular-nums inline-flex items-center justify-end gap-0.5 ${getChangeColor(quote.preMarketChange ?? 0)}`}
+                            <span
+                              className={`text-[10px] font-medium tabular-nums ${getChangeColor(quote.change)}`}
                             >
-                              <Moon className={`h-2.5 w-2.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
-                              {formatPercent(quote.preMarketChangePercent ?? 0)}
-                            </div>
-                          ) : Number.isFinite(quote.changePercent) ? (
-                            <div className={`text-[10px] tabular-nums ${getChangeColor(quote.change)}`}>
                               {formatPercent(quote.changePercent)}
-                              <span className="text-muted-foreground mx-0.5">·</span>
-                              {formatWatchlistCurrency(Math.abs(quote.change), item.ticker)}
-                            </div>
+                            </span>
+                          ) : showOffHoursDailyChange ? (
+                            <span
+                              className={`text-[10px] font-medium tabular-nums inline-flex items-center gap-0.5 ${getChangeColor(quote.preMarketChange ?? 0)}`}
+                            >
+                              <Moon className={`h-2 w-2 shrink-0 ${premarketMoonClass}`} aria-hidden />
+                              {formatPercent(quote.preMarketChangePercent ?? 0)}
+                            </span>
+                          ) : Number.isFinite(quote.changePercent) ? (
+                            <span
+                              className={`text-[10px] font-medium tabular-nums ${getChangeColor(quote.change)}`}
+                            >
+                              {formatPercent(quote.changePercent)}
+                            </span>
                           ) : null}
+                          <span className="text-xs font-semibold tabular-nums">
+                            {formatWatchlistCurrency(quote.price, item.ticker)}
+                          </span>
                         </>
                       ) : (
                         <span className="text-[10px] text-muted-foreground">—</span>
@@ -609,7 +609,7 @@ export default function Watchlist() {
                     />
                   )}
 
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[9px] text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[8px] text-muted-foreground leading-tight">
                     <span>
                       P/E{" "}
                       <span className="text-foreground font-medium tabular-nums">
@@ -660,7 +660,7 @@ export default function Watchlist() {
                   )}
 
                   {item.notes?.trim() && (
-                    <p className="text-[10px] text-muted-foreground line-clamp-2 leading-snug">
+                    <p className="text-[9px] text-muted-foreground line-clamp-1 leading-tight">
                       {item.notes}
                     </p>
                   )}
