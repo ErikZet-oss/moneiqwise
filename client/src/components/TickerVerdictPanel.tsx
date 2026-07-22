@@ -35,6 +35,135 @@ function parseNumberedSections(text: string): Array<{ title: string; body: strin
   }));
 }
 
+function isProfileSection(title: string): boolean {
+  return /profil|verdikt/i.test(title);
+}
+
+function isTargetSection(title: string): boolean {
+  return /cieľov|cena\s*12|target/i.test(title);
+}
+
+function parseTradingAction(
+  text: string,
+  verdict: TickerVerdictData["verdict"],
+): "BUY" | "HOLD" | "SELL" {
+  const normalized = text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  if (/\b(predaj|sell)\b/.test(normalized) || /🔴/.test(text)) return "SELL";
+  if (/\b(kup|buy)\b/.test(normalized) || /🟢/.test(text)) return "BUY";
+  if (/\b(drz|hold)\b/.test(normalized) || /🚦/.test(text)) return "HOLD";
+
+  switch (verdict) {
+    case "vhodna":
+      return "BUY";
+    case "nevhodna":
+      return "SELL";
+    default:
+      return "HOLD";
+  }
+}
+
+function formatPriceToken(value: string, currency?: string): string {
+  const v = value.trim().replace(/\s+/g, "");
+  if (!currency) return v;
+  const c = currency.toUpperCase();
+  if (c === "€" || c === "EUR") return `${v} €`;
+  if (c === "$" || c === "USD") return `$${v}`;
+  if (c === "CHF") return `${v} CHF`;
+  return `${v} ${c}`;
+}
+
+function tryParseTargetRange(searchText: string): string | null {
+  const odDo = searchText.match(
+    /od\s+([\d.,]+)\s*(€|\$|USD|EUR|CHF)?\s+do\s+([\d.,]+)\s*(€|\$|USD|EUR|CHF)?/i,
+  );
+  if (odDo) {
+    const cur = odDo[2] || odDo[4] || "";
+    return `${formatPriceToken(odDo[1], cur)} – ${formatPriceToken(odDo[3], cur || odDo[2])}`;
+  }
+
+  const az = searchText.match(
+    /([\d.,]+)\s*(€|\$|USD|EUR|CHF)?\s+až\s+([\d.,]+)\s*(€|\$|USD|EUR|CHF)?/i,
+  );
+  if (az) {
+    const cur = az[2] || az[4] || "";
+    return `${formatPriceToken(az[1], cur)} – ${formatPriceToken(az[3], cur || az[2])}`;
+  }
+
+  const dash = searchText.match(
+    /([\d.,]+)\s*(€|\$|USD|EUR|CHF)\s*[-–—]\s*([\d.,]+)\s*(€|\$|USD|EUR|CHF)?/i,
+  );
+  if (dash) {
+    const cur = dash[2] || dash[4] || "";
+    return `${formatPriceToken(dash[1], cur)} – ${formatPriceToken(dash[3], cur || dash[2])}`;
+  }
+
+  const lowHigh = searchText.match(
+    /(?:nízk[aá]|minimum|min\.?|dno)[:\s]*([\d.,]+)\s*(€|\$|USD|EUR|CHF)?[\s\S]*?(?:vysok[aá]|maximum|max\.?|strop)[:\s]*([\d.,]+)\s*(€|\$|USD|EUR|CHF)?/i,
+  );
+  if (lowHigh) {
+    const cur = lowHigh[2] || lowHigh[4] || "";
+    return `${formatPriceToken(lowHigh[1], cur)} – ${formatPriceToken(lowHigh[3], cur || lowHigh[2])}`;
+  }
+
+  const highLow = searchText.match(
+    /(?:vysok[aá]|maximum|max\.?|strop)[:\s]*([\d.,]+)\s*(€|\$|USD|EUR|CHF)?[\s\S]*?(?:nízk[aá]|minimum|min\.?|dno)[:\s]*([\d.,]+)\s*(€|\$|USD|EUR|CHF)?/i,
+  );
+  if (highLow) {
+    const cur = highLow[4] || highLow[2] || "";
+    return `${formatPriceToken(highLow[3], cur || highLow[4])} – ${formatPriceToken(highLow[1], cur || highLow[2])}`;
+  }
+
+  return null;
+}
+
+function parseTargetRange(summary: string, sections: Array<{ title: string; body: string }> | null): string | null {
+  const targetSec = sections?.find((s) => isTargetSection(s.title));
+  if (targetSec?.body) {
+    const fromTarget = tryParseTargetRange(targetSec.body);
+    if (fromTarget) return fromTarget;
+  }
+  return tryParseTargetRange(summary);
+}
+
+function tradingActionBadge(action: "BUY" | "HOLD" | "SELL") {
+  switch (action) {
+    case "BUY":
+      return { label: "BUY", className: "bg-green-600 hover:bg-green-600 text-white" };
+    case "SELL":
+      return { label: "SELL", className: "bg-red-600 hover:bg-red-600 text-white" };
+    default:
+      return { label: "HOLD", className: "bg-amber-600 hover:bg-amber-600 text-white" };
+  }
+}
+
+function VerdictSideBox({
+  action,
+  targetRange,
+}: {
+  action: "BUY" | "HOLD" | "SELL";
+  targetRange: string | null;
+}) {
+  const badge = tradingActionBadge(action);
+
+  return (
+    <div className="shrink-0 w-[4.5rem] sm:w-20 rounded-md border border-border/70 bg-background/80 p-1.5 flex flex-col items-center justify-center gap-1 text-center">
+      <Badge className={`text-[9px] h-5 px-2 font-bold tracking-wide ${badge.className}`}>
+        {badge.label}
+      </Badge>
+      {targetRange ? (
+        <div className="space-y-0.5">
+          <p className="text-[7px] uppercase tracking-wide text-muted-foreground leading-none">Cieľ 12M</p>
+          <p className="text-[8px] font-semibold tabular-nums text-foreground leading-tight">{targetRange}</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** Ak summary má číslované sekcie, zobraz len boxy (bez duplicitného úvodu). */
 function splitIntroAndSections(summary: string): { intro: string; sections: Array<{ title: string; body: string }> | null } {
   const sections = parseNumberedSections(summary);
@@ -127,6 +256,12 @@ export function TickerVerdictPanel({ data }: Props) {
   const { intro, sections } = splitIntroAndSections(data.summary);
   const hasPros = data.pros.length > 0;
   const hasCons = data.cons.length > 0;
+  const profileSection = sections?.find((s) => isProfileSection(s.title));
+  const tradingAction = parseTradingAction(
+    [profileSection?.body, intro, data.summary].filter(Boolean).join(" "),
+    data.verdict,
+  );
+  const targetRange = parseTargetRange(data.summary, sections);
 
   return (
     <Card className="border-primary/20 bg-primary/[0.04]">
@@ -143,15 +278,36 @@ export function TickerVerdictPanel({ data }: Props) {
         </div>
 
         {intro ? (
-          <FinanceTermText text={intro} as="p" className="text-xs leading-relaxed whitespace-pre-line" />
+          <div className="flex gap-2 items-stretch">
+            <div className="flex-1 min-w-0">
+              <FinanceTermText text={intro} as="p" className="text-xs leading-relaxed whitespace-pre-line" />
+            </div>
+            {!sections ? <VerdictSideBox action={tradingAction} targetRange={targetRange} /> : null}
+          </div>
         ) : null}
 
-        {sections?.map((sec, i) => (
-          <div key={i} className="rounded-md border border-border/60 bg-background/60 p-2 space-y-1">
-            <p className="text-[10px] font-semibold text-foreground">{sec.title}</p>
-            <SectionBody title={sec.title} body={sec.body} />
-          </div>
-        ))}
+        {sections?.map((sec, i) => {
+          if (isTargetSection(sec.title) && targetRange) return null;
+
+          if (isProfileSection(sec.title)) {
+            return (
+              <div key={i} className="flex gap-2 items-stretch">
+                <div className="flex-1 min-w-0 rounded-md border border-border/60 bg-background/60 p-2 space-y-1">
+                  <p className="text-[10px] font-semibold text-foreground">{sec.title}</p>
+                  <SectionBody title={sec.title} body={sec.body} />
+                </div>
+                <VerdictSideBox action={tradingAction} targetRange={targetRange} />
+              </div>
+            );
+          }
+
+          return (
+            <div key={i} className="rounded-md border border-border/60 bg-background/60 p-2 space-y-1">
+              <p className="text-[10px] font-semibold text-foreground">{sec.title}</p>
+              <SectionBody title={sec.title} body={sec.body} />
+            </div>
+          );
+        })}
 
         {!sections && !intro && data.summary ? (
           <FinanceTermText
