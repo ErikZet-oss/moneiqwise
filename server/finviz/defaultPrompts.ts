@@ -34,15 +34,16 @@ Vráť IBA čistý JSON (bez markdown, bez \`\`\`) v presnom tvare:
 }`;
 
 /** Placeholdery: {{ticker}} {{companyName}} {{metricsJson}} */
-export const DEFAULT_TICKER_PROMPT = `Si investičný analytik. Vyhodnoť akciu {{ticker}} ({{companyName}}) na základe metrík z Finviz:
+export const DEFAULT_TICKER_PROMPT = `Si investičný analytik. Vyhodnoť akciu {{ticker}} ({{companyName}}) na základe metrík:
 {{metricsJson}}
 
-Odpovedaj PO SLOVENSKY. Vráť IBA čistý JSON:
+Odpovedaj PO SLOVENSKY. Pole verdict musí byť presne jedna z hodnôt: vhodna, opatrne, nevhodna, neiste.
+Vráť IBA čistý JSON (bez markdown, bez \`\`\`, bez textu pred alebo za JSON) v tomto tvare:
 {
-  "verdict": "vhodna" | "opatrne" | "nevhodna" | "neiste",
-  "summary": "2–3 vety verdikt či je akcia vhodná na investovanie a prečo",
-  "pros": ["...", "..."],
-  "cons": ["...", "..."]
+  "verdict": "opatrne",
+  "summary": "2–4 vety prečo je alebo nie je akcia vhodná na investovanie",
+  "pros": ["Plus 1", "Plus 2"],
+  "cons": ["Riziko 1", "Riziko 2"]
 }`;
 
 /** Placeholdery: {{kind}} {{contextJson}} */

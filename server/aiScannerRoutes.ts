@@ -361,7 +361,7 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
       const forceRefresh = req.body?.refresh === true;
       const { prompts } = await getPromptsForUser(userId);
       const promptFp = createHash("sha256").update(prompts.ticker).digest("hex").slice(0, 12);
-      const cacheKey = `${tickerAnalyzeCacheKey(ticker)}|${promptFp}`;
+      const cacheKey = `${tickerAnalyzeCacheKey(ticker)}|${promptFp}|v2`;
       let cached: {
         snapshot: Awaited<ReturnType<typeof fetchQuoteSnapshot>>;
         verdict: AiTickerVerdict;

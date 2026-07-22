@@ -75,14 +75,99 @@ export function formatAnthropicError(err: unknown): string {
   return String(err);
 }
 
+function repairJsonLike(raw: string): string {
+  return raw
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/,\s*([}\]])/g, "$1");
+}
+
 function extractJsonObject(text: string): unknown {
   const trimmed = text.trim();
-  const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
-  const raw = fence ? fence[1].trim() : trimmed;
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
-  if (start < 0 || end <= start) throw new Error("AI_JSON_PARSE");
-  return JSON.parse(raw.slice(start, end + 1));
+  if (!trimmed) throw new Error("AI_JSON_PARSE");
+
+  const candidates: string[] = [];
+  const fenceRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
+  let fenceMatch: RegExpExecArray | null;
+  while ((fenceMatch = fenceRegex.exec(trimmed)) !== null) {
+    if (fenceMatch[1]?.trim()) candidates.push(fenceMatch[1].trim());
+  }
+
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    candidates.push(trimmed.slice(start, end + 1));
+  }
+  candidates.push(trimmed);
+
+  for (const raw of candidates) {
+    for (const attempt of [raw, repairJsonLike(raw)]) {
+      try {
+        return JSON.parse(attempt);
+      } catch {
+        // try next
+      }
+    }
+  }
+
+  throw new Error("AI_JSON_PARSE");
+}
+
+function looseParseTickerVerdict(text: string): {
+  verdict?: string;
+  summary?: string;
+  pros?: string[];
+  cons?: string[];
+} {
+  const verdict =
+    text.match(/"verdict"\s*:\s*"([^"]+)"/i)?.[1] ??
+    text.match(/verdict\s*:\s*([a-zá-ž]+)/i)?.[1];
+
+  const summary =
+    text.match(/"summary"\s*:\s*"((?:\\.|[^"\\])*)"/i)?.[1]?.replace(/\\"/g, '"') ??
+    text.match(/"summary"\s*:\s*'([^']*)'/i)?.[1];
+
+  const prosBlock = text.match(/"pros"\s*:\s*\[([\s\S]*?)\]/i)?.[1] ?? "";
+  const consBlock = text.match(/"cons"\s*:\s*\[([\s\S]*?)\]/i)?.[1] ?? "";
+  const listFromBlock = (block: string) => {
+    const out: string[] = [];
+    const itemRegex = /"((?:\\.|[^"\\])*)"/g;
+    let m: RegExpExecArray | null;
+    while ((m = itemRegex.exec(block)) !== null) {
+      const val = m[1].replace(/\\"/g, '"').trim();
+      if (val) out.push(val);
+    }
+    return out;
+  };
+
+  return {
+    verdict,
+    summary,
+    pros: listFromBlock(prosBlock),
+    cons: listFromBlock(consBlock),
+  };
+}
+
+function parseTickerVerdictJson(text: string): {
+  verdict?: string;
+  summary?: string;
+  pros?: string[];
+  cons?: string[];
+} {
+  try {
+    return extractJsonObject(text) as {
+      verdict?: string;
+      summary?: string;
+      pros?: string[];
+      cons?: string[];
+    };
+  } catch {
+    const loose = looseParseTickerVerdict(text);
+    if (loose.summary || loose.pros?.length || loose.cons?.length || loose.verdict) {
+      return loose;
+    }
+    throw new Error("AI_JSON_PARSE");
+  }
 }
 
 const MODEL = process.env.ANTHROPIC_MODEL?.trim().replace(/^["']|["']$/g, "") || "claude-sonnet-5";
@@ -286,22 +371,42 @@ export async function evaluateTickerSnapshot(
     metricsJson: JSON.stringify(slim, null, 2),
   });
 
-  const msg = await client.messages.create({
-    model: MODEL,
-    max_tokens: 900,
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  const textBlock = msg.content.find((b) => b.type === "text");
-  const text = textBlock && textBlock.type === "text" ? textBlock.text : "";
-  const parsed = extractJsonObject(text) as {
-    verdict?: string;
-    summary?: string;
-    pros?: string[];
-    cons?: string[];
+  const requestOnce = async (extraInstruction?: string) => {
+    const msg = await client.messages.create({
+      model: MODEL,
+      max_tokens: 1600,
+      messages: [
+        {
+          role: "user",
+          content: extraInstruction ? `${prompt}\n\n${extraInstruction}` : prompt,
+        },
+      ],
+    });
+    const textBlock = msg.content.find((b) => b.type === "text");
+    return textBlock && textBlock.type === "text" ? textBlock.text : "";
   };
 
-  const verdictRaw = String(parsed.verdict || "neiste").toLowerCase();
+  let text = await requestOnce();
+  let parsed: { verdict?: string; summary?: string; pros?: string[]; cons?: string[] };
+  try {
+    parsed = parseTickerVerdictJson(text);
+  } catch (firstErr) {
+    console.warn("[ticker-eval] JSON parse failed, retrying:", String(firstErr));
+    text = await requestOnce(
+      "DÔLEŽITÉ: Predchádzajúca odpoveď nebola platný JSON. Vráť IBA jeden JSON objekt podľa schémy, bez markdown a bez komentára mimo JSON.",
+    );
+    try {
+      parsed = parseTickerVerdictJson(text);
+    } catch (secondErr) {
+      console.warn("[ticker-eval] JSON parse failed after retry. Raw:", text.slice(0, 600));
+      throw secondErr;
+    }
+  }
+
+  const verdictRaw = String(parsed.verdict || "neiste")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
   const verdict: AiTickerVerdict["verdict"] =
     verdictRaw === "vhodna" || verdictRaw === "opatrne" || verdictRaw === "nevhodna" || verdictRaw === "neiste"
       ? verdictRaw
@@ -312,8 +417,8 @@ export async function evaluateTickerSnapshot(
     companyName: snapshot.companyName,
     verdict,
     summary: String(parsed.summary || "").trim() || "Nepodarilo sa zostaviť verdikt.",
-    pros: Array.isArray(parsed.pros) ? parsed.pros.map(String).slice(0, 5) : [],
-    cons: Array.isArray(parsed.cons) ? parsed.cons.map(String).slice(0, 5) : [],
+    pros: asStringList(parsed.pros),
+    cons: asStringList(parsed.cons),
     model: MODEL,
   };
 }
