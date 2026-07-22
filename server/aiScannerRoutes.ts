@@ -9,9 +9,16 @@ import {
   tickerAnalyzeCacheKey,
   type ScreenerCachePayload,
 } from "./finviz/cache";
-import { evaluateStrategyPicks, evaluateTickerSnapshot, type AiStrategyEvaluation, type AiTickerVerdict } from "./finviz/claudeEvaluator";
+import {
+  evaluateStrategyPicks,
+  evaluateTickerSnapshot,
+  formatAnthropicError,
+  type AiStrategyEvaluation,
+  type AiTickerVerdict,
+} from "./finviz/claudeEvaluator";
 import { fetchQuoteSnapshot, fetchScreenerRows } from "./finviz/scraper";
 import { getStrategy, listStrategies } from "./finviz/strategies";
+import { fetchYahooMetricSnapshot } from "./finviz/yahooFallback";
 
 type AuthReq = {
   user?: { claims?: { sub?: string } };
@@ -111,13 +118,13 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
           await setCachePayload(evalKey, strategy.id, evaluation);
         } catch (err) {
           console.error("Claude evaluation failed:", err);
+          const detail = formatAnthropicError(err);
           if (err instanceof Error && err.message === "ANTHROPIC_API_KEY_MISSING") {
-            return res.status(503).json({ message: "Chýba ANTHROPIC_API_KEY." });
+            return res.status(503).json({ message: detail });
           }
           // Soft fallback: top 3 bez AI komentára
           evaluation = {
-            insight:
-              "AI evaluácia dočasne zlyhala. Zobrazujem prvé výsledky zo skenera bez komentára.",
+            insight: `AI evaluácia zlyhala (${detail}). Zobrazujem prvé výsledky zo skenera bez komentára.`,
             topPicks: rowsForAi.slice(0, 3).map((r) => ({
               ticker: r.ticker,
               companyName: r.companyName,
@@ -176,20 +183,41 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
 
       const forceRefresh = req.body?.refresh === true;
       const cacheKey = tickerAnalyzeCacheKey(ticker);
-      let cached: { snapshot: Awaited<ReturnType<typeof fetchQuoteSnapshot>>; verdict: AiTickerVerdict } | null =
-        forceRefresh ? null : await getCachePayload(cacheKey);
+      let cached: {
+        snapshot: Awaited<ReturnType<typeof fetchQuoteSnapshot>>;
+        verdict: AiTickerVerdict;
+        dataSource?: "finviz" | "yahoo";
+      } | null = forceRefresh ? null : await getCachePayload(cacheKey);
 
       if (!cached) {
-        let snapshot;
+        let snapshot: Awaited<ReturnType<typeof fetchQuoteSnapshot>> | null = null;
+        let dataSource: "finviz" | "yahoo" = "finviz";
+
         try {
           snapshot = await fetchQuoteSnapshot(ticker);
+          if (!snapshot.metrics || Object.keys(snapshot.metrics).length === 0) {
+            snapshot = null;
+          }
         } catch (err) {
-          console.error("Finviz quote failed:", err);
-          return res.status(502).json({ message: `Nepodarilo sa načítať Finviz dáta pre ${ticker}.` });
+          console.warn("Finviz quote failed, trying Yahoo fallback:", err);
+          snapshot = null;
         }
 
-        if (!snapshot.metrics || Object.keys(snapshot.metrics).length === 0) {
-          return res.status(404).json({ message: `Pre ${ticker} neboli nájdené metriky na Finviz.` });
+        if (!snapshot) {
+          try {
+            const yahoo = await fetchYahooMetricSnapshot(ticker);
+            snapshot = {
+              ticker: yahoo.ticker,
+              companyName: yahoo.companyName,
+              metrics: yahoo.metrics,
+            };
+            dataSource = "yahoo";
+          } catch (err) {
+            console.error("Yahoo fallback failed:", err);
+            return res.status(502).json({
+              message: `Nepodarilo sa načítať metriky pre ${ticker} (Finviz aj Yahoo zlyhali).`,
+            });
+          }
         }
 
         let verdict: AiTickerVerdict;
@@ -197,10 +225,10 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
           verdict = await evaluateTickerSnapshot(snapshot);
         } catch (err) {
           console.error("Claude ticker eval failed:", err);
-          return res.status(502).json({ message: "AI evaluácia zlyhala. Skús neskôr." });
+          return res.status(502).json({ message: formatAnthropicError(err) });
         }
 
-        cached = { snapshot, verdict };
+        cached = { snapshot, verdict, dataSource };
         await setCachePayload(cacheKey, "ticker", cached);
       }
 
@@ -225,11 +253,14 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
           marketCap,
         },
         model: cached.verdict.model,
+        dataSource: cached.dataSource ?? "finviz",
         cached: !forceRefresh,
       });
     } catch (error) {
       console.error("AI scanner analyze-ticker error:", error);
-      res.status(500).json({ message: "Nepodarilo sa vyhodnotiť ticker." });
+      res.status(500).json({
+        message: error instanceof Error ? error.message : "Nepodarilo sa vyhodnotiť ticker.",
+      });
     }
   });
 }

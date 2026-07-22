@@ -33,11 +33,35 @@ export type AiTickerVerdict = {
 };
 
 function getAnthropicClient(): Anthropic {
-  const key = process.env.ANTHROPIC_API_KEY?.trim();
+  const raw = process.env.ANTHROPIC_API_KEY?.trim() ?? "";
+  const key = raw.replace(/^["']|["']$/g, "").trim();
   if (!key) {
     throw new Error("ANTHROPIC_API_KEY_MISSING");
   }
   return new Anthropic({ apiKey: key });
+}
+
+export function formatAnthropicError(err: unknown): string {
+  if (!err) return "Neznáma chyba AI.";
+  if (err instanceof Anthropic.APIError) {
+    const status = err.status ? `HTTP ${err.status}` : "API";
+    const msg = err.message?.trim() || "Anthropic API error";
+    if (err.status === 401) return `${status}: Neplatný ANTHROPIC_API_KEY.`;
+    if (err.status === 403) return `${status}: Prístup zamietnutý (kľúč / organizácia).`;
+    if (err.status === 429) return `${status}: Rate limit / kredity Anthropic.`;
+    if (err.status === 404) return `${status}: Neplatný model (${process.env.ANTHROPIC_MODEL || "default"}).`;
+    return `${status}: ${msg}`;
+  }
+  if (err instanceof Error) {
+    if (err.message === "ANTHROPIC_API_KEY_MISSING") {
+      return "Chýba ANTHROPIC_API_KEY v Environment Variables na Renderi.";
+    }
+    if (err.message === "AI_JSON_PARSE") {
+      return "Claude nevrátil platný JSON. Skús znova.";
+    }
+    return err.message;
+  }
+  return String(err);
 }
 
 function extractJsonObject(text: string): unknown {
@@ -50,7 +74,7 @@ function extractJsonObject(text: string): unknown {
   return JSON.parse(raw.slice(start, end + 1));
 }
 
-const MODEL = process.env.ANTHROPIC_MODEL?.trim() || "claude-sonnet-4-20250514";
+const MODEL = process.env.ANTHROPIC_MODEL?.trim().replace(/^["']|["']$/g, "") || "claude-sonnet-4-20250514";
 
 export async function evaluateStrategyPicks(
   strategy: AiScannerStrategy,
