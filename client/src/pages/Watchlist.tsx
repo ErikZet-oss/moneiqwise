@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Eye,
@@ -11,7 +11,6 @@ import {
   Trash2,
   Target,
 } from "lucide-react";
-import { Line, LineChart, ResponsiveContainer } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -19,6 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Sheet,
   SheetContent,
@@ -36,6 +36,8 @@ import {
   getUsMarketSessionState,
   shouldShowExtendedQuote,
 } from "@/lib/usMarketSession";
+import { cn } from "@/lib/utils";
+import type { Currency } from "@shared/schema";
 
 const premarketMoonClass = "text-amber-600 dark:text-amber-400";
 
@@ -94,14 +96,6 @@ function getChangeColor(value: number): string {
   return "text-muted-foreground";
 }
 
-function buildSparklineSeries(prices: Record<string, number> | undefined): { v: number }[] {
-  if (!prices) return [];
-  const entries = Object.entries(prices)
-    .filter(([, v]) => Number.isFinite(v) && v > 0)
-    .sort(([a], [b]) => a.localeCompare(b));
-  return entries.slice(-30).map(([, v]) => ({ v }));
-}
-
 function Range52Bar({
   price,
   low52,
@@ -145,36 +139,47 @@ function Range52Bar({
   );
 }
 
-function MiniSparkline({ data, positive }: { data: { v: number }[]; positive: boolean }) {
-  if (data.length < 2) {
-    return <div className="h-10 w-full rounded bg-muted/40" />;
-  }
-
-  const color = positive ? "hsl(142 71% 45%)" : "hsl(0 84% 60%)";
-
-  return (
-    <div className="h-10 w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-          <Line
-            type="monotone"
-            dataKey="v"
-            stroke={color}
-            strokeWidth={1.5}
-            dot={false}
-            isAnimationActive={false}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
 export default function Watchlist() {
-  const { formatWithConversion, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
+  const { currency, exchangeRate, getTickerCurrency } = useCurrency();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const usSessionState = useMemo(() => getUsMarketSessionState(), []);
+  const [displayCurrency, setDisplayCurrency] = useState<Currency>(() =>
+    currency === "USD" ? "USD" : "EUR",
+  );
+
+  useEffect(() => {
+    if (currency === "EUR" || currency === "USD") {
+      setDisplayCurrency(currency);
+    }
+  }, [currency]);
+
+  const convertToWatchlistCurrency = useCallback(
+    (price: number, source: "EUR" | "USD" | "GBP" | "CZK" | "PLN") => {
+      const rate = exchangeRate;
+      let eurPrice = price;
+      if (source === "USD") eurPrice = price * rate.usdToEur;
+      else if (source === "GBP") eurPrice = price * rate.gbpToEur;
+      else if (source === "CZK") eurPrice = price * rate.czkToEur;
+      else if (source === "PLN") eurPrice = price * rate.plnToEur;
+      if (displayCurrency === "USD") return eurPrice * rate.eurToUsd;
+      return eurPrice;
+    },
+    [displayCurrency, exchangeRate],
+  );
+
+  const formatWatchlistCurrency = useCallback(
+    (price: number, ticker: string) => {
+      const converted = convertToWatchlistCurrency(price, getTickerCurrency(ticker));
+      return new Intl.NumberFormat("sk-SK", {
+        style: "currency",
+        currency: displayCurrency,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(converted);
+    },
+    [convertToWatchlistCurrency, displayCurrency, getTickerCurrency],
+  );
 
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search.trim(), 300);
@@ -228,25 +233,6 @@ export default function Watchlist() {
   });
 
   const quotes = quotesData?.quotes ?? {};
-
-  const { data: historyData } = useQuery<{ prices: Record<string, Record<string, number>> }>({
-    queryKey: ["/api/history", "watchlist", tickers.join(",")],
-    enabled: tickers.length > 0,
-    staleTime: 12 * 60 * 60 * 1000,
-    queryFn: async () => {
-      const res = await fetch("/api/stocks/history/batch", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ tickers }),
-      });
-      if (!res.ok) throw new Error("Failed to fetch history");
-      const data = await res.json();
-      return { prices: data.prices as Record<string, Record<string, number>> };
-    },
-  });
-
-  const history = historyData?.prices ?? {};
 
   const { data: searchResults, isFetching: searchLoading } = useQuery<SearchResult[]>({
     queryKey: ["/api/stocks/search", debouncedSearch],
@@ -336,23 +322,40 @@ export default function Watchlist() {
     });
   };
 
-  const formatQuoteLabel = (ticker: string, nativePrice: number) => {
-    const ccy = getTickerCurrency(ticker);
-    return formatCurrency(convertPrice(nativePrice, ccy));
-  };
+  const formatQuoteLabel = (ticker: string, nativePrice: number) =>
+    formatWatchlistCurrency(nativePrice, ticker);
 
   const showSearchResults = debouncedSearch.length >= 1 && search.trim().length >= 1;
 
   return (
     <div className="flex flex-col gap-3 md:gap-6 pb-6 md:pb-8">
-      <div>
-        <h1 className="text-lg font-semibold flex items-center gap-2 flex-wrap">
-          <Eye className="h-5 w-5 sm:h-6 sm:w-6 text-primary shrink-0" />
-          Watchlist
-        </h1>
-        <p className="text-xs text-muted-foreground mt-1">
-          Sledované akcie s metrikami, cieľovou cenou a poznámkami
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold flex items-center gap-2 flex-wrap">
+            <Eye className="h-5 w-5 sm:h-6 sm:w-6 text-primary shrink-0" />
+            Watchlist
+          </h1>
+          <p className="text-xs text-muted-foreground mt-1">
+            Sledované akcie s metrikami, cieľovou cenou a poznámkami
+          </p>
+        </div>
+        <div
+          className="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2 py-1.5 text-[10px] text-muted-foreground"
+          aria-label="Mena zobrazenia cien"
+        >
+          <span className={cn("font-medium tabular-nums", displayCurrency === "USD" && "text-foreground")}>
+            USD
+          </span>
+          <Switch
+            checked={displayCurrency === "EUR"}
+            onCheckedChange={(checked) => setDisplayCurrency(checked ? "EUR" : "USD")}
+            className="scale-[0.72] origin-center"
+            aria-label={displayCurrency === "EUR" ? "Prepnúť na USD" : "Prepnúť na EUR"}
+          />
+          <span className={cn("font-medium tabular-nums", displayCurrency === "EUR" && "text-foreground")}>
+            EUR
+          </span>
+        </div>
       </div>
 
       <div className="relative">
@@ -465,8 +468,6 @@ export default function Watchlist() {
         <div className="flex flex-col gap-2">
           {filteredItems.map((item) => {
             const quote = quotes[item.ticker];
-            const spark = buildSparklineSeries(history[item.ticker]);
-            const isPositive = (quote?.change ?? 0) >= 0;
             const divYield =
               quote?.price && quote.annualDividendPerShare
                 ? (quote.annualDividendPerShare / quote.price) * 100
@@ -477,20 +478,16 @@ export default function Watchlist() {
               quote.price > 0 &&
               quote.price <= item.targetPrice * 1.02;
 
-            const quoteCurrency = getTickerCurrency(item.ticker);
-            const preMarketPrice =
-              quote?.preMarketPrice != null
-                ? convertPrice(quote.preMarketPrice, quoteCurrency)
-                : null;
+            const preMarketPriceNative = quote?.preMarketPrice ?? null;
             const showExtendedQuote =
               shouldShowExtendedQuote(
                 usSessionState,
                 quote?.marketState,
                 quote?.preMarketChangePercent,
               ) &&
-              preMarketPrice != null &&
-              Number.isFinite(preMarketPrice) &&
-              preMarketPrice > 0;
+              preMarketPriceNative != null &&
+              Number.isFinite(preMarketPriceNative) &&
+              preMarketPriceNative > 0;
             const showRthDailyChange = usSessionState === "LIVE" || !showExtendedQuote;
 
             return (
@@ -533,13 +530,13 @@ export default function Watchlist() {
                       ) : quote ? (
                         <>
                           <div className="text-xs font-semibold tabular-nums">
-                            {formatWithConversion(quote.price, item.ticker)}
+                            {formatWatchlistCurrency(quote.price, item.ticker)}
                           </div>
                           {showRthDailyChange && (
                             <div className={`text-[10px] tabular-nums ${getChangeColor(quote.change)}`}>
                               {formatPercent(quote.changePercent)}
                               <span className="text-muted-foreground mx-0.5">·</span>
-                              {formatWithConversion(Math.abs(quote.change), item.ticker)}
+                              {formatWatchlistCurrency(Math.abs(quote.change), item.ticker)}
                             </div>
                           )}
                           {showExtendedQuote && (
@@ -548,7 +545,7 @@ export default function Watchlist() {
                                 <Moon className={`h-2.5 w-2.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
                                 <span className="text-[8px]">{getExtendedSessionLabel(usSessionState)}</span>
                                 <span className="text-foreground font-medium">
-                                  {formatCurrency(preMarketPrice)}
+                                  {formatWatchlistCurrency(preMarketPriceNative, item.ticker)}
                                 </span>
                               </span>
                               <span
@@ -556,7 +553,7 @@ export default function Watchlist() {
                               >
                                 {formatPercent(quote.preMarketChangePercent ?? 0)}
                                 <span className="text-muted-foreground mx-0.5">·</span>
-                                {formatWithConversion(
+                                {formatWatchlistCurrency(
                                   Math.abs(quote.preMarketChange ?? 0),
                                   item.ticker,
                                 )}
@@ -569,8 +566,6 @@ export default function Watchlist() {
                       )}
                     </div>
                   </div>
-
-                  <MiniSparkline data={spark} positive={isPositive} />
 
                   {quote && (
                     <Range52Bar
