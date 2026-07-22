@@ -1,4 +1,4 @@
-import { BarChart3, History, LogOut, User, TrendingUp, Settings, Briefcase, ChevronDown, Check, Target, Banknote, Upload, Sun, Moon, Layers, PieChart, Scale, LineChart, CircleHelp, CalendarClock, UserCog } from "lucide-react";
+import { BarChart3, History, LogOut, User, TrendingUp, Settings, Briefcase, ChevronDown, Check, Target, Banknote, Upload, Sun, Moon, Layers, PieChart, Scale, LineChart, CircleHelp, CalendarClock, UserCog, Eye } from "lucide-react";
 import { useLocation } from "wouter";
 import {
   Sidebar,
@@ -74,6 +74,11 @@ const menuItems = [
     title: "Kalendár udalostí",
     url: "/events",
     icon: CalendarClock,
+  },
+  {
+    title: "Watchlist",
+    url: "/watchlist",
+    icon: Eye,
   },
   {
     title: "Daňový asistent",

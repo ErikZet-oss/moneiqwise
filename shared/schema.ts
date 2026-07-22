@@ -329,3 +329,30 @@ export const insertOptionTradeSchema = createInsertSchema(optionTrades, {
 export type InsertOptionTrade = z.infer<typeof insertOptionTradeSchema>;
 export type OptionTrade = typeof optionTrades.$inferSelect;
 
+export const watchlistItems = pgTable("watchlist_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  ticker: varchar("ticker", { length: 32 }).notNull(),
+  companyName: varchar("company_name", { length: 255 }),
+  targetPrice: numeric("target_price", { precision: 18, scale: 4 }),
+  notes: text("notes"),
+  /** JSON pole reťazcov, napr. ["jadro","fintech"] */
+  tags: text("tags"),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertWatchlistItemSchema = createInsertSchema(watchlistItems, {
+  targetPrice: z.coerce.number().positive().optional().nullable(),
+}).omit({
+  id: true,
+  userId: true,
+  createdAt: true,
+  updatedAt: true,
+  sortOrder: true,
+});
+
+export type InsertWatchlistItem = z.infer<typeof insertWatchlistItemSchema>;
+export type WatchlistItem = typeof watchlistItems.$inferSelect;
+

@@ -167,6 +167,86 @@ async function ensureUserAssetMetadataTable() {
   `);
 }
 
+async function ensureWatchlistTable() {
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS watchlist_items (
+      id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id varchar NOT NULL REFERENCES users(id),
+      ticker varchar(32) NOT NULL,
+      company_name varchar(255),
+      target_price numeric(18, 4),
+      notes text,
+      tags text,
+      sort_order integer DEFAULT 0,
+      created_at timestamp DEFAULT now(),
+      updated_at timestamp DEFAULT now()
+    );
+  `);
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS watchlist_items_user_ticker_uidx
+    ON watchlist_items (user_id, ticker);
+  `);
+}
+
+function normalizeWatchlistTags(input: unknown): string | null {
+  if (input == null || input === "") return null;
+  let tags: string[] = [];
+  if (Array.isArray(input)) {
+    tags = input
+      .map((t) => String(t).trim().replace(/^#+/, "").toLowerCase())
+      .filter(Boolean);
+  } else if (typeof input === "string") {
+    tags = input
+      .split(/[,;]+/)
+      .flatMap((part) => part.split(/\s+/))
+      .map((t) => t.trim().replace(/^#+/, "").toLowerCase())
+      .filter(Boolean);
+  }
+  if (tags.length === 0) return null;
+  return JSON.stringify(Array.from(new Set(tags)));
+}
+
+function parseWatchlistTags(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((t): t is string => typeof t === "string" && t.trim().length > 0);
+    }
+  } catch {
+    /* legacy comma-separated */
+  }
+  return raw
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
+function serializeWatchlistItem(row: {
+  id: string;
+  userId: string;
+  ticker: string;
+  companyName: string | null;
+  targetPrice: string | null;
+  notes: string | null;
+  tags: string | null;
+  sortOrder: number | null;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+}) {
+  return {
+    id: row.id,
+    ticker: row.ticker,
+    companyName: row.companyName,
+    targetPrice: row.targetPrice != null ? Number(row.targetPrice) : null,
+    notes: row.notes,
+    tags: parseWatchlistTags(row.tags),
+    sortOrder: row.sortOrder ?? 0,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
 function mapYahooQuoteTypeToAssetClass(raw: unknown): AssetClassValue {
   const t = typeof raw === "string" ? raw.toUpperCase() : "";
   if (t.includes("ETF")) return "ETF";
@@ -848,6 +928,7 @@ async function fetchYahooQuoteFromChart(yahooTicker: string, ticker: string): Pr
     high52: (meta.fiftyTwoWeekHigh as number) || 0,
     low52: (meta.fiftyTwoWeekLow as number) || 0,
     annualDividendPerShare,
+    trailingPE: null,
   };
 }
 
@@ -1550,6 +1631,10 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
         annualDividendPerShare = await fetchYahooAnnualDividendPerShare(ticker);
       }
 
+      const trailingPERaw = Number(q.trailingPE ?? q.forwardPE);
+      const trailingPE =
+        Number.isFinite(trailingPERaw) && trailingPERaw > 0 ? trailingPERaw : null;
+
       return {
         ticker,
         price: regularMarketPrice,
@@ -1564,6 +1649,7 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
         high52: Number(q.fiftyTwoWeekHigh) || 0,
         low52: Number(q.fiftyTwoWeekLow) || 0,
         annualDividendPerShare,
+        trailingPE,
       };
     }
 
@@ -3780,6 +3866,7 @@ export async function registerRoutes(
                   high52: 1.00,
                   low52: 1.00,
                   annualDividendPerShare: 0,
+                  trailingPE: null,
                 }
               };
             }
@@ -3887,6 +3974,119 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching asset profiles batch:", error);
       res.status(500).json({ message: "Nepodarilo sa načítať profily aktív." });
+    }
+  });
+
+  app.get("/api/watchlist", isAuthenticated, async (req: any, res) => {
+    try {
+      await ensureWatchlistTable();
+      const userId = req.user.claims.sub;
+      const rows = await storage.getWatchlistByUser(userId);
+      res.json({ items: rows.map(serializeWatchlistItem) });
+    } catch (error) {
+      console.error("Error fetching watchlist:", error);
+      res.status(500).json({ message: "Nepodarilo sa načítať watchlist." });
+    }
+  });
+
+  app.post("/api/watchlist", isAuthenticated, async (req: any, res) => {
+    try {
+      await ensureWatchlistTable();
+      const userId = req.user.claims.sub;
+      const ticker = String(req.body?.ticker || "").trim().toUpperCase();
+      if (!ticker) return res.status(400).json({ message: "Ticker je povinný." });
+      if (ticker === "CASH") {
+        return res.status(400).json({ message: "Hotovosť nie je možné pridať do watchlistu." });
+      }
+
+      const companyName =
+        typeof req.body?.companyName === "string" ? req.body.companyName.trim() : "";
+      const notes = typeof req.body?.notes === "string" ? req.body.notes.trim() : undefined;
+      const targetPriceRaw = req.body?.targetPrice;
+      let targetPrice: number | null | undefined = undefined;
+      if (targetPriceRaw != null && targetPriceRaw !== "") {
+        const n = Number(targetPriceRaw);
+        if (!Number.isFinite(n) || n <= 0) {
+          return res.status(400).json({ message: "Neplatná cieľová cena." });
+        }
+        targetPrice = n;
+      }
+      const tags = normalizeWatchlistTags(req.body?.tags);
+
+      const row = await storage.addWatchlistItem(userId, {
+        ticker,
+        companyName: companyName || undefined,
+        targetPrice: targetPrice ?? undefined,
+        notes,
+        tags: tags ?? undefined,
+      });
+      res.status(201).json({ item: serializeWatchlistItem(row) });
+    } catch (error) {
+      if (error instanceof Error && error.message === "WATCHLIST_DUPLICATE") {
+        return res.status(409).json({ message: "Ticker už je vo watchliste." });
+      }
+      console.error("Error adding watchlist item:", error);
+      res.status(500).json({ message: "Nepodarilo sa pridať položku do watchlistu." });
+    }
+  });
+
+  app.patch("/api/watchlist/:ticker", isAuthenticated, async (req: any, res) => {
+    try {
+      await ensureWatchlistTable();
+      const userId = req.user.claims.sub;
+      const ticker = String(req.params.ticker || "").trim().toUpperCase();
+      if (!ticker) return res.status(400).json({ message: "Ticker je povinný." });
+
+      const patch: {
+        companyName?: string;
+        targetPrice?: number | null;
+        notes?: string;
+        tags?: string | null;
+      } = {};
+
+      if (req.body?.companyName !== undefined) {
+        patch.companyName = typeof req.body.companyName === "string" ? req.body.companyName.trim() : "";
+      }
+      if (req.body?.notes !== undefined) {
+        patch.notes = typeof req.body.notes === "string" ? req.body.notes.trim() : "";
+      }
+      if (req.body?.tags !== undefined) {
+        patch.tags = normalizeWatchlistTags(req.body.tags);
+      }
+      if (req.body?.targetPrice !== undefined) {
+        if (req.body.targetPrice == null || req.body.targetPrice === "") {
+          patch.targetPrice = null;
+        } else {
+          const n = Number(req.body.targetPrice);
+          if (!Number.isFinite(n) || n <= 0) {
+            return res.status(400).json({ message: "Neplatná cieľová cena." });
+          }
+          patch.targetPrice = n;
+        }
+      }
+
+      const row = await storage.updateWatchlistItem(userId, ticker, patch);
+      res.json({ item: serializeWatchlistItem(row) });
+    } catch (error) {
+      if (error instanceof Error && error.message === "WATCHLIST_NOT_FOUND") {
+        return res.status(404).json({ message: "Položka vo watchliste neexistuje." });
+      }
+      console.error("Error updating watchlist item:", error);
+      res.status(500).json({ message: "Nepodarilo sa aktualizovať watchlist." });
+    }
+  });
+
+  app.delete("/api/watchlist/:ticker", isAuthenticated, async (req: any, res) => {
+    try {
+      await ensureWatchlistTable();
+      const userId = req.user.claims.sub;
+      const ticker = String(req.params.ticker || "").trim().toUpperCase();
+      if (!ticker) return res.status(400).json({ message: "Ticker je povinný." });
+      await storage.removeWatchlistItem(userId, ticker);
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("Error removing watchlist item:", error);
+      res.status(500).json({ message: "Nepodarilo sa odstrániť položku z watchlistu." });
     }
   });
 

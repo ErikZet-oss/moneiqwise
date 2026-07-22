@@ -8,6 +8,7 @@ import {
   userSettings,
   portfolios,
   optionTrades,
+  watchlistItems,
   type User,
   type UpsertUser,
   type Transaction,
@@ -22,6 +23,8 @@ import {
   type InsertOptionTrade,
   type UserAssetMetadata,
   type AssetClassValue,
+  type WatchlistItem,
+  type InsertWatchlistItem,
 } from "@shared/schema";
 import type { AllExchangeRates } from "./convertAmountBetween";
 import { netLedgerCashEur } from "./netLedgerCashEur";
@@ -166,6 +169,15 @@ export interface IStorage {
     ticker: string,
     data: { sector?: string | null; country?: string | null; assetType?: AssetClassValue | null },
   ): Promise<UserAssetMetadata | null>;
+
+  getWatchlistByUser(userId: string): Promise<WatchlistItem[]>;
+  addWatchlistItem(userId: string, data: InsertWatchlistItem): Promise<WatchlistItem>;
+  updateWatchlistItem(
+    userId: string,
+    ticker: string,
+    data: Partial<Pick<InsertWatchlistItem, "companyName" | "targetPrice" | "notes" | "tags">>,
+  ): Promise<WatchlistItem>;
+  removeWatchlistItem(userId: string, ticker: string): Promise<void>;
   
   // User settings operations
   getUserSettings(userId: string): Promise<UserSettings | undefined>;
@@ -1261,6 +1273,78 @@ export class DatabaseStorage implements IStorage {
       RETURNING *
     `);
     return (result.rows[0] as UserAssetMetadata) ?? null;
+  }
+
+  async getWatchlistByUser(userId: string): Promise<WatchlistItem[]> {
+    return db
+      .select()
+      .from(watchlistItems)
+      .where(eq(watchlistItems.userId, userId))
+      .orderBy(asc(watchlistItems.sortOrder), asc(watchlistItems.createdAt));
+  }
+
+  async addWatchlistItem(userId: string, data: InsertWatchlistItem): Promise<WatchlistItem> {
+    const ticker = data.ticker.toUpperCase().trim();
+    const existing = await db
+      .select({ id: watchlistItems.id })
+      .from(watchlistItems)
+      .where(and(eq(watchlistItems.userId, userId), eq(watchlistItems.ticker, ticker)))
+      .limit(1);
+    if (existing.length > 0) {
+      throw new Error("WATCHLIST_DUPLICATE");
+    }
+
+    const [maxRow] = await db
+      .select({ max: sql<number>`coalesce(max(${watchlistItems.sortOrder}), -1)::int` })
+      .from(watchlistItems)
+      .where(eq(watchlistItems.userId, userId));
+    const sortOrder = (Number(maxRow?.max) || 0) + 1;
+
+    const [row] = await db
+      .insert(watchlistItems)
+      .values({
+        userId,
+        ticker,
+        companyName: data.companyName?.trim() || null,
+        targetPrice: data.targetPrice != null ? String(data.targetPrice) : null,
+        notes: data.notes?.trim() || null,
+        tags: data.tags ?? null,
+        sortOrder,
+      })
+      .returning();
+    if (!row) throw new Error("WATCHLIST_INSERT_FAILED");
+    return row;
+  }
+
+  async updateWatchlistItem(
+    userId: string,
+    ticker: string,
+    data: Partial<Pick<InsertWatchlistItem, "companyName" | "targetPrice" | "notes" | "tags">>,
+  ): Promise<WatchlistItem> {
+    const t = ticker.toUpperCase().trim();
+    const patch: Partial<typeof watchlistItems.$inferInsert> = { updatedAt: new Date() };
+    if (data.companyName !== undefined) patch.companyName = data.companyName?.trim() || null;
+    if (data.targetPrice !== undefined) {
+      patch.targetPrice = data.targetPrice != null ? String(data.targetPrice) : null;
+    }
+    if (data.notes !== undefined) patch.notes = data.notes?.trim() || null;
+    if (data.tags !== undefined) patch.tags = data.tags ?? null;
+
+    const [row] = await db
+      .update(watchlistItems)
+      .set(patch)
+      .where(and(eq(watchlistItems.userId, userId), eq(watchlistItems.ticker, t)))
+      .returning();
+    if (!row) throw new Error("WATCHLIST_NOT_FOUND");
+    return row;
+  }
+
+  async removeWatchlistItem(userId: string, ticker: string): Promise<void> {
+    await db
+      .delete(watchlistItems)
+      .where(
+        and(eq(watchlistItems.userId, userId), eq(watchlistItems.ticker, ticker.toUpperCase().trim())),
+      );
   }
 
   async getUserSettings(userId: string): Promise<UserSettings | undefined> {

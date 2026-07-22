@@ -21,6 +21,8 @@ const V7_QUOTE_FIELDS = [
   "fiftyTwoWeekLow",
   "trailingAnnualDividendRate",
   "dividendRate",
+  "trailingPE",
+  "forwardPE",
   "marketState",
   "exchangeTimezoneName",
   "overnightMarketPrice",
