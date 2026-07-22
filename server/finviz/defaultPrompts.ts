@@ -42,8 +42,10 @@ Odpovedaj PO SLOVENSKY. Vráť IBA jeden platný JSON objekt (bez markdown, bez 
 Povinné polia:
 - verdict: presne jedna hodnota — vhodna, opatrne, nevhodna, neiste
 - summary: 2–4 vety (profil firmy, KÚPIŤ/DRŽAŤ/PREDAJ + emoji, kľúčové čísla z metrík). Nepíš sem zoznam plusov/mínusov.
-- pros: pole ASPOŇ 3 konkrétnych výhod (fundamenty, moat, rast, konkurenčná výhoda — s číslami ak sú v metrikách)
-- cons: pole ASPOŇ 3 konkrétnych rizík (konkurenti, valuácia, dlh, makro, regulácia)
+- pros: pole 3–5 KRÁTKYCH viet (max 15 slov každá) — jedna konkrétna výhoda, bez opakovania textu zo summary
+- cons: pole 3–5 KRÁTKYCH viet (max 15 slov každá) — jedno konkrétne riziko, bez opakovania textu zo summary
+
+Nepíš do pros/cons celé odseky, sekcie ani zoznam metrík — len stručné pointy.
 
 Ak chýbajú dáta, napíš „Chýba: …“ v príslušnej položke. Nevymýšľaj čísla.
 

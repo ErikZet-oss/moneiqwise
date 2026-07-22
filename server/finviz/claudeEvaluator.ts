@@ -154,6 +154,75 @@ function cleanBulletLine(line: string): string {
   return line.replace(/^[\s\-•*]+/, "").trim();
 }
 
+const MAX_PROCON_LEN = 140;
+
+function truncateProCon(text: string, max = MAX_PROCON_LEN): string {
+  const t = text.replace(/\s+/g, " ").trim();
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max);
+  const lastPeriod = cut.lastIndexOf(". ");
+  if (lastPeriod > 40) return cut.slice(0, lastPeriod + 1);
+  return `${cut.slice(0, max - 1).trim()}…`;
+}
+
+function isSectionHeader(text: string): boolean {
+  return /^\d+\)\s*[A-ZÁÉÍÓÚÝÄÖÜČĎĽŇÓŔŠŤŽ][A-ZÁÉÍÓÚÝÄÖÜČĎĽŇÓŔŠŤŽ\s&/]{3,}$/i.test(text.trim());
+}
+
+function hasMultipleNumberedItems(text: string): boolean {
+  return (text.match(/\d+\)/g) || []).length >= 2;
+}
+
+function extractNumberedItems(body: string): string[] {
+  return Array.from(body.matchAll(/\d+\)\s*([\s\S]*?)(?=\s*\d+\)|$)/g))
+    .map((m) => truncateProCon(m[1]))
+    .filter((t) => t.length >= 8 && !isSectionHeader(t));
+}
+
+function expandProConItems(items: string[]): string[] {
+  const out: string[] = [];
+  for (const item of items) {
+    const trimmed = item.trim();
+    if (!trimmed) continue;
+    if (hasMultipleNumberedItems(trimmed)) {
+      out.push(...extractNumberedItems(trimmed));
+      continue;
+    }
+    if (trimmed.includes(";") && trimmed.length > 80) {
+      out.push(...trimmed.split(/;\s+/).map((p) => p.trim()).filter(Boolean));
+      continue;
+    }
+    out.push(trimmed);
+  }
+  return out;
+}
+
+function looksLikeRisk(text: string): boolean {
+  return /rizik|hroz|slab|konkur|regul|makro|pokles|prep|valuáci|dlh|tlak|neist|volatil|cykl|concern/i.test(text);
+}
+
+function looksLikePro(text: string): boolean {
+  return /výhod|siln|rast|moat|marž|divid|zisk|lead|domin|brand|cash flow|zdrav/i.test(text);
+}
+
+function sanitizeProConList(items: string[], kind: "pro" | "con"): string[] {
+  return uniqueStrings(
+    expandProConItems(items)
+      .map((item) => truncateProCon(item))
+      .filter((item) => {
+        if (item.length < 8) return false;
+        if (isSectionHeader(item)) return false;
+        if (hasMultipleNumberedItems(item)) return false;
+        if (/firemn[yý]\s+profil|finančn[yý]\s+pitevn|cieľov[aá]\s+cena\s*12/i.test(item)) {
+          return false;
+        }
+        if (kind === "con" && looksLikePro(item) && !looksLikeRisk(item)) return false;
+        if (kind === "pro" && looksLikeRisk(item) && !looksLikePro(item)) return false;
+        return true;
+      }),
+  ).slice(0, 5);
+}
+
 function uniqueStrings(items: string[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -166,14 +235,20 @@ function uniqueStrings(items: string[]): string[] {
   return out;
 }
 
-/** Ak Claude dal všetko do summary, vytiahni plusy/mínusy zo sekcií alebo odrážok. */
+/** Doplní pros/cons len ak ich Claude vrátil málo; nikdy nekopíruje celé sekcie summary. */
 function enrichProsConsFromSummary(
   summary: string,
   pros: string[],
   cons: string[],
 ): { pros: string[]; cons: string[] } {
-  const nextPros = [...pros];
-  const nextCons = [...cons];
+  let nextPros = sanitizeProConList(pros, "pro");
+  let nextCons = sanitizeProConList(cons, "con");
+
+  const needPros = nextPros.length < 3;
+  const needCons = nextCons.length < 3;
+  if (!needPros && !needCons) {
+    return { pros: nextPros, cons: nextCons };
+  }
 
   const sectionRe = /(?:^|\n)(\d+)\)\s*([^\n]+)\n?([\s\S]*?)(?=\n\d+\)\s|$)/gi;
   let m: RegExpExecArray | null;
@@ -182,44 +257,29 @@ function enrichProsConsFromSummary(
     const body = m[3].trim();
     if (!body) continue;
 
-    if (/moat|výhoda|konkurenčn/.test(title)) {
+    if (needCons && /konkuren|rizik|hroz/.test(title)) {
+      nextCons.push(...extractNumberedItems(body));
       for (const line of body.split("\n")) {
-        const t = cleanBulletLine(line);
-        if (t.length > 8) nextPros.push(t);
+        const t = truncateProCon(cleanBulletLine(line));
+        if (t.length >= 12 && t.length <= MAX_PROCON_LEN && looksLikeRisk(t)) {
+          nextCons.push(t);
+        }
       }
+    }
+
+    if (needPros && /moat|výhoda/.test(title) && !/konkuren|rizik|hroz/.test(title)) {
       const moatVerdict = body.match(/moat[^:\n]*:\s*(siln[yá]|stredn[yá]|slab[yá])/i);
-      if (moatVerdict) nextPros.push(`Moat verdikt: ${moatVerdict[1]}`);
-    }
-
-    if (/konkuren|rizik|hroz/.test(title)) {
-      for (const line of body.split("\n")) {
-        const t = cleanBulletLine(line);
-        if (t.length > 8) nextCons.push(t);
+      if (moatVerdict) nextPros.push(`Moat: ${moatVerdict[1]}`);
+      const firstSentence = body.split(/[.!?]\s+/)[0]?.trim() ?? "";
+      if (firstSentence.length >= 12 && firstSentence.length <= MAX_PROCON_LEN) {
+        nextPros.push(firstSentence);
       }
-    }
-
-    if (/finanč|fundament|p\/e|pitiev/.test(title) && body.length > 20) {
-      nextPros.push(body.split("\n")[0].slice(0, 220));
-    }
-
-    if (/cieľov|cena|target/.test(title) && body.length > 10) {
-      nextPros.push(`Cieľová cena: ${body.split("\n")[0].slice(0, 180)}`);
-    }
-  }
-
-  for (const line of summary.split("\n")) {
-    const t = cleanBulletLine(line);
-    if (t.length < 10) continue;
-    if (/rizik|hroz|slab|konkur|compet|dlh|regul|pokles|prep|valuáci/i.test(t)) {
-      nextCons.push(t);
-    } else if (/rast|moat|výhod|siln|divid|marž|profit|eps|tržb/i.test(t)) {
-      nextPros.push(t);
     }
   }
 
   return {
-    pros: uniqueStrings(nextPros).slice(0, 6),
-    cons: uniqueStrings(nextCons).slice(0, 6),
+    pros: sanitizeProConList(nextPros, "pro"),
+    cons: sanitizeProConList(nextCons, "con"),
   };
 }
 

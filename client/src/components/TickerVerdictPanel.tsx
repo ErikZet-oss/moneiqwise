@@ -66,6 +66,13 @@ function parseMetricItems(body: string): string[] | null {
   const labelRe = new RegExp(`\\b(?:${METRIC_LABELS})\\b`, "i");
   if (!labelRe.test(body)) return null;
 
+  const splitBefore = new RegExp(`(?=\\b(?:${METRIC_LABELS})\\b)`, "i");
+  const beforeParts = body
+    .split(splitBefore)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (beforeParts.length >= 2) return beforeParts;
+
   const splitRe = new RegExp(`\\s*(?:\\||;|,\\s*(?=\\b(?:${METRIC_LABELS})\\b))\\s*`, "i");
   const splitParts = body
     .split(splitRe)
