@@ -95,6 +95,38 @@ function getChangeColor(value: number): string {
   return "text-muted-foreground";
 }
 
+/** Koľko % musí cena klesnúť z aktuálnej hodnoty, aby dosiahla cieľovú nákupnú cenu. */
+function targetDropPercent(currentPrice: number, targetPrice: number): number | null {
+  if (
+    !Number.isFinite(currentPrice) ||
+    !Number.isFinite(targetPrice) ||
+    currentPrice <= 0 ||
+    targetPrice <= 0
+  ) {
+    return null;
+  }
+  if (currentPrice <= targetPrice) return 0;
+  return ((currentPrice - targetPrice) / currentPrice) * 100;
+}
+
+function getDisplayDailyChange(
+  quote: StockQuote | undefined,
+  usSessionState: ReturnType<typeof getUsMarketSessionState>,
+): number {
+  if (!quote) return 0;
+  if (usSessionState === "LIVE") return quote.change;
+  if (
+    shouldShowExtendedQuote(
+      usSessionState,
+      quote.marketState,
+      quote.preMarketChangePercent,
+    )
+  ) {
+    return quote.preMarketChange ?? 0;
+  }
+  return quote.change;
+}
+
 function Range52Bar({
   price,
   low52,
@@ -476,20 +508,36 @@ export default function Watchlist() {
               quote?.price != null &&
               quote.price > 0 &&
               quote.price <= item.targetPrice * 1.02;
+            const dropToTargetPct =
+              item.targetPrice != null && quote?.price
+                ? targetDropPercent(quote.price, item.targetPrice)
+                : null;
 
             const showOffHoursDailyChange = shouldShowExtendedQuote(
               usSessionState,
               quote?.marketState,
               quote?.preMarketChangePercent,
             );
+            const displayDailyChange = getDisplayDailyChange(quote, usSessionState);
 
             return (
               <Card
                 key={item.id}
-                className="overflow-hidden cursor-pointer active:bg-muted/30 transition-colors"
+                className="relative overflow-hidden cursor-pointer active:bg-muted/30 transition-colors"
                 onClick={() => openEdit(item)}
               >
-                <CardContent className="p-3 space-y-2">
+                {displayDailyChange !== 0 && (
+                  <div
+                    aria-hidden
+                    className={cn(
+                      "pointer-events-none absolute inset-0 bg-gradient-to-l from-35% to-transparent",
+                      displayDailyChange > 0
+                        ? "from-green-500/10 dark:from-green-500/15"
+                        : "from-red-500/10 dark:from-red-500/15",
+                    )}
+                  />
+                )}
+                <CardContent className="relative p-3 space-y-2">
                   <div className="flex items-start gap-2">
                     <a
                       href={yahooFinanceUrl(item.ticker)}
@@ -575,13 +623,21 @@ export default function Watchlist() {
                       </span>
                     </span>
                     {item.targetPrice != null && (
-                      <span className="inline-flex items-center gap-0.5">
+                      <span className="inline-flex items-center gap-0.5 flex-wrap">
                         <Target className="h-3 w-3" />
                         <span className="text-foreground font-medium tabular-nums">
                           {formatQuoteLabel(item.ticker, item.targetPrice)}
                         </span>
-                        {nearTarget && (
-                          <Badge className="ml-1 h-4 px-1 text-[8px] bg-green-600 hover:bg-green-600">
+                        {dropToTargetPct != null && dropToTargetPct > 0 && (
+                          <span className="text-red-500 font-medium tabular-nums">
+                            −{dropToTargetPct.toFixed(1)}%
+                          </span>
+                        )}
+                        {dropToTargetPct === 0 && (
+                          <span className="text-green-500 font-medium">Na cieli</span>
+                        )}
+                        {nearTarget && dropToTargetPct != null && dropToTargetPct > 0 && (
+                          <Badge className="ml-0.5 h-4 px-1 text-[8px] bg-green-600 hover:bg-green-600">
                             Blízko cieľa
                           </Badge>
                         )}
