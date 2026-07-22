@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Brain,
@@ -6,9 +6,6 @@ import {
   Plus,
   Search,
   Sparkles,
-  TrendingDown,
-  Gem,
-  Banknote,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,18 +16,10 @@ import { CompanyLogo } from "@/components/CompanyLogo";
 import { FinanceTermText } from "@/components/FinanceTermText";
 import { AiSkenerChat } from "@/components/AiSkenerChat";
 import { AiSkenerPromptsEditor } from "@/components/AiSkenerPromptsEditor";
+import { AiSkenerStrategiesPanel, type StrategyId } from "@/components/AiSkenerStrategiesPanel";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-
-type StrategyId = "dip_buyer" | "garp" | "dividend";
-
-type StrategyMeta = {
-  id: StrategyId;
-  label: string;
-  shortLabel: string;
-  description: string;
-};
 
 type TopPick = {
   ticker: string;
@@ -77,12 +66,6 @@ type TickerVerdict = {
 
 type SearchHit = { ticker: string; name: string };
 
-const STRATEGY_ICONS: Record<StrategyId, typeof TrendingDown> = {
-  dip_buyer: TrendingDown,
-  garp: Gem,
-  dividend: Banknote,
-};
-
 function formatPct(n: number | null | undefined): string | null {
   if (n == null || !Number.isFinite(n)) return null;
   const sign = n > 0 ? "+" : "";
@@ -115,17 +98,6 @@ export default function AiSkener() {
   const [runResult, setRunResult] = useState<RunResult | null>(null);
   const [tickerResult, setTickerResult] = useState<TickerVerdict | null>(null);
   const [mode, setMode] = useState<"strategy" | "ticker">("strategy");
-
-  const { data: strategiesData } = useQuery<{ strategies: StrategyMeta[] }>({
-    queryKey: ["/api/ai-scanner/strategies"],
-    queryFn: async () => {
-      const res = await fetch("/api/ai-scanner/strategies", { credentials: "include" });
-      if (!res.ok) throw new Error("strategies");
-      return res.json();
-    },
-  });
-
-  const strategies = strategiesData?.strategies ?? [];
 
   const debouncedSearch = search.trim();
   const { data: searchHits, isFetching: searchLoading } = useQuery<SearchHit[]>({
@@ -191,11 +163,6 @@ export default function AiSkener() {
   });
 
   const isBusy = runMutation.isPending || analyzeMutation.isPending;
-
-  const selectedStrategy = useMemo(
-    () => strategies.find((s) => s.id === strategyId),
-    [strategies, strategyId],
-  );
 
   return (
     <div className="flex flex-col gap-3 md:gap-6 pb-6 md:pb-8">
@@ -271,61 +238,16 @@ export default function AiSkener() {
         )}
       </div>
 
-      <div className="flex flex-col gap-2">
-        <p className="text-[10px] text-muted-foreground">Rýchle stratégie</p>
-        <div className="flex flex-wrap gap-1.5">
-          {(strategies.length
-            ? strategies
-            : [
-                { id: "dip_buyer" as const, label: "The Dip Buyer", shortLabel: "Dip", description: "" },
-                { id: "garp" as const, label: "The GARP Strategy", shortLabel: "GARP", description: "" },
-                { id: "dividend" as const, label: "The Dividend Compounder", shortLabel: "Div.", description: "" },
-              ]
-          ).map((s) => {
-            const Icon = STRATEGY_ICONS[s.id] ?? Sparkles;
-            const active = strategyId === s.id;
-            return (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => {
-                  setStrategyId(s.id);
-                  setMode("strategy");
-                }}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[10px] font-medium transition-colors",
-                  active
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-muted/50 text-muted-foreground border-border hover:bg-muted",
-                )}
-              >
-                <Icon className="h-3 w-3 shrink-0" />
-                {s.label}
-              </button>
-            );
-          })}
-        </div>
-        {selectedStrategy?.description && (
-          <p className="text-[10px] text-muted-foreground">{selectedStrategy.description}</p>
-        )}
-        <Button
-          className="h-9 text-xs w-full sm:w-auto sm:self-start"
-          disabled={isBusy}
-          onClick={() => runMutation.mutate({ strategyId })}
-        >
-          {runMutation.isPending ? (
-            <>
-              <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-              Spúšťam Claude…
-            </>
-          ) : (
-            <>
-              <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-              Spustiť AI Skener
-            </>
-          )}
-        </Button>
-      </div>
+      <AiSkenerStrategiesPanel
+        selectedId={strategyId}
+        onSelect={(id) => {
+          setStrategyId(id);
+          setMode("strategy");
+        }}
+        onRun={() => runMutation.mutate({ strategyId })}
+        runPending={runMutation.isPending}
+        runDisabled={isBusy}
+      />
 
       {(isBusy && !runResult && !tickerResult) && (
         <div className="space-y-2">

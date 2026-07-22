@@ -17,7 +17,13 @@ import {
   type AiTickerVerdict,
 } from "./finviz/claudeEvaluator";
 import { fetchQuoteSnapshot, fetchScreenerRows } from "./finviz/scraper";
-import { getStrategy, listStrategies } from "./finviz/strategies";
+import { listStrategies, normalizeStrategyFilters, type AiScannerStrategyId } from "./finviz/strategies";
+import {
+  getStrategiesForUser,
+  getStrategyForUser,
+  resetStrategiesForUser,
+  saveStrategiesForUser,
+} from "./finviz/strategyStore";
 import { fetchYahooMetricSnapshot } from "./finviz/yahooFallback";
 import { fetchYahooStrategyScreen } from "./finviz/yahooStrategyScreen";
 import {
@@ -55,15 +61,139 @@ function tickersFingerprint(tickers: string[]): string {
 }
 
 export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
-  app.get("/api/ai-scanner/strategies", isAuthenticated, async (_req, res) => {
-    res.json({
-      strategies: listStrategies().map((s) => ({
-        id: s.id,
-        label: s.label,
-        shortLabel: s.shortLabel,
-        description: s.description,
-      })),
-    });
+  app.get("/api/ai-scanner/strategies", isAuthenticated, async (req: AuthReq, res) => {
+    try {
+      const userId = requireUserId(req, res);
+      if (!userId) return;
+      const data = await getStrategiesForUser(userId);
+      res.json({
+        strategies: data.strategies.map((s) => ({
+          id: s.id,
+          label: s.label,
+          shortLabel: s.shortLabel,
+          description: s.description,
+          filters: s.filters,
+        })),
+        isCustom: data.isCustom,
+        defaults: listStrategies().map((s) => ({
+          id: s.id,
+          label: s.label,
+          shortLabel: s.shortLabel,
+          description: s.description,
+          filters: s.filters,
+        })),
+      });
+    } catch (error) {
+      console.error("Get AI strategies error:", error);
+      res.status(500).json({ message: "Nepodarilo sa načítať stratégie." });
+    }
+  });
+
+  app.put("/api/ai-scanner/strategies", isAuthenticated, async (req: AuthReq, res) => {
+    try {
+      const userId = requireUserId(req, res);
+      if (!userId) return;
+
+      const body = req.body ?? {};
+      const items = Array.isArray(body.strategies) ? body.strategies : [];
+      if (!items.length) {
+        return res.status(400).json({ message: "Nič na uloženie." });
+      }
+
+      const patch: Partial<
+        Record<AiScannerStrategyId, { label: string; shortLabel: string; description: string; filters: string[] }>
+      > = {};
+
+      for (const item of items) {
+        const id = String(item?.id || "").trim() as AiScannerStrategyId;
+        if (id !== "dip_buyer" && id !== "garp" && id !== "dividend") continue;
+
+        const label = String(item?.label || "").trim();
+        const shortLabel = String(item?.shortLabel || "").trim();
+        const description = String(item?.description || "").trim();
+        const filters = normalizeStrategyFilters(item?.filters ?? item?.filtersText ?? "");
+
+        if (label.length < 2) {
+          return res.status(400).json({ message: `Stratégia „${id}“: názov je príliš krátky.` });
+        }
+        if (shortLabel.length < 1) {
+          return res.status(400).json({ message: `Stratégia „${id}“: skratka je povinná.` });
+        }
+        if (filters.length < 1) {
+          return res.status(400).json({ message: `Stratégia „${id}“: aspoň jeden Finviz filter.` });
+        }
+        if (filters.some((f) => f.length > 64)) {
+          return res.status(400).json({ message: `Stratégia „${id}“: neplatný filter kód.` });
+        }
+
+        patch[id] = { label, shortLabel, description, filters };
+      }
+
+      if (!Object.keys(patch).length) {
+        return res.status(400).json({ message: "Neplatné stratégie." });
+      }
+
+      const strategies = await saveStrategiesForUser(userId, patch);
+      const data = await getStrategiesForUser(userId);
+      res.json({
+        strategies: strategies.map((s) => ({
+          id: s.id,
+          label: s.label,
+          shortLabel: s.shortLabel,
+          description: s.description,
+          filters: s.filters,
+        })),
+        isCustom: data.isCustom,
+        defaults: listStrategies().map((s) => ({
+          id: s.id,
+          label: s.label,
+          shortLabel: s.shortLabel,
+          description: s.description,
+          filters: s.filters,
+        })),
+      });
+    } catch (error) {
+      console.error("Save AI strategies error:", error);
+      res.status(500).json({ message: "Nepodarilo sa uložiť stratégie." });
+    }
+  });
+
+  app.post("/api/ai-scanner/strategies/reset", isAuthenticated, async (req: AuthReq, res) => {
+    try {
+      const userId = requireUserId(req, res);
+      if (!userId) return;
+
+      const keysRaw = req.body?.keys;
+      let keys: AiScannerStrategyId[] | undefined;
+      if (Array.isArray(keysRaw) && keysRaw.length) {
+        keys = keysRaw.filter(
+          (k): k is AiScannerStrategyId => k === "dip_buyer" || k === "garp" || k === "dividend",
+        );
+      }
+
+      const strategies = await resetStrategiesForUser(userId, keys);
+      const data = await getStrategiesForUser(userId);
+      res.json({
+        strategies: strategies.map((s) => ({
+          id: s.id,
+          label: s.label,
+          shortLabel: s.shortLabel,
+          description: s.description,
+          filters: s.filters,
+        })),
+        isCustom: data.isCustom,
+        defaults: listStrategies().map((s) => ({
+          id: s.id,
+          label: s.label,
+          shortLabel: s.shortLabel,
+          description: s.description,
+          filters: s.filters,
+        })),
+      });
+    } catch (error) {
+      console.error("Reset AI strategies error:", error);
+      res.status(500).json({ message: "Nepodarilo sa obnoviť stratégie." });
+    }
   });
 
   /** Spustí Finviz skener + Claude TOP 3 evaluáciu. */
@@ -81,7 +211,7 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
       }
 
       const strategyId = String(req.body?.strategyId || "").trim();
-      const strategy = getStrategy(strategyId);
+      const strategy = await getStrategyForUser(userId, strategyId);
       if (!strategy) {
         return res.status(400).json({ message: "Neplatná stratégia." });
       }

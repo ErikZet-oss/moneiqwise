@@ -64,3 +64,14 @@ export function getStrategy(id: string): AiScannerStrategy | null {
 export function listStrategies(): AiScannerStrategy[] {
   return Object.values(AI_SCANNER_STRATEGIES);
 }
+
+/** Normalizuje Finviz filter kódy z UI (čiarka / nový riadok). */
+export function normalizeStrategyFilters(raw: string[] | string): string[] {
+  const parts = Array.isArray(raw)
+    ? raw
+    : String(raw)
+        .split(/[\n,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+  return parts.map((s) => s.replace(/\s+/g, ""));
+}
