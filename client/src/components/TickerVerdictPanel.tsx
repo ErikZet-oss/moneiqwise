@@ -35,12 +35,11 @@ function parseNumberedSections(text: string): Array<{ title: string; body: strin
   }));
 }
 
-/** Ak summary nemá sekcie, zobraz len úvodný odsek pred prvou sekciou alebo celý text. */
+/** Ak summary má číslované sekcie, zobraz len boxy (bez duplicitného úvodu). */
 function splitIntroAndSections(summary: string): { intro: string; sections: Array<{ title: string; body: string }> | null } {
   const sections = parseNumberedSections(summary);
   if (sections?.length) {
-    const intro = summary.split(/\n\d+\)/)[0]?.trim() ?? "";
-    return { intro, sections };
+    return { intro: "", sections };
   }
   return { intro: summary.trim(), sections: null };
 }
