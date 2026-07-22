@@ -1,5 +1,8 @@
 /** Yahoo Fundamentals fallback keď Finviz z Renderu zlyhá / vráti prázdne metriky. */
 
+import YahooFinance from "yahoo-finance2";
+import { toYahooTicker } from "../yahooTicker";
+
 export type YahooMetricSnapshot = {
   ticker: string;
   companyName: string | null;
@@ -7,8 +10,15 @@ export type YahooMetricSnapshot = {
   source: "yahoo";
 };
 
-function toYahooTicker(ticker: string): string {
-  return ticker.trim().toUpperCase().replace(/\./g, "-");
+let yahooFinance: InstanceType<typeof YahooFinance> | null = null;
+
+function getYahooFinance(): InstanceType<typeof YahooFinance> {
+  if (!yahooFinance) {
+    yahooFinance = new YahooFinance({
+      suppressNotices: ["yahooSurvey"],
+    });
+  }
+  return yahooFinance;
 }
 
 function fmt(v: unknown): string | null {
@@ -27,38 +37,31 @@ function set(metrics: Record<string, string>, key: string, value: unknown) {
   if (s) metrics[key] = s;
 }
 
+function formatPercent(value: unknown): string | null {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return null;
+  const pct = Math.abs(n) <= 1 ? n * 100 : n;
+  const sign = pct > 0 ? "+" : "";
+  return `${sign}${pct.toFixed(2)}%`;
+}
+
 export async function fetchYahooMetricSnapshot(ticker: string): Promise<YahooMetricSnapshot> {
   const yahooTicker = toYahooTicker(ticker);
-  const url =
-    `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(yahooTicker)}` +
-    `?modules=price,summaryDetail,defaultKeyStatistics,financialData`;
+  const yf = getYahooFinance();
 
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      Accept: "application/json",
-    },
+  const result = await yf.quoteSummary(yahooTicker, {
+    modules: ["price", "summaryDetail", "defaultKeyStatistics", "financialData"],
   });
 
-  if (!response.ok) {
-    throw new Error(`Yahoo HTTP ${response.status}`);
-  }
-
-  const data = await response.json();
-  const result = data?.quoteSummary?.result?.[0];
-  if (!result) {
-    throw new Error("Yahoo empty quoteSummary");
-  }
-
-  const price = result.price ?? {};
-  const summary = result.summaryDetail ?? {};
-  const stats = result.defaultKeyStatistics ?? {};
-  const fin = result.financialData ?? {};
+  const price = (result.price ?? {}) as Record<string, unknown>;
+  const summary = (result.summaryDetail ?? {}) as Record<string, unknown>;
+  const stats = (result.defaultKeyStatistics ?? {}) as Record<string, unknown>;
+  const fin = (result.financialData ?? {}) as Record<string, unknown>;
 
   const metrics: Record<string, string> = {};
   set(metrics, "Price", price.regularMarketPrice ?? summary.regularMarketPrice);
-  set(metrics, "Change", price.regularMarketChangePercent);
+  const changePct = formatPercent(price.regularMarketChangePercent ?? summary.regularMarketChangePercent);
+  if (changePct) metrics["Change"] = changePct;
   set(metrics, "P/E", summary.trailingPE ?? stats.trailingPE);
   set(metrics, "Forward P/E", summary.forwardPE ?? stats.forwardPE);
   set(metrics, "PEG", stats.pegRatio);
@@ -89,7 +92,7 @@ export async function fetchYahooMetricSnapshot(ticker: string): Promise<YahooMet
     null;
 
   if (Object.keys(metrics).length === 0) {
-    throw new Error("Yahoo metrics empty");
+    throw new Error(`Yahoo metrics empty for ${yahooTicker}`);
   }
 
   return {
