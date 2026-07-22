@@ -430,7 +430,11 @@ export default function AiSkener() {
                   </Badge>
                 )}
               </div>
-              <FinanceTermText text={tickerResult.summary} as="p" className="text-xs leading-relaxed" />
+              <FinanceTermText
+                text={tickerResult.summary}
+                as="p"
+                className="text-xs leading-relaxed whitespace-pre-line"
+              />
               {(tickerResult.pros.length > 0 || tickerResult.cons.length > 0) && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                   {tickerResult.pros.length > 0 && (

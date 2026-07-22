@@ -113,6 +113,89 @@ function extractJsonObject(text: string): unknown {
   throw new Error("AI_JSON_PARSE");
 }
 
+function extractJsonStringField(text: string, field: string): string | undefined {
+  const re = new RegExp(`"${field}"\\s*:\\s*"`, "i");
+  const m = re.exec(text);
+  if (!m) return undefined;
+
+  let i = m.index + m[0].length;
+  let out = "";
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch === "\\" && i + 1 < text.length) {
+      const next = text[i + 1];
+      if (next === "n") {
+        out += "\n";
+        i += 2;
+        continue;
+      }
+      if (next === "t") {
+        out += "\t";
+        i += 2;
+        continue;
+      }
+      if (next === "r") {
+        out += "\r";
+        i += 2;
+        continue;
+      }
+      out += next;
+      i += 2;
+      continue;
+    }
+    if (ch === '"') break;
+    out += ch;
+    i++;
+  }
+  return out.trim() || undefined;
+}
+
+function pickString(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (value == null) return "";
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return "";
+}
+
+function normalizeTickerVerdictParsed(raw: Record<string, unknown>): {
+  verdict?: string;
+  summary?: string;
+  pros?: string[];
+  cons?: string[];
+} {
+  const pros = asStringList(raw.pros ?? raw.advantages ?? raw.plusy, 8);
+  const cons = asStringList(raw.cons ?? raw.risks ?? raw.negatives ?? raw.minusy, 8);
+
+  let summary =
+    pickString(raw.summary) ||
+    pickString(raw.analysis) ||
+    pickString(raw.comment) ||
+    pickString(raw.verdict_text) ||
+    pickString(raw.prehlad) ||
+    pickString(raw.report);
+
+  if (!summary && typeof raw.sections === "object" && raw.sections !== null) {
+    summary = Object.entries(raw.sections as Record<string, unknown>)
+      .map(([k, v]) => `${k}: ${pickString(v)}`)
+      .filter((line) => line.length > 3)
+      .join("\n\n");
+  }
+
+  if (!summary && (pros.length || cons.length)) {
+    const parts: string[] = [];
+    if (pros.length) parts.push(`Plusy: ${pros.join("; ")}.`);
+    if (cons.length) parts.push(`Riziká: ${cons.join("; ")}.`);
+    summary = parts.join("\n");
+  }
+
+  return {
+    verdict: pickString(raw.verdict) || pickString(raw.rating) || pickString(raw.odporucenie),
+    summary,
+    pros,
+    cons,
+  };
+}
+
 function looseParseTickerVerdict(text: string): {
   verdict?: string;
   summary?: string;
@@ -124,8 +207,9 @@ function looseParseTickerVerdict(text: string): {
     text.match(/verdict\s*:\s*([a-zá-ž]+)/i)?.[1];
 
   const summary =
-    text.match(/"summary"\s*:\s*"((?:\\.|[^"\\])*)"/i)?.[1]?.replace(/\\"/g, '"') ??
-    text.match(/"summary"\s*:\s*'([^']*)'/i)?.[1];
+    extractJsonStringField(text, "summary") ??
+    extractJsonStringField(text, "analysis") ??
+    extractJsonStringField(text, "comment");
 
   const prosBlock = text.match(/"pros"\s*:\s*\[([\s\S]*?)\]/i)?.[1] ?? "";
   const consBlock = text.match(/"cons"\s*:\s*\[([\s\S]*?)\]/i)?.[1] ?? "";
@@ -134,18 +218,18 @@ function looseParseTickerVerdict(text: string): {
     const itemRegex = /"((?:\\.|[^"\\])*)"/g;
     let m: RegExpExecArray | null;
     while ((m = itemRegex.exec(block)) !== null) {
-      const val = m[1].replace(/\\"/g, '"').trim();
+      const val = m[1].replace(/\\"/g, '"').replace(/\\n/g, "\n").trim();
       if (val) out.push(val);
     }
     return out;
   };
 
-  return {
+  return normalizeTickerVerdictParsed({
     verdict,
     summary,
     pros: listFromBlock(prosBlock),
     cons: listFromBlock(consBlock),
-  };
+  });
 }
 
 function parseTickerVerdictJson(text: string): {
@@ -155,12 +239,11 @@ function parseTickerVerdictJson(text: string): {
   cons?: string[];
 } {
   try {
-    return extractJsonObject(text) as {
-      verdict?: string;
-      summary?: string;
-      pros?: string[];
-      cons?: string[];
-    };
+    const raw = extractJsonObject(text);
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      throw new Error("AI_JSON_PARSE");
+    }
+    return normalizeTickerVerdictParsed(raw as Record<string, unknown>);
   } catch {
     const loose = looseParseTickerVerdict(text);
     if (loose.summary || loose.pros?.length || loose.cons?.length || loose.verdict) {
@@ -374,7 +457,7 @@ export async function evaluateTickerSnapshot(
   const requestOnce = async (extraInstruction?: string) => {
     const msg = await client.messages.create({
       model: MODEL,
-      max_tokens: 1600,
+      max_tokens: prompt.length > 2500 ? 4096 : 2200,
       messages: [
         {
           role: "user",
@@ -412,13 +495,29 @@ export async function evaluateTickerSnapshot(
       ? verdictRaw
       : "neiste";
 
+  const pros = asStringList(parsed.pros, 8);
+  const cons = asStringList(parsed.cons, 8);
+  let summary = String(parsed.summary || "").trim();
+  if (!summary) {
+    if (pros.length || cons.length) {
+      summary = [
+        pros.length ? `Plusy:\n- ${pros.join("\n- ")}` : "",
+        cons.length ? `Riziká:\n- ${cons.join("\n- ")}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+    } else {
+      summary = "Claude nevrátil text analýzy. Skús znova alebo skráť/uprav prompt v sekcii Prompty.";
+    }
+  }
+
   return {
     ticker: snapshot.ticker,
     companyName: snapshot.companyName,
     verdict,
-    summary: String(parsed.summary || "").trim() || "Nepodarilo sa zostaviť verdikt.",
-    pros: asStringList(parsed.pros),
-    cons: asStringList(parsed.cons),
+    summary,
+    pros,
+    cons,
     model: MODEL,
   };
 }

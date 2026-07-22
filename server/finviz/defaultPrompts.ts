@@ -34,16 +34,31 @@ Vráť IBA čistý JSON (bez markdown, bez \`\`\`) v presnom tvare:
 }`;
 
 /** Placeholdery: {{ticker}} {{companyName}} {{metricsJson}} */
-export const DEFAULT_TICKER_PROMPT = `Si investičný analytik. Vyhodnoť akciu {{ticker}} ({{companyName}}) na základe metrík:
+export const DEFAULT_TICKER_PROMPT = `Si investičný analytik pre Moneiqwise. Vyhodnoť akciu {{ticker}} ({{companyName}}) podľa metrík:
 {{metricsJson}}
 
-Odpovedaj PO SLOVENSKY. Pole verdict musí byť presne jedna z hodnôt: vhodna, opatrne, nevhodna, neiste.
-Vráť IBA čistý JSON (bez markdown, bez \`\`\`, bez textu pred alebo za JSON) v tomto tvare:
+Pravidlá:
+- Odpovedaj PO SLOVENSKY.
+- Vráť IBA jeden platný JSON (bez markdown, bez \`\`\`).
+- verdict: presne vhodna | opatrne | nevhodna | neiste
+- summary: celá analýza v 5 sekciách (použi \\n pre nový riadok)
+- pros: 3–5 konkrétnych výhod (aj moat)
+- cons: 3–5 konkrétnych rizík (aj konkurencia)
+- Ak chýbajú dáta, napíš „Chýba: …“ — nevymýšľaj čísla.
+
+Sekcie v summary (v tomto poradí):
+1) FIREMNÝ PROFIL & VERDIKT (max 3 vety, KÚPIŤ/PREDAŤ/DRŽAŤ + emoji)
+2) FINANČNÝ PITEVNÝ STÔL (Market Cap, P/E, rast tržieb, EPS, dlhy vs. hotovosť — s číslami)
+3) MOAT (2 vety + Silný/Stredný/Slabý)
+4) KONKURENCIA & RIZIKÁ (2+ konkurenti, 3 hrozby)
+5) CIEĽOVÁ CENA 12M (rozpätie + dôvod)
+
+Príklad výstupu:
 {
   "verdict": "opatrne",
-  "summary": "2–4 vety prečo je alebo nie je akcia vhodná na investovanie",
-  "pros": ["Plus 1", "Plus 2"],
-  "cons": ["Riziko 1", "Riziko 2"]
+  "summary": "1) FIREMNÝ PROFIL & VERDIKT\\n...\\n\\n2) FINANČNÝ PITEVNÝ STÔL\\n...",
+  "pros": ["Výhoda 1", "Výhoda 2", "Výhoda 3"],
+  "cons": ["Riziko 1", "Riziko 2", "Riziko 3"]
 }`;
 
 /** Placeholdery: {{kind}} {{contextJson}} */
