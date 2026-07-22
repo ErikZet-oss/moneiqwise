@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Brain,
@@ -17,8 +17,11 @@ import { FinanceTermText } from "@/components/FinanceTermText";
 import { AiSkenerChat } from "@/components/AiSkenerChat";
 import { AiSkenerPromptsEditor } from "@/components/AiSkenerPromptsEditor";
 import { AiSkenerStrategiesPanel, type StrategyId } from "@/components/AiSkenerStrategiesPanel";
+import { TickerVerdictPanel } from "@/components/TickerVerdictPanel";
+import { Range52Bar } from "@/components/Range52Bar";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useCurrency } from "@/hooks/useCurrency";
 import { cn } from "@/lib/utils";
 
 type TopPick = {
@@ -61,6 +64,9 @@ type TickerVerdict = {
     change: string | null;
     rsi: string | null;
     marketCap: string | null;
+    priceNum: number | null;
+    low52: number | null;
+    high52: number | null;
   };
   model: string;
   cached: boolean;
@@ -79,22 +85,32 @@ function changeColor(n: number | null | undefined): string {
   return n > 0 ? "text-green-500" : "text-red-500";
 }
 
-function verdictBadge(v: TickerVerdict["verdict"]) {
-  switch (v) {
-    case "vhodna":
-      return { label: "Vhodná", className: "bg-green-600 hover:bg-green-600" };
-    case "opatrne":
-      return { label: "Opatrne", className: "bg-amber-600 hover:bg-amber-600" };
-    case "nevhodna":
-      return { label: "Nevhodná", className: "bg-red-600 hover:bg-red-600" };
-    default:
-      return { label: "Neisté", className: "bg-muted-foreground hover:bg-muted-foreground" };
-  }
-}
 
 export default function AiSkener() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { currency, exchangeRate, getTickerCurrency } = useCurrency();
+  const displayCurrency = currency === "USD" ? "USD" : "EUR";
+
+  const formatQuoteLabel = useCallback(
+    (ticker: string, nativePrice: number) => {
+      const rate = exchangeRate;
+      const source = getTickerCurrency(ticker);
+      let eurPrice = nativePrice;
+      if (source === "USD") eurPrice = nativePrice * rate.usdToEur;
+      else if (source === "GBP") eurPrice = nativePrice * rate.gbpToEur;
+      else if (source === "CZK") eurPrice = nativePrice * rate.czkToEur;
+      else if (source === "PLN") eurPrice = nativePrice * rate.plnToEur;
+      const converted = displayCurrency === "USD" ? eurPrice * rate.eurToUsd : eurPrice;
+      return new Intl.NumberFormat("sk-SK", {
+        style: "currency",
+        currency: displayCurrency,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(converted);
+    },
+    [displayCurrency, exchangeRate, getTickerCurrency],
+  );
   const [strategyId, setStrategyId] = useState<StrategyId>("dip_buyer");
   const [search, setSearch] = useState("");
   const [runResult, setRunResult] = useState<RunResult | null>(null);
@@ -416,58 +432,18 @@ export default function AiSkener() {
 
       {mode === "ticker" && tickerResult && (
         <div className="flex flex-col gap-2">
-          <Card className="border-primary/20 bg-primary/[0.04]">
-            <CardContent className="p-3 space-y-1.5">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <Sparkles className="h-3 w-3 text-primary" />
-                <span className="text-[10px] text-muted-foreground">Claude verdikt</span>
-                <Badge className={`text-[8px] h-4 px-1.5 ${verdictBadge(tickerResult.verdict).className}`}>
-                  {verdictBadge(tickerResult.verdict).label}
-                </Badge>
-                {tickerResult.cached && (
-                  <Badge variant="outline" className="text-[8px] h-4 px-1">
-                    cache
-                  </Badge>
-                )}
-              </div>
-              <FinanceTermText
-                text={tickerResult.summary}
-                as="p"
-                className="text-xs leading-relaxed whitespace-pre-line"
-              />
-              {(tickerResult.pros.length > 0 || tickerResult.cons.length > 0) && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                  {tickerResult.pros.length > 0 && (
-                    <div>
-                      <p className="text-[9px] font-medium text-green-600 dark:text-green-400 mb-0.5">Plusy</p>
-                      <ul className="text-[9px] text-muted-foreground space-y-0.5 list-disc pl-3">
-                        {tickerResult.pros.map((p, i) => (
-                          <li key={i}>
-                            <FinanceTermText text={p} className="inline" />
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {tickerResult.cons.length > 0 && (
-                    <div>
-                      <p className="text-[9px] font-medium text-red-500 mb-0.5">Riziká</p>
-                      <ul className="text-[9px] text-muted-foreground space-y-0.5 list-disc pl-3">
-                        {tickerResult.cons.map((c, i) => (
-                          <li key={i}>
-                            <FinanceTermText text={c} className="inline" />
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <TickerVerdictPanel
+            data={{
+              verdict: tickerResult.verdict,
+              summary: tickerResult.summary,
+              pros: tickerResult.pros,
+              cons: tickerResult.cons,
+              cached: tickerResult.cached,
+            }}
+          />
 
           <Card className="relative overflow-hidden">
-            <CardContent className="relative p-2 space-y-1.5">
+            <CardContent className="relative p-2 space-y-1">
               <div className="flex items-center gap-2">
                 <CompanyLogo
                   ticker={tickerResult.ticker}
@@ -491,7 +467,15 @@ export default function AiSkener() {
                   )}
                 </div>
               </div>
-              <div className="flex items-center justify-between gap-2 text-[8px] text-muted-foreground">
+
+              <Range52Bar
+                price={tickerResult.metrics.priceNum ?? 0}
+                low52={tickerResult.metrics.low52 ?? 0}
+                high52={tickerResult.metrics.high52 ?? 0}
+                formatLabel={(v) => formatQuoteLabel(tickerResult.ticker, v)}
+              />
+
+              <div className="flex items-end justify-between gap-2 text-[8px] text-muted-foreground leading-tight">
                 <span className="flex gap-x-2 flex-wrap">
                   <span>
                     <FinanceTermText text="P/E" className="inline" />{" "}

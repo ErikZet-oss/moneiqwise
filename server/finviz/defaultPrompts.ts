@@ -34,31 +34,33 @@ Vráť IBA čistý JSON (bez markdown, bez \`\`\`) v presnom tvare:
 }`;
 
 /** Placeholdery: {{ticker}} {{companyName}} {{metricsJson}} */
-export const DEFAULT_TICKER_PROMPT = `Si investičný analytik pre Moneiqwise. Vyhodnoť akciu {{ticker}} ({{companyName}}) podľa metrík:
+export const DEFAULT_TICKER_PROMPT = `Si investičný analytik. Vyhodnoť akciu {{ticker}} ({{companyName}}) na základe metrík:
 {{metricsJson}}
 
-Pravidlá:
-- Odpovedaj PO SLOVENSKY.
-- Vráť IBA jeden platný JSON (bez markdown, bez \`\`\`).
-- verdict: presne vhodna | opatrne | nevhodna | neiste
-- summary: celá analýza v 5 sekciách (použi \\n pre nový riadok)
-- pros: 3–5 konkrétnych výhod (aj moat)
-- cons: 3–5 konkrétnych rizík (aj konkurencia)
-- Ak chýbajú dáta, napíš „Chýba: …“ — nevymýšľaj čísla.
+Odpovedaj PO SLOVENSKY. Vráť IBA jeden platný JSON objekt (bez markdown, bez \`\`\`).
 
-Sekcie v summary (v tomto poradí):
-1) FIREMNÝ PROFIL & VERDIKT (max 3 vety, KÚPIŤ/PREDAŤ/DRŽAŤ + emoji)
-2) FINANČNÝ PITEVNÝ STÔL (Market Cap, P/E, rast tržieb, EPS, dlhy vs. hotovosť — s číslami)
-3) MOAT (2 vety + Silný/Stredný/Slabý)
-4) KONKURENCIA & RIZIKÁ (2+ konkurenti, 3 hrozby)
-5) CIEĽOVÁ CENA 12M (rozpätie + dôvod)
+Povinné polia:
+- verdict: presne jedna hodnota — vhodna, opatrne, nevhodna, neiste
+- summary: 2–4 vety (profil firmy, KÚPIŤ/DRŽAŤ/PREDAJ + emoji, kľúčové čísla z metrík). Nepíš sem zoznam plusov/mínusov.
+- pros: pole ASPOŇ 3 konkrétnych výhod (fundamenty, moat, rast, konkurenčná výhoda — s číslami ak sú v metrikách)
+- cons: pole ASPOŇ 3 konkrétnych rizík (konkurenti, valuácia, dlh, makro, regulácia)
 
-Príklad výstupu:
+Ak chýbajú dáta, napíš „Chýba: …“ v príslušnej položke. Nevymýšľaj čísla.
+
+Príklad:
 {
   "verdict": "opatrne",
-  "summary": "1) FIREMNÝ PROFIL & VERDIKT\\n...\\n\\n2) FINANČNÝ PITEVNÝ STÔL\\n...",
-  "pros": ["Výhoda 1", "Výhoda 2", "Výhoda 3"],
-  "cons": ["Riziko 1", "Riziko 2", "Riziko 3"]
+  "summary": "SOFI je fintech banka zameraná na mladých klientov. Verdikt: DRŽAŤ 🚦 — rast je silný, ale valuácia je náročná (P/E …).",
+  "pros": [
+    "Rastúci počet klientov a tržby (konkrétne číslo z metrík alebo Chýba)",
+    "Silný digitálny model a nižšie náklady oproti bankám",
+    "Moat: sieťové efekty a brand medzi mladšími investormi (Stredný)"
+  ],
+  "cons": [
+    "Konkurencia: JPM, BAC, CHYM a neobankové appky",
+    "Citlivosť na úrokové sadzby a kreditné straty",
+    "Valuácia môže byť predražená voči zisku"
+  ]
 }`;
 
 /** Placeholdery: {{kind}} {{contextJson}} */

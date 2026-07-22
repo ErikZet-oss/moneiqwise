@@ -150,6 +150,79 @@ function extractJsonStringField(text: string, field: string): string | undefined
   return out.trim() || undefined;
 }
 
+function cleanBulletLine(line: string): string {
+  return line.replace(/^[\s\-•*]+/, "").trim();
+}
+
+function uniqueStrings(items: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of items) {
+    const key = item.toLowerCase();
+    if (!item || seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+}
+
+/** Ak Claude dal všetko do summary, vytiahni plusy/mínusy zo sekcií alebo odrážok. */
+function enrichProsConsFromSummary(
+  summary: string,
+  pros: string[],
+  cons: string[],
+): { pros: string[]; cons: string[] } {
+  const nextPros = [...pros];
+  const nextCons = [...cons];
+
+  const sectionRe = /(?:^|\n)(\d+)\)\s*([^\n]+)\n?([\s\S]*?)(?=\n\d+\)\s|$)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = sectionRe.exec(summary)) !== null) {
+    const title = m[2].toLowerCase();
+    const body = m[3].trim();
+    if (!body) continue;
+
+    if (/moat|výhoda|konkurenčn/.test(title)) {
+      for (const line of body.split("\n")) {
+        const t = cleanBulletLine(line);
+        if (t.length > 8) nextPros.push(t);
+      }
+      const moatVerdict = body.match(/moat[^:\n]*:\s*(siln[yá]|stredn[yá]|slab[yá])/i);
+      if (moatVerdict) nextPros.push(`Moat verdikt: ${moatVerdict[1]}`);
+    }
+
+    if (/konkuren|rizik|hroz/.test(title)) {
+      for (const line of body.split("\n")) {
+        const t = cleanBulletLine(line);
+        if (t.length > 8) nextCons.push(t);
+      }
+    }
+
+    if (/finanč|fundament|p\/e|pitiev/.test(title) && body.length > 20) {
+      nextPros.push(body.split("\n")[0].slice(0, 220));
+    }
+
+    if (/cieľov|cena|target/.test(title) && body.length > 10) {
+      nextPros.push(`Cieľová cena: ${body.split("\n")[0].slice(0, 180)}`);
+    }
+  }
+
+  for (const line of summary.split("\n")) {
+    const t = cleanBulletLine(line);
+    if (t.length < 10) continue;
+    if (/rizik|hroz|slab|konkur|compet|dlh|regul|pokles|prep|valuáci/i.test(t)) {
+      nextCons.push(t);
+    } else if (/rast|moat|výhod|siln|divid|marž|profit|eps|tržb/i.test(t)) {
+      nextPros.push(t);
+    }
+  }
+
+  return {
+    pros: uniqueStrings(nextPros).slice(0, 6),
+    cons: uniqueStrings(nextCons).slice(0, 6),
+  };
+}
+
 function pickString(value: unknown): string {
   if (typeof value === "string") return value.trim();
   if (value == null) return "";
@@ -498,16 +571,16 @@ export async function evaluateTickerSnapshot(
   const pros = asStringList(parsed.pros, 8);
   const cons = asStringList(parsed.cons, 8);
   let summary = String(parsed.summary || "").trim();
+
+  const enriched = enrichProsConsFromSummary(summary, pros, cons);
+  let finalPros = enriched.pros;
+  let finalCons = enriched.cons;
+
   if (!summary) {
-    if (pros.length || cons.length) {
-      summary = [
-        pros.length ? `Plusy:\n- ${pros.join("\n- ")}` : "",
-        cons.length ? `Riziká:\n- ${cons.join("\n- ")}` : "",
-      ]
-        .filter(Boolean)
-        .join("\n\n");
+    if (finalPros.length || finalCons.length) {
+      summary = "Pozri plusy a riziká nižšie.";
     } else {
-      summary = "Claude nevrátil text analýzy. Skús znova alebo skráť/uprav prompt v sekcii Prompty.";
+      summary = "Claude nevrátil text analýzy. Obnov prompt v Prompty → Analýza tickera a skús znova.";
     }
   }
 
@@ -516,8 +589,8 @@ export async function evaluateTickerSnapshot(
     companyName: snapshot.companyName,
     verdict,
     summary,
-    pros,
-    cons,
+    pros: finalPros,
+    cons: finalCons,
     model: MODEL,
   };
 }

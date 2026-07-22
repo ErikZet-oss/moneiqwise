@@ -73,6 +73,8 @@ export async function fetchYahooMetricSnapshot(ticker: string): Promise<YahooMet
   set(metrics, "Oper. Margin", fin.operatingMargins);
   set(metrics, "Profit Margin", fin.profitMargins);
   set(metrics, "Target Price", fin.targetMeanPrice);
+  set(metrics, "52W High", summary.fiftyTwoWeekHigh);
+  set(metrics, "52W Low", summary.fiftyTwoWeekLow);
   set(metrics, "Recom", fin.recommendationMean);
   set(metrics, "Avg Volume", summary.averageVolume);
   set(metrics, "Short Float", stats.shortPercentOfFloat);

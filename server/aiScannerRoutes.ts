@@ -57,6 +57,40 @@ function requireUserId(req: AuthReq, res: Response): string | null {
   return userId;
 }
 
+function parseMetricNumber(raw: string | null | undefined): number | null {
+  if (!raw) return null;
+  const cleaned = raw.replace(/[$,%\s]/g, "").replace(/,/g, "");
+  if (!cleaned || cleaned === "-" || cleaned === "—") return null;
+  const n = parseFloat(cleaned);
+  return Number.isFinite(n) ? n : null;
+}
+
+function metricByKeyPattern(metrics: Record<string, string>, pattern: RegExp): string | null {
+  for (const [key, value] of Object.entries(metrics)) {
+    if (pattern.test(key) && value?.trim()) return value.trim();
+  }
+  return null;
+}
+
+function extractQuoteRange(metrics: Record<string, string>): {
+  priceNum: number | null;
+  low52: number | null;
+  high52: number | null;
+} {
+  const priceNum = parseMetricNumber(metrics["Price"]);
+  const low52 = parseMetricNumber(
+    metrics["52W Low"] ??
+      metricByKeyPattern(metrics, /52\s*w.*low|week.*low/i) ??
+      undefined,
+  );
+  const high52 = parseMetricNumber(
+    metrics["52W High"] ??
+      metricByKeyPattern(metrics, /52\s*w.*high|week.*high/i) ??
+      undefined,
+  );
+  return { priceNum, low52, high52 };
+}
+
 function tickersFingerprint(tickers: string[]): string {
   return createHash("sha256").update(tickers.slice().sort().join(",")).digest("hex").slice(0, 24);
 }
@@ -361,7 +395,7 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
       const forceRefresh = req.body?.refresh === true;
       const { prompts } = await getPromptsForUser(userId);
       const promptFp = createHash("sha256").update(prompts.ticker).digest("hex").slice(0, 12);
-      const cacheKey = `${tickerAnalyzeCacheKey(ticker)}|${promptFp}|v3`;
+      const cacheKey = `${tickerAnalyzeCacheKey(ticker)}|${promptFp}|v4`;
       let cached: {
         snapshot: Awaited<ReturnType<typeof fetchQuoteSnapshot>>;
         verdict: AiTickerVerdict;
@@ -416,6 +450,7 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
       const change = cached.snapshot.metrics["Change"] ?? null;
       const rsi = cached.snapshot.metrics["RSI (14)"] ?? null;
       const marketCap = cached.snapshot.metrics["Market Cap"] ?? null;
+      const { priceNum, low52, high52 } = extractQuoteRange(cached.snapshot.metrics);
 
       res.json({
         ticker: cached.verdict.ticker,
@@ -430,6 +465,9 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
           change,
           rsi,
           marketCap,
+          priceNum,
+          low52,
+          high52,
         },
         model: cached.verdict.model,
         dataSource: cached.dataSource ?? "finviz",
