@@ -24,6 +24,7 @@ import Grafy from "@/pages/Grafy";
 import GoalTracker from "@/pages/GoalTracker";
 import EventsCalendar from "@/pages/EventsCalendar";
 import Watchlist from "@/pages/Watchlist";
+import AiSkener from "@/pages/AiSkener";
 import AssetDetail from "@/pages/AssetDetail";
 import TaxSummaryPage from "@/pages/TaxSummaryPage";
 import FaqPage from "@/pages/FaqPage";
@@ -72,6 +73,7 @@ function Router() {
       <Route path="/goal" component={GoalTracker} />
       <Route path="/events" component={EventsCalendar} />
       <Route path="/watchlist" component={Watchlist} />
+      <Route path="/ai-skener" component={AiSkener} />
       <Route path="/settings" component={Settings} />
       <Route path="/admin/registrations" component={AdminRegistrations} />
       <Route path="/faq" component={FaqPage} />

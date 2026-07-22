@@ -2704,6 +2704,9 @@ export async function registerRoutes(
   // Setup auth middleware
   await setupAuth(app);
 
+  const { registerAiScannerRoutes } = await import("./aiScannerRoutes");
+  registerAiScannerRoutes(app, isAuthenticated);
+
   // Auth routes
   app.get("/api/auth/user", isAuthenticated, async (req: any, res) => {
     try {
