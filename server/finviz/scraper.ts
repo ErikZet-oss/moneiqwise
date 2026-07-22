@@ -35,14 +35,29 @@ async function fetchFinvizHtml(url: string): Promise<string> {
   const res = await fetch(url, {
     headers: {
       "User-Agent": UA,
-      Accept: "text/html,application/xhtml+xml",
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       "Accept-Language": "en-US,en;q=0.9",
+      Referer: "https://finviz.com/",
+      "Cache-Control": "no-cache",
+      Pragma: "no-cache",
     },
+    redirect: "follow",
   });
   if (!res.ok) {
     throw new Error(`Finviz HTTP ${res.status}`);
   }
-  return res.text();
+  const html = await res.text();
+  const lower = html.toLowerCase();
+  if (
+    lower.includes("access denied") ||
+    lower.includes("captcha") ||
+    lower.includes("cf-challenge") ||
+    lower.includes("just a moment") ||
+    (html.length < 2000 && !lower.includes("screener"))
+  ) {
+    throw new Error("Finviz blocked or challenge page");
+  }
+  return html;
 }
 
 /**

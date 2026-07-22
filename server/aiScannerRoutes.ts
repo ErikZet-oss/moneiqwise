@@ -19,6 +19,7 @@ import {
 import { fetchQuoteSnapshot, fetchScreenerRows } from "./finviz/scraper";
 import { getStrategy, listStrategies } from "./finviz/strategies";
 import { fetchYahooMetricSnapshot } from "./finviz/yahooFallback";
+import { fetchYahooStrategyScreen } from "./finviz/yahooStrategyScreen";
 import {
   appendUserMessageAndReply,
   createChat,
@@ -83,21 +84,45 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
       const scanKey = screenerCacheKey(strategy.id, filterFp);
 
       let screener: ScreenerCachePayload | null = forceRefresh ? null : await getCachePayload(scanKey);
+      let dataSource: "finviz" | "yahoo" = "finviz";
       if (!screener) {
         try {
           const fetched = await fetchScreenerRows(strategy);
+          if (!fetched.rows.length) {
+            throw new Error("Finviz returned 0 rows");
+          }
           screener = {
             url: fetched.url,
             rows: fetched.rows.slice(0, 40),
             fetchedAt: new Date().toISOString(),
           };
-          await setCachePayload(scanKey, strategy.id, screener);
+          dataSource = "finviz";
         } catch (err) {
-          console.error("Finviz screener failed:", err);
-          return res.status(502).json({
-            message: "Nepodarilo sa načítať dáta z Finviz. Skús neskôr.",
-          });
+          console.warn("Finviz screener failed, using Yahoo fallback:", err);
+          try {
+            const yahoo = await fetchYahooStrategyScreen(strategy);
+            if (!yahoo.rows.length) {
+              return res.status(502).json({
+                message:
+                  "Skener nenašiel vhodné akcie (Finviz nedostupný z servera, Yahoo fallback bez výsledkov). Skús neskôr alebo inú stratégiu.",
+              });
+            }
+            screener = {
+              url: yahoo.url,
+              rows: yahoo.rows.slice(0, 40),
+              fetchedAt: new Date().toISOString(),
+            };
+            dataSource = "yahoo";
+          } catch (yahooErr) {
+            console.error("Yahoo strategy fallback failed:", yahooErr);
+            return res.status(502).json({
+              message: "Nepodarilo sa načítať dáta skenera (Finviz aj Yahoo zlyhali). Skús neskôr.",
+            });
+          }
         }
+        await setCachePayload(scanKey, strategy.id, { ...screener, dataSource });
+      } else {
+        dataSource = screener.dataSource ?? "finviz";
       }
 
       if (!screener.rows.length) {
@@ -112,6 +137,7 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
           scannedCount: 0,
           cached: !forceRefresh,
           finvizUrl: screener.url,
+          dataSource,
           model: null,
         });
       }
@@ -157,11 +183,15 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
           label: strategy.label,
           description: strategy.description,
         },
-        insight: evaluation.insight,
+        insight:
+          dataSource === "yahoo"
+            ? `Finviz na serveri nie je dostupný, použil som Yahoo fallback skener. ${evaluation.insight}`
+            : evaluation.insight,
         topPicks: evaluation.topPicks,
         scannedCount: screener.rows.length,
         cached: !forceRefresh,
         finvizUrl: screener.url,
+        dataSource,
         model: evaluation.model,
       });
     } catch (error) {

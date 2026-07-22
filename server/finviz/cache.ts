@@ -66,4 +66,5 @@ export type ScreenerCachePayload = {
   url: string;
   rows: FinvizScreenerRow[];
   fetchedAt: string;
+  dataSource?: "finviz" | "yahoo";
 };

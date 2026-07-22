@@ -52,6 +52,7 @@ type RunResult = {
   scannedCount: number;
   cached: boolean;
   finvizUrl?: string;
+  dataSource?: "finviz" | "yahoo";
   model: string | null;
 };
 
@@ -338,6 +339,11 @@ export default function AiSkener() {
                 <Sparkles className="h-3 w-3 text-primary" />
                 AI Insight · {runResult.strategy.label}
                 {runResult.cached && <Badge variant="outline" className="text-[8px] h-4 px-1">cache</Badge>}
+                {runResult.dataSource === "yahoo" && (
+                  <Badge variant="outline" className="text-[8px] h-4 px-1">
+                    Yahoo fallback
+                  </Badge>
+                )}
               </div>
               <FinanceTermText text={runResult.insight} as="p" className="text-xs leading-relaxed" />
               <p className="text-[9px] text-muted-foreground">
