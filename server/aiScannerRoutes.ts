@@ -28,6 +28,13 @@ import {
   getChatForUser,
   listChatsByUser,
 } from "./finviz/chatStore";
+import { AI_PROMPT_META, DEFAULT_AI_PROMPTS } from "./finviz/defaultPrompts";
+import {
+  getPromptsForUser,
+  resetPromptsForUser,
+  savePromptsForUser,
+} from "./finviz/promptStore";
+import type { AiPromptKey } from "./finviz/defaultPrompts";
 
 type AuthReq = {
   user?: { claims?: { sub?: string } };
@@ -143,12 +150,17 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
       }
 
       const rowsForAi = screener.rows.slice(0, 20);
-      const evalKey = evaluateCacheKey(strategy.id, tickersFingerprint(rowsForAi.map((r) => r.ticker)));
+      const { prompts } = await getPromptsForUser(userId);
+      const promptFp = createHash("sha256").update(prompts.strategy).digest("hex").slice(0, 12);
+      const evalKey = evaluateCacheKey(
+        strategy.id,
+        `${tickersFingerprint(rowsForAi.map((r) => r.ticker))}|${promptFp}`,
+      );
       let evaluation: AiStrategyEvaluation | null = forceRefresh ? null : await getCachePayload(evalKey);
 
       if (!evaluation) {
         try {
-          evaluation = await evaluateStrategyPicks(strategy, rowsForAi);
+          evaluation = await evaluateStrategyPicks(strategy, rowsForAi, prompts.strategy);
           await setCachePayload(evalKey, strategy.id, evaluation);
         } catch (err) {
           console.error("Claude evaluation failed:", err);
@@ -220,7 +232,9 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
       }
 
       const forceRefresh = req.body?.refresh === true;
-      const cacheKey = tickerAnalyzeCacheKey(ticker);
+      const { prompts } = await getPromptsForUser(userId);
+      const promptFp = createHash("sha256").update(prompts.ticker).digest("hex").slice(0, 12);
+      const cacheKey = `${tickerAnalyzeCacheKey(ticker)}|${promptFp}`;
       let cached: {
         snapshot: Awaited<ReturnType<typeof fetchQuoteSnapshot>>;
         verdict: AiTickerVerdict;
@@ -260,7 +274,7 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
 
         let verdict: AiTickerVerdict;
         try {
-          verdict = await evaluateTickerSnapshot(snapshot);
+          verdict = await evaluateTickerSnapshot(snapshot, prompts.ticker);
         } catch (err) {
           console.error("Claude ticker eval failed:", err);
           return res.status(502).json({ message: formatAnthropicError(err) });
@@ -299,6 +313,88 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
       res.status(500).json({
         message: error instanceof Error ? error.message : "Nepodarilo sa vyhodnotiť ticker.",
       });
+    }
+  });
+
+  app.get("/api/ai-scanner/prompts", isAuthenticated, async (req: AuthReq, res) => {
+    try {
+      const userId = requireUserId(req, res);
+      if (!userId) return;
+      const data = await getPromptsForUser(userId);
+      res.json({
+        prompts: data.prompts,
+        isCustom: data.isCustom,
+        defaults: DEFAULT_AI_PROMPTS,
+        meta: AI_PROMPT_META,
+      });
+    } catch (error) {
+      console.error("Get AI prompts error:", error);
+      res.status(500).json({ message: "Nepodarilo sa načítať prompty." });
+    }
+  });
+
+  app.put("/api/ai-scanner/prompts", isAuthenticated, async (req: AuthReq, res) => {
+    try {
+      const userId = requireUserId(req, res);
+      if (!userId) return;
+
+      const body = req.body ?? {};
+      const patch: Partial<{ strategy: string; ticker: string; chat: string }> = {};
+      if (typeof body.strategy === "string") patch.strategy = body.strategy;
+      if (typeof body.ticker === "string") patch.ticker = body.ticker;
+      if (typeof body.chat === "string") patch.chat = body.chat;
+
+      if (!Object.keys(patch).length) {
+        return res.status(400).json({ message: "Nič na uloženie." });
+      }
+
+      for (const [key, value] of Object.entries(patch)) {
+        if (value.trim().length < 20) {
+          return res.status(400).json({ message: `Prompt „${key}“ je príliš krátky.` });
+        }
+        if (value.length > 20000) {
+          return res.status(400).json({ message: `Prompt „${key}“ je príliš dlhý.` });
+        }
+      }
+
+      const prompts = await savePromptsForUser(userId, patch);
+      const data = await getPromptsForUser(userId);
+      res.json({
+        prompts,
+        isCustom: data.isCustom,
+        defaults: DEFAULT_AI_PROMPTS,
+        meta: AI_PROMPT_META,
+      });
+    } catch (error) {
+      console.error("Save AI prompts error:", error);
+      res.status(500).json({ message: "Nepodarilo sa uložiť prompty." });
+    }
+  });
+
+  app.post("/api/ai-scanner/prompts/reset", isAuthenticated, async (req: AuthReq, res) => {
+    try {
+      const userId = requireUserId(req, res);
+      if (!userId) return;
+
+      const keysRaw = req.body?.keys;
+      let keys: AiPromptKey[] | undefined;
+      if (Array.isArray(keysRaw)) {
+        keys = keysRaw.filter(
+          (k): k is AiPromptKey => k === "strategy" || k === "ticker" || k === "chat",
+        );
+      }
+
+      const prompts = await resetPromptsForUser(userId, keys);
+      const data = await getPromptsForUser(userId);
+      res.json({
+        prompts,
+        isCustom: data.isCustom,
+        defaults: DEFAULT_AI_PROMPTS,
+        meta: AI_PROMPT_META,
+      });
+    } catch (error) {
+      console.error("Reset AI prompts error:", error);
+      res.status(500).json({ message: "Nepodarilo sa obnoviť prompty." });
     }
   });
 

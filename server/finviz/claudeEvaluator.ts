@@ -1,6 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { FinvizScreenerRow, FinvizQuoteSnapshot } from "./scraper";
 import type { AiScannerStrategy } from "./strategies";
+import {
+  DEFAULT_AI_PROMPTS,
+  applyPromptTemplate,
+} from "./defaultPrompts";
 
 export type AiTopPick = {
   ticker: string;
@@ -84,6 +88,7 @@ const MODEL = process.env.ANTHROPIC_MODEL?.trim().replace(/^["']|["']$/g, "") ||
 export async function evaluateStrategyPicks(
   strategy: AiScannerStrategy,
   rows: FinvizScreenerRow[],
+  promptTemplate?: string,
 ): Promise<AiStrategyEvaluation> {
   const client = getAnthropicClient();
   const limited = rows.slice(0, 20);
@@ -97,22 +102,11 @@ export async function evaluateStrategyPicks(
     changePercent: r.changePercent,
   }));
 
-  const prompt = `Si investičný analytik pre slovenskú portfolio appku Moneiqwise.
-Tu je zoznam akcií vyfiltrovaných zo skenera "${strategy.label}" (${strategy.description}):
-${JSON.stringify(list, null, 2)}
-
-Preanalýzuj ich, vyber TOP 3 najzaujímavejšie investičné príležitosti.
-Pre každú napíš:
-- comment: 1–2 vety prečo je zaujímavá
-- risk: 1 veta hlavné riziko
-
-Odpovedaj PO SLOVENSKY. Vráť IBA čistý JSON (bez markdown) v tvare:
-{
-  "insight": "2–3 vety celkový verdikt k výberu trhu / stratégie",
-  "topPicks": [
-    { "ticker": "XXX", "comment": "...", "risk": "..." }
-  ]
-}`;
+  const prompt = applyPromptTemplate(promptTemplate?.trim() || DEFAULT_AI_PROMPTS.strategy, {
+    strategyLabel: strategy.label,
+    strategyDescription: strategy.description,
+    stockListJson: JSON.stringify(list, null, 2),
+  });
 
   const msg = await client.messages.create({
     model: MODEL,
@@ -175,7 +169,10 @@ Odpovedaj PO SLOVENSKY. Vráť IBA čistý JSON (bez markdown) v tvare:
   };
 }
 
-export async function evaluateTickerSnapshot(snapshot: FinvizQuoteSnapshot): Promise<AiTickerVerdict> {
+export async function evaluateTickerSnapshot(
+  snapshot: FinvizQuoteSnapshot,
+  promptTemplate?: string,
+): Promise<AiTickerVerdict> {
   const client = getAnthropicClient();
   const interestingKeys = [
     "P/E",
@@ -222,16 +219,11 @@ export async function evaluateTickerSnapshot(snapshot: FinvizQuoteSnapshot): Pro
     }
   }
 
-  const prompt = `Si investičný analytik. Vyhodnoť akciu ${snapshot.ticker} (${snapshot.companyName || "N/A"}) na základe metrík z Finviz:
-${JSON.stringify(slim, null, 2)}
-
-Odpovedaj PO SLOVENSKY. Vráť IBA čistý JSON:
-{
-  "verdict": "vhodna" | "opatrne" | "nevhodna" | "neiste",
-  "summary": "2–3 vety verdikt či je akcia vhodná na investovanie a prečo",
-  "pros": ["...", "..."],
-  "cons": ["...", "..."]
-}`;
+  const prompt = applyPromptTemplate(promptTemplate?.trim() || DEFAULT_AI_PROMPTS.ticker, {
+    ticker: snapshot.ticker,
+    companyName: snapshot.companyName || "N/A",
+    metricsJson: JSON.stringify(slim, null, 2),
+  });
 
   const msg = await client.messages.create({
     model: MODEL,

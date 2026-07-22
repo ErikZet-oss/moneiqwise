@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CompanyLogo } from "@/components/CompanyLogo";
 import { FinanceTermText } from "@/components/FinanceTermText";
 import { AiSkenerChat } from "@/components/AiSkenerChat";
+import { AiSkenerPromptsEditor } from "@/components/AiSkenerPromptsEditor";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -198,14 +199,17 @@ export default function AiSkener() {
 
   return (
     <div className="flex flex-col gap-3 md:gap-6 pb-6 md:pb-8">
-      <div>
-        <h1 className="text-lg font-semibold flex items-center gap-2 flex-wrap">
-          <Brain className="h-5 w-5 sm:h-6 sm:w-6 text-primary shrink-0" />
-          AI Skener
-        </h1>
-        <p className="text-xs text-muted-foreground mt-1">
-          Finviz filtre + Claude vyhodnotenie — stratégie alebo jedna akcia
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold flex items-center gap-2 flex-wrap">
+            <Brain className="h-5 w-5 sm:h-6 sm:w-6 text-primary shrink-0" />
+            AI Skener
+          </h1>
+          <p className="text-xs text-muted-foreground mt-1">
+            Finviz filtre + Claude vyhodnotenie — stratégie alebo jedna akcia
+          </p>
+        </div>
+        <AiSkenerPromptsEditor />
       </div>
 
       <div className="relative">

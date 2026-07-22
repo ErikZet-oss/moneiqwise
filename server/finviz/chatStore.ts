@@ -2,6 +2,8 @@ import { sql } from "drizzle-orm";
 import { db } from "../db";
 import Anthropic from "@anthropic-ai/sdk";
 import { formatAnthropicError } from "./claudeEvaluator";
+import { DEFAULT_AI_PROMPTS, applyPromptTemplate } from "./defaultPrompts";
+import { getPromptsForUser } from "./promptStore";
 
 export type ChatKind = "strategy" | "ticker";
 
@@ -164,12 +166,11 @@ function getAnthropicClient(): Anthropic {
   return new Anthropic({ apiKey: key });
 }
 
-function buildSystemPrompt(kind: ChatKind, context: unknown): string {
-  return `Si investičný asistent v appke Moneiqwise (AI Skener). Odpovedaj PO SLOVENSKY, stručne a prakticky.
-Máš kontext z poslednej analýzy (typ: ${kind}):
-${JSON.stringify(context, null, 2)}
-
-Odpovedaj na otázky používateľa k tomuto kontextu. Ak niečo nevieš z dát, povedz to otvorene. Nepíš investičné rady ako garanciu výnosu.`;
+function buildSystemPrompt(kind: ChatKind, context: unknown, template?: string): string {
+  return applyPromptTemplate(template?.trim() || DEFAULT_AI_PROMPTS.chat, {
+    kind,
+    contextJson: JSON.stringify(context, null, 2),
+  });
 }
 
 export async function appendUserMessageAndReply(input: {
@@ -196,12 +197,13 @@ export async function appendUserMessageAndReply(input: {
 
   // Anthropic: only user/assistant in messages; system separate
   const client = getAnthropicClient();
+  const { prompts } = await getPromptsForUser(input.userId);
   let assistantText: string;
   try {
     const msg = await client.messages.create({
       model: MODEL,
       max_tokens: 1000,
-      system: buildSystemPrompt(loaded.chat.kind, loaded.chat.context),
+      system: buildSystemPrompt(loaded.chat.kind, loaded.chat.context, prompts.chat),
       messages: history.map((m) => ({
         role: m.role,
         content: m.content,
