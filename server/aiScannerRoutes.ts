@@ -19,6 +19,14 @@ import {
 import { fetchQuoteSnapshot, fetchScreenerRows } from "./finviz/scraper";
 import { getStrategy, listStrategies } from "./finviz/strategies";
 import { fetchYahooMetricSnapshot } from "./finviz/yahooFallback";
+import {
+  appendUserMessageAndReply,
+  createChat,
+  deleteChatForUser,
+  ensureAiScannerChatTables,
+  getChatForUser,
+  listChatsByUser,
+} from "./finviz/chatStore";
 
 type AuthReq = {
   user?: { claims?: { sub?: string } };
@@ -261,6 +269,148 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
       res.status(500).json({
         message: error instanceof Error ? error.message : "Nepodarilo sa vyhodnotiť ticker.",
       });
+    }
+  });
+
+  app.get("/api/ai-scanner/chats", isAuthenticated, async (req: AuthReq, res) => {
+    try {
+      const userId = requireUserId(req, res);
+      if (!userId) return;
+      await ensureAiScannerChatTables();
+      const chats = await listChatsByUser(userId);
+      res.json({ chats });
+    } catch (error) {
+      console.error("List AI chats error:", error);
+      res.status(500).json({ message: "Nepodarilo sa načítať históriu chatu." });
+    }
+  });
+
+  app.get("/api/ai-scanner/chats/:id", isAuthenticated, async (req: AuthReq, res) => {
+    try {
+      const userId = requireUserId(req, res);
+      if (!userId) return;
+      await ensureAiScannerChatTables();
+      const chatId = String((req as any).params?.id || "");
+      const loaded = await getChatForUser(userId, chatId);
+      if (!loaded) return res.status(404).json({ message: "Chat neexistuje." });
+      res.json({
+        chat: {
+          id: loaded.chat.id,
+          title: loaded.chat.title,
+          kind: loaded.chat.kind,
+          context: loaded.chat.context,
+          createdAt: loaded.chat.createdAt,
+          updatedAt: loaded.chat.updatedAt,
+        },
+        messages: loaded.messages.map((m) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          createdAt: m.createdAt,
+        })),
+      });
+    } catch (error) {
+      console.error("Get AI chat error:", error);
+      res.status(500).json({ message: "Nepodarilo sa načítať chat." });
+    }
+  });
+
+  app.post("/api/ai-scanner/chats", isAuthenticated, async (req: AuthReq, res) => {
+    try {
+      const userId = requireUserId(req, res);
+      if (!userId) return;
+      await ensureAiScannerChatTables();
+
+      const kind = String(req.body?.kind || "").trim();
+      if (kind !== "strategy" && kind !== "ticker") {
+        return res.status(400).json({ message: "Neplatný typ chatu." });
+      }
+      const context = req.body?.context;
+      if (context == null || typeof context !== "object") {
+        return res.status(400).json({ message: "Chýba kontext analýzy." });
+      }
+
+      let title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
+      if (!title) {
+        title =
+          kind === "ticker"
+            ? `Ticker ${(context as any).ticker || "analýza"}`
+            : `Stratégia ${(context as any).strategy?.label || (context as any).strategyId || "skener"}`;
+      }
+
+      const chat = await createChat({ userId, title, kind, context });
+      res.status(201).json({
+        chat: {
+          id: chat.id,
+          title: chat.title,
+          kind: chat.kind,
+          context: chat.context,
+          createdAt: chat.createdAt,
+          updatedAt: chat.updatedAt,
+        },
+        messages: [],
+      });
+    } catch (error) {
+      console.error("Create AI chat error:", error);
+      res.status(500).json({ message: "Nepodarilo sa vytvoriť chat." });
+    }
+  });
+
+  app.post("/api/ai-scanner/chats/:id/messages", isAuthenticated, async (req: AuthReq, res) => {
+    try {
+      const userId = requireUserId(req, res);
+      if (!userId) return;
+      await ensureAiScannerChatTables();
+
+      if (!process.env.ANTHROPIC_API_KEY?.trim()) {
+        return res.status(503).json({
+          message: "AI Skener nie je nakonfigurovaný. Nastav ANTHROPIC_API_KEY na serveri.",
+        });
+      }
+
+      const chatId = String((req as any).params?.id || "");
+      const content = typeof req.body?.content === "string" ? req.body.content : "";
+      if (!content.trim()) {
+        return res.status(400).json({ message: "Správa je prázdna." });
+      }
+
+      const result = await appendUserMessageAndReply({ userId, chatId, content });
+      res.json({
+        userMessage: {
+          id: result.userMessage.id,
+          role: result.userMessage.role,
+          content: result.userMessage.content,
+          createdAt: result.userMessage.createdAt,
+        },
+        assistantMessage: {
+          id: result.assistantMessage.id,
+          role: result.assistantMessage.role,
+          content: result.assistantMessage.content,
+          createdAt: result.assistantMessage.createdAt,
+        },
+      });
+    } catch (error) {
+      console.error("AI chat message error:", error);
+      const msg = error instanceof Error ? error.message : "Nepodarilo sa odoslať správu.";
+      if (msg === "CHAT_NOT_FOUND") return res.status(404).json({ message: "Chat neexistuje." });
+      if (msg === "EMPTY_MESSAGE") return res.status(400).json({ message: "Správa je prázdna." });
+      if (msg === "MESSAGE_TOO_LONG") return res.status(400).json({ message: "Správa je príliš dlhá." });
+      res.status(502).json({ message: msg });
+    }
+  });
+
+  app.delete("/api/ai-scanner/chats/:id", isAuthenticated, async (req: AuthReq, res) => {
+    try {
+      const userId = requireUserId(req, res);
+      if (!userId) return;
+      await ensureAiScannerChatTables();
+      const chatId = String((req as any).params?.id || "");
+      const ok = await deleteChatForUser(userId, chatId);
+      if (!ok) return res.status(404).json({ message: "Chat neexistuje." });
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("Delete AI chat error:", error);
+      res.status(500).json({ message: "Nepodarilo sa zmazať chat." });
     }
   });
 }
