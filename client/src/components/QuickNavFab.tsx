@@ -41,6 +41,15 @@ const ICON_BY_PATH: Record<string, LucideIcon> = {
   "/faq": CircleHelp,
 };
 
+const FAB_POSITION_STYLE: React.CSSProperties = {
+  position: "fixed",
+  zIndex: 50,
+  left: "auto",
+  top: "auto",
+  right: "calc(1rem + env(safe-area-inset-right, 0px))",
+  bottom: "calc(1rem + env(safe-area-inset-bottom, 0px))",
+};
+
 function isOnPath(current: string, target: string): boolean {
   if (target === "/") return current === "/";
   return current === target || current.startsWith(`${target}/`);
@@ -64,13 +73,10 @@ export function QuickNavFab() {
       size="icon"
       aria-label={`Prejsť na ${section.label}`}
       title={isMobile ? section.label : undefined}
+      style={FAB_POSITION_STYLE}
       className={cn(
-        "fixed z-50 left-auto rounded-full border-0 p-0",
+        "rounded-full border-0 p-0",
         "h-10 w-10 md:h-11 md:w-11",
-        "bottom-[max(0.875rem,env(safe-area-inset-bottom))]",
-        "right-[max(0.875rem,env(safe-area-inset-right))]",
-        "md:bottom-[max(1.25rem,env(safe-area-inset-bottom))]",
-        "md:right-[max(1.25rem,env(safe-area-inset-right))]",
         "bg-gradient-to-br from-primary via-primary to-primary/70",
         "text-primary-foreground",
         "shadow-md shadow-primary/25 ring-1 ring-inset ring-white/20",
