@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { format, fromUnixTime } from "date-fns";
+import { format, fromUnixTime, parseISO } from "date-fns";
 import { sk } from "date-fns/locale";
 import {
   ArrowLeft,
@@ -13,7 +13,9 @@ import {
   Users,
 } from "lucide-react";
 import {
-  LineChart,
+  Area,
+  CartesianGrid,
+  ComposedChart,
   Line,
   XAxis,
   YAxis,
@@ -60,10 +62,33 @@ const SECTIONS: {
 ];
 
 const CHART_RANGES = [
+  { id: "1m" as const, label: "1M" },
+  { id: "3m" as const, label: "3M" },
   { id: "6m" as const, label: "6M" },
   { id: "1y" as const, label: "1R" },
   { id: "5y" as const, label: "5R" },
 ];
+
+type ChartPoint = {
+  date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number | null;
+};
+
+type ChartSummary = {
+  range: string;
+  interval: string;
+  series: ChartPoint[];
+  firstClose: number | null;
+  lastClose: number | null;
+  periodHigh: number | null;
+  periodLow: number | null;
+  changePercent: number | null;
+  totalVolume: number | null;
+};
 
 function yahooQuoteUrl(ticker: string): string {
   return `https://finance.yahoo.com/quote/${encodeURIComponent(ticker)}`;
@@ -172,69 +197,170 @@ function NewsContent({ articles }: { articles: Array<Record<string, unknown>> })
   );
 }
 
+function formatVolume(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return String(Math.round(value));
+}
+
+function formatAxisPrice(value: number): string {
+  if (value >= 1000) return Number(value).toFixed(0);
+  if (value >= 100) return Number(value).toFixed(1);
+  return Number(value).toFixed(2);
+}
+
+function formatChartDateLabel(date: string, range: string): string {
+  try {
+    const parsed = parseISO(date);
+    if (range === "1m") return format(parsed, "d.M. HH:mm", { locale: sk });
+    if (range === "5y") return format(parsed, "MMM yy", { locale: sk });
+    return format(parsed, "d.M.yy", { locale: sk });
+  } catch {
+    return date;
+  }
+}
+
 function ChartContent({
-  series,
+  chart,
   formatPrice,
   ticker,
 }: {
-  series: Array<{ date: string; close: number }>;
+  chart: ChartSummary;
   formatPrice: (price: number, ticker: string) => string;
   ticker: string;
 }) {
+  const { series, range, changePercent, periodHigh, periodLow, lastClose, totalVolume } = chart;
+
   const chartData = useMemo(
     () =>
       series.map((p) => ({
         ...p,
-        label: format(new Date(`${p.date}T12:00:00`), "d.M.yy"),
+        label: formatChartDateLabel(p.date, range),
       })),
-    [series],
+    [series, range],
   );
 
   if (chartData.length === 0) {
     return <p className="text-xs text-muted-foreground py-4 text-center">Graf nie je k dispozícii.</p>;
   }
 
-  const first = chartData[0]?.close ?? 0;
-  const last = chartData[chartData.length - 1]?.close ?? 0;
-  const changePct = first > 0 ? ((last - first) / first) * 100 : 0;
+  const isUp = (changePercent ?? 0) >= 0;
+  const strokeColor = isUp ? "hsl(142 76% 36%)" : "hsl(0 84% 60%)";
+  const fillId = isUp ? "watchlistChartUp" : "watchlistChartDown";
 
   return (
     <div className="space-y-2">
-      <div className="flex items-end justify-between gap-2">
-        <div>
-          <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Cena</div>
-          <div className="text-sm font-semibold tabular-nums">{formatPrice(last, ticker)}</div>
+      <div className="grid grid-cols-2 gap-1.5">
+        <div className="rounded-lg border bg-card p-2">
+          <div className="text-[9px] text-muted-foreground">Posledná cena</div>
+          <div className="text-xs font-semibold tabular-nums">
+            {lastClose != null ? formatPrice(lastClose, ticker) : "—"}
+          </div>
         </div>
-        <div className={cn("text-[10px] font-medium tabular-nums", changePct >= 0 ? "text-green-500" : "text-red-500")}>
-          {formatPct(changePct)}
+        <div className="rounded-lg border bg-card p-2">
+          <div className="text-[9px] text-muted-foreground">Zmena v období</div>
+          <div
+            className={cn(
+              "text-xs font-semibold tabular-nums",
+              isUp ? "text-green-500" : "text-red-500",
+            )}
+          >
+            {formatPct(changePercent)}
+          </div>
+        </div>
+        <div className="rounded-lg border bg-card p-2">
+          <div className="text-[9px] text-muted-foreground">High</div>
+          <div className="text-xs font-medium tabular-nums">
+            {periodHigh != null ? formatPrice(periodHigh, ticker) : "—"}
+          </div>
+        </div>
+        <div className="rounded-lg border bg-card p-2">
+          <div className="text-[9px] text-muted-foreground">Low</div>
+          <div className="text-xs font-medium tabular-nums">
+            {periodLow != null ? formatPrice(periodLow, ticker) : "—"}
+          </div>
         </div>
       </div>
-      <div className="h-40 w-full">
+
+      <div className="text-[9px] text-muted-foreground">
+        Objem v období:{" "}
+        <span className="text-foreground font-medium tabular-nums">{formatVolume(totalVolume)}</span>
+      </div>
+
+      <div className="h-56 w-full rounded-lg border bg-card/40 p-1">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+          <ComposedChart data={chartData} margin={{ top: 8, right: 6, left: -4, bottom: 0 }}>
+            <defs>
+              <linearGradient id="watchlistChartUp" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="hsl(142 76% 36%)" stopOpacity={0.28} />
+                <stop offset="100%" stopColor="hsl(142 76% 36%)" stopOpacity={0.02} />
+              </linearGradient>
+              <linearGradient id="watchlistChartDown" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="hsl(0 84% 60%)" stopOpacity={0.28} />
+                <stop offset="100%" stopColor="hsl(0 84% 60%)" stopOpacity={0.02} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" className="stroke-muted/60" vertical={false} />
             <XAxis
               dataKey="label"
               tick={{ fontSize: 9 }}
               interval="preserveStartEnd"
-              minTickGap={24}
+              minTickGap={18}
               axisLine={false}
               tickLine={false}
             />
             <YAxis
               domain={["auto", "auto"]}
               tick={{ fontSize: 9 }}
-              width={42}
+              width={46}
               axisLine={false}
               tickLine={false}
-              tickFormatter={(v) => Number(v).toFixed(0)}
+              tickFormatter={formatAxisPrice}
             />
             <RechartsTooltip
-              contentStyle={{ fontSize: 11, borderRadius: 8 }}
-              labelFormatter={(_, payload) => payload?.[0]?.payload?.date ?? ""}
-              formatter={(value: number) => [formatPrice(value, ticker), "Cena"]}
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                const row = payload[0].payload as ChartPoint & { label: string };
+                return (
+                  <div className="rounded-md border bg-background px-2.5 py-2 text-[10px] shadow-md max-w-[220px]">
+                    <div className="font-medium">
+                      {format(parseISO(row.date), "d. MMM yyyy", { locale: sk })}
+                      {range === "1m" ? ` ${format(parseISO(row.date), "HH:mm")}` : ""}
+                    </div>
+                    <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 tabular-nums">
+                      <span className="text-muted-foreground">Open</span>
+                      <span className="text-right font-medium">{formatPrice(row.open, ticker)}</span>
+                      <span className="text-muted-foreground">High</span>
+                      <span className="text-right font-medium">{formatPrice(row.high, ticker)}</span>
+                      <span className="text-muted-foreground">Low</span>
+                      <span className="text-right font-medium">{formatPrice(row.low, ticker)}</span>
+                      <span className="text-muted-foreground">Close</span>
+                      <span className="text-right font-medium">{formatPrice(row.close, ticker)}</span>
+                      <span className="text-muted-foreground">Vol</span>
+                      <span className="text-right font-medium">{formatVolume(row.volume)}</span>
+                    </div>
+                  </div>
+                );
+              }}
             />
-            <Line type="monotone" dataKey="close" stroke="hsl(var(--primary))" strokeWidth={1.5} dot={false} />
-          </LineChart>
+            <Area
+              type="monotone"
+              dataKey="close"
+              stroke="none"
+              fill={`url(#${fillId})`}
+              isAnimationActive={false}
+            />
+            <Line
+              type="monotone"
+              dataKey="close"
+              stroke={strokeColor}
+              strokeWidth={2}
+              dot={false}
+              isAnimationActive={false}
+            />
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
     </div>
@@ -540,7 +666,7 @@ export function WatchlistStockInfoSheet({ item, open, onOpenChange, formatPrice 
               ) : (
                 <div className="space-y-2">
                   {activeSection === "chart" ? (
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 overflow-x-auto pb-0.5">
                       {CHART_RANGES.map((range) => (
                         <button
                           key={range.id}
@@ -564,10 +690,17 @@ export function WatchlistStockInfoSheet({ item, open, onOpenChange, formatPrice 
                   ) : null}
                   {activeSection === "chart" ? (
                     <ChartContent
-                      series={
-                        ((data?.chart as { series?: Array<{ date: string; close: number }> } | undefined)?.series ??
-                          []) as Array<{ date: string; close: number }>
-                      }
+                      chart={(data?.chart as ChartSummary | undefined) ?? {
+                        range: chartRange,
+                        interval: "1d",
+                        series: [],
+                        firstClose: null,
+                        lastClose: null,
+                        periodHigh: null,
+                        periodLow: null,
+                        changePercent: null,
+                        totalVolume: null,
+                      }}
                       formatPrice={formatPrice}
                       ticker={item.ticker}
                     />

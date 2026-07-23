@@ -14,9 +14,27 @@ export type WatchlistStockNewsArticle = {
   thumbnail?: string | null;
 };
 
+export type WatchlistChartRange = "1m" | "3m" | "6m" | "1y" | "5y";
+
 export type WatchlistStockChartPoint = {
   date: string;
+  open: number;
+  high: number;
+  low: number;
   close: number;
+  volume: number | null;
+};
+
+export type WatchlistStockChartSummary = {
+  range: WatchlistChartRange;
+  interval: string;
+  series: WatchlistStockChartPoint[];
+  firstClose: number | null;
+  lastClose: number | null;
+  periodHigh: number | null;
+  periodLow: number | null;
+  changePercent: number | null;
+  totalVolume: number | null;
 };
 
 export type WatchlistStockOptionRow = {
@@ -70,6 +88,13 @@ function dateStr(v: unknown): string | null {
   return format(d, "yyyy-MM-dd");
 }
 
+function chartPointDate(v: unknown): string | null {
+  if (v == null) return null;
+  const d = v instanceof Date ? v : new Date(String(v));
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
 export async function fetchWatchlistStockNews(ticker: string): Promise<WatchlistStockNewsArticle[]> {
   const yahooTicker = toYahooTicker(ticker);
   const url = `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(yahooTicker)}&quotesCount=0&newsCount=10&enableFuzzyQuery=false&quotesQueryId=tss_match_phrase_query&multiQuoteQueryId=multi_quote_single_token_query&newsQueryId=news_cie_vespa&enableCb=false&enableNavLinks=false`;
@@ -105,35 +130,79 @@ export async function fetchWatchlistStockNews(ticker: string): Promise<Watchlist
   }));
 }
 
+function chartQueryForRange(range: WatchlistChartRange, now = new Date()) {
+  switch (range) {
+    case "1m":
+      return { period1: subMonths(now, 1), interval: "1h" as const };
+    case "3m":
+      return { period1: subMonths(now, 3), interval: "1d" as const };
+    case "6m":
+      return { period1: subMonths(now, 6), interval: "1d" as const };
+    case "1y":
+      return { period1: subYears(now, 1), interval: "1d" as const };
+    case "5y":
+      return { period1: subYears(now, 5), interval: "1wk" as const };
+  }
+}
+
 export async function fetchWatchlistStockChart(
   ticker: string,
-  range: "6m" | "1y" | "5y" = "6m",
-): Promise<{ range: string; series: WatchlistStockChartPoint[] }> {
+  range: WatchlistChartRange = "6m",
+): Promise<WatchlistStockChartSummary> {
   const yahooTicker = toYahooTicker(ticker);
   const yf = getYahooFinance();
-  const now = new Date();
-  const period1 =
-    range === "5y"
-      ? subYears(now, 5)
-      : range === "1y"
-        ? subYears(now, 1)
-        : subMonths(now, 6);
+  const { period1, interval } = chartQueryForRange(range);
 
   const chart = await yf.chart(yahooTicker, {
     period1: format(period1, "yyyy-MM-dd"),
-    interval: "1d",
+    interval,
   });
 
   const series: WatchlistStockChartPoint[] = (chart.quotes ?? [])
     .map((q) => {
       const close = num(q.close ?? q.adjclose);
-      const date = dateStr(q.date);
+      const open = num(q.open) ?? close;
+      const high = num(q.high) ?? close;
+      const low = num(q.low) ?? close;
+      const date = chartPointDate(q.date);
       if (close == null || !date) return null;
-      return { date, close };
+      return {
+        date,
+        open: open ?? close,
+        high: high ?? close,
+        low: low ?? close,
+        close,
+        volume: num(q.volume),
+      };
     })
     .filter((p): p is WatchlistStockChartPoint => p != null);
 
-  return { range, series };
+  const closes = series.map((p) => p.close);
+  const highs = series.map((p) => p.high);
+  const lows = series.map((p) => p.low);
+  const volumes = series.map((p) => p.volume).filter((v): v is number => v != null);
+
+  const firstClose = closes[0] ?? null;
+  const lastClose = closes[closes.length - 1] ?? null;
+  const periodHigh = highs.length > 0 ? Math.max(...highs) : null;
+  const periodLow = lows.length > 0 ? Math.min(...lows) : null;
+  const changePercent =
+    firstClose != null && lastClose != null && firstClose > 0
+      ? ((lastClose - firstClose) / firstClose) * 100
+      : null;
+  const totalVolume = volumes.length > 0 ? volumes.reduce((sum, v) => sum + v, 0) : null;
+
+  return {
+    range,
+    interval,
+    series,
+    firstClose,
+    lastClose,
+    periodHigh,
+    periodLow,
+    changePercent,
+    totalVolume,
+  };
 }
 
 export async function fetchWatchlistStockStatistics(ticker: string) {
@@ -271,7 +340,7 @@ export async function fetchWatchlistStockHolders(ticker: string) {
 export async function fetchWatchlistStockSection(
   ticker: string,
   section: WatchlistStockSection,
-  options?: { chartRange?: "6m" | "1y" | "5y"; expirationIndex?: number },
+  options?: { chartRange?: WatchlistChartRange; expirationIndex?: number },
 ) {
   switch (section) {
     case "news":

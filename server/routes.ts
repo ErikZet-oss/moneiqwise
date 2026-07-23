@@ -54,6 +54,7 @@ import { buildOpenFifoLotRowList, loadTradeTransactionsForAssetLots } from "./as
 import { buildTaxSummary } from "./taxSummary";
 import {
   fetchWatchlistStockSection,
+  type WatchlistChartRange,
   type WatchlistStockSection,
 } from "./watchlistStockInfo";
 import { db } from "./db";
@@ -4127,7 +4128,10 @@ export async function registerRoutes(
       }
 
       const rangeRaw = String(req.query.range || "6m").toLowerCase();
-      const chartRange = rangeRaw === "1y" || rangeRaw === "5y" ? rangeRaw : "6m";
+      const allowedRanges: WatchlistChartRange[] = ["1m", "3m", "6m", "1y", "5y"];
+      const chartRange: WatchlistChartRange = allowedRanges.includes(rangeRaw as WatchlistChartRange)
+        ? (rangeRaw as WatchlistChartRange)
+        : "6m";
       const expirationIndex = Math.max(0, Number.parseInt(String(req.query.expiration ?? "0"), 10) || 0);
 
       const payload = await fetchWatchlistStockSection(ticker, section, {
