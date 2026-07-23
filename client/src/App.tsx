@@ -30,6 +30,7 @@ import TaxSummaryPage from "@/pages/TaxSummaryPage";
 import FaqPage from "@/pages/FaqPage";
 import AdminRegistrations from "@/pages/AdminRegistrations";
 import { MarketQuoteTicker } from "@/components/MarketQuoteTicker";
+import { QuickNavFab } from "@/components/QuickNavFab";
 
 function RedirectToHistory() {
   const [, setLocation] = useLocation();
@@ -110,6 +111,7 @@ function AuthenticatedLayout() {
               <main className="flex-1 overflow-auto p-2 md:p-6">
                 <Router />
               </main>
+              <QuickNavFab />
             </div>
           </div>
         </div>

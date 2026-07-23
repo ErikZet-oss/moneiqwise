@@ -10,7 +10,9 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
-import { Loader2, Eye, EyeOff, Coins, Calculator, RefreshCw, Briefcase, Plus, Pencil, Trash2, LineChart, Newspaper, AlertTriangle, ChevronUp, ChevronDown, Eraser, TrendingUp, Code2, Download } from "lucide-react";
+import { useQuickNavFab } from "@/hooks/useQuickNavFab";
+import { QUICK_NAV_SECTIONS } from "@/lib/quickNavSections";
+import { Loader2, Eye, EyeOff, Coins, Calculator, RefreshCw, Briefcase, Plus, Pencil, Trash2, LineChart, Newspaper, AlertTriangle, ChevronUp, ChevronDown, Eraser, TrendingUp, Code2, Download, MousePointerClick } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { BrokerLogo, BrokerSelectItem, BROKER_CATALOG } from "@/components/BrokerLogo";
 import { BROKER_CODES, type Currency, type BrokerCode } from "@shared/schema";
@@ -61,6 +63,8 @@ export default function Settings() {
     setShowAthPopup,
     setShowCalendarEventsPopup,
   } = useChartSettings();
+  const { enabled: quickNavEnabled, path: quickNavPath, setEnabled: setQuickNavEnabled, setPath: setQuickNavPath } =
+    useQuickNavFab();
   const [newPortfolioName, setNewPortfolioName] = useState("");
   const [newPortfolioBroker, setNewPortfolioBroker] = useState<BrokerCode | undefined>(undefined);
   const [editingPortfolio, setEditingPortfolio] = useState<{ id: string; name: string; brokerCode: BrokerCode | null } | null>(null);
@@ -783,6 +787,56 @@ export default function Settings() {
             </Select>
             {updateSettingsMutation.isPending && <Loader2 className="h-4 w-4 animate-spin shrink-0" />}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="p-4 pb-2">
+          <div className="flex items-center gap-2">
+            <MousePointerClick className="h-5 w-5 text-primary" />
+            <CardTitle className="text-sm font-medium">Rýchla navigácia</CardTitle>
+          </div>
+          <CardDescription>
+            Plávajúce tlačidlo vpravo dole pre rýchly skok do vašej najpoužívanejšej sekcie.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-4 pt-3 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <div className="text-sm font-medium">Zobraziť rýchle tlačidlo</div>
+              <div className="text-xs text-muted-foreground">
+                Po kliknutí otvorí vybranú sekciu z menu aplikácie
+              </div>
+            </div>
+            <Switch
+              checked={quickNavEnabled}
+              onCheckedChange={setQuickNavEnabled}
+              data-testid="switch-quick-nav-fab"
+            />
+          </div>
+
+          {quickNavEnabled && (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-2 border-t">
+              <div className="space-y-0.5 min-w-0">
+                <div className="text-sm font-medium">Sekcia po kliknutí</div>
+                <div className="text-xs text-muted-foreground">
+                  Vyberte stránku, na ktorú sa po stlačení tlačidla prejde
+                </div>
+              </div>
+              <Select value={quickNavPath} onValueChange={setQuickNavPath}>
+                <SelectTrigger className="w-full sm:w-[220px] shrink-0" data-testid="select-quick-nav-section">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {QUICK_NAV_SECTIONS.map((section) => (
+                    <SelectItem key={section.path} value={section.path}>
+                      {section.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </CardContent>
       </Card>
 
