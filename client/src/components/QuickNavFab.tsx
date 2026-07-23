@@ -65,17 +65,24 @@ export function QuickNavFab() {
       aria-label={`Prejsť na ${section.label}`}
       title={isMobile ? section.label : undefined}
       className={cn(
-        "fixed z-50 h-12 w-12 rounded-full shadow-lg left-auto",
-        "bottom-[max(1rem,env(safe-area-inset-bottom))]",
-        "right-[max(1rem,env(safe-area-inset-right))]",
-        "md:bottom-[max(1.5rem,env(safe-area-inset-bottom))]",
-        "md:right-[max(1.5rem,env(safe-area-inset-right))]",
-        "bg-primary text-primary-foreground hover:bg-primary/90",
+        "fixed z-50 left-auto rounded-full border-0 p-0",
+        "h-10 w-10 md:h-11 md:w-11",
+        "bottom-[max(0.875rem,env(safe-area-inset-bottom))]",
+        "right-[max(0.875rem,env(safe-area-inset-right))]",
+        "md:bottom-[max(1.25rem,env(safe-area-inset-bottom))]",
+        "md:right-[max(1.25rem,env(safe-area-inset-right))]",
+        "bg-gradient-to-br from-primary via-primary to-primary/70",
+        "text-primary-foreground",
+        "shadow-md shadow-primary/25 ring-1 ring-inset ring-white/20",
+        "transition-all duration-200 ease-out",
+        "hover:from-primary hover:via-primary/95 hover:to-primary/80",
+        "hover:shadow-lg hover:shadow-primary/35 hover:brightness-105",
+        "active:scale-95",
       )}
       onClick={() => setLocation(path)}
       data-testid="button-quick-nav-fab"
     >
-      <Icon className="h-5 w-5" />
+      <Icon className="h-4 w-4 md:h-[18px] md:w-[18px]" strokeWidth={2.25} />
     </Button>
   );
 
