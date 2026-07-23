@@ -23,12 +23,13 @@ export function WatchlistSortableRow({ id, disabled, className, children }: Prop
         transform: CSS.Transform.toString(transform),
         transition,
         zIndex: isDragging ? 30 : undefined,
+        touchAction: disabled ? undefined : "none",
       }}
       className={cn(
-        "relative touch-pan-y",
+        "relative",
         className,
-        !disabled && "cursor-grab active:cursor-grabbing",
-        isDragging && "opacity-95 shadow-md ring-1 ring-primary/25 rounded-lg",
+        !disabled && "cursor-grab active:cursor-grabbing select-none",
+        isDragging && "z-30 opacity-95 shadow-md ring-1 ring-primary/25 rounded-lg",
       )}
       {...(disabled ? {} : { ...attributes, ...listeners })}
     >

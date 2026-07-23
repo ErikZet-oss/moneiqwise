@@ -8,6 +8,7 @@ import {
   TouchSensor,
   useSensor,
   useSensors,
+  type DragCancelEvent,
   type DragEndEvent,
 } from "@dnd-kit/core";
 import {
@@ -218,6 +219,7 @@ export default function Watchlist() {
   const items = watchlistData?.items ?? [];
   const [localItems, setLocalItems] = useState<WatchlistItem[]>([]);
   const dragJustEndedRef = useRef(false);
+  const scrollLockMainRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!selectedTag) setLocalItems(items);
@@ -226,9 +228,32 @@ export default function Watchlist() {
   const canReorder = !selectedTag && localItems.length > 1;
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { delay: 280, tolerance: 8 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 280, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const unlockPageScroll = useCallback(() => {
+    const main = scrollLockMainRef.current;
+    if (!main) return;
+    main.style.overflow = "";
+    main.style.touchAction = "";
+    scrollLockMainRef.current = null;
+  }, []);
+
+  const handleDragStart = useCallback(() => {
+    const main = document.querySelector("main");
+    if (!main) return;
+    scrollLockMainRef.current = main;
+    main.style.overflow = "hidden";
+    main.style.touchAction = "none";
+  }, []);
+
+  const handleDragCancel = useCallback(
+    (_event: DragCancelEvent) => {
+      unlockPageScroll();
+    },
+    [unlockPageScroll],
   );
 
   const filteredItems = useMemo(() => {
@@ -362,6 +387,8 @@ export default function Watchlist() {
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
+      unlockPageScroll();
+
       dragJustEndedRef.current = true;
       window.setTimeout(() => {
         dragJustEndedRef.current = false;
@@ -379,8 +406,10 @@ export default function Watchlist() {
         return next;
       });
     },
-    [reorderMutation, selectedTag],
+    [reorderMutation, selectedTag, unlockPageScroll],
   );
+
+  useEffect(() => () => unlockPageScroll(), [unlockPageScroll]);
 
   const openEdit = (item: WatchlistItem) => {
     setEditItem(item);
@@ -561,7 +590,13 @@ export default function Watchlist() {
               Podržte kartu (~0,3 s) a presuňte ju hore/dole pre zmenu poradia.
             </p>
           )}
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragCancel={handleDragCancel}
+            onDragEnd={handleDragEnd}
+          >
             <SortableContext
               items={filteredItems.map((item) => item.id)}
               strategy={verticalListSortingStrategy}
