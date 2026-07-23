@@ -231,7 +231,7 @@ export default function Watchlist() {
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 280, tolerance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 1000, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
@@ -593,7 +593,7 @@ export default function Watchlist() {
         <>
           {canReorder && (
             <p className="text-[10px] text-muted-foreground px-0.5">
-              Podržte kartu (~0,3 s) a presuňte ju hore/dole pre zmenu poradia.
+              Podržte kartu (~1 s) a presuňte ju hore/dole pre zmenu poradia.
             </p>
           )}
           <DndContext
