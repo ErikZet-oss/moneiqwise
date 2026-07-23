@@ -106,6 +106,20 @@ function yahooFinanceUrl(ticker: string): string {
   return `https://finance.yahoo.com/quote/${encodeURIComponent(ticker)}`;
 }
 
+const WATCHLIST_DISPLAY_CURRENCY_KEY = "moneiqwise.watchlist.displayCurrency";
+
+function readWatchlistDisplayCurrency(fallback: Currency): Currency {
+  if (typeof window === "undefined") return fallback;
+  const stored = window.localStorage.getItem(WATCHLIST_DISPLAY_CURRENCY_KEY);
+  if (stored === "EUR" || stored === "USD") return stored;
+  return fallback;
+}
+
+function writeWatchlistDisplayCurrency(value: Currency) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(WATCHLIST_DISPLAY_CURRENCY_KEY, value);
+}
+
 function formatPercent(value: number): string {
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(2)}%`;
@@ -164,14 +178,21 @@ export default function Watchlist() {
   const queryClient = useQueryClient();
   const usSessionState = useMemo(() => getUsMarketSessionState(), []);
   const [displayCurrency, setDisplayCurrency] = useState<Currency>(() =>
-    currency === "USD" ? "USD" : "EUR",
+    readWatchlistDisplayCurrency(currency === "USD" ? "USD" : "EUR"),
   );
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.localStorage.getItem(WATCHLIST_DISPLAY_CURRENCY_KEY)) return;
     if (currency === "EUR" || currency === "USD") {
       setDisplayCurrency(currency);
     }
   }, [currency]);
+
+  const setWatchlistDisplayCurrency = useCallback((next: Currency) => {
+    setDisplayCurrency(next);
+    writeWatchlistDisplayCurrency(next);
+  }, []);
 
   const convertToWatchlistCurrency = useCallback(
     (price: number, source: "EUR" | "USD" | "GBP" | "CZK" | "PLN") => {
@@ -473,7 +494,9 @@ export default function Watchlist() {
           </span>
           <Switch
             checked={displayCurrency === "EUR"}
-            onCheckedChange={(checked) => setDisplayCurrency(checked ? "EUR" : "USD")}
+            onCheckedChange={(checked) =>
+              setWatchlistDisplayCurrency(checked ? "EUR" : "USD")
+            }
             className="scale-[0.72] origin-center"
             aria-label={displayCurrency === "EUR" ? "Prepnúť na USD" : "Prepnúť na EUR"}
           />
