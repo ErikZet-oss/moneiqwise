@@ -32,6 +32,12 @@ import AdminRegistrations from "@/pages/AdminRegistrations";
 import { MarketQuoteTicker } from "@/components/MarketQuoteTicker";
 import { QuickNavFab } from "@/components/QuickNavFab";
 
+function QuickNavFabGate() {
+  const { isAuthenticated, isLoading } = useAuth();
+  if (isLoading || !isAuthenticated) return null;
+  return <QuickNavFab />;
+}
+
 function RedirectToHistory() {
   const [, setLocation] = useLocation();
   useEffect(() => {
@@ -111,7 +117,6 @@ function AuthenticatedLayout() {
               <main className="flex-1 overflow-auto p-2 md:p-6">
                 <Router />
               </main>
-              <QuickNavFab />
             </div>
           </div>
         </div>
@@ -126,6 +131,7 @@ function App() {
       <ThemeProvider>
         <TooltipProvider>
           <AuthenticatedLayout />
+          <QuickNavFabGate />
           <Toaster />
         </TooltipProvider>
       </ThemeProvider>

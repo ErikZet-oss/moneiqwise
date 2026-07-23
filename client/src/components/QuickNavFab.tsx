@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { useLocation } from "wouter";
 import {
   BarChart3,
@@ -17,13 +18,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useQuickNavFab } from "@/hooks/useQuickNavFab";
 import { getQuickNavSection } from "@/lib/quickNavSections";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 
 const ICON_BY_PATH: Record<string, LucideIcon> = {
@@ -52,6 +49,7 @@ function isOnPath(current: string, target: string): boolean {
 export function QuickNavFab() {
   const { enabled, path } = useQuickNavFab();
   const [location, setLocation] = useLocation();
+  const isMobile = useIsMobile();
 
   if (!enabled) return null;
 
@@ -60,27 +58,28 @@ export function QuickNavFab() {
 
   const Icon = ICON_BY_PATH[path] ?? Eye;
 
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          type="button"
-          size="icon"
-          aria-label={`Prejsť na ${section.label}`}
-          className={cn(
-            "fixed z-40 h-12 w-12 rounded-full shadow-lg",
-            "bottom-4 right-4 md:bottom-6 md:right-6",
-            "bg-primary text-primary-foreground hover:bg-primary/90",
-          )}
-          onClick={() => setLocation(path)}
-          data-testid="button-quick-nav-fab"
-        >
-          <Icon className="h-5 w-5" />
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent side="left" className="text-xs">
-        {section.label}
-      </TooltipContent>
-    </Tooltip>
+  const button = (
+    <Button
+      type="button"
+      size="icon"
+      aria-label={`Prejsť na ${section.label}`}
+      title={isMobile ? section.label : undefined}
+      className={cn(
+        "fixed z-50 h-12 w-12 rounded-full shadow-lg left-auto",
+        "bottom-[max(1rem,env(safe-area-inset-bottom))]",
+        "right-[max(1rem,env(safe-area-inset-right))]",
+        "md:bottom-[max(1.5rem,env(safe-area-inset-bottom))]",
+        "md:right-[max(1.5rem,env(safe-area-inset-right))]",
+        "bg-primary text-primary-foreground hover:bg-primary/90",
+      )}
+      onClick={() => setLocation(path)}
+      data-testid="button-quick-nav-fab"
+    >
+      <Icon className="h-5 w-5" />
+    </Button>
   );
+
+  if (typeof document === "undefined") return button;
+
+  return createPortal(button, document.body);
 }
