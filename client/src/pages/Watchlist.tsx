@@ -49,6 +49,7 @@ import {
 import { CompanyLogo } from "@/components/CompanyLogo";
 import { Range52Bar } from "@/components/Range52Bar";
 import { WatchlistSortableRow } from "@/components/WatchlistSortableRow";
+import { WatchlistStockInfoSheet } from "@/components/WatchlistStockInfoSheet";
 import { useCurrency } from "@/hooks/useCurrency";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -203,6 +204,7 @@ export default function Watchlist() {
   const debouncedSearch = useDebounce(search.trim(), 300);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [editItem, setEditItem] = useState<WatchlistItem | null>(null);
+  const [infoItem, setInfoItem] = useState<WatchlistItem | null>(null);
   const [editTarget, setEditTarget] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editTags, setEditTags] = useState("");
@@ -410,6 +412,10 @@ export default function Watchlist() {
   );
 
   useEffect(() => () => unlockPageScroll(), [unlockPageScroll]);
+
+  const openInfo = (item: WatchlistItem) => {
+    setInfoItem(item);
+  };
 
   const openEdit = (item: WatchlistItem) => {
     setEditItem(item);
@@ -628,11 +634,7 @@ export default function Watchlist() {
             return (
               <WatchlistSortableRow key={item.id} id={item.id} disabled={!canReorder}>
                 <Card
-                  className="relative overflow-hidden cursor-pointer active:bg-muted/30 transition-colors pl-6"
-                  onClick={() => {
-                    if (dragJustEndedRef.current) return;
-                    openEdit(item);
-                  }}
+                  className="relative overflow-hidden transition-colors pl-6"
                 >
                 {displayDailyChange !== 0 && (
                   <div
@@ -646,6 +648,13 @@ export default function Watchlist() {
                   />
                 )}
                 <CardContent className="relative p-2 space-y-1">
+                  <div
+                    className="cursor-pointer active:bg-muted/30 rounded-md -mx-1 px-1"
+                    onClick={() => {
+                      if (dragJustEndedRef.current) return;
+                      openEdit(item);
+                    }}
+                  >
                   <div className="flex items-center gap-2">
                     <a
                       href={yahooFinanceUrl(item.ticker)}
@@ -716,7 +725,16 @@ export default function Watchlist() {
                       formatLabel={(v) => formatQuoteLabel(item.ticker, v)}
                     />
                   )}
+                  </div>
 
+                  <div
+                    className="cursor-pointer active:bg-muted/30 rounded-md -mx-1 px-1 pt-0.5"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (dragJustEndedRef.current) return;
+                      openInfo(item);
+                    }}
+                  >
                   <div className="flex items-end justify-between gap-2 text-[8px] text-muted-foreground leading-tight">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0 flex-1">
                       <span>
@@ -782,6 +800,7 @@ export default function Watchlist() {
                       {item.notes}
                     </p>
                   )}
+                  </div>
                 </CardContent>
               </Card>
               </WatchlistSortableRow>
@@ -792,6 +811,17 @@ export default function Watchlist() {
           </DndContext>
         </>
       )}
+
+      <WatchlistStockInfoSheet
+        item={
+          infoItem
+            ? { ticker: infoItem.ticker, companyName: infoItem.companyName }
+            : null
+        }
+        open={!!infoItem}
+        onOpenChange={(open) => !open && setInfoItem(null)}
+        formatPrice={(price, ticker) => formatQuoteLabel(ticker, price)}
+      />
 
       <Sheet open={!!editItem} onOpenChange={(open) => !open && setEditItem(null)}>
         <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-xl">

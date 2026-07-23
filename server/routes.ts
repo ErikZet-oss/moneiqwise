@@ -52,6 +52,10 @@ import {
 import { buildCalculationAuditWorkbook } from "./calculationAuditXlsx";
 import { buildOpenFifoLotRowList, loadTradeTransactionsForAssetLots } from "./assetFifoLots";
 import { buildTaxSummary } from "./taxSummary";
+import {
+  fetchWatchlistStockSection,
+  type WatchlistStockSection,
+} from "./watchlistStockInfo";
 import { db } from "./db";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 
@@ -4106,6 +4110,34 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error reordering watchlist:", error);
       res.status(500).json({ message: "Nepodarilo sa zmeniť poradie vo watchliste." });
+    }
+  });
+
+  app.get("/api/watchlist/stock-info/:section", isAuthenticated, async (req: any, res) => {
+    try {
+      const section = String(req.params.section || "").toLowerCase() as WatchlistStockSection;
+      const allowed: WatchlistStockSection[] = ["news", "chart", "statistics", "options", "holders"];
+      if (!allowed.includes(section)) {
+        return res.status(400).json({ message: "Neplatná sekcia." });
+      }
+
+      const ticker = String(req.query.ticker || "").trim().toUpperCase();
+      if (!ticker) {
+        return res.status(400).json({ message: "Ticker je povinný." });
+      }
+
+      const rangeRaw = String(req.query.range || "6m").toLowerCase();
+      const chartRange = rangeRaw === "1y" || rangeRaw === "5y" ? rangeRaw : "6m";
+      const expirationIndex = Math.max(0, Number.parseInt(String(req.query.expiration ?? "0"), 10) || 0);
+
+      const payload = await fetchWatchlistStockSection(ticker, section, {
+        chartRange,
+        expirationIndex,
+      });
+      res.json(payload);
+    } catch (error) {
+      console.error("Error fetching watchlist stock info:", error);
+      res.status(500).json({ message: "Nepodarilo sa načítať údaje z Yahoo Finance." });
     }
   });
 
