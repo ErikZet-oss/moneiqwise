@@ -178,6 +178,7 @@ export interface IStorage {
     data: Partial<Pick<InsertWatchlistItem, "companyName" | "targetPrice" | "notes" | "tags">>,
   ): Promise<WatchlistItem>;
   removeWatchlistItem(userId: string, ticker: string): Promise<void>;
+  reorderWatchlistItems(userId: string, orderedIds: string[]): Promise<void>;
   
   // User settings operations
   getUserSettings(userId: string): Promise<UserSettings | undefined>;
@@ -1345,6 +1346,37 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(eq(watchlistItems.userId, userId), eq(watchlistItems.ticker, ticker.toUpperCase().trim())),
       );
+  }
+
+  async reorderWatchlistItems(userId: string, orderedIds: string[]): Promise<void> {
+    const serverOrdered = await this.getWatchlistByUser(userId);
+    const serverIds = serverOrdered.map((item) => item.id);
+    const serverSet = new Set(serverIds);
+
+    const seen = new Set<string>();
+    const fromClient: string[] = [];
+    for (const id of orderedIds) {
+      if (typeof id !== "string" || !serverSet.has(id) || seen.has(id)) continue;
+      seen.add(id);
+      fromClient.push(id);
+    }
+
+    const merged: string[] = [...fromClient];
+    for (const id of serverIds) {
+      if (!seen.has(id)) {
+        merged.push(id);
+        seen.add(id);
+      }
+    }
+
+    await db.transaction(async (tx) => {
+      for (let i = 0; i < merged.length; i++) {
+        await tx
+          .update(watchlistItems)
+          .set({ sortOrder: i, updatedAt: new Date() })
+          .where(and(eq(watchlistItems.id, merged[i]!), eq(watchlistItems.userId, userId)));
+      }
+    });
   }
 
   async getUserSettings(userId: string): Promise<UserSettings | undefined> {

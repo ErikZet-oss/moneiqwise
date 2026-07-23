@@ -4093,6 +4093,22 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/watchlist/reorder", isAuthenticated, async (req: any, res) => {
+    try {
+      await ensureWatchlistTable();
+      const userId = req.user.claims.sub;
+      const orderedIds = req.body?.orderedIds;
+      if (!Array.isArray(orderedIds)) {
+        return res.status(400).json({ message: "orderedIds musí byť pole ID." });
+      }
+      await storage.reorderWatchlistItems(userId, orderedIds);
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("Error reordering watchlist:", error);
+      res.status(500).json({ message: "Nepodarilo sa zmeniť poradie vo watchliste." });
+    }
+  });
+
   app.post("/api/stocks/earnings/batch", isAuthenticated, async (req: any, res) => {
     try {
       const { tickers } = req.body;

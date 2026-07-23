@@ -1,5 +1,21 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  closestCenter,
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import {
   Eye,
   ExternalLink,
@@ -31,6 +47,7 @@ import {
 } from "@/components/ui/sheet";
 import { CompanyLogo } from "@/components/CompanyLogo";
 import { Range52Bar } from "@/components/Range52Bar";
+import { WatchlistSortableRow } from "@/components/WatchlistSortableRow";
 import { useCurrency } from "@/hooks/useCurrency";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -199,11 +216,29 @@ export default function Watchlist() {
   });
 
   const items = watchlistData?.items ?? [];
+  const [localItems, setLocalItems] = useState<WatchlistItem[]>([]);
+  const dragJustEndedRef = useRef(false);
+
+  useEffect(() => {
+    if (!selectedTag) setLocalItems(items);
+  }, [items, selectedTag]);
+
+  const canReorder = !selectedTag && localItems.length > 1;
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { delay: 280, tolerance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 280, tolerance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   const filteredItems = useMemo(() => {
-    if (!selectedTag) return items;
-    return items.filter((item) => item.tags.some((t) => t.toLowerCase() === selectedTag.toLowerCase()));
-  }, [items, selectedTag]);
+    if (selectedTag) {
+      return items.filter((item) =>
+        item.tags.some((t) => t.toLowerCase() === selectedTag.toLowerCase()),
+      );
+    }
+    return localItems;
+  }, [items, localItems, selectedTag]);
 
   const allTags = useMemo(() => {
     const set = new Set<string>();
@@ -310,6 +345,42 @@ export default function Watchlist() {
       toast({ title: "Odstránené z watchlistu" });
     },
   });
+
+  const reorderMutation = useMutation({
+    mutationFn: (orderedIds: string[]) => apiRequest("POST", "/api/watchlist/reorder", { orderedIds }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/watchlist"] });
+    },
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/watchlist"] });
+      toast({
+        title: "Nepodarilo sa zmeniť poradie",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      dragJustEndedRef.current = true;
+      window.setTimeout(() => {
+        dragJustEndedRef.current = false;
+      }, 0);
+
+      const { active, over } = event;
+      if (!over || active.id === over.id || selectedTag) return;
+
+      setLocalItems((prev) => {
+        const oldIndex = prev.findIndex((item) => item.id === active.id);
+        const newIndex = prev.findIndex((item) => item.id === over.id);
+        if (oldIndex < 0 || newIndex < 0) return prev;
+        const next = arrayMove(prev, oldIndex, newIndex);
+        reorderMutation.mutate(next.map((item) => item.id));
+        return next;
+      });
+    },
+    [reorderMutation, selectedTag],
+  );
 
   const openEdit = (item: WatchlistItem) => {
     setEditItem(item);
@@ -484,8 +555,19 @@ export default function Watchlist() {
           </CardContent>
         </Card>
       ) : (
-        <div className="flex flex-col gap-1.5">
-          {filteredItems.map((item) => {
+        <>
+          {canReorder && (
+            <p className="text-[10px] text-muted-foreground px-0.5">
+              Podržte kartu (~0,3 s) a presuňte ju hore/dole pre zmenu poradia.
+            </p>
+          )}
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext
+              items={filteredItems.map((item) => item.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="flex flex-col gap-1.5">
+                {filteredItems.map((item) => {
             const quote = quotes[item.ticker];
             const divYield =
               quote?.price && quote.annualDividendPerShare
@@ -509,11 +591,14 @@ export default function Watchlist() {
             const displayDailyChange = getDisplayDailyChange(quote, usSessionState);
 
             return (
-              <Card
-                key={item.id}
-                className="relative overflow-hidden cursor-pointer active:bg-muted/30 transition-colors"
-                onClick={() => openEdit(item)}
-              >
+              <WatchlistSortableRow key={item.id} id={item.id} disabled={!canReorder}>
+                <Card
+                  className="relative overflow-hidden cursor-pointer active:bg-muted/30 transition-colors pl-6"
+                  onClick={() => {
+                    if (dragJustEndedRef.current) return;
+                    openEdit(item);
+                  }}
+                >
                 {displayDailyChange !== 0 && (
                   <div
                     aria-hidden
@@ -664,9 +749,13 @@ export default function Watchlist() {
                   )}
                 </CardContent>
               </Card>
+              </WatchlistSortableRow>
             );
           })}
-        </div>
+              </div>
+            </SortableContext>
+          </DndContext>
+        </>
       )}
 
       <Sheet open={!!editItem} onOpenChange={(open) => !open && setEditItem(null)}>
