@@ -577,6 +577,12 @@ function getTickerCurrency(ticker: string): "EUR" | "USD" | "GBP" | "CZK" | "PLN
 
 // Convert ticker to Yahoo Finance format
 function toYahooTicker(ticker: string): string {
+  const upper = ticker.trim().toUpperCase();
+  const hk = upper.match(/^(\d+)\.HK$/);
+  if (hk) {
+    return `${hk[1].padStart(4, "0")}.HK`;
+  }
+
   // European exchanges mapping
   const exchangeMap: Record<string, string> = {
     ".US": "",         // US suffix from broker feed -> plain Yahoo ticker (AAPL.US -> AAPL)
@@ -603,12 +609,12 @@ function toYahooTicker(ticker: string): string {
   };
   
   for (const [suffix, yahooSuffix] of Object.entries(exchangeMap)) {
-    if (ticker.toUpperCase().endsWith(suffix)) {
+    if (upper.endsWith(suffix)) {
       const base = ticker.slice(0, -suffix.length);
       return base + yahooSuffix;
     }
   }
-  
+
   return ticker;
 }
 
@@ -6595,7 +6601,10 @@ export async function registerRoutes(
         let companyName: string;
         if (tickerUpper === CASH_FLOW_TICKER && cashCustomName !== "") {
           companyName = cashCustomName;
-        } else if (parserCompanyName && isCryptoYahooTicker) {
+        } else if (
+          parserCompanyName &&
+          (isCryptoYahooTicker || /\.HK$/i.test(tickerUpper))
+        ) {
           companyName = parserCompanyName;
         } else {
           let resolved = companyNameCache[tickerUpper] ?? "";

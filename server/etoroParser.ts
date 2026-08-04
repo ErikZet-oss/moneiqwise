@@ -2,6 +2,7 @@ import * as XLSX from "xlsx";
 import { CASH_FLOW_TICKER } from "@shared/schema";
 import type { ImportLogEntry, ParsedTransaction, XTBImportResult } from "./xtbParser";
 import { eurPerOneUnit } from "./eurAtTransactionDate";
+import { toYahooTicker } from "./yahooTicker";
 
 const TRADABLE_ASSETS = new Set(["Stocks", "ETF", "Crypto"]);
 
@@ -108,7 +109,7 @@ function cleanTicker(raw: string): string {
     "BRK.A": "BRK-A",
     "CON.DE": "CON.DE",
   };
-  return mappings[cleaned] || cleaned;
+  return toYahooTicker(mappings[cleaned] || cleaned);
 }
 
 function parseInstrument(details: string): { ticker: string; quoteCurrency: string } | null {
@@ -132,9 +133,12 @@ function resolveEtoroTicker(
   return instrument.ticker;
 }
 
-function resolveEtoroCompanyName(assetType: string, details: string): string {
+function resolveEtoroCompanyName(assetType: string, details: string, ticker: string): string {
   if (assetType === "Crypto") {
     return `${details} (krypto)`;
+  }
+  if (ticker === "0300.HK") {
+    return "Midea Group Co., Ltd.";
   }
   return details;
 }
@@ -420,7 +424,7 @@ function parseAccountActivity(
         exchangeRateAtTransaction: 1,
         baseCurrencyAmount: pricing.baseCurrencyAmount,
         instrumentPricePerShare: pricing.instrumentPricePerShare,
-        companyName: resolveEtoroCompanyName(assetType, details),
+        companyName: resolveEtoroCompanyName(assetType, details, ticker),
       });
 
       log.push({

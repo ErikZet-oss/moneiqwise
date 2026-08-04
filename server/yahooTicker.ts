@@ -1,6 +1,12 @@
 /** Konverzia brokera / app tickera na symbol Yahoo Finance (rovnaká logika ako watchlist quotes). */
 export function toYahooTicker(ticker: string): string {
   const upper = ticker.trim().toUpperCase();
+
+  const hk = upper.match(/^(\d+)\.HK$/);
+  if (hk) {
+    return `${hk[1].padStart(4, "0")}.HK`;
+  }
+
   const exchangeMap: Record<string, string> = {
     ".US": "",
     ".FR": ".PA",
