@@ -107,6 +107,9 @@ function yahooFinanceUrl(ticker: string): string {
 }
 
 const WATCHLIST_DISPLAY_CURRENCY_KEY = "moneiqwise.watchlist.displayCurrency";
+const WATCHLIST_VIEW_MODE_KEY = "moneiqwise.watchlist.viewMode";
+
+type WatchlistViewMode = "classic" | "simple";
 
 function readWatchlistDisplayCurrency(fallback: Currency): Currency {
   if (typeof window === "undefined") return fallback;
@@ -118,6 +121,18 @@ function readWatchlistDisplayCurrency(fallback: Currency): Currency {
 function writeWatchlistDisplayCurrency(value: Currency) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(WATCHLIST_DISPLAY_CURRENCY_KEY, value);
+}
+
+function readWatchlistViewMode(): WatchlistViewMode {
+  if (typeof window === "undefined") return "classic";
+  const stored = window.localStorage.getItem(WATCHLIST_VIEW_MODE_KEY);
+  if (stored === "classic" || stored === "simple") return stored;
+  return "classic";
+}
+
+function writeWatchlistViewMode(value: WatchlistViewMode) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(WATCHLIST_VIEW_MODE_KEY, value);
 }
 
 function formatPercent(value: number): string {
@@ -192,6 +207,13 @@ export default function Watchlist() {
   const setWatchlistDisplayCurrency = useCallback((next: Currency) => {
     setDisplayCurrency(next);
     writeWatchlistDisplayCurrency(next);
+  }, []);
+
+  const [viewMode, setViewMode] = useState<WatchlistViewMode>(() => readWatchlistViewMode());
+
+  const setWatchlistViewMode = useCallback((next: WatchlistViewMode) => {
+    setViewMode(next);
+    writeWatchlistViewMode(next);
   }, []);
 
   const convertToWatchlistCurrency = useCallback(
@@ -485,24 +507,45 @@ export default function Watchlist() {
             Sledované akcie s metrikami, cieľovou cenou a poznámkami
           </p>
         </div>
-        <div
-          className="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2 py-1.5 text-[10px] text-muted-foreground"
-          aria-label="Mena zobrazenia cien"
-        >
-          <span className={cn("font-medium tabular-nums", displayCurrency === "USD" && "text-foreground")}>
-            USD
-          </span>
-          <Switch
-            checked={displayCurrency === "EUR"}
-            onCheckedChange={(checked) =>
-              setWatchlistDisplayCurrency(checked ? "EUR" : "USD")
-            }
-            className="scale-[0.72] origin-center"
-            aria-label={displayCurrency === "EUR" ? "Prepnúť na USD" : "Prepnúť na EUR"}
-          />
-          <span className={cn("font-medium tabular-nums", displayCurrency === "EUR" && "text-foreground")}>
-            EUR
-          </span>
+        <div className="shrink-0 flex flex-col items-end gap-1.5">
+          <div
+            className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2 py-1.5 text-[10px] text-muted-foreground"
+            aria-label="Mena zobrazenia cien"
+          >
+            <span className={cn("font-medium tabular-nums", displayCurrency === "USD" && "text-foreground")}>
+              USD
+            </span>
+            <Switch
+              checked={displayCurrency === "EUR"}
+              onCheckedChange={(checked) =>
+                setWatchlistDisplayCurrency(checked ? "EUR" : "USD")
+              }
+              className="scale-[0.72] origin-center"
+              aria-label={displayCurrency === "EUR" ? "Prepnúť na USD" : "Prepnúť na EUR"}
+            />
+            <span className={cn("font-medium tabular-nums", displayCurrency === "EUR" && "text-foreground")}>
+              EUR
+            </span>
+          </div>
+          <div
+            className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2 py-1.5 text-[10px] text-muted-foreground"
+            aria-label="Režim zobrazenia watchlistu"
+          >
+            <span className={cn("font-medium", viewMode === "classic" && "text-foreground")}>
+              Klasický
+            </span>
+            <Switch
+              checked={viewMode === "simple"}
+              onCheckedChange={(checked) =>
+                setWatchlistViewMode(checked ? "simple" : "classic")
+              }
+              className="scale-[0.72] origin-center"
+              aria-label={viewMode === "simple" ? "Prepnúť na klasické zobrazenie" : "Prepnúť na jednoduché zobrazenie"}
+            />
+            <span className={cn("font-medium", viewMode === "simple" && "text-foreground")}>
+              Jednoduchý
+            </span>
+          </div>
         </div>
       </div>
 
@@ -670,7 +713,64 @@ export default function Watchlist() {
                     )}
                   />
                 )}
-                <CardContent className="relative p-2 space-y-1">
+                <CardContent className={cn("relative p-2", viewMode === "classic" && "space-y-1")}>
+                  {viewMode === "simple" ? (
+                    <div
+                      className="cursor-pointer active:bg-muted/30 rounded-md -mx-1 px-1"
+                      onClick={() => {
+                        if (dragJustEndedRef.current) return;
+                        openEdit(item);
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <CompanyLogo
+                          ticker={item.ticker}
+                          companyName={item.companyName ?? item.ticker}
+                          size="xs"
+                        />
+                        <div className="min-w-0 flex-1 leading-tight">
+                          <span className="text-xs font-semibold">{item.ticker}</span>
+                          <p className="truncate text-[9px] text-muted-foreground">
+                            {item.companyName || item.ticker}
+                          </p>
+                        </div>
+                        <div className="shrink-0 flex items-center gap-1 leading-none">
+                          {quotesLoading && !quote ? (
+                            <Skeleton className="h-3.5 w-16" />
+                          ) : quote ? (
+                            <>
+                              {usSessionState === "LIVE" && Number.isFinite(quote.changePercent) ? (
+                                <span
+                                  className={`text-[10px] font-medium tabular-nums ${getChangeColor(quote.change)}`}
+                                >
+                                  {formatPercent(quote.changePercent)}
+                                </span>
+                              ) : showOffHoursDailyChange ? (
+                                <span
+                                  className={`text-[10px] font-medium tabular-nums inline-flex items-center gap-0.5 ${getChangeColor(quote.preMarketChange ?? 0)}`}
+                                >
+                                  <Moon className={`h-2 w-2 shrink-0 ${premarketMoonClass}`} aria-hidden />
+                                  {formatPercent(quote.preMarketChangePercent ?? 0)}
+                                </span>
+                              ) : Number.isFinite(quote.changePercent) ? (
+                                <span
+                                  className={`text-[10px] font-medium tabular-nums ${getChangeColor(quote.change)}`}
+                                >
+                                  {formatPercent(quote.changePercent)}
+                                </span>
+                              ) : null}
+                              <span className="text-xs font-semibold tabular-nums">
+                                {formatWatchlistCurrency(quote.price, item.ticker)}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">—</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
                   <div
                     className="cursor-pointer active:bg-muted/30 rounded-md -mx-1 px-1"
                     onClick={() => {
@@ -824,6 +924,8 @@ export default function Watchlist() {
                     </p>
                   )}
                   </div>
+                    </>
+                  )}
                 </CardContent>
               </Card>
               </WatchlistSortableRow>
