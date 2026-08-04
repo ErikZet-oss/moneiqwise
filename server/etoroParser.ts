@@ -120,6 +120,24 @@ function parseInstrument(details: string): { ticker: string; quoteCurrency: stri
   return { ticker: cleanTicker(symbol), quoteCurrency };
 }
 
+/** eToro krypto páry (SUI/USD) → Yahoo formát SUI-USD. */
+function resolveEtoroTicker(
+  assetType: string,
+  instrument: { ticker: string; quoteCurrency: string },
+): string {
+  if (assetType === "Crypto") {
+    return `${instrument.ticker}-${instrument.quoteCurrency}`;
+  }
+  return instrument.ticker;
+}
+
+function resolveEtoroCompanyName(assetType: string, details: string): string {
+  if (assetType === "Crypto") {
+    return `${details} (krypto)`;
+  }
+  return details;
+}
+
 function parseEurFromDetails(details: string): number | null {
   const match = details.match(/([\d.,]+)\s*EUR\b/i);
   if (!match) return null;
@@ -345,10 +363,11 @@ function parseAccountActivity(
       const txType = isBuy ? "BUY" : "SELL";
       const suffix = isBuy ? "open" : "close";
       const txKey = positionId || `${i + 1}`;
+      const ticker = resolveEtoroTicker(assetType, instrument);
 
       out.push({
         date,
-        ticker: instrument.ticker,
+        ticker,
         type: txType,
         quantity: units,
         priceEur: pricing.priceEur,
@@ -360,13 +379,13 @@ function parseAccountActivity(
         exchangeRateAtTransaction: 1,
         baseCurrencyAmount: pricing.baseCurrencyAmount,
         instrumentPricePerShare: pricing.instrumentPricePerShare,
-        companyName: details,
+        companyName: resolveEtoroCompanyName(assetType, details),
       });
 
       log.push({
         row: i + 1,
         status: "success",
-        message: `[${txKey}] ${instrument.ticker} ${txType} ${units} @ ${pricing.priceEur.toFixed(2)} (${instrument.quoteCurrency})`,
+        message: `[${txKey}] ${ticker} ${txType} ${units} @ ${pricing.priceEur.toFixed(2)} (${instrument.quoteCurrency})`,
       });
       continue;
     }
@@ -477,14 +496,16 @@ function buildPositionTickerMap(rows: unknown[][]): Map<string, string> {
   const headers = buildHeaderIndex(rows[0]);
   const detailsIdx = col(headers, "Details");
   const positionIdx = col(headers, "Position ID");
+  const assetTypeIdx = col(headers, "Asset type");
 
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
     const details = String(cell(row, detailsIdx) ?? "").trim();
     const positionRaw = String(cell(row, positionIdx) ?? "").trim();
+    const assetType = String(cell(row, assetTypeIdx) ?? "").trim();
     if (!positionRaw || positionRaw === "-" || !details.includes("/")) continue;
     const instrument = parseInstrument(details);
-    if (instrument) map.set(positionRaw, instrument.ticker);
+    if (instrument) map.set(positionRaw, resolveEtoroTicker(assetType, instrument));
   }
   return map;
 }

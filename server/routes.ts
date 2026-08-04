@@ -2068,6 +2068,7 @@ const STOCK_DATABASE = [
   { ticker: "BTC-USD", name: "Bitcoin", exchange: "CRYPTO", currency: "USD" },
   { ticker: "ETH-USD", name: "Ethereum", exchange: "CRYPTO", currency: "USD" },
   { ticker: "SOL-USD", name: "Solana", exchange: "CRYPTO", currency: "USD" },
+  { ticker: "SUI-USD", name: "Sui", exchange: "CRYPTO", currency: "USD" },
   { ticker: "XRP-USD", name: "XRP (Ripple)", exchange: "CRYPTO", currency: "USD" },
   { ticker: "DOGE-USD", name: "Dogecoin", exchange: "CRYPTO", currency: "USD" },
   { ticker: "ADA-USD", name: "Cardano", exchange: "CRYPTO", currency: "USD" },
@@ -6587,10 +6588,15 @@ export async function registerRoutes(
         const tickerUpper = effectiveTicker.toUpperCase();
         const cashCustomName =
           isCashFlow && typeof tx.companyName === "string" ? tx.companyName.trim() : "";
+        const parserCompanyName =
+          typeof tx.companyName === "string" ? tx.companyName.trim() : "";
+        const isCryptoYahooTicker = /^[A-Z0-9]{1,12}-(USD|EUR|USDT)$/i.test(tickerUpper);
 
         let companyName: string;
         if (tickerUpper === CASH_FLOW_TICKER && cashCustomName !== "") {
           companyName = cashCustomName;
+        } else if (parserCompanyName && isCryptoYahooTicker) {
+          companyName = parserCompanyName;
         } else {
           let resolved = companyNameCache[tickerUpper] ?? "";
           if (!resolved) {
