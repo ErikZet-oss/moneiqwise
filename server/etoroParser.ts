@@ -177,7 +177,11 @@ function buildEtoroCashTransactionId(
 }
 
 /** Primárny zdroj: hárok Account Activity (všetky transakcie). */
-function parseAccountActivity(rows: unknown[][], log: ImportLogEntry[]): ParsedTransaction[] {
+function parseAccountActivity(
+  rows: unknown[][],
+  tickerByPosition: Map<string, string>,
+  log: ImportLogEntry[],
+): ParsedTransaction[] {
   const out: ParsedTransaction[] = [];
   if (rows.length < 2) return out;
 
@@ -275,10 +279,43 @@ function parseAccountActivity(rows: unknown[][], log: ImportLogEntry[]): ParsedT
     }
 
     if (typeNorm === "opening and closing spread") {
+      if (amount === 0) continue;
+
+      if (assetType && !TRADABLE_ASSETS.has(assetType)) {
+        log.push({
+          row: i + 1,
+          status: "skipped",
+          message: `[${positionId || "?"}] ${typeRaw} — ${assetType} (nepodporovaný typ aktíva)`,
+        });
+        continue;
+      }
+
+      const fee = Math.abs(amount);
+      const spreadPhase = details.toLowerCase().includes("close") ? "close" : "open";
+      const txKey = positionId || `${i + 1}`;
+      const ticker = (positionId && tickerByPosition.get(positionId)) || CASH_FLOW_TICKER;
+      const phaseLabel = spreadPhase === "close" ? "zatvorenie" : "otvorenie";
+
+      out.push({
+        date,
+        ticker,
+        type: "TAX",
+        quantity: 0,
+        priceEur: 0,
+        totalAmountEur: -fee,
+        originalComment: `${typeRaw}: ${details || phaseLabel}`,
+        externalId: `etoro:${txKey}:spread-${spreadPhase}`,
+        transactionId: `etoro:${txKey}:spread-${spreadPhase}`,
+        originalCurrency: "USD",
+        exchangeRateAtTransaction: 1,
+        baseCurrencyAmount: -fee,
+        companyName: `Poplatok spread (${phaseLabel}) (eToro)`,
+      });
+
       log.push({
         row: i + 1,
-        status: "skipped",
-        message: `[${positionId || "?"}] Spread ${details || ""} (${amount})`,
+        status: "success",
+        message: `[${txKey}] ${ticker} Poplatok spread (${phaseLabel}) -${fee.toFixed(2)}`,
       });
       continue;
     }
@@ -495,7 +532,7 @@ export async function parseEtoroFile(fileBuffer: Buffer, _fileName: string): Pro
     log.push({ row: 0, status: "success", message: `Spracovávam hárok: ${activitySheet}` });
 
     const tickerByPosition = buildPositionTickerMap(activityRows);
-    transactions.push(...parseAccountActivity(activityRows, log));
+    transactions.push(...parseAccountActivity(activityRows, tickerByPosition, log));
 
     if (dividendsSheet) {
       log.push({ row: 0, status: "success", message: `Spracovávam hárok: ${dividendsSheet}` });

@@ -599,8 +599,8 @@ export default function Import() {
                   ) : (
                     <>
                       Stiahnite Account Statement z eToro (Nastavenia → Account Statement → Download XLS).
-                      Transakcie sa čítajú z hárka Account Activity (akcie, ETF, krypto, vklady).
-                      Dividendy z hárka Dividends. Spread poplatky sa preskakujú.
+                      Transakcie sa čítajú z hárka Account Activity (akcie, ETF, krypto, vklady,
+                      poplatky). Dividendy z hárka Dividends.
                     </>
                   )}
                 </AlertDescription>
