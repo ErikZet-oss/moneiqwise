@@ -2,8 +2,7 @@ import * as XLSX from "xlsx";
 import { CASH_FLOW_TICKER } from "@shared/schema";
 import type { ImportLogEntry, ParsedTransaction, XTBImportResult } from "./xtbParser";
 
-const DERIVATIVE_TYPES = new Set(["CFD", "OPT", "FUT", "FOP", "Crypto Margin"]);
-const TRADABLE_TYPES = new Set(["Stocks", "ETF"]);
+const TRADABLE_ASSETS = new Set(["Stocks", "ETF", "Crypto"]);
 
 function stripDiacritics(s: string): string {
   return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -57,29 +56,18 @@ function parseEtoroDate(value: unknown): Date | null {
     if (!Number.isNaN(d.getTime())) return d;
   }
 
-  const ymd = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/);
-  if (ymd) {
-    const d = new Date(
-      Number(ymd[1]),
-      Number(ymd[2]) - 1,
-      Number(ymd[3]),
-      Number(ymd[4] ?? 0),
-      Number(ymd[5] ?? 0),
-      Number(ymd[6] ?? 0),
-    );
-    if (!Number.isNaN(d.getTime())) return d;
-  }
-
   const fallback = new Date(raw);
   return Number.isNaN(fallback.getTime()) ? null : fallback;
 }
 
 function findSheetName(sheetNames: string[], candidates: string[]): string | null {
-  const normalized = sheetNames.map((name) => ({ name, norm: stripDiacritics(name.toLowerCase()) }));
   for (const candidate of candidates) {
     const c = stripDiacritics(candidate.toLowerCase());
-    const hit = normalized.find((s) => s.norm === c || s.norm.includes(c));
-    if (hit) return hit.name;
+    const hit = sheetNames.find((name) => {
+      const n = stripDiacritics(name.toLowerCase());
+      return n === c || n.includes(c);
+    });
+    if (hit) return hit;
   }
   return null;
 }
@@ -117,217 +105,61 @@ function cleanTicker(raw: string): string {
   const mappings: Record<string, string> = {
     "BRK.B": "BRK-B",
     "BRK.A": "BRK-A",
+    "CON.DE": "CON.DE",
   };
   return mappings[cleaned] || cleaned;
 }
 
-function extractTickerFromDetails(details: string): string | null {
+function parseInstrument(details: string): { ticker: string; quoteCurrency: string } | null {
   const trimmed = details.trim();
-  if (!trimmed.includes("/")) return null;
   const slash = trimmed.lastIndexOf("/");
+  if (slash <= 0) return null;
   const symbol = trimmed.slice(0, slash).trim().toUpperCase();
-  return symbol ? cleanTicker(symbol) : null;
+  const quoteCurrency = trimmed.slice(slash + 1).trim().toUpperCase();
+  if (!symbol || !quoteCurrency) return null;
+  return { ticker: cleanTicker(symbol), quoteCurrency };
 }
 
-function extractTickerFromAction(action: string): string | null {
-  const parts = action.trim().split(/\s+/);
-  if (parts.length < 2) return null;
-  return cleanTicker(parts.slice(1).join(" "));
+function parseEurFromDetails(details: string): number | null {
+  const match = details.match(/([\d.,]+)\s*EUR\b/i);
+  if (!match) return null;
+  const n = parseAmount(match[1]);
+  return n > 0 ? n : null;
 }
 
-function buildPositionSymbolMap(rows: unknown[][], log: ImportLogEntry[]): Map<number, string> {
-  const map = new Map<number, string>();
-  if (rows.length < 2) return map;
-
-  const headers = buildHeaderIndex(rows[0]);
-  const detailsIdx = col(headers, "Details");
-  const positionIdx = col(headers, "Position ID");
-
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    if (!row?.length) continue;
-    const details = String(cell(row, detailsIdx) ?? "").trim();
-    const positionRaw = cell(row, positionIdx);
-    const positionId = Number.parseInt(String(positionRaw ?? ""), 10);
-    if (!Number.isFinite(positionId) || !details.includes("/")) continue;
-    const ticker = extractTickerFromDetails(details);
-    if (ticker) map.set(positionId, ticker);
-  }
-
-  log.push({
-    row: 0,
-    status: "success",
-    message: `Mapovanie symbolov z Account Activity: ${map.size} pozícií`,
-  });
-  return map;
+function parseUnits(value: unknown): number {
+  const raw = String(value ?? "").trim();
+  if (!raw || raw === "-") return 0;
+  return parseAmount(value);
 }
 
-function eurPricePerShare(
-  amountEur: number,
+function pricingFromActivity(
+  amount: number,
   units: number,
-  instrumentRate: number,
-  fxRate: number,
-): { priceEur: number; instrumentPricePerShare?: number; exchangeRateAtTransaction?: number } {
-  if (units > 0 && amountEur > 0) {
-    return { priceEur: amountEur / units };
-  }
-  if (instrumentRate > 0 && fxRate > 0) {
+  quoteCurrency: string,
+): {
+  priceEur: number;
+  originalCurrency: string;
+  instrumentPricePerShare?: number;
+  baseCurrencyAmount: number;
+} {
+  const perShare = units > 0 ? amount / units : 0;
+  if (quoteCurrency === "EUR") {
     return {
-      priceEur: instrumentRate / fxRate,
-      instrumentPricePerShare: instrumentRate,
-      exchangeRateAtTransaction: fxRate,
+      priceEur: perShare,
+      originalCurrency: "EUR",
+      baseCurrencyAmount: amount,
     };
   }
-  if (instrumentRate > 0) {
-    return { priceEur: instrumentRate, instrumentPricePerShare: instrumentRate };
-  }
-  return { priceEur: 0 };
+  return {
+    priceEur: perShare,
+    originalCurrency: quoteCurrency || "USD",
+    instrumentPricePerShare: perShare,
+    baseCurrencyAmount: amount,
+  };
 }
 
-function parseClosedPositions(
-  rows: unknown[][],
-  positionSymbols: Map<number, string>,
-  log: ImportLogEntry[],
-): ParsedTransaction[] {
-  const out: ParsedTransaction[] = [];
-  if (rows.length < 2) return out;
-
-  const headers = buildHeaderIndex(rows[0]);
-  const positionIdx = col(headers, "Position ID");
-  const actionIdx = col(headers, "Action");
-  const longShortIdx = col(headers, "Long / Short", "Long/Short");
-  const amountIdx = col(headers, "Amount");
-  const unitsIdx = col(headers, "Units / Contracts", "Units");
-  const openDateIdx = col(headers, "Open Date");
-  const closeDateIdx = col(headers, "Close Date");
-  const leverageIdx = col(headers, "Leverage");
-  const typeIdx = col(headers, "Type");
-  const openRateIdx = col(headers, "Open Rate");
-  const closeRateIdx = col(headers, "Close Rate");
-  const fxOpenIdx = col(headers, "FX rate at open (USD)", "FX Rate at Open (USD)");
-  const fxCloseIdx = col(headers, "FX rate at close (USD)", "FX Rate at Close (USD)");
-  const profitEurIdx = col(headers, "Profit(EUR)", "Profit (EUR)");
-
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i];
-    if (!row?.length) continue;
-
-    const assetType = String(cell(row, typeIdx) ?? "").trim();
-    const leverage = parseAmount(cell(row, leverageIdx));
-    const positionId = Number.parseInt(String(cell(row, positionIdx) ?? ""), 10);
-    const action = String(cell(row, actionIdx) ?? "").trim();
-    const longShort = String(cell(row, longShortIdx) ?? "").trim().toLowerCase();
-
-    if (DERIVATIVE_TYPES.has(assetType) || leverage > 1) {
-      log.push({
-        row: i + 1,
-        status: "skipped",
-        message: `[${positionId || "?"}] Preskočené (${assetType || "derivát"}, leverage ${leverage || 1})`,
-      });
-      continue;
-    }
-    if (assetType && !TRADABLE_TYPES.has(assetType)) {
-      log.push({
-        row: i + 1,
-        status: "skipped",
-        message: `[${positionId || "?"}] Nepodporovaný typ aktíva: ${assetType}`,
-      });
-      continue;
-    }
-
-    const units = parseAmount(cell(row, unitsIdx));
-    const amount = parseAmount(cell(row, amountIdx));
-    const openDate = parseEtoroDate(cell(row, openDateIdx));
-    const closeDate = parseEtoroDate(cell(row, closeDateIdx));
-    if (!openDate || !closeDate || units <= 0) {
-      log.push({
-        row: i + 1,
-        status: "warning",
-        message: `[${positionId || "?"}] Neúplný riadok Closed Positions (dátum alebo units)`,
-      });
-      continue;
-    }
-
-    const ticker =
-      (Number.isFinite(positionId) ? positionSymbols.get(positionId) : undefined) ||
-      extractTickerFromAction(action) ||
-      "";
-    if (!ticker) {
-      log.push({
-        row: i + 1,
-        status: "warning",
-        message: `[${positionId || "?"}] Nepodarilo sa určiť ticker`,
-      });
-      continue;
-    }
-
-    const openRate = parseAmount(cell(row, openRateIdx));
-    const closeRate = parseAmount(cell(row, closeRateIdx));
-    const fxOpen = parseAmount(cell(row, fxOpenIdx));
-    const fxClose = parseAmount(cell(row, fxCloseIdx));
-    const profitEur = parseAmount(cell(row, profitEurIdx));
-
-    const isLong = longShort.includes("long") || action.toLowerCase().startsWith("buy");
-    if (!isLong) {
-      log.push({
-        row: i + 1,
-        status: "skipped",
-        message: `[${positionId}] Short pozície zatiaľ nie sú podporované`,
-      });
-      continue;
-    }
-
-    const openPricing = eurPricePerShare(amount, units, openRate, fxOpen || 1);
-    const closeAmountEur =
-      amount + (Number.isFinite(profitEur) ? profitEur : 0);
-    const closePricing = eurPricePerShare(closeAmountEur, units, closeRate, fxClose || fxOpen || 1);
-
-    const positionKey = Number.isFinite(positionId) ? String(positionId) : `row-${i + 1}`;
-
-    out.push({
-      date: openDate,
-      ticker,
-      type: "BUY",
-      quantity: units,
-      priceEur: openPricing.priceEur,
-      totalAmountEur: amount > 0 ? amount : openPricing.priceEur * units,
-      originalComment: action,
-      externalId: `etoro:${positionKey}:open`,
-      transactionId: `etoro:${positionKey}:open`,
-      originalCurrency: openPricing.instrumentPricePerShare ? "USD" : "EUR",
-      exchangeRateAtTransaction: openPricing.exchangeRateAtTransaction ?? 1,
-      baseCurrencyAmount: amount > 0 ? amount : openPricing.priceEur * units,
-      instrumentPricePerShare: openPricing.instrumentPricePerShare,
-      companyName: action,
-    });
-
-    out.push({
-      date: closeDate,
-      ticker,
-      type: "SELL",
-      quantity: units,
-      priceEur: closePricing.priceEur,
-      totalAmountEur: closeAmountEur > 0 ? closeAmountEur : closePricing.priceEur * units,
-      originalComment: action,
-      externalId: `etoro:${positionKey}:close`,
-      transactionId: `etoro:${positionKey}:close`,
-      originalCurrency: closePricing.instrumentPricePerShare ? "USD" : "EUR",
-      exchangeRateAtTransaction: closePricing.exchangeRateAtTransaction ?? (fxClose || 1),
-      baseCurrencyAmount: closeAmountEur > 0 ? closeAmountEur : closePricing.priceEur * units,
-      instrumentPricePerShare: closePricing.instrumentPricePerShare,
-      companyName: action,
-    });
-
-    log.push({
-      row: i + 1,
-      status: "success",
-      message: `[${positionKey}] ${ticker}: BUY ${units} @ open, SELL @ close`,
-    });
-  }
-
-  return out;
-}
-
+/** Primárny zdroj: hárok Account Activity (všetky transakcie). */
 function parseAccountActivity(rows: unknown[][], log: ImportLogEntry[]): ParsedTransaction[] {
   const out: ParsedTransaction[] = [];
   if (rows.length < 2) return out;
@@ -337,37 +169,74 @@ function parseAccountActivity(rows: unknown[][], log: ImportLogEntry[]): ParsedT
   const typeIdx = col(headers, "Type");
   const detailsIdx = col(headers, "Details");
   const amountIdx = col(headers, "Amount");
+  const unitsIdx = col(headers, "Units / Contracts", "Units");
   const positionIdx = col(headers, "Position ID");
+  const assetTypeIdx = col(headers, "Asset type");
 
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
     if (!row?.length) continue;
 
-    const typeRaw = String(cell(row, typeIdx) ?? "").trim().toLowerCase();
+    const typeRaw = String(cell(row, typeIdx) ?? "").trim();
+    const typeNorm = typeRaw.toLowerCase();
+    const details = String(cell(row, detailsIdx) ?? "").trim();
     const amount = parseAmount(cell(row, amountIdx));
+    const units = parseUnits(cell(row, unitsIdx));
     const date = parseEtoroDate(cell(row, dateIdx));
-    if (!date || amount === 0) continue;
+    const positionRaw = String(cell(row, positionIdx) ?? "").trim();
+    const positionId = positionRaw && positionRaw !== "-" ? positionRaw : "";
+    const assetType = String(cell(row, assetTypeIdx) ?? "").trim();
 
-    if (typeRaw.includes("deposit")) {
+    if (!date) {
+      log.push({ row: i + 1, status: "warning", message: `[${typeRaw}] Chýba dátum` });
+      continue;
+    }
+
+    if (typeNorm === "deposit") {
+      if (amount === 0) continue;
+      const eurFromDetails = parseEurFromDetails(details);
+      const depositEur = eurFromDetails ?? Math.abs(amount);
       out.push({
         date,
         ticker: CASH_FLOW_TICKER,
         type: "DEPOSIT",
         quantity: 0,
         priceEur: 0,
-        totalAmountEur: Math.abs(amount),
-        originalComment: String(cell(row, detailsIdx) ?? ""),
-        transactionId: `etoro:activity:${i + 1}:deposit`,
-        originalCurrency: "EUR",
+        totalAmountEur: depositEur,
+        originalComment: details || typeRaw,
+        transactionId: `etoro:activity:${positionId || i + 1}:deposit:${date.getTime()}`,
+        originalCurrency: eurFromDetails != null ? "EUR" : "USD",
         exchangeRateAtTransaction: 1,
-        baseCurrencyAmount: Math.abs(amount),
+        baseCurrencyAmount: depositEur,
         companyName: "Vklad (eToro)",
       });
-      log.push({ row: i + 1, status: "success", message: `Vklad +${Math.abs(amount).toFixed(2)} EUR` });
+      log.push({ row: i + 1, status: "success", message: `Vklad +${depositEur.toFixed(2)}` });
       continue;
     }
 
-    if (typeRaw.includes("withdraw")) {
+    if (typeNorm === "deposit conversion fee") {
+      if (amount === 0) continue;
+      const fee = Math.abs(amount);
+      out.push({
+        date,
+        ticker: CASH_FLOW_TICKER,
+        type: "WITHDRAWAL",
+        quantity: 0,
+        priceEur: 0,
+        totalAmountEur: -fee,
+        originalComment: details || "Deposit Conversion Fee",
+        transactionId: `etoro:activity:${i + 1}:conv-fee:${date.getTime()}`,
+        originalCurrency: "USD",
+        exchangeRateAtTransaction: 1,
+        baseCurrencyAmount: -fee,
+        companyName: "Poplatok za konverziu vkladu (eToro)",
+      });
+      log.push({ row: i + 1, status: "success", message: `Poplatok za konverziu -${fee.toFixed(2)}` });
+      continue;
+    }
+
+    if (typeNorm.includes("withdraw")) {
+      if (amount === 0) continue;
       out.push({
         date,
         ticker: CASH_FLOW_TICKER,
@@ -375,27 +244,82 @@ function parseAccountActivity(rows: unknown[][], log: ImportLogEntry[]): ParsedT
         quantity: 0,
         priceEur: 0,
         totalAmountEur: -Math.abs(amount),
-        originalComment: String(cell(row, detailsIdx) ?? ""),
-        transactionId: `etoro:activity:${i + 1}:withdraw`,
+        originalComment: details || typeRaw,
+        transactionId: `etoro:activity:${i + 1}:withdraw:${date.getTime()}`,
         originalCurrency: "EUR",
         exchangeRateAtTransaction: 1,
         baseCurrencyAmount: -Math.abs(amount),
         companyName: "Výber (eToro)",
       });
-      log.push({ row: i + 1, status: "success", message: `Výber -${Math.abs(amount).toFixed(2)} EUR` });
+      log.push({ row: i + 1, status: "success", message: `Výber -${Math.abs(amount).toFixed(2)}` });
       continue;
     }
 
-    if (typeRaw.includes("open position") || typeRaw.includes("position closed")) {
-      continue;
-    }
-
-    const positionId = String(cell(row, positionIdx) ?? "").trim();
-    if (positionId) {
+    if (typeNorm === "opening and closing spread") {
       log.push({
         row: i + 1,
         status: "skipped",
-        message: `[${positionId}] Account Activity: ${typeRaw || "neznámy typ"}`,
+        message: `[${positionId || "?"}] Spread ${details || ""} (${amount})`,
+      });
+      continue;
+    }
+
+    if (typeNorm === "open position" || typeNorm === "position closed") {
+      if (assetType && !TRADABLE_ASSETS.has(assetType)) {
+        log.push({
+          row: i + 1,
+          status: "skipped",
+          message: `[${positionId || "?"}] ${typeRaw} — ${assetType} (nepodporovaný typ aktíva)`,
+        });
+        continue;
+      }
+
+      const instrument = parseInstrument(details);
+      if (!instrument || units <= 0 || amount === 0) {
+        log.push({
+          row: i + 1,
+          status: "warning",
+          message: `[${positionId || "?"}] ${typeRaw} — neúplné dáta (${details})`,
+        });
+        continue;
+      }
+
+      const pricing = pricingFromActivity(amount, units, instrument.quoteCurrency);
+      const isBuy = typeNorm === "open position";
+      const txType = isBuy ? "BUY" : "SELL";
+      const suffix = isBuy ? "open" : "close";
+      const txKey = positionId || `${i + 1}`;
+
+      out.push({
+        date,
+        ticker: instrument.ticker,
+        type: txType,
+        quantity: units,
+        priceEur: pricing.priceEur,
+        totalAmountEur: pricing.baseCurrencyAmount,
+        originalComment: `${typeRaw}: ${details}`,
+        externalId: `etoro:${txKey}:${suffix}`,
+        transactionId: `etoro:${txKey}:${suffix}`,
+        originalCurrency: pricing.originalCurrency,
+        exchangeRateAtTransaction: 1,
+        baseCurrencyAmount: pricing.baseCurrencyAmount,
+        instrumentPricePerShare: pricing.instrumentPricePerShare,
+        companyName: details,
+      });
+
+      log.push({
+        row: i + 1,
+        status: "success",
+        message: `[${txKey}] ${instrument.ticker} ${txType} ${units} @ ${pricing.priceEur.toFixed(2)} (${instrument.quoteCurrency})`,
+      });
+      continue;
+    }
+
+    if (typeRaw) {
+      log.push({
+        row: i + 1,
+        status: "skipped",
+        message: `Nepodporovaný typ: ${typeRaw}`,
       });
     }
   }
@@ -405,7 +329,7 @@ function parseAccountActivity(rows: unknown[][], log: ImportLogEntry[]): ParsedT
 
 function parseDividends(
   rows: unknown[][],
-  positionSymbols: Map<number, string>,
+  tickerByPosition: Map<string, string>,
   log: ImportLogEntry[],
 ): ParsedTransaction[] {
   const out: ParsedTransaction[] = [];
@@ -429,21 +353,21 @@ function parseDividends(
     const netUsd = parseAmount(cell(row, netUsdIdx));
     const taxEur = parseAmount(cell(row, taxEurIdx));
     const taxUsd = parseAmount(cell(row, taxUsdIdx));
-    const positionId = Number.parseInt(String(cell(row, positionIdx) ?? ""), 10);
+    const positionRaw = String(cell(row, positionIdx) ?? "").trim();
+    const positionKey = positionRaw && positionRaw !== "-" ? positionRaw : `div-${i + 1}`;
     const instrumentName = String(cell(row, nameIdx) ?? "").trim();
 
     const dividendEur = netEur > 0 ? netEur : 0;
     const dividendUsd = netUsd > 0 ? netUsd : 0;
-    const taxAmountEur = taxEur > 0 ? taxEur : taxUsd > 0 ? taxUsd : 0;
+    const taxAmount = taxEur > 0 ? taxEur : taxUsd > 0 ? taxUsd : 0;
 
     if (!date || (dividendEur <= 0 && dividendUsd <= 0)) continue;
 
     const ticker =
-      (Number.isFinite(positionId) ? positionSymbols.get(positionId) : undefined) ||
+      tickerByPosition.get(positionKey) ||
       (instrumentName ? cleanTicker(instrumentName.split(/\s+/)[0]) : "DIVIDEND");
 
     const amountEur = dividendEur > 0 ? dividendEur : dividendUsd;
-    const positionKey = Number.isFinite(positionId) ? String(positionId) : `div-${i + 1}`;
 
     out.push({
       date,
@@ -461,21 +385,21 @@ function parseDividends(
       companyName: instrumentName || ticker,
     });
 
-    if (taxAmountEur > 0) {
+    if (taxAmount > 0) {
       out.push({
         date,
         ticker,
         type: "TAX",
         quantity: 0,
         priceEur: 0,
-        totalAmountEur: -taxAmountEur,
+        totalAmountEur: -taxAmount,
         originalComment: `Withholding tax — ${instrumentName}`,
         externalId: `etoro:${positionKey}:dividend-tax`,
         transactionId: `etoro:${positionKey}:dividend-tax`,
         linkedDividendId: `etoro:${positionKey}:dividend`,
         originalCurrency: taxEur > 0 ? "EUR" : "USD",
         exchangeRateAtTransaction: 1,
-        baseCurrencyAmount: -taxAmountEur,
+        baseCurrencyAmount: -taxAmount,
         companyName: instrumentName || ticker,
       });
     }
@@ -483,11 +407,30 @@ function parseDividends(
     log.push({
       row: i + 1,
       status: "success",
-      message: `[${ticker}] Dividenda ${amountEur.toFixed(2)}${taxAmountEur > 0 ? `, daň -${taxAmountEur.toFixed(2)}` : ""}`,
+      message: `[${ticker}] Dividenda ${amountEur.toFixed(2)}${taxAmount > 0 ? `, daň -${taxAmount.toFixed(2)}` : ""}`,
     });
   }
 
   return out;
+}
+
+function buildPositionTickerMap(rows: unknown[][]): Map<string, string> {
+  const map = new Map<string, string>();
+  if (rows.length < 2) return map;
+
+  const headers = buildHeaderIndex(rows[0]);
+  const detailsIdx = col(headers, "Details");
+  const positionIdx = col(headers, "Position ID");
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const details = String(cell(row, detailsIdx) ?? "").trim();
+    const positionRaw = String(cell(row, positionIdx) ?? "").trim();
+    if (!positionRaw || positionRaw === "-" || !details.includes("/")) continue;
+    const instrument = parseInstrument(details);
+    if (instrument) map.set(positionRaw, instrument.ticker);
+  }
+  return map;
 }
 
 function summarize(log: ImportLogEntry[], transactions: ParsedTransaction[]): XTBImportResult {
@@ -516,48 +459,39 @@ export async function parseEtoroFile(fileBuffer: Buffer, _fileName: string): Pro
       message: `Nájdené hárky: ${workbook.SheetNames.join(", ")}`,
     });
 
-    const activitySheet = findSheetName(workbook.SheetNames, ["Account Activity", "Account activity"]);
-    const closedSheet = findSheetName(workbook.SheetNames, ["Closed Positions", "Closed positions"]);
+    const activitySheet = findSheetName(workbook.SheetNames, ["Account Activity"]);
     const dividendsSheet = findSheetName(workbook.SheetNames, ["Dividends"]);
 
-    if (!activitySheet && !closedSheet && !dividendsSheet) {
+    if (!activitySheet) {
       log.push({
         row: 0,
         status: "error",
         message:
-          "Nerozpoznaný eToro export. Očakávame Account Statement XLS s hárkami Account Activity / Closed Positions / Dividends.",
+          "Chýba hárok Account Activity. Stiahnite Account Statement z eToro (Profil → Nastavenia → Account Statement).",
       });
       return summarize(log, transactions);
     }
 
-    const positionSymbols = activitySheet
-      ? buildPositionSymbolMap(sheetToRows(workbook, activitySheet), log)
-      : new Map<number, string>();
+    const activityRows = sheetToRows(workbook, activitySheet);
+    log.push({ row: 0, status: "success", message: `Spracovávam hárok: ${activitySheet}` });
 
-    if (closedSheet) {
-      log.push({ row: 0, status: "success", message: `Spracovávam hárok: ${closedSheet}` });
-      transactions.push(
-        ...parseClosedPositions(sheetToRows(workbook, closedSheet), positionSymbols, log),
-      );
-    } else {
-      log.push({
-        row: 0,
-        status: "warning",
-        message: "Hárok Closed Positions nenájdený — nákupy/predaje nebudú importované.",
-      });
-    }
-
-    if (activitySheet) {
-      log.push({ row: 0, status: "success", message: `Spracovávam hárok: ${activitySheet}` });
-      transactions.push(...parseAccountActivity(sheetToRows(workbook, activitySheet), log));
-    }
+    const tickerByPosition = buildPositionTickerMap(activityRows);
+    transactions.push(...parseAccountActivity(activityRows, log));
 
     if (dividendsSheet) {
       log.push({ row: 0, status: "success", message: `Spracovávam hárok: ${dividendsSheet}` });
-      transactions.push(...parseDividends(sheetToRows(workbook, dividendsSheet), positionSymbols, log));
+      transactions.push(
+        ...parseDividends(sheetToRows(workbook, dividendsSheet), tickerByPosition, log),
+      );
     }
 
     transactions.sort((a, b) => a.date.getTime() - b.date.getTime());
+    log.push({
+      row: 0,
+      status: "success",
+      message: `Celkom transakcií na import: ${transactions.length}`,
+    });
+
     return summarize(log, transactions);
   } catch (error) {
     log.push({

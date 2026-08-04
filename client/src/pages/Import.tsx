@@ -587,8 +587,8 @@ export default function Import() {
                   ) : (
                     <>
                       Stiahnite Account Statement z eToro (Nastavenia → Account Statement → Download XLS).
-                      Podporované hárky: Account Activity, Closed Positions a Dividends. CFD a pákové
-                      pozície sa preskakujú.
+                      Transakcie sa čítajú z hárka Account Activity (akcie, ETF, krypto, vklady).
+                      Dividendy z hárka Dividends. Spread poplatky sa preskakujú.
                     </>
                   )}
                 </AlertDescription>
