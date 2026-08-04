@@ -96,7 +96,7 @@ const menuItems = [
     icon: Target,
   },
   {
-    title: "Import XTB",
+    title: "Import brokera",
     url: "/import",
     icon: Upload,
   },

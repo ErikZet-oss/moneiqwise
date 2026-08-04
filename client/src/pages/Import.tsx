@@ -27,6 +27,8 @@ import {
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrency";
+import { BrokerLogo } from "@/components/BrokerLogo";
+import { cn } from "@/lib/utils";
 import type { Portfolio } from "@shared/schema";
 import {
   CASH_INTEREST_DISPLAY_NAME,
@@ -77,6 +79,21 @@ interface SaveResult {
   message: string;
 }
 
+type ImportBroker = "xtb" | "etoro";
+
+const IMPORT_BROKER_KEY = "moneiqwise.import.broker";
+
+const IMPORT_BROKERS: { id: ImportBroker; label: string }[] = [
+  { id: "xtb", label: "XTB" },
+  { id: "etoro", label: "eToro" },
+];
+
+function readImportBroker(): ImportBroker {
+  if (typeof window === "undefined") return "xtb";
+  const stored = window.localStorage.getItem(IMPORT_BROKER_KEY);
+  return stored === "etoro" ? "etoro" : "xtb";
+}
+
 /** JSON { message }, alebo HTML od proxy (502…) — bez výpisu celého HTML do toastu. */
 async function readHttpErrorMessage(response: Response): Promise<string> {
   const text = await response.text();
@@ -125,6 +142,7 @@ export default function Import() {
   const { toast } = useToast();
   const { formatCurrency } = useCurrency();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedBroker, setSelectedBroker] = useState<ImportBroker>(() => readImportBroker());
   const [selectedPortfolio, setSelectedPortfolio] = useState<string>("default");
   const [parseResult, setParseResult] = useState<XTBImportResult | null>(null);
   const [activeTab, setActiveTab] = useState<string>("transactions");
@@ -278,33 +296,34 @@ export default function Import() {
   });
 
   const parseMutation = useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async ({ file, broker }: { file: File; broker: ImportBroker }) => {
       const formData = new FormData();
-      formData.append('file', file);
-      
-      const response = await fetch('/api/import/xtb/parse', {
-        method: 'POST',
+      formData.append("file", file);
+
+      const response = await fetch(`/api/import/${broker}/parse`, {
+        method: "POST",
         body: formData,
-        credentials: 'include',
+        credentials: "include",
       });
-      
+
       if (!response.ok) {
         throw new Error(await readHttpErrorMessage(response));
       }
-      
+
       return response.json() as Promise<XTBImportResult>;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       setParseResult(data);
       setActiveTab("transactions");
       const n = data.transactions.length;
       const w = data.log.filter((l) => l.status === "warning").length;
+      const brokerLabel = variables.broker === "etoro" ? "eToro" : "XTB";
       toast({
         title: n > 0 ? "Súbor spracovaný" : "Súbor načítaný — žiadne transakcie",
         description:
           n > 0
-            ? `Nájdených ${n} transakcií. Denník: ${w} upozornení, ${data.summary.skipped} preskočených, ${data.summary.errors} chýb.`
-            : `Riadky transakcií: 0. Skontroluj denník nižšie (export musí byť z „Cash operation history“ a správny formát stĺpcov). Upozornení: ${w}.`,
+            ? `${brokerLabel}: nájdených ${n} transakcií. Denník: ${w} upozornení, ${data.summary.skipped} preskočených, ${data.summary.errors} chýb.`
+            : `${brokerLabel}: riadky transakcií 0. Skontroluj denník nižšie. Upozornení: ${w}.`,
       });
     },
     onError: (error: Error) => {
@@ -317,21 +336,27 @@ export default function Import() {
   });
 
   const saveMutation = useMutation({
-    mutationFn: async (transactions: ParsedTransaction[]) => {
-      const response = await fetch('/api/import/xtb/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
+    mutationFn: async ({
+      transactions,
+      broker,
+    }: {
+      transactions: ParsedTransaction[];
+      broker: ImportBroker;
+    }) => {
+      const response = await fetch(`/api/import/${broker}/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           transactions,
-          portfolioId: selectedPortfolio === 'default' ? null : selectedPortfolio,
+          portfolioId: selectedPortfolio === "default" ? null : selectedPortfolio,
         }),
       });
-      
+
       if (!response.ok) {
         throw new Error(await readHttpErrorMessage(response));
       }
-      
+
       return response.json() as Promise<SaveResult>;
     },
     onSuccess: (data) => {
@@ -364,27 +389,41 @@ export default function Import() {
     },
   });
 
+  const handleBrokerChange = (broker: ImportBroker) => {
+    setSelectedBroker(broker);
+    setParseResult(null);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(IMPORT_BROKER_KEY, broker);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     setIsParsing(true);
     try {
-      await parseMutation.mutateAsync(file);
+      await parseMutation.mutateAsync({ file, broker: selectedBroker });
     } finally {
       setIsParsing(false);
       if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+        fileInputRef.current.value = "";
       }
     }
   };
 
   const handleSave = async () => {
     if (!parseResult?.transactions.length) return;
-    
+
     setIsSaving(true);
     try {
-      await saveMutation.mutateAsync(parseResult.transactions);
+      await saveMutation.mutateAsync({
+        transactions: parseResult.transactions,
+        broker: selectedBroker,
+      });
     } finally {
       setIsSaving(false);
     }
@@ -446,9 +485,9 @@ export default function Import() {
   return (
     <div className="container mx-auto py-6 px-4 max-w-6xl">
       <div className="mb-6">
-        <h1 className="text-lg font-semibold mb-1">Import z XTB</h1>
+        <h1 className="text-lg font-semibold mb-1">Import brokera</h1>
         <p className="text-xs text-muted-foreground">
-          Nahrajte súbor exportu z XTB brokera (CSV alebo XLSX) pre automatický import transakcií.
+          Nahrajte export z XTB alebo eToro pre automatický import transakcií do portfólia.
         </p>
       </div>
 
@@ -465,6 +504,29 @@ export default function Import() {
           </CardHeader>
           <CardContent className="p-4 pt-3">
             <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium mb-2 block">Broker</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {IMPORT_BROKERS.map((broker) => (
+                    <button
+                      key={broker.id}
+                      type="button"
+                      onClick={() => handleBrokerChange(broker.id)}
+                      className={cn(
+                        "inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs font-medium transition-colors",
+                        selectedBroker === broker.id
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/50",
+                      )}
+                      data-testid={`button-import-broker-${broker.id}`}
+                    >
+                      <BrokerLogo brokerCode={broker.id} size="xs" />
+                      {broker.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="flex flex-col sm:flex-row gap-4">
                 <div className="flex-1">
                   <label className="text-sm font-medium mb-2 block">Portfólio pre import</label>
@@ -513,10 +575,22 @@ export default function Import() {
 
               <Alert>
                 <Info className="h-4 w-4" />
-                <AlertTitle>Formát XTB exportu</AlertTitle>
+                <AlertTitle>
+                  {selectedBroker === "xtb" ? "Formát XTB exportu" : "Formát eToro exportu"}
+                </AlertTitle>
                 <AlertDescription>
-                  Súbor by mal obsahovať stĺpce: Time, Type, Symbol, Amount, Comment.
-                  Parser automaticky detekuje hlavičku a oddeľovač (čiarka alebo bodkočiarka).
+                  {selectedBroker === "xtb" ? (
+                    <>
+                      Súbor by mal obsahovať stĺpce: Time, Type, Symbol, Amount, Comment.
+                      Parser automaticky detekuje hlavičku a oddeľovač (čiarka alebo bodkočiarka).
+                    </>
+                  ) : (
+                    <>
+                      Stiahnite Account Statement z eToro (Nastavenia → Account Statement → Download XLS).
+                      Podporované hárky: Account Activity, Closed Positions a Dividends. CFD a pákové
+                      pozície sa preskakujú.
+                    </>
+                  )}
                 </AlertDescription>
               </Alert>
             </div>

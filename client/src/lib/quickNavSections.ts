@@ -18,7 +18,7 @@ export const QUICK_NAV_SECTIONS: QuickNavSection[] = [
   { path: "/ai-skener", label: "AI Skener" },
   { path: "/tax", label: "Daňový asistent" },
   { path: "/options", label: "Opcie" },
-  { path: "/import", label: "Import XTB" },
+  { path: "/import", label: "Import brokera" },
   { path: "/faq", label: "FAQ" },
 ];
 

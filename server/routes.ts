@@ -36,6 +36,7 @@ import {
 } from "./yahooQuoteClient";
 import { fetchSilverHistoricalPrices, fetchSilverSpotQuote } from "./metalQuoteClient";
 import { parseXTBFile, type XTBImportResult } from "./xtbParser";
+import { parseEtoroFile } from "./etoroParser";
 import {
   computeRealizedGainsFromTransactionsAsync,
   transactionLotKey,
@@ -6518,8 +6519,244 @@ export async function registerRoutes(
   });
 
   // ============================================
-  // XTB IMPORT ENDPOINTS
+  // BROKER IMPORT (XTB, eToro)
   // ============================================
+
+  async function saveBrokerImportTransactions(
+    userId: string,
+    transactions: any[],
+    portfolioId: string | null | undefined,
+    brokerLabel: string,
+  ) {
+    const defaultPortfolio = await storage.ensureDefaultPortfolio(userId);
+    const targetPortfolioId: string = portfolioId || defaultPortfolio.id;
+
+    const imported: any[] = [];
+    const errors: string[] = [];
+    let skippedDuplicates = 0;
+
+    const existingInPortfolio = await storage.getTransactionsByUser(userId, targetPortfolioId);
+    const existingExternalIds = new Set(
+      existingInPortfolio
+        .map((t) => t.externalId)
+        .filter((id): id is string => typeof id === "string" && id.trim() !== ""),
+    );
+    const existingTransactionIds = new Set(
+      existingInPortfolio
+        .map((t) => t.transactionId)
+        .filter((id): id is string => typeof id === "string" && id.trim() !== ""),
+    );
+
+    const companyNameCache: Record<string, string> = {};
+
+    const sortedTransactions = [...transactions].sort(
+      (a: { date: string | Date }, b: { date: string | Date }) =>
+        new Date(a.date).getTime() - new Date(b.date).getTime(),
+    );
+
+    const tickersNeedingHoldingsSync = new Map<string, string>();
+
+    for (let i = 0; i < sortedTransactions.length; i++) {
+      const tx = sortedTransactions[i];
+      try {
+        if (tx.type === "TAX" && (!tx.ticker || tx.ticker === "TAX")) {
+          continue;
+        }
+
+        const isCashFlow = tx.type === "DEPOSIT" || tx.type === "WITHDRAWAL";
+        const rawTicker = typeof tx.ticker === "string" ? tx.ticker.trim() : "";
+        const effectiveTicker = rawTicker ? rawTicker : isCashFlow ? CASH_FLOW_TICKER : "";
+
+        if (!effectiveTicker) {
+          errors.push(`Riadok ${i + 1} (ID: ${tx.externalId || "N/A"}): Chýba ticker`);
+          continue;
+        }
+
+        const extId = typeof tx.externalId === "string" ? tx.externalId.trim() : "";
+        const txIdRaw = typeof tx.transactionId === "string" ? tx.transactionId.trim() : "";
+        const txId = txIdRaw || extId;
+        if (txId && existingTransactionIds.has(txId)) {
+          skippedDuplicates++;
+          continue;
+        }
+        if (extId && existingExternalIds.has(extId)) {
+          skippedDuplicates++;
+          continue;
+        }
+
+        const tickerUpper = effectiveTicker.toUpperCase();
+        const cashCustomName =
+          isCashFlow && typeof tx.companyName === "string" ? tx.companyName.trim() : "";
+
+        let companyName: string;
+        if (tickerUpper === CASH_FLOW_TICKER && cashCustomName !== "") {
+          companyName = cashCustomName;
+        } else {
+          let resolved = companyNameCache[tickerUpper] ?? "";
+          if (!resolved) {
+            if (tickerUpper === CASH_FLOW_TICKER) {
+              resolved =
+                tx.type === "DEPOSIT" ? "Vklad" : tx.type === "WITHDRAWAL" ? "Výber" : CASH_FLOW_TICKER;
+            } else if (tickerUpper === CASH_INTEREST_TICKER) {
+              resolved =
+                tx.type === "TAX" ? CASH_INTEREST_TAX_DISPLAY_NAME : CASH_INTEREST_DISPLAY_NAME;
+            } else {
+              resolved = effectiveTicker;
+              try {
+                const searchResponse = await fetch(
+                  `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(effectiveTicker)}&quotesCount=1`,
+                );
+                if (searchResponse.ok) {
+                  const searchData = await searchResponse.json();
+                  if (searchData.quotes && searchData.quotes.length > 0) {
+                    resolved =
+                      searchData.quotes[0].shortname ||
+                      searchData.quotes[0].longname ||
+                      effectiveTicker;
+                  }
+                }
+              } catch {
+                /* keep ticker */
+              }
+            }
+            companyNameCache[tickerUpper] = resolved;
+          }
+          companyName = resolved;
+        }
+
+        let shares: string;
+        let pricePerShare: string;
+
+        if (tx.type === "BUY" || tx.type === "SELL") {
+          shares = tx.quantity.toString();
+          pricePerShare = tx.priceEur.toString();
+        } else {
+          shares = "1";
+          pricePerShare = tx.totalAmountEur.toString();
+        }
+
+        const ptx = tx as {
+          originalCurrency?: string;
+          exchangeRateAtTransaction?: number;
+          baseCurrencyAmount?: number;
+          quantity?: number;
+          priceEur?: number;
+          totalAmountEur?: number;
+        };
+        const origCur =
+          typeof ptx.originalCurrency === "string" && ptx.originalCurrency.trim() !== ""
+            ? ptx.originalCurrency.trim().toUpperCase()
+            : "EUR";
+
+        const exNum = ptx.exchangeRateAtTransaction;
+        const exRate = typeof exNum === "number" && Number.isFinite(exNum) && exNum > 0 ? exNum : 1;
+
+        let baseNum = ptx.baseCurrencyAmount;
+        if (typeof baseNum !== "number" || !Number.isFinite(baseNum)) {
+          if (tx.type === "BUY" || tx.type === "SELL") {
+            const q = Number(tx.quantity);
+            const p = Number(ptx.priceEur);
+            baseNum = Number.isFinite(q) && Number.isFinite(p) ? q * p : 0;
+          } else {
+            const t = Number(ptx.totalAmountEur);
+            baseNum = Number.isFinite(t) ? t : 0;
+          }
+        }
+
+        const isCloseTradeCashImport =
+          isCashFlow && /close trade/i.test(String(cashCustomName || companyName || ""));
+
+        const instPx = (tx as { instrumentPricePerShare?: number }).instrumentPricePerShare;
+
+        const payload: InsertTransaction = {
+          userId,
+          portfolioId: targetPortfolioId,
+          type: tx.type,
+          ticker: tickerUpper,
+          companyName,
+          shares,
+          pricePerShare,
+          commission: "0",
+          externalId: extId || null,
+          transactionDate: new Date(tx.date),
+          originalCurrency: origCur,
+          currency: origCur,
+          exchangeRateAtTransaction: exRate.toFixed(8),
+          baseCurrencyAmount: baseNum.toFixed(4),
+          ...(typeof instPx === "number" && Number.isFinite(instPx) && instPx > 0
+            ? { instrumentPricePerShare: instPx.toFixed(4) }
+            : {}),
+          ...(isCloseTradeCashImport ? { realizedGain: baseNum.toFixed(4) } : {}),
+          ...(txId ? { transactionId: txId } : {}),
+        };
+
+        const parseResult = insertTransactionSchema.safeParse(payload);
+        if (!parseResult.success) {
+          const issue = parseResult.error.issues[0];
+          const detail = issue
+            ? `${issue.path.join(".")}: ${issue.message}`
+            : parseResult.error.message;
+          errors.push(`${tickerUpper} (${tx.type}) [ID: ${tx.externalId || "N/A"}]: ${detail}`);
+          continue;
+        }
+
+        const transaction = await storage.createTransaction(parseResult.data);
+        imported.push(transaction);
+        if (extId) existingExternalIds.add(extId);
+        if (txId) existingTransactionIds.add(txId);
+
+        if (tx.type === "BUY" || tx.type === "SELL") {
+          tickersNeedingHoldingsSync.set(tickerUpper, companyName);
+        }
+      } catch (err: unknown) {
+        const mapped = responseForDbUniqueViolation(err);
+        const msg = mapped
+          ? mapped.message
+          : err instanceof Error
+            ? err.message
+            : String(err);
+        errors.push(
+          `${(typeof tx.ticker === "string" && tx.ticker.trim()) || "?"} [ID: ${tx.externalId || "N/A"}]: ${msg}`,
+        );
+      }
+    }
+
+    const syncErrors: string[] = [];
+    for (const [tickerU, cn] of Array.from(tickersNeedingHoldingsSync.entries())) {
+      try {
+        await syncHoldingFromTradeTransactions(userId, targetPortfolioId, tickerU, cn);
+      } catch (syncErr: unknown) {
+        const msg =
+          syncErr instanceof Error
+            ? syncErr.message
+            : typeof syncErr === "string"
+              ? syncErr
+              : "Neznáma chyba";
+        console.error("Error syncing holding after broker import", { userId, ticker: tickerU }, syncErr);
+        syncErrors.push(`${tickerU}: ${msg}`);
+      }
+    }
+
+    const allErrors = [...errors, ...syncErrors];
+
+    if (imported.length > 0) {
+      invalidatePerformanceCache(userId);
+    }
+
+    const dupMsg =
+      skippedDuplicates > 0
+        ? ` Preskočených ${skippedDuplicates} už importovaných riadkov (rovnaké ID v tomto portfóliu).`
+        : "";
+    const syncWarn =
+      syncErrors.length > 0 ? ` Upozornenie: ${syncErrors.length} chýb pri prepočte podielov.` : "";
+
+    return {
+      imported: imported.length,
+      skippedDuplicates,
+      errors: allErrors.length > 0 ? allErrors : undefined,
+      message: `Importovaných ${imported.length} transakcií (${brokerLabel}).${dupMsg}${syncWarn}`,
+    };
+  }
 
   // Parse XTB file (preview without saving)
   app.post("/api/import/xtb/parse", isAuthenticated, upload.single('file'), async (req: any, res) => {
@@ -6543,292 +6780,11 @@ export async function registerRoutes(
     try {
       const userId = req.user.claims.sub;
       const { transactions, portfolioId } = req.body;
-      
       if (!Array.isArray(transactions) || transactions.length === 0) {
         return res.status(400).json({ message: "Žiadne transakcie na uloženie." });
       }
-
-      // Always resolve to a real portfolio ID. If the client sent null (the
-      // "default" option in the import UI), use the user's default portfolio.
-      // Without this, transactions/holdings land with portfolio_id = NULL and
-      // are only visible under "All portfolios" — never under a specific one.
-      const defaultPortfolio = await storage.ensureDefaultPortfolio(userId);
-      const targetPortfolioId: string = portfolioId || defaultPortfolio.id;
-
-      const imported: any[] = [];
-      const errors: string[] = [];
-      let skippedDuplicates = 0;
-
-      const existingInPortfolio = await storage.getTransactionsByUser(
-        userId,
-        targetPortfolioId
-      );
-      const existingExternalIds = new Set(
-        existingInPortfolio
-          .map((t) => t.externalId)
-          .filter((id): id is string => typeof id === "string" && id.trim() !== ""),
-      );
-      const existingTransactionIds = new Set(
-        existingInPortfolio
-          .map((t) => t.transactionId)
-          .filter((id): id is string => typeof id === "string" && id.trim() !== ""),
-      );
-
-      // Cache company names to avoid repeated API calls
-      const companyNameCache: Record<string, string> = {};
-
-      const sortedTransactions = [...transactions].sort(
-        (a: { date: string | Date }, b: { date: string | Date }) =>
-          new Date(a.date).getTime() - new Date(b.date).getTime(),
-      );
-
-      /** Upper ticker → company name — full holding replay after batch */
-      const tickersNeedingHoldingsSync = new Map<string, string>();
-
-      for (let i = 0; i < sortedTransactions.length; i++) {
-        const tx = sortedTransactions[i];
-        try {
-          // Skip TAX entries without a proper ticker
-          if (tx.type === 'TAX' && (!tx.ticker || tx.ticker === 'TAX')) {
-            continue;
-          }
-
-          const isCashFlow = tx.type === "DEPOSIT" || tx.type === "WITHDRAWAL";
-          const rawTicker =
-            typeof tx.ticker === "string" ? tx.ticker.trim() : "";
-          const effectiveTicker = rawTicker
-            ? rawTicker
-            : isCashFlow
-              ? CASH_FLOW_TICKER
-              : "";
-
-          if (!effectiveTicker) {
-            errors.push(
-              `Riadok ${i + 1} (ID: ${tx.externalId || "N/A"}): Chýba ticker`,
-            );
-            continue;
-          }
-
-          const extId =
-            typeof tx.externalId === "string" ? tx.externalId.trim() : "";
-          const txIdRaw =
-            typeof tx.transactionId === "string"
-              ? tx.transactionId.trim()
-              : "";
-          const txId = txIdRaw || extId;
-          if (txId && existingTransactionIds.has(txId)) {
-            skippedDuplicates++;
-            continue;
-          }
-          if (extId && existingExternalIds.has(extId)) {
-            skippedDuplicates++;
-            continue;
-          }
-
-          const tickerUpper = effectiveTicker.toUpperCase();
-          const cashCustomName =
-            isCashFlow && typeof (tx as { companyName?: string }).companyName === "string"
-              ? (tx as { companyName?: string }).companyName!.trim()
-              : "";
-
-          let companyName: string;
-          if (tickerUpper === CASH_FLOW_TICKER && cashCustomName !== "") {
-            companyName = cashCustomName;
-          } else {
-            let resolved = companyNameCache[tickerUpper] ?? "";
-            if (!resolved) {
-              if (tickerUpper === CASH_FLOW_TICKER) {
-                resolved =
-                  tx.type === "DEPOSIT"
-                    ? "Vklad"
-                    : tx.type === "WITHDRAWAL"
-                      ? "Výber"
-                      : CASH_FLOW_TICKER;
-              } else if (tickerUpper === CASH_INTEREST_TICKER) {
-                resolved =
-                  tx.type === "TAX"
-                    ? CASH_INTEREST_TAX_DISPLAY_NAME
-                    : CASH_INTEREST_DISPLAY_NAME;
-              } else {
-                resolved = effectiveTicker;
-                try {
-                  const searchResponse = await fetch(
-                    `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(effectiveTicker)}&quotesCount=1`,
-                  );
-                  if (searchResponse.ok) {
-                    const searchData = await searchResponse.json();
-                    if (searchData.quotes && searchData.quotes.length > 0) {
-                      resolved =
-                        searchData.quotes[0].shortname ||
-                        searchData.quotes[0].longname ||
-                        effectiveTicker;
-                    }
-                  }
-                } catch {
-                  /* keep ticker */
-                }
-              }
-              companyNameCache[tickerUpper] = resolved;
-            }
-            companyName = resolved;
-          }
-
-          // Calculate shares and price based on transaction type
-          let shares: string;
-          let pricePerShare: string;
-
-          if (tx.type === "BUY" || tx.type === "SELL") {
-            shares = tx.quantity.toString();
-            pricePerShare = tx.priceEur.toString();
-          } else {
-            // DIVIDEND / TAX / DEPOSIT / WITHDRAWAL: shares=1, pricePerShare = hotovostná suma (môže byť záporná)
-            shares = "1";
-            pricePerShare = tx.totalAmountEur.toString();
-          }
-
-          const ptx = tx as {
-            originalCurrency?: string;
-            exchangeRateAtTransaction?: number;
-            baseCurrencyAmount?: number;
-            quantity?: number;
-            priceEur?: number;
-            totalAmountEur?: number;
-          };
-          const origCur =
-            typeof ptx.originalCurrency === "string" &&
-            ptx.originalCurrency.trim() !== ""
-              ? ptx.originalCurrency.trim().toUpperCase()
-              : "EUR";
-
-          const exNum = ptx.exchangeRateAtTransaction;
-          const exRate =
-            typeof exNum === "number" && Number.isFinite(exNum) && exNum > 0
-              ? exNum
-              : 1;
-
-          let baseNum = ptx.baseCurrencyAmount;
-          if (typeof baseNum !== "number" || !Number.isFinite(baseNum)) {
-            if (tx.type === "BUY" || tx.type === "SELL") {
-              const q = Number(tx.quantity);
-              const p = Number((tx as { priceEur?: number }).priceEur);
-              baseNum = Number.isFinite(q) && Number.isFinite(p) ? q * p : 0;
-            } else {
-              const t = Number((tx as { totalAmountEur?: number }).totalAmountEur);
-              baseNum = Number.isFinite(t) ? t : 0;
-            }
-          }
-
-          const isCloseTradeCashImport =
-            isCashFlow &&
-            /close trade/i.test(
-              String(cashCustomName || companyName || ""),
-            );
-
-          const instPx = (tx as { instrumentPricePerShare?: number }).instrumentPricePerShare;
-
-          const payload: InsertTransaction = {
-            userId,
-            portfolioId: targetPortfolioId,
-            type: tx.type,
-            ticker: tickerUpper,
-            companyName,
-            shares,
-            pricePerShare,
-            commission: "0",
-            externalId: extId || null,
-            transactionDate: new Date(tx.date),
-            originalCurrency: origCur,
-            currency: origCur,
-            exchangeRateAtTransaction: exRate.toFixed(8),
-            baseCurrencyAmount: baseNum.toFixed(4),
-            ...(typeof instPx === "number" && Number.isFinite(instPx) && instPx > 0
-              ? { instrumentPricePerShare: instPx.toFixed(4) }
-              : {}),
-            ...(isCloseTradeCashImport ? { realizedGain: baseNum.toFixed(4) } : {}),
-            ...(txId ? { transactionId: txId } : {}),
-          };
-
-          const parseResult = insertTransactionSchema.safeParse(payload);
-          if (!parseResult.success) {
-            const issue = parseResult.error.issues[0];
-            const detail = issue
-              ? `${issue.path.join(".")}: ${issue.message}`
-              : parseResult.error.message;
-            errors.push(
-              `${tickerUpper} (${tx.type}) [ID: ${tx.externalId || "N/A"}]: ${detail}`,
-            );
-            continue;
-          }
-
-          const transaction = await storage.createTransaction(parseResult.data);
-          imported.push(transaction);
-          if (extId) existingExternalIds.add(extId);
-          if (txId) existingTransactionIds.add(txId);
-
-          if (tx.type === "BUY" || tx.type === "SELL") {
-            tickersNeedingHoldingsSync.set(tickerUpper, companyName);
-          }
-        } catch (err: unknown) {
-          const mapped = responseForDbUniqueViolation(err);
-          const msg = mapped
-            ? mapped.message
-            : err instanceof Error
-              ? err.message
-              : String(err);
-          errors.push(
-            `${(typeof tx.ticker === "string" && tx.ticker.trim()) || "?"} [ID: ${tx.externalId || "N/A"}]: ${msg}`,
-          );
-        }
-      }
-
-      const syncErrors: string[] = [];
-      for (const [tickerU, cn] of Array.from(
-        tickersNeedingHoldingsSync.entries(),
-      )) {
-        try {
-          await syncHoldingFromTradeTransactions(
-            userId,
-            targetPortfolioId,
-            tickerU,
-            cn,
-          );
-        } catch (syncErr: unknown) {
-          const msg =
-            syncErr instanceof Error
-              ? syncErr.message
-              : typeof syncErr === "string"
-                ? syncErr
-                : "Neznáma chyba";
-          console.error(
-            "Error syncing holding after XTB import",
-            { userId, ticker: tickerU },
-            syncErr,
-          );
-          syncErrors.push(`${tickerU}: ${msg}`);
-        }
-      }
-
-      const allErrors = [...errors, ...syncErrors];
-
-      if (imported.length > 0) {
-        invalidatePerformanceCache(userId);
-      }
-
-      const dupMsg =
-        skippedDuplicates > 0
-          ? ` Preskočených ${skippedDuplicates} už importovaných riadkov (rovnaké XTB ID v tomto portfóliu).`
-          : "";
-      const syncWarn =
-        syncErrors.length > 0
-          ? ` Upozornenie: ${syncErrors.length} chýb pri prepočte podielov.`
-          : "";
-
-      res.json({
-        imported: imported.length,
-        skippedDuplicates,
-        errors: allErrors.length > 0 ? allErrors : undefined,
-        message: `Importovaných ${imported.length} transakcií.${dupMsg}${syncWarn}`,
-      });
+      const result = await saveBrokerImportTransactions(userId, transactions, portfolioId, "XTB");
+      res.json(result);
     } catch (error) {
       const detail =
         error instanceof Error
@@ -6836,9 +6792,52 @@ export async function registerRoutes(
           : typeof error === "string"
             ? error
             : "Neznáma chyba";
-      const safeDetail =
-        detail.length > 1200 ? `${detail.slice(0, 1200)}…` : detail;
+      const safeDetail = detail.length > 1200 ? `${detail.slice(0, 1200)}…` : detail;
       console.error("Error saving XTB transactions:", error);
+      const columnHint = /column|does not exist|42703|42P01/i.test(safeDetail)
+        ? " Skontroluj, či na serveri s databázou beží `npm run db:push` (schéma musí zodpovedať kódu)."
+        : "";
+      res.status(500).json({
+        message: `Nepodarilo sa uložiť transakcie. ${safeDetail}${columnHint}`.trim(),
+      });
+    }
+  });
+
+  // Parse eToro account statement (preview without saving)
+  app.post("/api/import/etoro/parse", isAuthenticated, upload.single("file"), async (req: any, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "Nebol nahraný žiadny súbor." });
+      }
+      const result = await parseEtoroFile(req.file.buffer, req.file.originalname);
+      res.json(result);
+    } catch (error) {
+      console.error("Error parsing eToro file:", error);
+      res.status(500).json({
+        message: error instanceof Error ? error.message : "Nepodarilo sa spracovať súbor.",
+      });
+    }
+  });
+
+  // Import parsed eToro transactions to database
+  app.post("/api/import/etoro/save", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { transactions, portfolioId } = req.body;
+      if (!Array.isArray(transactions) || transactions.length === 0) {
+        return res.status(400).json({ message: "Žiadne transakcie na uloženie." });
+      }
+      const result = await saveBrokerImportTransactions(userId, transactions, portfolioId, "eToro");
+      res.json(result);
+    } catch (error) {
+      const detail =
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+            ? error
+            : "Neznáma chyba";
+      const safeDetail = detail.length > 1200 ? `${detail.slice(0, 1200)}…` : detail;
+      console.error("Error saving eToro transactions:", error);
       const columnHint = /column|does not exist|42703|42P01/i.test(safeDetail)
         ? " Skontroluj, či na serveri s databázou beží `npm run db:push` (schéma musí zodpovedať kódu)."
         : "";
