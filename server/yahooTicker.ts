@@ -1,6 +1,13 @@
 /** Konverzia brokera / app tickera na symbol Yahoo Finance (rovnaká logika ako watchlist quotes). */
+import { toYahooCryptoTicker } from "@shared/cryptoYahooTicker";
+
 export function toYahooTicker(ticker: string): string {
   const upper = ticker.trim().toUpperCase();
+
+  const cryptoYahoo = toYahooCryptoTicker(upper);
+  if (cryptoYahoo !== upper) {
+    return cryptoYahoo;
+  }
 
   const hk = upper.match(/^(\d+)\.HK$/);
   if (hk) {

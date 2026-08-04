@@ -37,6 +37,7 @@ import {
 import { fetchSilverHistoricalPrices, fetchSilverSpotQuote } from "./metalQuoteClient";
 import { parseXTBFile, type XTBImportResult } from "./xtbParser";
 import { parseEtoroFile } from "./etoroParser";
+import { toYahooTicker } from "./yahooTicker";
 import {
   computeRealizedGainsFromTransactionsAsync,
   transactionLotKey,
@@ -586,49 +587,6 @@ function getTickerCurrency(ticker: string): "EUR" | "USD" | "GBP" | "CZK" | "PLN
   }
   // US stocks (no suffix or common US exchanges)
   return "USD";
-}
-
-// Convert ticker to Yahoo Finance format
-function toYahooTicker(ticker: string): string {
-  const upper = ticker.trim().toUpperCase();
-  const hk = upper.match(/^(\d+)\.HK$/);
-  if (hk) {
-    return `${hk[1].padStart(4, "0")}.HK`;
-  }
-
-  // European exchanges mapping
-  const exchangeMap: Record<string, string> = {
-    ".US": "",         // US suffix from broker feed -> plain Yahoo ticker (AAPL.US -> AAPL)
-    // Musí byť pred kratším ".F" — inak neplatí, MC.FR končí .FR, nie .F
-    ".FR": ".PA",      // Euronext Paris (XTB „.FR“) → Yahoo uvádja MC.PA, MC.FR 404
-    ".DE": ".DE",      // XETRA Germany
-    ".DEX": ".DE",     // XETRA alternate
-    ".F": ".F",        // Frankfurt
-    ".BE": ".BE",      // Berlin
-    ".DU": ".DU",      // Düsseldorf
-    ".HM": ".HM",      // Hamburg
-    ".SG": ".SG",      // Stuttgart
-    ".MU": ".MU",      // Munich
-    ".L": ".L",        // London
-    ".PA": ".PA",      // Paris (Euronext)
-    ".PAR": ".PA",     // Paris alternate
-    ".AMS": ".AS",     // Amsterdam (Euronext)
-    ".AS": ".AS",      // Amsterdam
-    ".MI": ".MI",      // Milan
-    ".SW": ".SW",      // Swiss
-    ".VI": ".VI",      // Vienna
-    ".PR": ".PR",      // Prague Stock Exchange
-    ".WA": ".WA",      // Warsaw Stock Exchange
-  };
-  
-  for (const [suffix, yahooSuffix] of Object.entries(exchangeMap)) {
-    if (upper.endsWith(suffix)) {
-      const base = ticker.slice(0, -suffix.length);
-      return base + yahooSuffix;
-    }
-  }
-
-  return ticker;
 }
 
 type YahooTradingPeriodWindow = { start?: number; end?: number };
@@ -2087,7 +2045,7 @@ const STOCK_DATABASE = [
   { ticker: "BTC-USD", name: "Bitcoin", exchange: "CRYPTO", currency: "USD" },
   { ticker: "ETH-USD", name: "Ethereum", exchange: "CRYPTO", currency: "USD" },
   { ticker: "SOL-USD", name: "Solana", exchange: "CRYPTO", currency: "USD" },
-  { ticker: "SUI-USD", name: "Sui", exchange: "CRYPTO", currency: "USD" },
+  { ticker: "SUI20947-USD", name: "Sui", exchange: "CRYPTO", currency: "USD" },
   { ticker: "XRP-USD", name: "XRP (Ripple)", exchange: "CRYPTO", currency: "USD" },
   { ticker: "DOGE-USD", name: "Dogecoin", exchange: "CRYPTO", currency: "USD" },
   { ticker: "ADA-USD", name: "Cardano", exchange: "CRYPTO", currency: "USD" },
@@ -6611,7 +6569,7 @@ export async function registerRoutes(
           isCashFlow && typeof tx.companyName === "string" ? tx.companyName.trim() : "";
         const parserCompanyName =
           typeof tx.companyName === "string" ? tx.companyName.trim() : "";
-        const isCryptoYahooTicker = /^[A-Z0-9]{1,12}-(USD|EUR|USDT)$/i.test(tickerUpper);
+        const isCryptoYahooTicker = /^[A-Z0-9]{1,20}-(USD|EUR|USDT)$/i.test(tickerUpper);
 
         let companyName: string;
         if (tickerUpper === CASH_FLOW_TICKER && cashCustomName !== "") {

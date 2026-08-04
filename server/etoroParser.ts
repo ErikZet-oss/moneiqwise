@@ -3,6 +3,7 @@ import { CASH_FLOW_TICKER } from "@shared/schema";
 import type { ImportLogEntry, ParsedTransaction, XTBImportResult } from "./xtbParser";
 import { eurPerOneUnit } from "./eurAtTransactionDate";
 import { toYahooTicker } from "./yahooTicker";
+import { cryptoDisplayName, resolveCryptoYahooTicker } from "@shared/cryptoYahooTicker";
 
 const TRADABLE_ASSETS = new Set(["Stocks", "ETF", "Crypto"]);
 
@@ -122,20 +123,20 @@ function parseInstrument(details: string): { ticker: string; quoteCurrency: stri
   return { ticker: cleanTicker(symbol), quoteCurrency };
 }
 
-/** eToro krypto páry (SUI/USD) → Yahoo formát SUI-USD. */
+/** eToro krypto páry (SUI/USD) → Yahoo ticker (napr. SUI20947-USD). */
 function resolveEtoroTicker(
   assetType: string,
   instrument: { ticker: string; quoteCurrency: string },
 ): string {
   if (assetType === "Crypto") {
-    return `${instrument.ticker}-${instrument.quoteCurrency}`;
+    return resolveCryptoYahooTicker(instrument.ticker, instrument.quoteCurrency);
   }
   return instrument.ticker;
 }
 
 function resolveEtoroCompanyName(assetType: string, details: string, ticker: string): string {
   if (assetType === "Crypto") {
-    return `${details} (krypto)`;
+    return cryptoDisplayName(ticker) ?? `${details} (krypto)`;
   }
   if (ticker === "0300.HK") {
     return "Midea Group Co., Ltd.";
