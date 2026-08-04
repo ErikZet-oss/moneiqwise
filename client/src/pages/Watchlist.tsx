@@ -20,9 +20,11 @@ import {
 import {
   Eye,
   ExternalLink,
+  LayoutList,
   Loader2,
   Moon,
   Plus,
+  Rows2,
   Search,
   Tag,
   Trash2,
@@ -528,23 +530,31 @@ export default function Watchlist() {
             </span>
           </div>
           <div
-            className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2 py-1.5 text-[10px] text-muted-foreground"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2 py-1.5 text-muted-foreground"
             aria-label="Režim zobrazenia watchlistu"
           >
-            <span className={cn("font-medium", viewMode === "classic" && "text-foreground")}>
-              Klasický
-            </span>
+            <LayoutList
+              className={cn(
+                "h-3.5 w-3.5 shrink-0",
+                viewMode === "classic" ? "text-foreground" : "text-muted-foreground/60",
+              )}
+              aria-hidden
+            />
             <Switch
               checked={viewMode === "simple"}
               onCheckedChange={(checked) =>
                 setWatchlistViewMode(checked ? "simple" : "classic")
               }
               className="scale-[0.72] origin-center"
-              aria-label={viewMode === "simple" ? "Prepnúť na klasické zobrazenie" : "Prepnúť na jednoduché zobrazenie"}
+              aria-label={viewMode === "simple" ? "Prepnúť na detailné zobrazenie" : "Prepnúť na kompaktné zobrazenie"}
             />
-            <span className={cn("font-medium", viewMode === "simple" && "text-foreground")}>
-              Jednoduchý
-            </span>
+            <Rows2
+              className={cn(
+                "h-3.5 w-3.5 shrink-0",
+                viewMode === "simple" ? "text-foreground" : "text-muted-foreground/60",
+              )}
+              aria-hidden
+            />
           </div>
         </div>
       </div>
