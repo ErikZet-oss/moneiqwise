@@ -651,7 +651,7 @@ export default function Import() {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>XTB ID</TableHead>
+                            <TableHead>Broker ID</TableHead>
                             <TableHead>Dátum</TableHead>
                             <TableHead>Ticker</TableHead>
                             <TableHead>Typ</TableHead>
@@ -664,7 +664,7 @@ export default function Import() {
                           {parseResult.transactions.map((tx, index) => (
                             <TableRow key={index} data-testid={`row-transaction-${index}`} className={tx.type === 'TAX' || tx.type === 'WITHDRAWAL' ? 'bg-red-500/5' : ''}>
                               <TableCell className="font-mono text-xs text-muted-foreground">
-                                {tx.externalId || '-'}
+                                {tx.externalId || tx.transactionId || '-'}
                               </TableCell>
                               <TableCell>
                                 {format(new Date(tx.date), "d.M.yyyy", { locale: sk })}

@@ -159,6 +159,23 @@ function pricingFromActivity(
   };
 }
 
+/** Stabilné ID pre hotovostné riadky — dátum + suma + popis (nezávislé od čísla riadku v exporte). */
+function buildEtoroCashTransactionId(
+  kind: string,
+  date: Date,
+  amount: number,
+  details: string,
+): string {
+  const base = `etoro:${kind}:${date.getTime()}:${Math.abs(amount).toFixed(2)}:`;
+  const maxDetails = Math.max(0, 64 - base.length);
+  const detailsKey = stripDiacritics(details)
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxDetails);
+  return `${base}${detailsKey}`;
+}
+
 /** Primárny zdroj: hárok Account Activity (všetky transakcie). */
 function parseAccountActivity(rows: unknown[][], log: ImportLogEntry[]): ParsedTransaction[] {
   const out: ParsedTransaction[] = [];
@@ -196,6 +213,7 @@ function parseAccountActivity(rows: unknown[][], log: ImportLogEntry[]): ParsedT
       if (amount === 0) continue;
       const eurFromDetails = parseEurFromDetails(details);
       const depositEur = eurFromDetails ?? Math.abs(amount);
+      const depositId = buildEtoroCashTransactionId("deposit", date, depositEur, details || typeRaw);
       out.push({
         date,
         ticker: CASH_FLOW_TICKER,
@@ -204,7 +222,7 @@ function parseAccountActivity(rows: unknown[][], log: ImportLogEntry[]): ParsedT
         priceEur: 0,
         totalAmountEur: depositEur,
         originalComment: details || typeRaw,
-        transactionId: `etoro:activity:${positionId || i + 1}:deposit:${date.getTime()}`,
+        transactionId: depositId,
         originalCurrency: eurFromDetails != null ? "EUR" : "USD",
         exchangeRateAtTransaction: 1,
         baseCurrencyAmount: depositEur,
@@ -217,6 +235,7 @@ function parseAccountActivity(rows: unknown[][], log: ImportLogEntry[]): ParsedT
     if (typeNorm === "deposit conversion fee") {
       if (amount === 0) continue;
       const fee = Math.abs(amount);
+      const feeDetails = details || "Deposit Conversion Fee";
       out.push({
         date,
         ticker: CASH_FLOW_TICKER,
@@ -224,8 +243,8 @@ function parseAccountActivity(rows: unknown[][], log: ImportLogEntry[]): ParsedT
         quantity: 0,
         priceEur: 0,
         totalAmountEur: -fee,
-        originalComment: details || "Deposit Conversion Fee",
-        transactionId: `etoro:activity:${i + 1}:conv-fee:${date.getTime()}`,
+        originalComment: feeDetails,
+        transactionId: buildEtoroCashTransactionId("deposit-fee", date, fee, feeDetails),
         originalCurrency: "USD",
         exchangeRateAtTransaction: 1,
         baseCurrencyAmount: -fee,
@@ -245,7 +264,7 @@ function parseAccountActivity(rows: unknown[][], log: ImportLogEntry[]): ParsedT
         priceEur: 0,
         totalAmountEur: -Math.abs(amount),
         originalComment: details || typeRaw,
-        transactionId: `etoro:activity:${i + 1}:withdraw:${date.getTime()}`,
+        transactionId: buildEtoroCashTransactionId("withdraw", date, Math.abs(amount), details || typeRaw),
         originalCurrency: "EUR",
         exchangeRateAtTransaction: 1,
         baseCurrencyAmount: -Math.abs(amount),
