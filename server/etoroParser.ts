@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import { CASH_FLOW_TICKER } from "@shared/schema";
 import type { ImportLogEntry, ParsedTransaction, XTBImportResult } from "./xtbParser";
+import { eurPerOneUnit } from "./eurAtTransactionDate";
 
 const TRADABLE_ASSETS = new Set(["Stocks", "ETF", "Crypto"]);
 
@@ -194,6 +195,39 @@ function buildEtoroCashTransactionId(
   return `${base}${detailsKey}`;
 }
 
+/** Prevedie sumy v USD (účet eToro) do EUR pre `baseCurrencyAmount` podľa kurzu v deň transakcie. */
+async function applyEtoroEurConversion(transactions: ParsedTransaction[]): Promise<void> {
+  const rateCache = new Map<string, number>();
+
+  for (const tx of transactions) {
+    const ccy = (tx.originalCurrency || "EUR").toUpperCase();
+    if (ccy === "EUR") {
+      tx.exchangeRateAtTransaction = 1;
+      continue;
+    }
+
+    const raw =
+      typeof tx.baseCurrencyAmount === "number" ? tx.baseCurrencyAmount : tx.totalAmountEur;
+    if (typeof raw !== "number" || !Number.isFinite(raw) || Math.abs(raw) < 1e-9) continue;
+
+    const iso = tx.date.toISOString().slice(0, 10);
+    const cacheKey = `${iso}|${ccy}`;
+    let rate = rateCache.get(cacheKey);
+    if (rate == null) {
+      const fetched = await eurPerOneUnit(ccy, iso);
+      if (fetched == null || fetched <= 0) continue;
+      rate = fetched;
+      rateCache.set(cacheKey, rate);
+    }
+
+    const sign = raw < 0 ? -1 : 1;
+    const eur = Math.abs(raw) * rate * sign;
+    tx.baseCurrencyAmount = eur;
+    tx.totalAmountEur = eur;
+    tx.exchangeRateAtTransaction = rate;
+  }
+}
+
 /** Primárny zdroj: hárok Account Activity (všetky transakcie). */
 function parseAccountActivity(
   rows: unknown[][],
@@ -233,24 +267,31 @@ function parseAccountActivity(
 
     if (typeNorm === "deposit") {
       if (amount === 0) continue;
+      const accountCredit = Math.abs(amount);
       const eurFromDetails = parseEurFromDetails(details);
-      const depositEur = eurFromDetails ?? Math.abs(amount);
-      const depositId = buildEtoroCashTransactionId("deposit", date, depositEur, details || typeRaw);
+      const depositId = buildEtoroCashTransactionId("deposit", date, accountCredit, details || typeRaw);
       out.push({
         date,
         ticker: CASH_FLOW_TICKER,
         type: "DEPOSIT",
         quantity: 0,
         priceEur: 0,
-        totalAmountEur: depositEur,
+        totalAmountEur: accountCredit,
         originalComment: details || typeRaw,
         transactionId: depositId,
-        originalCurrency: eurFromDetails != null ? "EUR" : "USD",
+        originalCurrency: "USD",
         exchangeRateAtTransaction: 1,
-        baseCurrencyAmount: depositEur,
-        companyName: "Vklad (eToro)",
+        baseCurrencyAmount: accountCredit,
+        companyName:
+          eurFromDetails != null
+            ? `Vklad (eToro) — ${eurFromDetails.toFixed(2)} EUR`
+            : "Vklad (eToro)",
       });
-      log.push({ row: i + 1, status: "success", message: `Vklad +${depositEur.toFixed(2)}` });
+      log.push({
+        row: i + 1,
+        status: "success",
+        message: `Vklad +${accountCredit.toFixed(2)} USD${eurFromDetails != null ? ` (${eurFromDetails.toFixed(2)} EUR kartou)` : ""}`,
+      });
       continue;
     }
 
@@ -561,6 +602,8 @@ export async function parseEtoroFile(fileBuffer: Buffer, _fileName: string): Pro
         ...parseDividends(sheetToRows(workbook, dividendsSheet), tickerByPosition, log),
       );
     }
+
+    await applyEtoroEurConversion(transactions);
 
     transactions.sort((a, b) => a.date.getTime() - b.date.getTime());
     log.push({
