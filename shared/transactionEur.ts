@@ -2,18 +2,18 @@ import type { Transaction } from "./schema";
 import { getTickerCurrency } from "./tickerCurrency";
 import { sumCashFlowEurFromRows } from "./cashFromTransactions";
 
-export type TradeCurrency = "EUR" | "USD" | "GBP" | "CZK" | "PLN";
+export type TradeCurrency = "EUR" | "USD" | "GBP" | "CZK" | "PLN" | "HKD";
 
 /**
  * Mena, v ktorej sú `shares` a `pricePerShare` zadané pre akciový obchod.
  */
 export function inferTradeCurrency(t: Pick<Transaction, "ticker" | "originalCurrency" | "currency">): TradeCurrency {
   const oc = t.originalCurrency?.toUpperCase().trim();
-  if (oc === "EUR" || oc === "USD" || oc === "GBP" || oc === "CZK" || oc === "PLN") {
+  if (oc === "EUR" || oc === "USD" || oc === "GBP" || oc === "CZK" || oc === "PLN" || oc === "HKD") {
     return oc;
   }
   const leg = t.currency?.toUpperCase().trim();
-  if (leg === "EUR" || leg === "USD" || leg === "GBP" || leg === "CZK" || leg === "PLN") {
+  if (leg === "EUR" || leg === "USD" || leg === "GBP" || leg === "CZK" || leg === "PLN" || leg === "HKD") {
     return leg;
   }
   return getTickerCurrency(t.ticker);

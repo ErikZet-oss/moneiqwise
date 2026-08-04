@@ -8,7 +8,7 @@ export const CASH_INTEREST_DISPLAY_NAME = "Úrok z cash XTB";
 
 export const CASH_INTEREST_TAX_DISPLAY_NAME = "Daň z úroku z cash XTB";
 
-export type QuoteCurrency = "EUR" | "USD" | "GBP" | "CZK" | "PLN";
+export type QuoteCurrency = "EUR" | "USD" | "GBP" | "CZK" | "PLN" | "HKD";
 
 /**
  * Mena trhovej kotácie (Yahoo) podľa sufixu / typu aktíva.
@@ -47,6 +47,7 @@ export function getTickerCurrency(ticker: string): QuoteCurrency {
   if (u.endsWith(".PR")) return "CZK";
   if (u.endsWith(".WA")) return "PLN";
   if (u.endsWith(".L")) return "GBP";
+  if (u.endsWith(".HK")) return "HKD";
   return "USD";
 }
 

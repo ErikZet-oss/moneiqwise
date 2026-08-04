@@ -1,4 +1,4 @@
-type SupportedCcy = "EUR" | "USD" | "CZK" | "PLN" | "GBP";
+type SupportedCcy = "EUR" | "USD" | "CZK" | "PLN" | "GBP" | "HKD";
 export type AllExchangeRates = {
   eurToUsd: number;
   usdToEur: number;
@@ -8,6 +8,8 @@ export type AllExchangeRates = {
   plnToEur: number;
   eurToGbp: number;
   gbpToEur: number;
+  eurToHkd: number;
+  hkdToEur: number;
 };
 
 export function convertAmountBetween(
@@ -34,6 +36,9 @@ export function convertAmountBetween(
     case "GBP":
       eur = amount * rates.gbpToEur;
       break;
+    case "HKD":
+      eur = amount * rates.hkdToEur;
+      break;
     default:
       eur = amount;
   }
@@ -48,6 +53,8 @@ export function convertAmountBetween(
       return eur * rates.eurToPln;
     case "GBP":
       return eur * rates.eurToGbp;
+    case "HKD":
+      return eur * rates.eurToHkd;
     default:
       return eur;
   }

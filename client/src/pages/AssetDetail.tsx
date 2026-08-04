@@ -30,6 +30,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Switch } from "@/components/ui/switch";
 import type { BrokerCode, Currency, Transaction } from "@shared/schema";
 import type { TradeCurrency } from "@shared/transactionEur";
+import type { QuoteCurrency } from "@shared/tickerCurrency";
 import { cn, formatShareQuantity } from "@/lib/utils";
 
 const PRICE_CHART_RANGE_OPTIONS = [
@@ -154,13 +155,15 @@ function alignMarkerToChart(
   return p != null ? { date: best, price: p } : null;
 }
 
-function txnCurrency(tx: Transaction): "EUR" | "USD" | "GBP" | "CZK" | "PLN" {
-  const c = (tx.currency || "EUR").toUpperCase();
-  if (c === "USD" || c === "GBP" || c === "CZK" || c === "PLN" || c === "EUR") return c;
+function txnCurrency(tx: Transaction): QuoteCurrency {
+  const oc = (tx.originalCurrency || tx.currency || "EUR").toUpperCase();
+  if (oc === "USD" || oc === "GBP" || oc === "CZK" || oc === "PLN" || oc === "HKD" || oc === "EUR") {
+    return oc;
+  }
   return "EUR";
 }
 
-function formatAmountInCurrency(value: number, ccy: Currency | TradeCurrency): string {
+function formatAmountInCurrency(value: number, ccy: Currency | TradeCurrency | QuoteCurrency): string {
   return new Intl.NumberFormat("sk-SK", {
     style: "currency",
     currency: ccy,

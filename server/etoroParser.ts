@@ -156,6 +156,10 @@ function parseUnits(value: unknown): number {
   return parseAmount(value);
 }
 
+function resolveEtoroAmountCurrency(quoteCurrency: string): string {
+  return quoteCurrency === "EUR" ? "EUR" : "USD";
+}
+
 function pricingFromActivity(
   amount: number,
   units: number,
@@ -167,16 +171,18 @@ function pricingFromActivity(
   baseCurrencyAmount: number;
 } {
   const perShare = units > 0 ? amount / units : 0;
-  if (quoteCurrency === "EUR") {
+  const amountCurrency = resolveEtoroAmountCurrency(quoteCurrency);
+  if (amountCurrency === "EUR") {
     return {
       priceEur: perShare,
       originalCurrency: "EUR",
       baseCurrencyAmount: amount,
+      instrumentPricePerShare: perShare,
     };
   }
   return {
     priceEur: perShare,
-    originalCurrency: quoteCurrency || "USD",
+    originalCurrency: "USD",
     instrumentPricePerShare: perShare,
     baseCurrencyAmount: amount,
   };
@@ -229,6 +235,35 @@ async function applyEtoroEurConversion(transactions: ParsedTransaction[]): Promi
     tx.baseCurrencyAmount = eur;
     tx.totalAmountEur = eur;
     tx.exchangeRateAtTransaction = rate;
+  }
+}
+
+/** eToro účet v USD: pre HK akcie prepočíta USD/ks na HKD/ks (Yahoo kotuje v HKD). */
+async function applyEtoroHkInstrumentPrices(transactions: ParsedTransaction[]): Promise<void> {
+  const rateCache = new Map<string, { eurPerUsd: number; eurPerHkd: number }>();
+
+  for (const tx of transactions) {
+    if (tx.type !== "BUY" && tx.type !== "SELL") continue;
+    if (!tx.ticker.endsWith(".HK")) continue;
+    if ((tx.originalCurrency || "").toUpperCase() !== "USD") continue;
+
+    const usdPerShare = tx.instrumentPricePerShare ?? tx.priceEur;
+    if (typeof usdPerShare !== "number" || !Number.isFinite(usdPerShare) || usdPerShare <= 0) continue;
+
+    const iso = tx.date.toISOString().slice(0, 10);
+    let cached = rateCache.get(iso);
+    if (!cached) {
+      const eurPerUsd = await eurPerOneUnit("USD", iso);
+      const eurPerHkd = await eurPerOneUnit("HKD", iso);
+      if (!eurPerUsd || !eurPerHkd) continue;
+      cached = { eurPerUsd, eurPerHkd };
+      rateCache.set(iso, cached);
+    }
+
+    const hkdPerShare = usdPerShare * (cached.eurPerUsd / cached.eurPerHkd);
+    tx.instrumentPricePerShare = hkdPerShare;
+    tx.priceEur = hkdPerShare;
+    tx.originalCurrency = "HKD";
   }
 }
 
@@ -608,6 +643,7 @@ export async function parseEtoroFile(fileBuffer: Buffer, _fileName: string): Pro
     }
 
     await applyEtoroEurConversion(transactions);
+    await applyEtoroHkInstrumentPrices(transactions);
 
     transactions.sort((a, b) => a.date.getTime() - b.date.getTime());
     log.push({

@@ -12,6 +12,7 @@ function eurPerOneUnitOfCcy(ccy: string, rates: AllExchangeRates): number {
   if (c === "CZK") return rates.czkToEur;
   if (c === "PLN") return rates.plnToEur;
   if (c === "GBP") return rates.gbpToEur;
+  if (c === "HKD") return rates.hkdToEur;
   return 1;
 }
 

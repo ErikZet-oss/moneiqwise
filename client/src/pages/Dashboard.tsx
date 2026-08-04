@@ -348,7 +348,7 @@ async function fetchDashboardQuotesBatch(
   return data.quotes as Record<string, StockQuote>;
 }
 
-type PortfolioQuoteCurrency = "EUR" | "USD" | "GBP" | "CZK" | "PLN";
+type PortfolioQuoteCurrency = "EUR" | "USD" | "GBP" | "CZK" | "PLN" | "HKD";
 
 function sortHoldingsArray(
   holdings: HoldingWithCostCurrency[] | undefined,

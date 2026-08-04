@@ -61,6 +61,7 @@ import {
 } from "@/lib/usMarketSession";
 import { cn } from "@/lib/utils";
 import type { Currency } from "@shared/schema";
+import type { QuoteCurrency } from "@shared/tickerCurrency";
 
 const premarketMoonClass = "text-amber-600 dark:text-amber-400";
 
@@ -219,13 +220,14 @@ export default function Watchlist() {
   }, []);
 
   const convertToWatchlistCurrency = useCallback(
-    (price: number, source: "EUR" | "USD" | "GBP" | "CZK" | "PLN") => {
+    (price: number, source: QuoteCurrency) => {
       const rate = exchangeRate;
       let eurPrice = price;
       if (source === "USD") eurPrice = price * rate.usdToEur;
       else if (source === "GBP") eurPrice = price * rate.gbpToEur;
       else if (source === "CZK") eurPrice = price * rate.czkToEur;
       else if (source === "PLN") eurPrice = price * rate.plnToEur;
+      else if (source === "HKD") eurPrice = price * rate.hkdToEur;
       if (displayCurrency === "USD") return eurPrice * rate.eurToUsd;
       return eurPrice;
     },

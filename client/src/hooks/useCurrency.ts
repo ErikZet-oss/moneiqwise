@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Currency } from "@shared/schema";
-import { getTickerCostCurrency, getTickerCurrency } from "@shared/tickerCurrency";
+import { getTickerCostCurrency, getTickerCurrency, type QuoteCurrency } from "@shared/tickerCurrency";
 import type { HoldingWithCostCurrency } from "@shared/holdingCostCurrency";
 import type { TradeCurrency } from "@shared/transactionEur";
 
@@ -15,6 +15,8 @@ interface ExchangeRate {
   plnToEur: number;
   eurToGbp: number;
   gbpToEur: number;
+  eurToHkd: number;
+  hkdToEur: number;
 }
 
 interface Settings {
@@ -32,6 +34,8 @@ const defaultRates: ExchangeRate = {
   plnToEur: 0.233,
   eurToGbp: 0.85,
   gbpToEur: 1.18,
+  eurToHkd: 8.45,
+  hkdToEur: 0.118,
 };
 
 export function useCurrency() {
@@ -63,7 +67,7 @@ export function useCurrency() {
   }, [settings?.averageCostDisplayCurrency, currency]);
 
   // Convert price based on source currency and target currency
-  const convertPrice = (price: number, sourceCurrency: "EUR" | "USD" | "GBP" | "CZK" | "PLN"): number => {
+  const convertPrice = (price: number, sourceCurrency: QuoteCurrency): number => {
     // If same currency, no conversion needed
     if (sourceCurrency === currency) return price;
 
@@ -77,6 +81,8 @@ export function useCurrency() {
       eurPrice = price * rate.czkToEur;
     } else if (sourceCurrency === "PLN") {
       eurPrice = price * rate.plnToEur;
+    } else if (sourceCurrency === "HKD") {
+      eurPrice = price * rate.hkdToEur;
     }
 
     // Then convert from EUR to target currency
@@ -91,7 +97,7 @@ export function useCurrency() {
 
   /** Priemerná nákupná cena: prepočet do `averageCostDisplayCurrency` (EUR/USD alebo mena zobrazenia). */
   const convertAverageCostPrice = useCallback(
-    (price: number, sourceCurrency: "EUR" | "USD" | "GBP" | "CZK" | "PLN"): number => {
+    (price: number, sourceCurrency: QuoteCurrency): number => {
       const target = averageCostDisplayCurrency;
       if (sourceCurrency === target) return price;
 
@@ -104,6 +110,8 @@ export function useCurrency() {
         eurPrice = price * rate.czkToEur;
       } else if (sourceCurrency === "PLN") {
         eurPrice = price * rate.plnToEur;
+      } else if (sourceCurrency === "HKD") {
+        eurPrice = price * rate.hkdToEur;
       }
 
       if (target === "EUR") {

@@ -38,9 +38,9 @@ import {
 const REALIZED_NEAR_ZERO = 1e-6;
 
 /** Mena, v ktorej je v DB `realizedGain` pri SELL (rovnako ako cena) — ako na `/api/realized-gains`. */
-function realizedGainSourceCurrency(tx: Transaction): "EUR" | "USD" | "GBP" | "CZK" | "PLN" {
+function realizedGainSourceCurrency(tx: Transaction): "EUR" | "USD" | "GBP" | "CZK" | "PLN" | "HKD" {
   const c = (tx.currency || "").trim().toUpperCase();
-  if (c === "USD" || c === "EUR" || c === "GBP" || c === "CZK" || c === "PLN") return c;
+  if (c === "USD" || c === "EUR" || c === "GBP" || c === "CZK" || c === "PLN" || c === "HKD") return c;
   return getTickerCurrency(tx.ticker);
 }
 

@@ -460,6 +460,14 @@ interface AllExchangeRates {
   plnToEur: number;
   eurToGbp: number;
   gbpToEur: number;
+  eurToHkd: number;
+  hkdToEur: number;
+}
+
+function withHkdRates(partial: Omit<AllExchangeRates, "eurToHkd" | "hkdToEur"> & { eurToHkd?: number }): AllExchangeRates {
+  const eurToHkd = partial.eurToHkd ?? 8.45;
+  const { eurToHkd: _drop, ...rest } = partial;
+  return { ...rest, eurToHkd, hkdToEur: 1 / eurToHkd };
 }
 
 // Fetch all exchange rates from EUR
@@ -471,11 +479,11 @@ async function fetchAllExchangeRates(): Promise<AllExchangeRates> {
 
   // Try Frankfurter API first (free, reliable, ECB rates)
   try {
-    const response = await fetch("https://api.frankfurter.app/latest?from=EUR&to=USD,CZK,PLN,GBP");
+    const response = await fetch("https://api.frankfurter.app/latest?from=EUR&to=USD,CZK,PLN,GBP,HKD");
     if (response.ok) {
       const data = await response.json();
       if (data.rates?.USD && data.rates?.CZK) {
-        const result: AllExchangeRates = {
+        const result = withHkdRates({
           eurToUsd: data.rates.USD,
           usdToEur: 1 / data.rates.USD,
           eurToCzk: data.rates.CZK,
@@ -484,7 +492,8 @@ async function fetchAllExchangeRates(): Promise<AllExchangeRates> {
           plnToEur: 1 / (data.rates.PLN || 4.3),
           eurToGbp: data.rates.GBP || 0.85,
           gbpToEur: 1 / (data.rates.GBP || 0.85),
-        };
+          eurToHkd: data.rates.HKD,
+        });
         exchangeRateCache.set("ALL_RATES", { data: result, timestamp: Date.now() });
         scheduleCacheSave();
         console.log(`Exchange rates fetched: 1 EUR = ${result.eurToUsd} USD, ${result.eurToCzk} CZK, ${result.eurToPln} PLN`);
@@ -501,7 +510,7 @@ async function fetchAllExchangeRates(): Promise<AllExchangeRates> {
     if (response.ok) {
       const data = await response.json();
       if (data.rates?.USD) {
-        const result: AllExchangeRates = {
+        const result = withHkdRates({
           eurToUsd: data.rates.USD,
           usdToEur: 1 / data.rates.USD,
           eurToCzk: data.rates.CZK || 25.3,
@@ -510,7 +519,8 @@ async function fetchAllExchangeRates(): Promise<AllExchangeRates> {
           plnToEur: 1 / (data.rates.PLN || 4.3),
           eurToGbp: data.rates.GBP || 0.85,
           gbpToEur: 1 / (data.rates.GBP || 0.85),
-        };
+          eurToHkd: data.rates.HKD,
+        });
         exchangeRateCache.set("ALL_RATES", { data: result, timestamp: Date.now() });
         scheduleCacheSave();
         return result;
@@ -526,8 +536,8 @@ async function fetchAllExchangeRates(): Promise<AllExchangeRates> {
   }
 
   // Fallback to approximate rates
-  return { 
-    eurToUsd: 1.08, 
+  return withHkdRates({
+    eurToUsd: 1.08,
     usdToEur: 0.926,
     eurToCzk: 25.3,
     czkToEur: 0.0395,
@@ -535,7 +545,7 @@ async function fetchAllExchangeRates(): Promise<AllExchangeRates> {
     plnToEur: 0.233,
     eurToGbp: 0.85,
     gbpToEur: 1.18,
-  };
+  });
 }
 
 // Legacy function for backward compatibility
@@ -545,7 +555,7 @@ async function fetchExchangeRate(): Promise<{ eurToUsd: number; usdToEur: number
 }
 
 // Determine currency for a ticker
-function getTickerCurrency(ticker: string): "EUR" | "USD" | "GBP" | "CZK" | "PLN" {
+function getTickerCurrency(ticker: string): "EUR" | "USD" | "GBP" | "CZK" | "PLN" | "HKD" {
   const upperTicker = ticker.toUpperCase();
   // German exchanges (XETRA, Frankfurt, Berlin, Düsseldorf, Hamburg, Stuttgart, Munich)
   if (upperTicker.endsWith(".DE") || upperTicker.endsWith(".F") ||
@@ -570,6 +580,9 @@ function getTickerCurrency(ticker: string): "EUR" | "USD" | "GBP" | "CZK" | "PLN
   }
   if (upperTicker.endsWith(".L")) {
     return "GBP";
+  }
+  if (upperTicker.endsWith(".HK")) {
+    return "HKD";
   }
   // US stocks (no suffix or common US exchanges)
   return "USD";
@@ -2283,7 +2296,7 @@ function isNonHoldingTransactionType(t: string): boolean {
   return t === "DIVIDEND" || t === "TAX" || t === "DEPOSIT" || t === "WITHDRAWAL";
 }
 
-type SupportedCcy = "EUR" | "USD" | "CZK" | "PLN" | "GBP";
+type SupportedCcy = "EUR" | "USD" | "CZK" | "PLN" | "GBP" | "HKD";
 
 function convertAmountBetween(
   amount: number,
@@ -2299,6 +2312,7 @@ function convertAmountBetween(
     case "CZK": eur = amount * rates.czkToEur; break;
     case "PLN": eur = amount * rates.plnToEur; break;
     case "GBP": eur = amount * rates.gbpToEur; break;
+    case "HKD": eur = amount * rates.hkdToEur; break;
     default: eur = amount;
   }
   switch (to.toUpperCase()) {
@@ -2307,6 +2321,7 @@ function convertAmountBetween(
     case "CZK": return eur * rates.eurToCzk;
     case "PLN": return eur * rates.eurToPln;
     case "GBP": return eur * rates.eurToGbp;
+    case "HKD": return eur * rates.eurToHkd;
     default: return eur;
   }
 }
