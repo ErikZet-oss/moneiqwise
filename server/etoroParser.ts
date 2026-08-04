@@ -220,7 +220,7 @@ function parseAccountActivity(rows: unknown[][], log: ImportLogEntry[]): ParsedT
       out.push({
         date,
         ticker: CASH_FLOW_TICKER,
-        type: "WITHDRAWAL",
+        type: "TAX",
         quantity: 0,
         priceEur: 0,
         totalAmountEur: -fee,
@@ -231,7 +231,7 @@ function parseAccountActivity(rows: unknown[][], log: ImportLogEntry[]): ParsedT
         baseCurrencyAmount: -fee,
         companyName: "Poplatok za konverziu vkladu (eToro)",
       });
-      log.push({ row: i + 1, status: "success", message: `Poplatok za konverziu -${fee.toFixed(2)}` });
+      log.push({ row: i + 1, status: "success", message: `Poplatok za konverziu vkladu -${fee.toFixed(2)}` });
       continue;
     }
 

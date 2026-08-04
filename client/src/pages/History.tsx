@@ -961,7 +961,12 @@ export default function History() {
                             ? "Vklad"
                             : transaction.type === "WITHDRAWAL"
                               ? "Výber"
-                              : transaction.type;
+                              : transaction.type === "TAX" &&
+                                  /poplatok/i.test(String(transaction.companyName || ""))
+                                ? "Poplatok"
+                                : transaction.type === "TAX"
+                                  ? "Daň"
+                                  : transaction.type;
 
                   return (
                     <div 
@@ -1157,7 +1162,12 @@ export default function History() {
                             ? "Vklad"
                             : transaction.type === "WITHDRAWAL"
                               ? "Výber"
-                              : transaction.type;
+                              : transaction.type === "TAX" &&
+                                  /poplatok/i.test(String(transaction.companyName || ""))
+                                ? "Poplatok"
+                                : transaction.type === "TAX"
+                                  ? "Daň"
+                                  : transaction.type;
 
                   return (
                     <TableRow 

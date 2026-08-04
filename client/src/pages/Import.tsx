@@ -30,6 +30,7 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { BrokerLogo } from "@/components/BrokerLogo";
 import { cn } from "@/lib/utils";
 import type { Portfolio } from "@shared/schema";
+import { CASH_FLOW_TICKER } from "@shared/schema";
 import {
   CASH_INTEREST_DISPLAY_NAME,
   CASH_INTEREST_TAX_DISPLAY_NAME,
@@ -50,6 +51,7 @@ interface ParsedTransaction {
   originalCurrency?: string;
   exchangeRateAtTransaction?: number;
   baseCurrencyAmount?: number;
+  companyName?: string;
 }
 
 interface ImportLogEntry {
@@ -463,7 +465,17 @@ export default function Import() {
     }
   };
 
-  const getTypeLabel = (type: string) => {
+  const getCashFlowTickerLabel = (tx: ParsedTransaction): string => {
+    if (tx.companyName?.trim()) return tx.companyName.trim();
+    if (tx.type === "DEPOSIT") return "Vklad";
+    if (tx.type === "WITHDRAWAL") return "Výber";
+    return CASH_FLOW_TICKER;
+  };
+
+  const getTypeLabel = (type: string, tx?: ParsedTransaction) => {
+    if (type === "TAX" && /poplatok/i.test(tx?.companyName ?? "")) {
+      return "Poplatok";
+    }
     switch (type) {
       case 'BUY':
         return 'Nákup';
@@ -662,11 +674,13 @@ export default function Import() {
                                   ? tx.type === "TAX"
                                     ? CASH_INTEREST_TAX_DISPLAY_NAME
                                     : CASH_INTEREST_DISPLAY_NAME
-                                  : tx.ticker}
+                                  : tx.ticker === CASH_FLOW_TICKER
+                                    ? getCashFlowTickerLabel(tx)
+                                    : tx.ticker}
                               </TableCell>
                               <TableCell>
                                 <Badge variant={getTypeBadgeVariant(tx.type)}>
-                                  {getTypeLabel(tx.type)}
+                                  {getTypeLabel(tx.type, tx)}
                                 </Badge>
                               </TableCell>
                               <TableCell className="text-right">
