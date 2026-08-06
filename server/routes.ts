@@ -338,7 +338,7 @@ async function fetchPhysicalMetalQuote(ticker: string): Promise<any> {
 const CACHE_DIR = path.join(process.cwd(), ".cache");
 const CACHE_FILE = path.join(CACHE_DIR, "prices.json");
 /** Bump when quote shape/source changes — invalidates stale on-disk quote cache. */
-const QUOTE_CACHE_VERSION = 3;
+const QUOTE_CACHE_VERSION = 4;
 
 function isUsExtendedSessionNow(): boolean {
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -359,23 +359,9 @@ function isUsExtendedSessionNow(): boolean {
   return false;
 }
 
-function isStaleOvernightInPreMarketCache(data: unknown): boolean {
-  if (!data || typeof data !== "object") return false;
-  const ms = String((data as Record<string, unknown>).marketState ?? "").toUpperCase();
-  if (ms !== "OVERNIGHT" && ms !== "PREPRE") return false;
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Europe/Bratislava",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    weekday: "short",
-  }).formatToParts(new Date());
-  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
-  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
-  const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
-  if (weekday.startsWith("Sat") || weekday.startsWith("Sun")) return false;
-  const m = hour * 60 + minute;
-  return m >= 10 * 60 && m < 15 * 60 + 30;
+function isStaleOvernightInPreMarketCache(_data: unknown): boolean {
+  // Overnight/BOATS počas PRE je validný fallback, kým Yahoo nedoplní preMarketPrice.
+  return false;
 }
 
 function isStaleChartExtendedCache(data: unknown): boolean {

@@ -92,6 +92,28 @@ export function mapExtendedQuoteFromYahooV7(
 } {
   const marketStateRaw = String(q.marketState ?? "").toUpperCase();
   const marketState = marketStateRaw || null;
+  const baselineClose =
+    Number.isFinite(previousClose) && previousClose > 0
+      ? previousClose
+      : Number.isFinite(rthPrice) && rthPrice > 0
+        ? rthPrice
+        : 0;
+
+  const withChange = (
+    price: number,
+    providedCh: number | null,
+    providedPct: number | null,
+    baseline: number,
+  ) => {
+    if (providedCh != null && providedPct != null) {
+      return { preMarketChange: providedCh, preMarketChangePercent: providedPct };
+    }
+    if (baseline > 0) {
+      const ch = price - baseline;
+      return { preMarketChange: ch, preMarketChangePercent: (ch / baseline) * 100 };
+    }
+    return { preMarketChange: providedCh, preMarketChangePercent: providedPct };
+  };
 
   const prePrice = num(q.preMarketPrice);
   const preCh = num(q.preMarketChange);
@@ -103,9 +125,7 @@ export function mapExtendedQuoteFromYahooV7(
   ) {
     return {
       preMarketPrice: prePrice,
-      preMarketChange: preCh ?? (rthPrice > 0 ? prePrice - rthPrice : null),
-      preMarketChangePercent:
-        preChPct ?? (rthPrice > 0 ? ((prePrice - rthPrice) / rthPrice) * 100 : null),
+      ...withChange(prePrice, preCh, preChPct, baselineClose),
       marketState: marketStateRaw === "PREPRE" ? "PRE" : marketState,
     };
   }
@@ -118,11 +138,10 @@ export function mapExtendedQuoteFromYahooV7(
     postPrice > 0 &&
     (marketStateRaw === "POST" || marketStateRaw === "POSTPOST")
   ) {
+    const postBaseline = rthPrice > 0 ? rthPrice : baselineClose;
     return {
       preMarketPrice: postPrice,
-      preMarketChange: postCh ?? (rthPrice > 0 ? postPrice - rthPrice : null),
-      preMarketChangePercent:
-        postChPct ?? (rthPrice > 0 ? ((postPrice - rthPrice) / rthPrice) * 100 : null),
+      ...withChange(postPrice, postCh, postChPct, postBaseline),
       marketState,
     };
   }
@@ -130,21 +149,25 @@ export function mapExtendedQuoteFromYahooV7(
   const overnightPrice = num(q.overnightMarketPrice);
   const overnightCh = num(q.overnightMarketChange);
   const overnightChPct = num(q.overnightMarketChangePercent);
+  /**
+   * Yahoo často drží počas PRE len overnight/BOATS cenu a `preMarketPrice` ešte nie je.
+   * Starší fix overnight v PRE úplne vynechal → žiadne predobchodné % na dashboarde.
+   * Preferuj skutočný preMarket; inak použi overnight ako extended počas PRE.
+   */
   if (
     overnightPrice != null &&
     overnightPrice > 0 &&
-    marketStateRaw !== "PRE" &&
     marketStateRaw !== "POST" &&
     marketStateRaw !== "POSTPOST" &&
     marketStateRaw !== "REGULAR"
   ) {
+    const keepPreLabel = marketStateRaw === "PRE" || marketStateRaw === "PREPRE";
     return {
       preMarketPrice: overnightPrice,
-      preMarketChange: overnightCh ?? (rthPrice > 0 ? overnightPrice - rthPrice : null),
-      preMarketChangePercent:
-        overnightChPct ?? (rthPrice > 0 ? ((overnightPrice - rthPrice) / rthPrice) * 100 : null),
-      marketState:
-        marketStateRaw === "PREPRE" || marketStateRaw === "OVERNIGHT"
+      ...withChange(overnightPrice, overnightCh, overnightChPct, baselineClose),
+      marketState: keepPreLabel
+        ? "PRE"
+        : marketStateRaw === "OVERNIGHT" || marketStateRaw === "PREPRE"
           ? "OVERNIGHT"
           : marketState,
     };
@@ -155,12 +178,10 @@ export function mapExtendedQuoteFromYahooV7(
   const extChPct = num(q.extendedMarketChangePercent);
   if (extPrice != null && extPrice > 0) {
     const baseline =
-      marketStateRaw === "POST" || marketStateRaw === "POSTPOST" ? rthPrice : previousClose;
+      marketStateRaw === "POST" || marketStateRaw === "POSTPOST" ? rthPrice : baselineClose;
     return {
       preMarketPrice: extPrice,
-      preMarketChange: extCh ?? (baseline > 0 ? extPrice - baseline : null),
-      preMarketChangePercent:
-        extChPct ?? (baseline > 0 ? ((extPrice - baseline) / baseline) * 100 : null),
+      ...withChange(extPrice, extCh, extChPct, baseline > 0 ? baseline : baselineClose),
       marketState,
     };
   }
