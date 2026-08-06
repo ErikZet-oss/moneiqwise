@@ -44,6 +44,12 @@ const V7_QUOTE_FIELDS = [
 
 export type YahooV7QuoteRow = Record<string, unknown>;
 
+export type YahooChartIntraday = {
+  meta: Record<string, unknown>;
+  closes: unknown[];
+  timestamps: unknown[];
+};
+
 function num(v: unknown): number | null {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
@@ -76,6 +82,57 @@ export async function fetchYahooV7Quote(yahooTicker: string): Promise<YahooV7Quo
     return row;
   } catch (error) {
     console.warn(`Yahoo v7 quote failed for ${yahooTicker}:`, error);
+    return null;
+  }
+}
+
+/**
+ * 1m chart s pre/post — cez crumb (rovnaký klient ako v7).
+ * Plain fetch bez cookies často vráti prázdne bary počas PRE.
+ */
+export async function fetchYahooChartIntraday(yahooTicker: string): Promise<YahooChartIntraday | null> {
+  try {
+    const yf = getYahooFinance();
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooTicker)}`;
+    const nowSec = Math.floor(Date.now() / 1000);
+    const attempts: Array<Record<string, string>> = [
+      { interval: "1m", range: "1d", includePrePost: "true" },
+      {
+        interval: "1m",
+        period1: String(nowSec - 8 * 60 * 60),
+        period2: String(nowSec),
+        includePrePost: "true",
+      },
+    ];
+
+    for (const params of attempts) {
+      const data = (await yf._fetch(url, params, {}, "json", true)) as {
+        chart?: {
+          result?: Array<{
+            meta?: Record<string, unknown>;
+            timestamp?: unknown[];
+            indicators?: { quote?: Array<{ close?: unknown[] }> };
+          }>;
+        };
+      };
+      const result = data?.chart?.result?.[0];
+      if (!result) continue;
+      const closes = result.indicators?.quote?.[0]?.close ?? [];
+      const timestamps = result.timestamp ?? [];
+      const hasBar = closes.some((c) => {
+        const n = Number(c);
+        return Number.isFinite(n) && n > 0;
+      });
+      if (!hasBar) continue;
+      return {
+        meta: (result.meta ?? {}) as Record<string, unknown>,
+        closes,
+        timestamps,
+      };
+    }
+    return null;
+  } catch (error) {
+    console.warn(`Yahoo chart intraday failed for ${yahooTicker}:`, error);
     return null;
   }
 }

@@ -32,6 +32,7 @@ import {
 } from "@shared/holdingCostCurrency";
 import {
   fetchYahooV7Quote,
+  fetchYahooChartIntraday,
   mapExtendedQuoteFromYahooV7,
 } from "./yahooQuoteClient";
 import { fetchSilverHistoricalPrices, fetchSilverSpotQuote } from "./metalQuoteClient";
@@ -338,7 +339,7 @@ async function fetchPhysicalMetalQuote(ticker: string): Promise<any> {
 const CACHE_DIR = path.join(process.cwd(), ".cache");
 const CACHE_FILE = path.join(CACHE_DIR, "prices.json");
 /** Bump when quote shape/source changes — invalidates stale on-disk quote cache. */
-const QUOTE_CACHE_VERSION = 4;
+const QUOTE_CACHE_VERSION = 5;
 
 function isUsExtendedSessionNow(): boolean {
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -834,31 +835,45 @@ function resolveExtendedSessionChange(
 }
 
 async function fetchYahooQuoteFromChart(yahooTicker: string, ticker: string): Promise<any> {
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooTicker)}?interval=1m&range=1d&includePrePost=true`;
-  const response = await fetch(url, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    },
-  });
+  const chart = await fetchYahooChartIntraday(yahooTicker);
+  if (!chart) {
+    // Fallback: plain fetch (niektoré prostredia crumb chart nevyplnia)
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooTicker)}?interval=1m&range=1d&includePrePost=true`;
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      },
+    });
 
-  if (!response.ok) {
-    throw new Error(`Yahoo Finance returned ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`Yahoo Finance returned ${response.status}`);
+    }
+
+    const data = await response.json();
+    const result = data.chart?.result?.[0];
+    if (!result) {
+      throw new Error("Invalid response from Yahoo Finance");
+    }
+
+    const meta = result.meta as Record<string, unknown>;
+    const quote = result.indicators?.quote?.[0];
+    const closes: unknown[] = quote?.close ?? [];
+    const timestamps: unknown[] = result.timestamp ?? [];
+    return buildQuoteFromYahooChart(ticker, meta, closes, timestamps);
   }
 
-  const data = await response.json();
-  const result = data.chart?.result?.[0];
-  if (!result) {
-    throw new Error("Invalid response from Yahoo Finance");
-  }
+  return buildQuoteFromYahooChart(ticker, chart.meta, chart.closes, chart.timestamps);
+}
 
-  const meta = result.meta as Record<string, unknown>;
-  const quote = result.indicators?.quote?.[0];
-  const closes: unknown[] = quote?.close ?? [];
-  const timestamps: unknown[] = result.timestamp ?? [];
-
+async function buildQuoteFromYahooChart(
+  ticker: string,
+  meta: Record<string, unknown>,
+  closes: unknown[],
+  timestamps: unknown[],
+): Promise<any> {
   const rthPrice =
     Number(meta?.regularMarketPrice) ||
-    Number(closes[closes.length - 1]) ||
+    Number(closes.filter((c) => c != null).slice(-1)[0]) ||
     0;
   const previousClose =
     Number(meta?.previousClose) ||
@@ -1585,7 +1600,58 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
       const changePercent =
         previousClose != null && previousClose > 0 ? (change / previousClose) * 100 : 0;
 
-      const extended = mapExtendedQuoteFromYahooV7(q, regularMarketPrice, previousClose);
+      let extended = mapExtendedQuoteFromYahooV7(q, regularMarketPrice, previousClose);
+
+      const hasOfficialPre =
+        Number.isFinite(Number(q.preMarketPrice)) && Number(q.preMarketPrice) > 0;
+      const hasOfficialPost =
+        Number.isFinite(Number(q.postMarketPrice)) && Number(q.postMarketPrice) > 0;
+      const inPre = marketStateRaw === "PRE" || marketStateRaw === "PREPRE";
+      const inPost = marketStateRaw === "POST" || marketStateRaw === "POSTPOST";
+      const needsLiveChartExtended =
+        (inPre && !hasOfficialPre) ||
+        (inPost && !hasOfficialPost) ||
+        (isUsExtendedSessionNow() &&
+          !hasOfficialPre &&
+          !hasOfficialPost &&
+          extended.preMarketPrice != null);
+
+      if (needsLiveChartExtended) {
+        try {
+          const chart = await fetchYahooChartIntraday(yahooTicker);
+          if (chart) {
+            const fromChart = resolveExtendedQuoteFromChart(
+              chart.meta,
+              chart.closes,
+              chart.timestamps,
+            );
+            if (
+              fromChart.preMarketPrice != null &&
+              fromChart.preMarketChangePercent != null &&
+              Number.isFinite(fromChart.preMarketPrice)
+            ) {
+              const overnightTs = Number(q.overnightMarketTime);
+              const lastBar = lastYahooValidBar(chart.closes, chart.timestamps);
+              const chartFresher =
+                lastBar != null &&
+                (!Number.isFinite(overnightTs) || lastBar.ts > overnightTs);
+              const priceMoved =
+                extended.preMarketPrice == null ||
+                Math.abs(fromChart.preMarketPrice - extended.preMarketPrice) > 1e-4;
+              if (chartFresher || priceMoved || extended.preMarketChangePercent == null) {
+                extended = {
+                  preMarketPrice: fromChart.preMarketPrice,
+                  preMarketChange: fromChart.preMarketChange,
+                  preMarketChangePercent: fromChart.preMarketChangePercent,
+                  marketState: fromChart.marketState ?? extended.marketState,
+                };
+              }
+            }
+          }
+        } catch (err) {
+          console.warn(`Yahoo chart enrich failed for ${ticker}:`, err);
+        }
+      }
 
       const regularMarketTimeRaw = Number(q.regularMarketTime);
       const quoteDate = quoteDateFromEpoch(
