@@ -339,7 +339,7 @@ async function fetchPhysicalMetalQuote(ticker: string): Promise<any> {
 const CACHE_DIR = path.join(process.cwd(), ".cache");
 const CACHE_FILE = path.join(CACHE_DIR, "prices.json");
 /** Bump when quote shape/source changes — invalidates stale on-disk quote cache. */
-const QUOTE_CACHE_VERSION = 5;
+const QUOTE_CACHE_VERSION = 6;
 
 function isUsExtendedSessionNow(): boolean {
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -717,9 +717,19 @@ function resolveExtendedQuoteFromChart(
         extendedPrice = lastBar.price;
         session = "POST";
       }
-    } else if (activeExtended === "PRE" && (barSession === "PRE" || barSession === "POST" || afterRth || differsFromRth)) {
-      extendedPrice = lastBar.price;
-      session = "PRE";
+    } else if (activeExtended === "PRE") {
+      // Len bary v dnešnom PRE okne — nie včerajší POST (inak stale ~RTH±).
+      const preStart = periods?.pre?.start;
+      const preEnd = periods?.pre?.end;
+      const inTodayPre =
+        preStart != null &&
+        preEnd != null &&
+        lastBar.ts >= preStart &&
+        lastBar.ts < preEnd;
+      if (barSession === "PRE" || inTodayPre) {
+        extendedPrice = lastBar.price;
+        session = "PRE";
+      }
     }
     // OVERNIGHT: chart API lacks BOATS — do not surface stale post-market bars.
   }
@@ -736,7 +746,15 @@ function resolveExtendedQuoteFromChart(
     };
   }
 
-  const baseline = session === "POST" ? rthPrice : previousClose;
+  // PRE/POST: voči last RTH close (regularMarketPrice). Chart previousClose vie byť T-2.
+  const baseline =
+    session === "POST" || session === "PRE"
+      ? rthPrice > 0
+        ? rthPrice
+        : previousClose
+      : previousClose > 0
+        ? previousClose
+        : rthPrice;
   if (!Number.isFinite(baseline) || baseline <= 0) {
     return {
       preMarketPrice: extendedPrice,
@@ -1627,8 +1645,8 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
             );
             if (
               fromChart.preMarketPrice != null &&
-              fromChart.preMarketChangePercent != null &&
-              Number.isFinite(fromChart.preMarketPrice)
+              Number.isFinite(fromChart.preMarketPrice) &&
+              fromChart.preMarketPrice > 0
             ) {
               const overnightTs = Number(q.overnightMarketTime);
               const lastBar = lastYahooValidBar(chart.closes, chart.timestamps);
@@ -1639,10 +1657,17 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
                 extended.preMarketPrice == null ||
                 Math.abs(fromChart.preMarketPrice - extended.preMarketPrice) > 1e-4;
               if (chartFresher || priceMoved || extended.preMarketChangePercent == null) {
+                // Vždy % voči v7 last RTH close (nie chart previousClose, ktorý vie byť T-2).
+                const baseline =
+                  regularMarketPrice > 0 ? regularMarketPrice : previousClose;
+                const ch =
+                  baseline > 0 ? fromChart.preMarketPrice - baseline : null;
+                const pct =
+                  ch != null && baseline > 0 ? (ch / baseline) * 100 : null;
                 extended = {
                   preMarketPrice: fromChart.preMarketPrice,
-                  preMarketChange: fromChart.preMarketChange,
-                  preMarketChangePercent: fromChart.preMarketChangePercent,
+                  preMarketChange: ch,
+                  preMarketChangePercent: pct,
                   marketState: fromChart.marketState ?? extended.marketState,
                 };
               }

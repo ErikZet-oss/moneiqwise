@@ -149,67 +149,58 @@ export function mapExtendedQuoteFromYahooV7(
 } {
   const marketStateRaw = String(q.marketState ?? "").toUpperCase();
   const marketState = marketStateRaw || null;
-  const baselineClose =
-    Number.isFinite(previousClose) && previousClose > 0
-      ? previousClose
-      : Number.isFinite(rthPrice) && rthPrice > 0
-        ? rthPrice
+  /**
+   * Počas PRE/OVERNIGHT je `regularMarketPrice` posledný RTH close.
+   * `regularMarketPreviousClose` vie zaostávať o deň (NBIS: prevClose ešte T-2),
+   * preto pre extended % používame RTH close; previousClose len ako fallback.
+   */
+  const extendedBaseline =
+    Number.isFinite(rthPrice) && rthPrice > 0
+      ? rthPrice
+      : Number.isFinite(previousClose) && previousClose > 0
+        ? previousClose
         : 0;
 
-  const withChange = (
-    price: number,
-    providedCh: number | null,
-    providedPct: number | null,
-    baseline: number,
-  ) => {
-    if (providedCh != null && providedPct != null) {
-      return { preMarketChange: providedCh, preMarketChangePercent: providedPct };
+  const recomputeVsBaseline = (price: number, baseline: number) => {
+    if (!(baseline > 0)) {
+      return { preMarketChange: null as number | null, preMarketChangePercent: null as number | null };
     }
-    if (baseline > 0) {
-      const ch = price - baseline;
-      return { preMarketChange: ch, preMarketChangePercent: (ch / baseline) * 100 };
-    }
-    return { preMarketChange: providedCh, preMarketChangePercent: providedPct };
+    const ch = price - baseline;
+    return { preMarketChange: ch, preMarketChangePercent: (ch / baseline) * 100 };
   };
 
   const prePrice = num(q.preMarketPrice);
-  const preCh = num(q.preMarketChange);
-  const preChPct = num(q.preMarketChangePercent);
   if (
     prePrice != null &&
     prePrice > 0 &&
     (marketStateRaw === "PRE" || marketStateRaw === "PREPRE")
   ) {
+    // Oficiálne Yahoo pre % je voči last close; prepočítame sami kvôli konzistencii.
     return {
       preMarketPrice: prePrice,
-      ...withChange(prePrice, preCh, preChPct, baselineClose),
+      ...recomputeVsBaseline(prePrice, extendedBaseline),
       marketState: marketStateRaw === "PREPRE" ? "PRE" : marketState,
     };
   }
 
   const postPrice = num(q.postMarketPrice);
-  const postCh = num(q.postMarketChange);
-  const postChPct = num(q.postMarketChangePercent);
   if (
     postPrice != null &&
     postPrice > 0 &&
     (marketStateRaw === "POST" || marketStateRaw === "POSTPOST")
   ) {
-    const postBaseline = rthPrice > 0 ? rthPrice : baselineClose;
+    const postBaseline = rthPrice > 0 ? rthPrice : extendedBaseline;
     return {
       preMarketPrice: postPrice,
-      ...withChange(postPrice, postCh, postChPct, postBaseline),
+      ...recomputeVsBaseline(postPrice, postBaseline),
       marketState,
     };
   }
 
   const overnightPrice = num(q.overnightMarketPrice);
-  const overnightCh = num(q.overnightMarketChange);
-  const overnightChPct = num(q.overnightMarketChangePercent);
   /**
-   * Yahoo často drží počas PRE len overnight/BOATS cenu a `preMarketPrice` ešte nie je.
-   * Starší fix overnight v PRE úplne vynechal → žiadne predobchodné % na dashboarde.
-   * Preferuj skutočný preMarket; inak použi overnight ako extended počas PRE.
+   * Yahoo overnightChangePercent je často voči inej báze / BOATS a nesedí s broker UI.
+   * Vždy prepočítaj voči last RTH close. Preferuj skutočný preMarket, inak overnight.
    */
   if (
     overnightPrice != null &&
@@ -221,7 +212,7 @@ export function mapExtendedQuoteFromYahooV7(
     const keepPreLabel = marketStateRaw === "PRE" || marketStateRaw === "PREPRE";
     return {
       preMarketPrice: overnightPrice,
-      ...withChange(overnightPrice, overnightCh, overnightChPct, baselineClose),
+      ...recomputeVsBaseline(overnightPrice, extendedBaseline),
       marketState: keepPreLabel
         ? "PRE"
         : marketStateRaw === "OVERNIGHT" || marketStateRaw === "PREPRE"
@@ -231,14 +222,12 @@ export function mapExtendedQuoteFromYahooV7(
   }
 
   const extPrice = num(q.extendedMarketPrice);
-  const extCh = num(q.extendedMarketChange);
-  const extChPct = num(q.extendedMarketChangePercent);
   if (extPrice != null && extPrice > 0) {
     const baseline =
-      marketStateRaw === "POST" || marketStateRaw === "POSTPOST" ? rthPrice : baselineClose;
+      marketStateRaw === "POST" || marketStateRaw === "POSTPOST" ? rthPrice : extendedBaseline;
     return {
       preMarketPrice: extPrice,
-      ...withChange(extPrice, extCh, extChPct, baseline > 0 ? baseline : baselineClose),
+      ...recomputeVsBaseline(extPrice, baseline > 0 ? baseline : extendedBaseline),
       marketState,
     };
   }
