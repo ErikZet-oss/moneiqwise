@@ -1393,8 +1393,18 @@ function parseOpenPositionsSheet(data: any[][], log: ImportLogEntry[]): XTBOpenP
   const currentPriceCol = getColumnIndex(headers, ['current price', 'market price']);
   const openPriceCol = getColumnIndex(headers, ['open price']);
   const openTimeCol = getColumnIndex(headers, ['open time', 'open time (utc)']);
-  const netProfitCol = getColumnIndex(headers, ['net profit']);
-  const netProfitPctCol = getColumnIndex(headers, ['net profit %', 'net profit%']);
+  // Presné názvy: „net profit“ by inak zhodilo „net profit %“ (includes).
+  const headerNorm = headers.map((h) => stripDiacritics((h || '').toLowerCase().trim()));
+  let netProfitPctCol = headerNorm.findIndex((h) => h === 'net profit %' || h === 'net profit%');
+  let netProfitCol = headerNorm.findIndex((h) => h === 'net profit');
+  if (netProfitCol < 0) {
+    netProfitCol = headerNorm.findIndex(
+      (h, i) => i !== netProfitPctCol && h.includes('net profit') && !h.includes('%'),
+    );
+  }
+  if (netProfitPctCol < 0) {
+    netProfitPctCol = headerNorm.findIndex((h) => h.includes('net profit') && h.includes('%'));
+  }
   const categoryCol = getColumnIndex(headers, ['category']);
 
   if (instrumentCol === -1 || tickerCol === -1 || volumeCol === -1) {
