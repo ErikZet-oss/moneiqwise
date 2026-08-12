@@ -272,7 +272,10 @@ export default function FaqPage() {
               <h3 className="text-sm font-semibold mb-2">Import z XTB zlyhal — prečo?</h3>
               <ul className="list-disc pl-5 space-y-2">
                 <li>
-                  Použi export z XTB v podporovanom formáte — stránka Import uvádza očakávané stĺpce (napr. čas, typ, symbol, suma, komentár podľa typu exportu). <strong>CSV / XLSX</strong> musí zodpovedať šablóne „Cash operation history“ alebo podporovanému reportu, nie ľubovoľnému výstrižku.
+                  Použi export z XTB v podporovanom formáte — stránka Import uvádza očakávané stĺpce.{" "}
+                  <strong>XLSX</strong> môže byť <strong>nový</strong> report (hárky „Cash Operations“,
+                  „Open Positions“) alebo <strong>starý</strong> „Cash operation history“ — nie
+                  ľubovoľný výstrižok.
                 </li>
                 <li>
                   Chýbajúce alebo premenované stĺpce spôsobia <strong>preskočené riadky alebo chyby</strong> v denníku importu — otvor zhrnutie importu a prečítaj prvé chybové hlášky.

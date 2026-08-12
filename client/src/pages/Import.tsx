@@ -72,6 +72,35 @@ interface XTBImportResult {
     errors: number;
     skipped: number;
   };
+  format?: "legacy" | "v2";
+  openPositions?: {
+    asOf: string | Date | null;
+    totals: Array<{ product: string; value: number; profit: number; currency: string }>;
+    lots: Array<{
+      positionId: string;
+      ticker: string;
+      shares: number;
+      openPrice: number;
+      currentPrice: number | null;
+      value: number;
+      netProfit: number;
+      netProfitPct: number;
+      openTime: string | Date | null;
+      companyName?: string;
+    }>;
+    parents: Array<{
+      ticker: string;
+      shares: number;
+      value: number;
+      netProfit: number;
+      netProfitPct: number;
+      companyName?: string;
+    }>;
+    reconciliation?: {
+      tickersMatched: number;
+      shareDiffs: Array<{ ticker: string; imported: number; xtb: number }>;
+    };
+  };
 }
 
 interface SaveResult {
@@ -593,8 +622,13 @@ export default function Import() {
                 <AlertDescription>
                   {selectedBroker === "xtb" ? (
                     <>
-                      Súbor by mal obsahovať stĺpce: Time, Type, Symbol, Amount, Comment.
-                      Parser automaticky detekuje hlavičku a oddeľovač (čiarka alebo bodkočiarka).
+                      Podporovaný je <strong>nový</strong> XTB export (hárky{" "}
+                      <span className="font-mono text-xs">Cash Operations</span>,{" "}
+                      <span className="font-mono text-xs">Open Positions</span>) aj{" "}
+                      <strong>starý</strong> formát (
+                      <span className="font-mono text-xs">Cash operation history</span>
+                      ). Stĺpce cash: Type, Ticker/Symbol, Time, Amount, Comment, ID.
+                      Otvorené pozície sa použijú na kontrolu voči importovaným nákupom/predajom.
                     </>
                   ) : (
                     <>
@@ -616,6 +650,11 @@ export default function Import() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <CardTitle className="text-sm font-medium">Výsledok spracovania</CardTitle>
                   <div className="flex flex-wrap gap-2">
+                    {parseResult.format && (
+                      <Badge variant="outline" data-testid="badge-xtb-format">
+                        Formát: {parseResult.format === "v2" ? "nový XTB" : "starý XTB"}
+                      </Badge>
+                    )}
                     <Badge variant="default" className="bg-green-500">
                       {parseResult.summary.success} úspešných
                     </Badge>
@@ -636,6 +675,63 @@ export default function Import() {
                 </div>
               </CardHeader>
               <CardContent className="p-4 pt-3">
+                {parseResult.openPositions && (
+                  <div
+                    className="mb-4 rounded-md border p-3 space-y-2"
+                    data-testid="xtb-open-positions-summary"
+                  >
+                    <div className="text-sm font-medium">XTB Open Positions (kontrola)</div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                      {parseResult.openPositions.asOf && (
+                        <span>
+                          Stav k{" "}
+                          {format(new Date(parseResult.openPositions.asOf), "d.M.yyyy HH:mm", {
+                            locale: sk,
+                          })}
+                        </span>
+                      )}
+                      <span>
+                        {parseResult.openPositions.parents?.length ?? 0} titulov ·{" "}
+                        {parseResult.openPositions.lots?.length ?? 0} lotov
+                      </span>
+                      {(parseResult.openPositions.totals ?? []).map((t, i) => (
+                        <span key={`${t.product}-${i}`}>
+                          {t.product}: hodnota {formatCurrency(t.value)}
+                          {Number.isFinite(t.profit)
+                            ? ` · zisk ${formatCurrency(t.profit)}`
+                            : ""}{" "}
+                          ({t.currency})
+                        </span>
+                      ))}
+                    </div>
+                    {parseResult.openPositions.reconciliation &&
+                      parseResult.openPositions.reconciliation.shareDiffs.length > 0 && (
+                        <Alert variant="destructive" className="py-2">
+                          <AlertTitle className="text-sm">Rozdiely v počte kusov</AlertTitle>
+                          <AlertDescription className="text-xs">
+                            Importované BUY−SELL sa nezhodujú s Open Positions (
+                            {parseResult.openPositions.reconciliation.shareDiffs.length} tickerov):
+                            <ul className="mt-1 list-disc pl-4">
+                              {parseResult.openPositions.reconciliation.shareDiffs
+                                .slice(0, 8)
+                                .map((d) => (
+                                  <li key={d.ticker}>
+                                    {d.ticker}: import {d.imported}, XTB {d.xtb}
+                                  </li>
+                                ))}
+                            </ul>
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                    {parseResult.openPositions.reconciliation &&
+                      parseResult.openPositions.reconciliation.shareDiffs.length === 0 && (
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                          Počty kusov sedía s Open Positions (
+                          {parseResult.openPositions.reconciliation.tickersMatched} tickerov).
+                        </p>
+                      )}
+                  </div>
+                )}
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
                   <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="transactions" data-testid="tab-transactions">
