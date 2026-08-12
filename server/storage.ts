@@ -97,8 +97,17 @@ export interface IStorage {
   
   // Transaction operations
   createTransaction(transaction: InsertTransaction): Promise<Transaction>;
-  getTransactionsByUser(userId: string, portfolioId?: string | null): Promise<Transaction[]>;
-  getTransactionsByUserAndTicker(userId: string, ticker: string, portfolioId?: string | null): Promise<Transaction[]>;
+  getTransactionsByUser(
+    userId: string,
+    portfolioId?: string | null,
+    opts?: { includeHidden?: boolean },
+  ): Promise<Transaction[]>;
+  getTransactionsByUserAndTicker(
+    userId: string,
+    ticker: string,
+    portfolioId?: string | null,
+    opts?: { includeHidden?: boolean },
+  ): Promise<Transaction[]>;
   updateTransaction(transactionId: string, userId: string, data: Partial<InsertTransaction>): Promise<void>;
   deleteTransaction(transactionId: string, userId: string): Promise<void>;
   getTransactionById(transactionId: string, userId: string): Promise<Transaction | undefined>;
@@ -685,7 +694,11 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async getTransactionsByUser(userId: string, portfolioId?: string | null): Promise<Transaction[]> {
+  async getTransactionsByUser(
+    userId: string,
+    portfolioId?: string | null,
+    opts?: { includeHidden?: boolean },
+  ): Promise<Transaction[]> {
     if (portfolioId && portfolioId !== "all") {
       return await db
         .select()
@@ -699,16 +712,34 @@ export class DatabaseStorage implements IStorage {
         .orderBy(desc(transactions.transactionDate));
     }
 
-    // Všetky transakcie používateľa (všetky portfóliá + NULL / „osirelé“ id po zmenách).
-    // Predtým: filter inArray(portfolioId, …) vylučoval riadky, ktoré už nepasujú na existujúce id.
+    // „Všetky“ = ako holdings: viditeľné portfóliá + NULL / osirelé. Skryté len s includeHidden.
+    if (opts?.includeHidden) {
+      return await db
+        .select()
+        .from(transactions)
+        .where(eq(transactions.userId, userId))
+        .orderBy(desc(transactions.transactionDate));
+    }
+
+    const visibleIds = await this.getVisiblePortfolioIdsByUser(userId);
+    const portfolioFilter =
+      visibleIds.length > 0
+        ? or(isNull(transactions.portfolioId), inArray(transactions.portfolioId, visibleIds))
+        : isNull(transactions.portfolioId);
+
     return await db
       .select()
       .from(transactions)
-      .where(eq(transactions.userId, userId))
+      .where(and(eq(transactions.userId, userId), portfolioFilter))
       .orderBy(desc(transactions.transactionDate));
   }
 
-  async getTransactionsByUserAndTicker(userId: string, ticker: string, portfolioId?: string | null): Promise<Transaction[]> {
+  async getTransactionsByUserAndTicker(
+    userId: string,
+    ticker: string,
+    portfolioId?: string | null,
+    opts?: { includeHidden?: boolean },
+  ): Promise<Transaction[]> {
     if (portfolioId && portfolioId !== "all") {
       return await db
         .select()
@@ -722,7 +753,26 @@ export class DatabaseStorage implements IStorage {
         )
         .orderBy(desc(transactions.transactionDate));
     }
-    
+
+    if (opts?.includeHidden) {
+      return await db
+        .select()
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.userId, userId),
+            eq(transactions.ticker, ticker),
+          ),
+        )
+        .orderBy(desc(transactions.transactionDate));
+    }
+
+    const visibleIds = await this.getVisiblePortfolioIdsByUser(userId);
+    const portfolioFilter =
+      visibleIds.length > 0
+        ? or(isNull(transactions.portfolioId), inArray(transactions.portfolioId, visibleIds))
+        : isNull(transactions.portfolioId);
+
     return await db
       .select()
       .from(transactions)
@@ -730,6 +780,7 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(transactions.userId, userId),
           eq(transactions.ticker, ticker),
+          portfolioFilter,
         ),
       )
       .orderBy(desc(transactions.transactionDate));
@@ -1158,6 +1209,11 @@ export class DatabaseStorage implements IStorage {
 
   async getTransactionsForTickerAcrossPortfolios(userId: string, ticker: string): Promise<Transaction[]> {
     const normalized = ticker.trim().toLowerCase();
+    const visibleIds = await this.getVisiblePortfolioIdsByUser(userId);
+    const portfolioFilter =
+      visibleIds.length > 0
+        ? or(isNull(transactions.portfolioId), inArray(transactions.portfolioId, visibleIds))
+        : isNull(transactions.portfolioId);
     return await db
       .select()
       .from(transactions)
@@ -1165,6 +1221,7 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(transactions.userId, userId),
           sql`lower(${transactions.ticker}) = ${normalized}`,
+          portfolioFilter,
         ),
       )
       .orderBy(asc(transactions.transactionDate));

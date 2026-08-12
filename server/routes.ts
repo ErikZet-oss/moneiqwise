@@ -3338,6 +3338,7 @@ export async function registerRoutes(
       const upperTicker = displayTicker.toUpperCase();
 
       const allPortfolios = await storage.getPortfoliosByUser(userId);
+      const visiblePortfolios = allPortfolios.filter((p) => !p.isHidden);
       const portfolioMap = new Map(allPortfolios.map((p) => [p.id, p]));
 
       const positions = holdingRows
@@ -3457,7 +3458,7 @@ export async function registerRoutes(
         companyName,
         costCurrency: inferHoldingCostCurrency(displayTicker, txRows),
         positions,
-        portfolios: allPortfolios.map((p) => ({ id: p.id, name: p.name })),
+        portfolios: visiblePortfolios.map((p) => ({ id: p.id, name: p.name })),
         totals: {
           shares: totalShares,
           totalInvested: totalInvestedSum,
@@ -5980,7 +5981,9 @@ export async function registerRoutes(
       const existingIdsByPortfolio = new Map<string, Set<string>>();
       const globallyUsedIds = new Set<string>();
       if (hasIdColumn) {
-        const existingTxns = await storage.getTransactionsByUser(userId);
+      const existingTxns = await storage.getTransactionsByUser(userId, "all", {
+          includeHidden: true,
+        });
         for (const t of existingTxns) {
           globallyUsedIds.add(t.id);
           const key = t.portfolioId ?? "__none__";
