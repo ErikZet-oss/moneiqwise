@@ -848,19 +848,18 @@ export default function Dashboard() {
     valueTestId: string,
   ) => (
     <div key={row.ticker} className="border-b border-border/60 last:border-0" data-testid={rowTestId}>
-      {/* Mobile — rovnaké fonty / usporiadanie ako Prehľad aktív (suma a % vedľa seba) */}
-      <div className="flex gap-2 items-start py-2 md:hidden">
-        <span className="text-[9px] text-muted-foreground tabular-nums shrink-0 w-3 pt-0.5">
+      {/* Mobile — názov ako v Prehľade aktív; jedna riadková výška vľavo */}
+      <div className="flex gap-2 items-center py-2 md:hidden">
+        <span className="text-[9px] text-muted-foreground tabular-nums shrink-0 w-3">
           {idx + 1}.
         </span>
-        <div className="shrink-0 pt-0.5">
+        <div className="shrink-0">
           <CompanyLogo ticker={row.ticker} companyName={row.name} size="xs" />
         </div>
-        <div className="min-w-0 flex-1 flex flex-col gap-0.5 pr-1">
-          <span className="font-semibold text-xs leading-tight truncate" data-testid={`${rowTestId}-ticker`}>
-            {row.ticker}
+        <div className="min-w-0 flex-1 pr-1">
+          <span className="font-semibold text-xs leading-tight truncate block" data-testid={`${rowTestId}-ticker`}>
+            {(row.name || "").trim() || row.ticker}
           </span>
-          <span className="text-[9px] text-muted-foreground truncate">{row.name}</span>
         </div>
         <div className="text-right shrink-0 flex flex-col items-end justify-center gap-0.5 max-w-[46%]">
           <div
