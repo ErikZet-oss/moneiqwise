@@ -45,7 +45,7 @@ export function useCurrency() {
 
   const { data: exchangeRate, isLoading: rateLoading } = useQuery<ExchangeRate>({
     queryKey: ["/api/exchange-rate"],
-    staleTime: 60 * 60 * 1000, // 1 hour
+    staleTime: 15 * 60 * 1000, // 15 min — keep USD MTM aligned with spot / XTB
   });
 
   const updateCurrencyMutation = useMutation({

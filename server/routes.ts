@@ -118,7 +118,7 @@ function getQuoteCacheTtlMs(cachedData?: unknown): number {
   return QUOTE_CACHE_TTL_LIVE_MS;
 }
 const HISTORICAL_CACHE_TTL = 12 * 60 * 60 * 1000; // 12 hours for historical data
-const EXCHANGE_RATE_CACHE_TTL = 60 * 60 * 1000; // 1 hour for exchange rates
+const EXCHANGE_RATE_CACHE_TTL = 15 * 60 * 1000; // 15 min — spot FX bližšie k XTB
 const NEWS_CACHE_TTL = 15 * 60 * 1000; // 15 minutes for news
 
 interface AssetProfileCacheEntry {
@@ -461,20 +461,84 @@ function withHkdRates(partial: Omit<AllExchangeRates, "eurToHkd" | "hkdToEur"> &
   return { ...rest, eurToHkd, hkdToEur: 1 / eurToHkd };
 }
 
+/**
+ * Live Yahoo spot: how many `quoteCcy` per 1 EUR (napr. EURUSD=X → eurToUsd).
+ * XTB oceňuje USD pozície spotom; ECB/Frankfurter (včerajší fix) systematicky
+ * nafukoval US akcie v EUR o stovky € pri väčšom portfóliu.
+ */
+async function fetchYahooSpotEurTo(quoteCcy: string): Promise<number | null> {
+  const ccy = quoteCcy.toUpperCase();
+  if (!ccy || ccy === "EUR") return 1;
+  try {
+    const symbol = `EUR${ccy}=X`;
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; Moneiqwise/1.0)",
+        Accept: "application/json",
+      },
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    const meta = data?.chart?.result?.[0]?.meta;
+    const raw =
+      Number(meta?.regularMarketPrice) ||
+      Number(meta?.previousClose) ||
+      Number(data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.slice(-1)?.[0]);
+    if (Number.isFinite(raw) && raw > 0) return raw;
+  } catch (error) {
+    console.warn(`Yahoo spot FX EUR${ccy} failed:`, error);
+  }
+  return null;
+}
+
+async function fetchYahooSpotEurRates(): Promise<Partial<{
+  eurToUsd: number;
+  eurToCzk: number;
+  eurToPln: number;
+  eurToGbp: number;
+  eurToHkd: number;
+}>> {
+  const [usd, czk, pln, gbp, hkd] = await Promise.all([
+    fetchYahooSpotEurTo("USD"),
+    fetchYahooSpotEurTo("CZK"),
+    fetchYahooSpotEurTo("PLN"),
+    fetchYahooSpotEurTo("GBP"),
+    fetchYahooSpotEurTo("HKD"),
+  ]);
+  const out: Partial<{
+    eurToUsd: number;
+    eurToCzk: number;
+    eurToPln: number;
+    eurToGbp: number;
+    eurToHkd: number;
+  }> = {};
+  if (usd != null) out.eurToUsd = usd;
+  if (czk != null) out.eurToCzk = czk;
+  if (pln != null) out.eurToPln = pln;
+  if (gbp != null) out.eurToGbp = gbp;
+  if (hkd != null) out.eurToHkd = hkd;
+  return out;
+}
+
 // Fetch all exchange rates from EUR
 async function fetchAllExchangeRates(): Promise<AllExchangeRates> {
-  const cached = exchangeRateCache.get("ALL_RATES");
+  // v2 = Yahoo spot preferred (busts old ECB-only disk/memory cache).
+  const cacheKey = "ALL_RATES_SPOT_V2";
+  const cached = exchangeRateCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < EXCHANGE_RATE_CACHE_TTL) {
     return cached.data;
   }
 
-  // Try Frankfurter API first (free, reliable, ECB rates)
+  let baseline: AllExchangeRates | null = null;
+
+  // Baseline: Frankfurter (ECB) — spoľahlivý fallback / doplnenie mien.
   try {
     const response = await fetch("https://api.frankfurter.app/latest?from=EUR&to=USD,CZK,PLN,GBP,HKD");
     if (response.ok) {
       const data = await response.json();
       if (data.rates?.USD && data.rates?.CZK) {
-        const result = withHkdRates({
+        baseline = withHkdRates({
           eurToUsd: data.rates.USD,
           usdToEur: 1 / data.rates.USD,
           eurToCzk: data.rates.CZK,
@@ -485,58 +549,81 @@ async function fetchAllExchangeRates(): Promise<AllExchangeRates> {
           gbpToEur: 1 / (data.rates.GBP || 0.85),
           eurToHkd: data.rates.HKD,
         });
-        exchangeRateCache.set("ALL_RATES", { data: result, timestamp: Date.now() });
-        scheduleCacheSave();
-        console.log(`Exchange rates fetched: 1 EUR = ${result.eurToUsd} USD, ${result.eurToCzk} CZK, ${result.eurToPln} PLN`);
-        return result;
       }
     }
   } catch (error) {
     console.warn("Frankfurter API failed, trying fallback...");
   }
 
-  // Fallback: ExchangeRate-API
-  try {
-    const response = await fetch("https://open.er-api.com/v6/latest/EUR");
-    if (response.ok) {
-      const data = await response.json();
-      if (data.rates?.USD) {
-        const result = withHkdRates({
-          eurToUsd: data.rates.USD,
-          usdToEur: 1 / data.rates.USD,
-          eurToCzk: data.rates.CZK || 25.3,
-          czkToEur: 1 / (data.rates.CZK || 25.3),
-          eurToPln: data.rates.PLN || 4.3,
-          plnToEur: 1 / (data.rates.PLN || 4.3),
-          eurToGbp: data.rates.GBP || 0.85,
-          gbpToEur: 1 / (data.rates.GBP || 0.85),
-          eurToHkd: data.rates.HKD,
-        });
-        exchangeRateCache.set("ALL_RATES", { data: result, timestamp: Date.now() });
-        scheduleCacheSave();
-        return result;
+  // Fallback baseline: ExchangeRate-API
+  if (!baseline) {
+    try {
+      const response = await fetch("https://open.er-api.com/v6/latest/EUR");
+      if (response.ok) {
+        const data = await response.json();
+        if (data.rates?.USD) {
+          baseline = withHkdRates({
+            eurToUsd: data.rates.USD,
+            usdToEur: 1 / data.rates.USD,
+            eurToCzk: data.rates.CZK || 25.3,
+            czkToEur: 1 / (data.rates.CZK || 25.3),
+            eurToPln: data.rates.PLN || 4.3,
+            plnToEur: 1 / (data.rates.PLN || 4.3),
+            eurToGbp: data.rates.GBP || 0.85,
+            gbpToEur: 1 / (data.rates.GBP || 0.85),
+            eurToHkd: data.rates.HKD,
+          });
+        }
       }
+    } catch (error) {
+      console.warn("ExchangeRate-API failed...");
     }
-  } catch (error) {
-    console.warn("ExchangeRate-API failed...");
   }
 
-  // Use cached value if available
-  if (cached) {
+  if (!baseline && cached) {
     return cached.data;
   }
 
-  // Fallback to approximate rates
-  return withHkdRates({
-    eurToUsd: 1.08,
-    usdToEur: 0.926,
-    eurToCzk: 25.3,
-    czkToEur: 0.0395,
-    eurToPln: 4.3,
-    plnToEur: 0.233,
-    eurToGbp: 0.85,
-    gbpToEur: 1.18,
+  if (!baseline) {
+    baseline = withHkdRates({
+      eurToUsd: 1.08,
+      usdToEur: 0.926,
+      eurToCzk: 25.3,
+      czkToEur: 0.0395,
+      eurToPln: 4.3,
+      plnToEur: 0.233,
+      eurToGbp: 0.85,
+      gbpToEur: 1.18,
+    });
+  }
+
+  // Prefer Yahoo spot (bližšie k XTB) — najmä USD, kde ECB fix robil ~0.3–0.5 % rozdiel.
+  const spot = await fetchYahooSpotEurRates();
+  const eurToUsd = spot.eurToUsd ?? baseline.eurToUsd;
+  const eurToCzk = spot.eurToCzk ?? baseline.eurToCzk;
+  const eurToPln = spot.eurToPln ?? baseline.eurToPln;
+  const eurToGbp = spot.eurToGbp ?? baseline.eurToGbp;
+  const eurToHkd = spot.eurToHkd ?? baseline.eurToHkd;
+  const result = withHkdRates({
+    eurToUsd,
+    usdToEur: 1 / eurToUsd,
+    eurToCzk,
+    czkToEur: 1 / eurToCzk,
+    eurToPln,
+    plnToEur: 1 / eurToPln,
+    eurToGbp,
+    gbpToEur: 1 / eurToGbp,
+    eurToHkd,
   });
+
+  exchangeRateCache.set(cacheKey, { data: result, timestamp: Date.now() });
+  scheduleCacheSave();
+  console.log(
+    `Exchange rates: 1 EUR = ${result.eurToUsd.toFixed(4)} USD` +
+      (spot.eurToUsd != null ? " (Yahoo spot)" : " (ECB/fallback)") +
+      `, ${result.eurToCzk.toFixed(2)} CZK, ${result.eurToPln.toFixed(3)} PLN`,
+  );
+  return result;
 }
 
 // Legacy function for backward compatibility
