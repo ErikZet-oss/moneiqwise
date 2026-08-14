@@ -712,119 +712,113 @@ export default function Overview() {
                   {overviewLoading || !m ? (
                     <Skeleton className="h-24 w-full" />
                   ) : hasAnyActivity ? (
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span className="text-[10px] text-muted-foreground">Celkový zisk:</span>
-                        <span
-                          className={`text-xs font-semibold tabular-nums ${getChangeTone(m.totalProfit)}`}
-                        >
-                          {maskAmount(formatSignedCurrency(m.totalProfit))}
-                        </span>
-                        <span
-                          className={`text-[10px] px-1 py-0.5 rounded font-medium tabular-nums ${pctBadgeClass(m.totalProfitPercent)}`}
-                        >
-                          {formatPercent(m.totalProfitPercent)}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] text-muted-foreground">Celkový zisk</span>
+                        <span className="inline-flex items-center gap-1.5 min-w-0 justify-end">
+                          <span
+                            className={`text-xs font-semibold tabular-nums ${getChangeTone(m.totalProfit)}`}
+                          >
+                            {maskAmount(formatSignedCurrency(m.totalProfit))}
+                          </span>
+                          <span
+                            className={`text-[10px] px-1 py-0.5 rounded font-medium tabular-nums shrink-0 ${pctBadgeClass(m.totalProfitPercent)}`}
+                          >
+                            {formatPercent(m.totalProfitPercent)}
+                          </span>
                         </span>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <div className="rounded-md border border-border/60 bg-muted/25 px-2 py-1.5 min-w-0">
-                          <div className="text-[10px] text-muted-foreground truncate">
-                            Nerealizovaný
-                          </div>
-                          <div
-                            className={`text-xs font-medium tabular-nums truncate ${getChangeTone(m.unrealizedGain)}`}
-                            data-testid={`overview-unrealized-${portfolio.id}`}
-                          >
-                            {maskAmount(formatSignedCurrency(m.unrealizedGain))}
-                          </div>
-                        </div>
-
-                        <div className="rounded-md border border-border/60 bg-muted/25 px-2 py-1.5 min-w-0">
-                          <div className="text-[10px] text-muted-foreground truncate">
-                            Realizovaný
-                          </div>
-                          <div
-                            className={`text-xs font-medium tabular-nums truncate ${getChangeTone(m.realizedGain)}`}
-                            data-testid={`overview-realized-gain-${portfolio.id}`}
-                          >
-                            {maskAmount(formatSignedCurrency(m.realizedGain))}
-                          </div>
-                        </div>
-
-                        <div className="rounded-md border border-border/60 bg-muted/25 px-2 py-1.5 min-w-0">
-                          {usSessionState === "LIVE" ? (
-                            <>
-                              <div className="text-[10px] text-muted-foreground truncate">
-                                Denná zmena
-                              </div>
-                              {m.hasQuotes ? (
-                                <div className="flex flex-wrap items-baseline gap-1 min-w-0">
-                                  <span
-                                    className={`text-xs font-medium tabular-nums truncate ${getChangeTone(displayedDaily)}`}
-                                  >
-                                    {maskAmount(formatSignedCurrency(displayedDaily))}
-                                  </span>
-                                  <span
-                                    className={`text-[10px] px-1 py-0.5 rounded font-medium tabular-nums ${pctBadgeClass(displayedDailyPct)}`}
-                                  >
-                                    {formatPercent(displayedDailyPct)}
-                                  </span>
-                                </div>
-                              ) : (
-                                <div className="text-xs text-muted-foreground">—</div>
-                              )}
-                            </>
-                          ) : showExtendedSession ? (
-                            <>
-                              <div className="text-[10px] text-muted-foreground inline-flex items-center gap-0.5 truncate">
-                                <Moon className={`h-2.5 w-2.5 shrink-0 ${PREMARKET_MOON_CLASS}`} />
-                                {getExtendedSessionLabel(usSessionState)}
-                              </div>
-                              {preOpen.available ? (
-                                <div className="flex flex-wrap items-baseline gap-1 min-w-0">
-                                  <span
-                                    className={`text-xs font-medium tabular-nums truncate ${getChangeTone(preOpen.amount)}`}
-                                    data-testid={`overview-pre-open-${portfolio.id}`}
-                                  >
-                                    {maskAmount(formatSignedCurrency(preOpen.amount))}
-                                  </span>
-                                  <span
-                                    className={`text-[10px] px-1 py-0.5 rounded font-medium tabular-nums ${pctBadgeClass(preOpen.percent)}`}
-                                  >
-                                    {formatPercent(preOpen.percent)}
-                                  </span>
-                                </div>
-                              ) : (
-                                <div className="text-xs text-muted-foreground">bez dát</div>
-                              )}
-                            </>
-                          ) : (
-                            <>
-                              <div className="text-[10px] text-muted-foreground truncate">
-                                Denná zmena
-                              </div>
-                              <div className="text-xs text-muted-foreground">Trh uzatvorený</div>
-                            </>
-                          )}
-                        </div>
-
-                        <div className="rounded-md border border-border/60 bg-muted/25 px-2 py-1.5 min-w-0">
-                          <div className="text-[10px] text-muted-foreground truncate">YTD</div>
-                          {ytdPct != null ? (
-                            <div
-                              className={`text-xs font-medium tabular-nums ${getChangeTone(ytdPct)}`}
-                              data-testid={`overview-ytd-${portfolio.id}`}
-                            >
-                              {formatPercent(ytdPct)}
-                            </div>
-                          ) : (
-                            <div className="text-xs text-muted-foreground">—</div>
-                          )}
-                        </div>
+                      <div
+                        className="flex items-center justify-between gap-2"
+                        data-testid={`overview-unrealized-${portfolio.id}`}
+                      >
+                        <span className="text-[10px] text-muted-foreground">Nerealizovaný</span>
+                        <span
+                          className={`text-xs font-medium tabular-nums ${getChangeTone(m.unrealizedGain)}`}
+                        >
+                          {maskAmount(formatSignedCurrency(m.unrealizedGain))}
+                        </span>
                       </div>
 
-                      <div className="flex items-center justify-between gap-2 pt-0.5">
+                      <div
+                        className="flex items-center justify-between gap-2"
+                        data-testid={`overview-realized-gain-${portfolio.id}`}
+                      >
+                        <span className="text-[10px] text-muted-foreground">Realizovaný</span>
+                        <span
+                          className={`text-xs font-medium tabular-nums ${getChangeTone(m.realizedGain)}`}
+                        >
+                          {maskAmount(formatSignedCurrency(m.realizedGain))}
+                        </span>
+                      </div>
+
+                      {usSessionState === "LIVE" ? (
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] text-muted-foreground">Denná zmena</span>
+                          {m.hasQuotes ? (
+                            <span className="inline-flex items-center gap-1.5 min-w-0 justify-end">
+                              <span
+                                className={`text-xs font-medium tabular-nums ${getChangeTone(displayedDaily)}`}
+                              >
+                                {maskAmount(formatSignedCurrency(displayedDaily))}
+                              </span>
+                              <span
+                                className={`text-[10px] px-1 py-0.5 rounded font-medium tabular-nums shrink-0 ${pctBadgeClass(displayedDailyPct)}`}
+                              >
+                                {formatPercent(displayedDailyPct)}
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </div>
+                      ) : showExtendedSession ? (
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1">
+                            <Moon className={`h-2.5 w-2.5 shrink-0 ${PREMARKET_MOON_CLASS}`} />
+                            {getExtendedSessionLabel(usSessionState)}
+                          </span>
+                          {preOpen.available ? (
+                            <span className="inline-flex items-center gap-1.5 min-w-0 justify-end">
+                              <span
+                                className={`text-xs font-medium tabular-nums ${getChangeTone(preOpen.amount)}`}
+                                data-testid={`overview-pre-open-${portfolio.id}`}
+                              >
+                                {maskAmount(formatSignedCurrency(preOpen.amount))}
+                              </span>
+                              <span
+                                className={`text-[10px] px-1 py-0.5 rounded font-medium tabular-nums shrink-0 ${pctBadgeClass(preOpen.percent)}`}
+                              >
+                                {formatPercent(preOpen.percent)}
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">bez dát</span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] text-muted-foreground">Denná zmena</span>
+                          <span className="text-xs text-muted-foreground">Trh uzatvorený</span>
+                        </div>
+                      )}
+
+                      <div
+                        className="flex items-center justify-between gap-2"
+                        data-testid={`overview-ytd-${portfolio.id}`}
+                      >
+                        <span className="text-[10px] text-muted-foreground">YTD</span>
+                        {ytdPct != null ? (
+                          <span className={`text-xs font-medium tabular-nums ${getChangeTone(ytdPct)}`}>
+                            {formatPercent(ytdPct)}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2">
                         <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1">
                           Pasívny príjem
                           <Tooltip>
