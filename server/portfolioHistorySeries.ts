@@ -216,3 +216,61 @@ export function computePortfolioHistorySeries(
       "Krivky % v prvom bode: 0.",
   };
 }
+
+/**
+ * Reťazený TWR % medzi startIso a endIso (vrátane) — rovnaká logika ako
+ * `portfolioCumulativePct` v histórii / YTD na dashboarde.
+ * `maxPoints` limituje počet denných kotiev (výkon).
+ */
+export function computeChainedTwrPercent(
+  sortedTx: Transaction[],
+  startIso: string,
+  endIso: string,
+  historicalByTicker: Record<string, Record<string, number>>,
+  historicalFxEurPerUnitByCurrency: Record<string, Record<string, number>>,
+  currentPrices: Record<string, number>,
+  rates: AllExchangeRates,
+  userCcy: string,
+  todayIso: string,
+  maxPoints = 48,
+): number {
+  if (!startIso || !endIso || startIso > endIso) return 0;
+  const dates = subsampleDateRange(startIso, endIso, maxPoints);
+  if (dates.length < 2) return 0;
+
+  let cumFactor = 1;
+  for (let i = 1; i < dates.length; i++) {
+    const iso = dates[i]!;
+    const prevIso = dates[i - 1]!;
+    const eod = new Date(`${iso}T23:59:59.999Z`);
+    const eodP = new Date(`${prevIso}T23:59:59.999Z`);
+    const V = mtmValueAtEod(
+      sortedTx,
+      iso,
+      historicalByTicker,
+      historicalFxEurPerUnitByCurrency,
+      currentPrices,
+      rates,
+      userCcy,
+      todayIso,
+    );
+    const v0 = mtmValueAtEod(
+      sortedTx,
+      prevIso,
+      historicalByTicker,
+      historicalFxEurPerUnitByCurrency,
+      currentPrices,
+      rates,
+      userCcy,
+      todayIso,
+    );
+    const N = toUserCcy(sumCashFlowEurUpTo(sortedTx, eod), userCcy, rates);
+    const n0U = toUserCcy(sumCashFlowEurUpTo(sortedTx, eodP), userCcy, rates);
+    const dN = N - n0U;
+    if (v0 > 1e-9) {
+      const r = (V - v0 - dN) / v0;
+      if (Number.isFinite(r) && r > -0.999) cumFactor *= 1 + r;
+    }
+  }
+  return (cumFactor - 1) * 100;
+}

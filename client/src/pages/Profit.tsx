@@ -12,7 +12,23 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { CompanyLogo } from "@/components/CompanyLogo";
+import { HelpTip } from "@/components/HelpTip";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { Transaction } from "@shared/schema";
+
+type PerformanceMethod = "simple" | "twr";
+
+const PROFIT_PERF_METHOD_KEY = "moneiqwise.profit.performanceMethod";
+
+function readStoredPerformanceMethod(): PerformanceMethod {
+  try {
+    const v = localStorage.getItem(PROFIT_PERF_METHOD_KEY);
+    if (v === "twr" || v === "simple") return v;
+  } catch {
+    /* ignore */
+  }
+  return "simple";
+}
 
 interface RealizedGainSummary {
   totalRealized: number;
@@ -59,6 +75,8 @@ interface PerformancePeriodStats {
   netInflow: number;
   profit: number;
   percentReturn: number;
+  /** Reťazený TWR % (rovnaká logika ako YTD na dashboarde). */
+  twrPercentReturn?: number;
   realizedGain: number;
   dividends: number;
   transactionCount: number;
@@ -579,6 +597,18 @@ function YearMonthPerformance({
   formatPercent: (n: number) => string;
 }) {
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
+  const [method, setMethod] = useState<PerformanceMethod>(readStoredPerformanceMethod);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PROFIT_PERF_METHOD_KEY, method);
+    } catch {
+      /* ignore */
+    }
+  }, [method]);
+
+  const pctFor = (row: PerformancePeriodStats) =>
+    method === "twr" ? (row.twrPercentReturn ?? row.percentReturn) : row.percentReturn;
 
   if (loading && !data) {
     return (
@@ -622,15 +652,55 @@ function YearMonthPerformance({
 
   return (
     <Card className="max-w-full overflow-x-hidden">
-      <CardHeader className="space-y-1 p-4 pb-2">
-        <CardTitle className="flex items-center gap-1.5 text-sm font-medium">
-          <CalendarDays className="h-4 w-4 shrink-0" />
-          Výkonnosť podľa rokov a mesiacov
-        </CardTitle>
-        <CardDescription className="text-xs leading-snug md:text-sm">
-          Ročný prehľad s rozbalením na jednotlivé mesiace. Výpočet beží na serveri a je udržaný v pamäti,
-          takže opakované otvorenia sú okamžité.
-        </CardDescription>
+      <CardHeader className="space-y-2 p-4 pb-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-1 min-w-0">
+            <CardTitle className="flex items-center gap-1.5 text-sm font-medium">
+              <CalendarDays className="h-4 w-4 shrink-0" />
+              Výkonnosť podľa rokov a mesiacov
+              <HelpTip title="Ako sa počíta % výkonnosť">
+                <p>
+                  <strong>Jednoduchý %</strong> (predvolené):{" "}
+                  <code className="text-[10px]">zisk = koniec − začiatok − čistý inflow</code>, kde
+                  začiatok/koniec = trhová hodnota držaných akcií (Yahoo) a čistý inflow = nákupy −
+                  predaje (v mene zobrazenia). Percentá:{" "}
+                  <code className="text-[10px]">zisk / (začiatok + max(inflow, 0)) × 100</code>.
+                  Stĺpec Zisk/Strata v € vždy používa tento vzorec.
+                </p>
+                <p>
+                  <strong>TWR %</strong> (Time-Weighted Return): rovnaká logika ako YTD na hlavnom
+                  dashboarde. Medzi dňami v období:{" "}
+                  <code className="text-[10px]">r = (V₁ − V₀ − Δvklady) / V₀</code>, potom sa
+                  násobí <code className="text-[10px]">(1+r)</code>. V = MTM hodnoty (akcie +
+                  hotovosť). Δvklady = zmena súčtu DEPOSIT/WITHDRAWAL. Výsledok:{" "}
+                  <code className="text-[10px]">(∏(1+r) − 1) × 100</code>. Očisťuje timing
+                  vkladov/výberov — vhodné na porovnanie s indexom.
+                </p>
+                <p className="text-muted-foreground">
+                  Dividendy sú v tabuľke samostatne; do jednoduchého % nie sú priamo pripočítané.
+                  TWR ich zachytáva cez zmenu peňaženky/MTM.
+                </p>
+              </HelpTip>
+            </CardTitle>
+            <CardDescription className="text-xs leading-snug md:text-sm">
+              Ročný prehľad s rozbalením na mesiace. Prepni % medzi jednoduchým výpočtom a TWR.
+            </CardDescription>
+          </div>
+          <ToggleGroup
+            type="single"
+            value={method}
+            onValueChange={(v) => v && setMethod(v as PerformanceMethod)}
+            className="justify-start sm:justify-end shrink-0"
+            data-testid="toggle-profit-performance-method"
+          >
+            <ToggleGroupItem value="simple" className="text-xs px-2.5 h-8" aria-label="Jednoduchý %">
+              Jednoduchý
+            </ToggleGroupItem>
+            <ToggleGroupItem value="twr" className="text-xs px-2.5 h-8" aria-label="TWR %">
+              TWR
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
       </CardHeader>
       <CardContent className="p-4 pt-3">
         <div className="w-full max-w-full overflow-x-hidden">
@@ -646,13 +716,16 @@ function YearMonthPerformance({
                   <span className="md:hidden">Zisk</span>
                   <span className="hidden md:inline">Zisk/Strata</span>
                 </TableHead>
-                <TableHead className="text-right whitespace-nowrap">%</TableHead>
+                <TableHead className="text-right whitespace-nowrap">
+                  {method === "twr" ? "TWR %" : "%"}
+                </TableHead>
                 <TableHead className="text-right hidden lg:table-cell">Dividendy</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody className="[&_td]:px-1.5 [&_td]:py-1.5 md:[&_td]:p-4">
               {data.years.map((year) => {
                 const isOpen = !!expanded[year.year];
+                const yearPct = pctFor(year);
                 return (
                   <Fragment key={year.year}>
                     <TableRow
@@ -680,8 +753,8 @@ function YearMonthPerformance({
                       <TableCell className={`text-right text-[10px] font-semibold tabular-nums md:text-sm ${signClass(year.profit)}`}>
                         {formatCurrency(year.profit)}
                       </TableCell>
-                      <TableCell className={`text-right text-[10px] font-semibold tabular-nums md:text-sm ${signClass(year.profit)}`}>
-                        {formatPercent(year.percentReturn)}
+                      <TableCell className={`text-right text-[10px] font-semibold tabular-nums md:text-sm ${signClass(yearPct)}`}>
+                        {formatPercent(yearPct)}
                       </TableCell>
                       <TableCell className="text-right hidden lg:table-cell">
                         {year.dividends > 0 ? formatCurrency(year.dividends) : "—"}
@@ -697,64 +770,70 @@ function YearMonthPerformance({
                     )}
 
                     {isOpen &&
-                      year.months.map((m) => (
-                        <TableRow
-                          key={m.label}
-                          className="bg-muted/20"
-                          data-testid={`row-perf-month-${m.label}`}
-                        >
-                          <TableCell></TableCell>
-                          <TableCell className="max-w-[5rem] truncate pl-3 capitalize text-muted-foreground md:max-w-none md:pl-8">
-                            {monthName(m.label)}
-                          </TableCell>
-                          <TableCell className="text-right hidden md:table-cell text-muted-foreground">
-                            {formatCurrency(m.startValue)}
-                          </TableCell>
-                          <TableCell className="text-right hidden md:table-cell text-muted-foreground">
-                            {formatCurrency(m.endValue)}
-                          </TableCell>
-                          <TableCell className="text-right hidden lg:table-cell text-muted-foreground">
-                            {formatCurrency(m.netInflow)}
-                          </TableCell>
-                          <TableCell className={`text-right text-[10px] tabular-nums md:text-sm ${signClass(m.profit)}`}>
-                            {formatCurrency(m.profit)}
-                          </TableCell>
-                          <TableCell className={`text-right text-[10px] tabular-nums md:text-sm ${signClass(m.profit)}`}>
-                            {formatPercent(m.percentReturn)}
-                          </TableCell>
-                          <TableCell className="text-right hidden lg:table-cell text-muted-foreground">
-                            {m.dividends > 0 ? formatCurrency(m.dividends) : "—"}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      year.months.map((m) => {
+                        const mPct = pctFor(m);
+                        return (
+                          <TableRow
+                            key={m.label}
+                            className="bg-muted/20"
+                            data-testid={`row-perf-month-${m.label}`}
+                          >
+                            <TableCell></TableCell>
+                            <TableCell className="max-w-[5rem] truncate pl-3 capitalize text-muted-foreground md:max-w-none md:pl-8">
+                              {monthName(m.label)}
+                            </TableCell>
+                            <TableCell className="text-right hidden md:table-cell text-muted-foreground">
+                              {formatCurrency(m.startValue)}
+                            </TableCell>
+                            <TableCell className="text-right hidden md:table-cell text-muted-foreground">
+                              {formatCurrency(m.endValue)}
+                            </TableCell>
+                            <TableCell className="text-right hidden lg:table-cell text-muted-foreground">
+                              {formatCurrency(m.netInflow)}
+                            </TableCell>
+                            <TableCell className={`text-right text-[10px] tabular-nums md:text-sm ${signClass(m.profit)}`}>
+                              {formatCurrency(m.profit)}
+                            </TableCell>
+                            <TableCell className={`text-right text-[10px] tabular-nums md:text-sm ${signClass(mPct)}`}>
+                              {formatPercent(mPct)}
+                            </TableCell>
+                            <TableCell className="text-right hidden lg:table-cell text-muted-foreground">
+                              {m.dividends > 0 ? formatCurrency(m.dividends) : "—"}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                   </Fragment>
                 );
               })}
 
-              {data.totals && (
-                <TableRow className="border-t-2 font-semibold" data-testid="row-perf-total">
-                  <TableCell></TableCell>
-                  <TableCell>Celkovo</TableCell>
-                  <TableCell className="text-right hidden md:table-cell">
-                    {formatCurrency(data.totals.startValue)}
-                  </TableCell>
-                  <TableCell className="text-right hidden md:table-cell">
-                    {formatCurrency(data.totals.endValue)}
-                  </TableCell>
-                  <TableCell className="text-right hidden lg:table-cell text-muted-foreground">
-                    {formatCurrency(data.totals.netInflow)}
-                  </TableCell>
-                  <TableCell className={`text-right ${signClass(data.totals.profit)}`}>
-                    {formatCurrency(data.totals.profit)}
-                  </TableCell>
-                  <TableCell className={`text-right ${signClass(data.totals.profit)}`}>
-                    {formatPercent(data.totals.percentReturn)}
-                  </TableCell>
-                  <TableCell className="text-right hidden lg:table-cell">
-                    {data.totals.dividends > 0 ? formatCurrency(data.totals.dividends) : "—"}
-                  </TableCell>
-                </TableRow>
-              )}
+              {data.totals && (() => {
+                const totalPct = pctFor(data.totals);
+                return (
+                  <TableRow className="border-t-2 font-semibold" data-testid="row-perf-total">
+                    <TableCell></TableCell>
+                    <TableCell>Celkovo</TableCell>
+                    <TableCell className="text-right hidden md:table-cell">
+                      {formatCurrency(data.totals.startValue)}
+                    </TableCell>
+                    <TableCell className="text-right hidden md:table-cell">
+                      {formatCurrency(data.totals.endValue)}
+                    </TableCell>
+                    <TableCell className="text-right hidden lg:table-cell text-muted-foreground">
+                      {formatCurrency(data.totals.netInflow)}
+                    </TableCell>
+                    <TableCell className={`text-right ${signClass(data.totals.profit)}`}>
+                      {formatCurrency(data.totals.profit)}
+                    </TableCell>
+                    <TableCell className={`text-right ${signClass(totalPct)}`}>
+                      {formatPercent(totalPct)}
+                    </TableCell>
+                    <TableCell className="text-right hidden lg:table-cell">
+                      {data.totals.dividends > 0 ? formatCurrency(data.totals.dividends) : "—"}
+                    </TableCell>
+                  </TableRow>
+                );
+              })()}
             </TableBody>
           </Table>
         </div>

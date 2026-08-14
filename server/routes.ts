@@ -49,6 +49,7 @@ import { computeCashLedgerBreakdownEur } from "./netLedgerCashEur";
 import { computeFifoRealizedGainsFromTransactions } from "@shared/fifoRealizedGains";
 import { computeGipsTwr } from "./twrGips";
 import {
+  computeChainedTwrPercent,
   computePortfolioHistorySeries,
   type PortfolioHistoryRange,
 } from "./portfolioHistorySeries";
@@ -2291,7 +2292,13 @@ interface PerformancePeriodStats {
   endValue: number;
   netInflow: number;
   profit: number;
+  /** Jednoduchý %: zisk / (začiatok + max(inflow, 0)). */
   percentReturn: number;
+  /**
+   * Reťazený TWR % v období (MTM + hotovosť, očistené o Δ vkladov/výberov) —
+   * rovnaká logika ako YTD na dashboarde.
+   */
+  twrPercentReturn: number;
   realizedGain: number;
   dividends: number;
   transactionCount: number;
@@ -2318,7 +2325,7 @@ const performanceCache = new Map<
 const PERFORMANCE_CACHE_TTL = 30 * 60 * 1000;
 
 function perfCacheKey(userId: string, portfolioParam: string): string {
-  return `${userId}:${portfolioParam || "all"}`;
+  return `${userId}:${portfolioParam || "all"}:v2-twr`;
 }
 
 function invalidatePerformanceCache(userId: string): void {
@@ -2603,6 +2610,18 @@ async function computePortfolioPerformance(
     const yearProfit = yearEndVal - yearStartVal - agg.netInflow;
     const yearBaseline = yearStartVal + Math.max(agg.netInflow, 0);
     const yearPct = yearBaseline > 0 ? (yearProfit / yearBaseline) * 100 : 0;
+    const yearTwrPct = computeChainedTwrPercent(
+      sorted,
+      yearStartIso,
+      yearEndIso,
+      historicalPrices,
+      {},
+      currentPrices,
+      rates,
+      userCurrency,
+      todayIso,
+      52,
+    );
 
     const monthsOut: PerformancePeriodStats[] = [];
     for (let m = 0; m < 12; m++) {
@@ -2623,6 +2642,18 @@ async function computePortfolioPerformance(
       const mProfit = mEnd - mStart - mAgg.netInflow;
       const mBaseline = mStart + Math.max(mAgg.netInflow, 0);
       const mPct = mBaseline > 0 ? (mProfit / mBaseline) * 100 : 0;
+      const mTwrPct = computeChainedTwrPercent(
+        sorted,
+        monthStartIso,
+        boundedMonthEnd,
+        historicalPrices,
+        {},
+        currentPrices,
+        rates,
+        userCurrency,
+        todayIso,
+        24,
+      );
 
       monthsOut.push({
         label: `${String(m + 1).padStart(2, "0")}/${yr}`,
@@ -2633,6 +2664,7 @@ async function computePortfolioPerformance(
         netInflow: mAgg.netInflow,
         profit: mProfit,
         percentReturn: mPct,
+        twrPercentReturn: mTwrPct,
         realizedGain: mRealizedGain,
         dividends: mAgg.dividends,
         transactionCount: mAgg.count,
@@ -2649,6 +2681,7 @@ async function computePortfolioPerformance(
       netInflow: agg.netInflow,
       profit: yearProfit,
       percentReturn: yearPct,
+      twrPercentReturn: yearTwrPct,
       realizedGain: yearRealizedGain,
       dividends: agg.dividends,
       transactionCount: agg.count,
@@ -2666,6 +2699,18 @@ async function computePortfolioPerformance(
   const allCount = years.reduce((s, y) => s + y.transactionCount, 0);
   const allProfit = nowValue - openingValue - allNetInflow;
   const allBaseline = openingValue + Math.max(allNetInflow, 0);
+  const allTwrPct = computeChainedTwrPercent(
+    sorted,
+    firstIso,
+    todayIso,
+    historicalPrices,
+    {},
+    currentPrices,
+    rates,
+    userCurrency,
+    todayIso,
+    80,
+  );
   const totals: PerformancePeriodStats = {
     label: "Celkovo",
     startDate: firstIso,
@@ -2675,6 +2720,7 @@ async function computePortfolioPerformance(
     netInflow: allNetInflow,
     profit: allProfit,
     percentReturn: allBaseline > 0 ? (allProfit / allBaseline) * 100 : 0,
+    twrPercentReturn: allTwrPct,
     realizedGain: allRealized,
     dividends: allDividends,
     transactionCount: allCount,
