@@ -1196,17 +1196,48 @@ function parseCashOperations(
       }
     } else if (
       typeStr.includes('spinoff') ||
+      typeStr.includes('spin-off') ||
       typeStr.includes('correction') ||
       typeStr.includes('fractional')
     ) {
       // Spinoff / Correction / Fractional shares: obchod len ak komentár obsahuje OPEN/CLOSE BUY|SELL qty @ price
       const tradeMatch = comment.match(/(OPEN|CLOSE)\s+(BUY|SELL)\s+/i);
       if (!tradeMatch || !ticker) {
-        log.push({
-          row: i + 1,
-          status: 'warning',
-          message: `[${operationId}] ${typeStr}: bez OPEN/CLOSE BUY|SELL @ price — preskočené (${comment.slice(0, 80)})`,
-        });
+        // Čistá hotovostná korekcia (napr. spin-off cash) — bez obchodu v komentári.
+        const absAmt = Math.abs(amount);
+        if (absAmt > 0) {
+          const lineSign: 1 | -1 = amount >= 0 ? 1 : -1;
+          const forex = buildForexForXtBLine(accountCurrency, row, fxCols, absAmt, lineSign);
+          const base = Number.isFinite(forex.baseCurrencyAmount)
+            ? forex.baseCurrencyAmount
+            : lineSign * absAmt;
+          transactions.push({
+            date: time,
+            ticker: CASH_FLOW_TICKER,
+            type: lineSign > 0 ? 'DEPOSIT' : 'WITHDRAWAL',
+            quantity: 0,
+            priceEur: 0,
+            totalAmountEur: base,
+            originalComment: comment,
+            externalId: operationId,
+            transactionId: operationId || undefined,
+            originalCurrency: forex.originalCurrency,
+            exchangeRateAtTransaction: forex.exchangeRateAtTransaction,
+            baseCurrencyAmount: base,
+            companyName: `${typeStr.trim() || 'Spin-off'} (hotovosť XTB)`,
+          });
+          log.push({
+            row: i + 1,
+            status: 'success',
+            message: `[${operationId}] ${lineSign > 0 ? 'DEPOSIT' : 'WITHDRAWAL'} (${typeStr}) ${base >= 0 ? '+' : ''}${base.toFixed(2)} EUR`,
+          });
+        } else {
+          log.push({
+            row: i + 1,
+            status: 'warning',
+            message: `[${operationId}] ${typeStr}: bez OPEN/CLOSE BUY|SELL @ price — preskočené (${comment.slice(0, 80)})`,
+          });
+        }
         continue;
       }
       const isBuy = /^OPEN$/i.test(tradeMatch[1]);

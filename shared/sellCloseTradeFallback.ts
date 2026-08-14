@@ -40,6 +40,93 @@ export function isCloseTradeCashRow(tx: Transaction): boolean {
   return label.includes("close trade") || label.includes("profit of position");
 }
 
+function cashLineAbsEur(
+  t: Pick<Transaction, "baseCurrencyAmount" | "shares" | "pricePerShare">,
+): number {
+  const baseEur = parseFloat(String(t.baseCurrencyAmount ?? "NaN"));
+  if (Number.isFinite(baseEur) && Math.abs(baseEur) > 1e-9) return Math.abs(baseEur);
+  const shares = parseFloat(String(t.shares ?? "NaN"));
+  const price = parseFloat(String(t.pricePerShare ?? "NaN"));
+  if (Number.isFinite(shares) && Number.isFinite(price)) return Math.abs(shares * price);
+  return 0;
+}
+
+/**
+ * XTB cash pri predaji:
+ * - **Cost-return**: Stock sale = vrátenie nákupu, close trade = P/L (sale+|close|≈trh) → close nechať.
+ * - **Market proceeds**: Stock sale už = trh, close trade znova P/L → close **vynechať** (inak +P/L naviac).
+ */
+export function closeTradeIdsDuplicatingMarketSellProceeds(
+  transactions: Transaction[],
+): Set<string> {
+  const exclude = new Set<string>();
+  const sells = transactions.filter((t) => String(t.type ?? "").trim().toUpperCase() === "SELL");
+  const closes = transactions.filter((t) => isCloseTradeCashRow(t));
+  if (sells.length === 0 || closes.length === 0) return exclude;
+
+  const usedClose = new Set<string>();
+  const maxDiffMs = 60 * 60 * 1000;
+
+  for (const sell of sells) {
+    const sellTs = new Date(sell.transactionDate as unknown as string).getTime();
+    if (!Number.isFinite(sellTs)) continue;
+    let best: Transaction | null = null;
+    let bestDiff = Infinity;
+    for (const c of closes) {
+      if (usedClose.has(c.id)) continue;
+      const cashTs = new Date(c.transactionDate as unknown as string).getTime();
+      if (!Number.isFinite(cashTs)) continue;
+      const diff = Math.abs(cashTs - sellTs);
+      if (diff > maxDiffMs) continue;
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        best = c;
+      }
+    }
+    if (!best) continue;
+    usedClose.add(best.id);
+
+    const saleEur = cashLineAbsEur(sell);
+    const ctEur = cashLineAbsEur(best);
+    if (!(saleEur > 0) || !(ctEur > 0)) continue;
+
+    const sh = Math.abs(parseFloat(String(sell.shares ?? "0")));
+    const inst = parseFloat(
+      String((sell as { instrumentPricePerShare?: string | null }).instrumentPricePerShare ?? "NaN"),
+    );
+    const ex = parseFloat(String(sell.exchangeRateAtTransaction ?? "NaN"));
+    const px = parseFloat(String(sell.pricePerShare ?? "NaN"));
+
+    let marketEur: number | null = null;
+    if (sh > 0 && Number.isFinite(inst) && inst > 0) {
+      if (Number.isFinite(ex) && ex > 0 && Math.abs(ex - 1) > 1e-6) {
+        marketEur = sh * inst * ex;
+      } else if (Number.isFinite(px) && px > 0 && Math.abs(px - inst) / inst > 0.05) {
+        // EUR účet: Amount/ks (px) je v EUR, @cena (inst) v USD/GBP — market z close+sale.
+        marketEur = saleEur + ctEur;
+      } else {
+        marketEur = sh * inst;
+      }
+    }
+
+    if (marketEur != null && marketEur > 1) {
+      const proceedsErr = Math.abs(saleEur - marketEur) / marketEur;
+      const costReturnErr = Math.abs(saleEur + ctEur - marketEur) / marketEur;
+      if (proceedsErr < 0.04 && costReturnErr > 0.08) {
+        exclude.add(best.id);
+      }
+      continue;
+    }
+
+    // Bez spoľahlivého marketEur: rovnaká „cena/ks“ ako instrument ≈ predaj v trhovej cene.
+    if (Number.isFinite(px) && Number.isFinite(inst) && inst > 0 && Math.abs(px - inst) / inst < 0.03) {
+      exclude.add(best.id);
+    }
+  }
+
+  return exclude;
+}
+
 export type CloseTradeFallbackPairing = {
   bySellId: Map<string, number>;
   pairedCloseTradeIds: Set<string>;

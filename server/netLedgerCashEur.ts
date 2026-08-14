@@ -2,6 +2,10 @@ import type { Transaction } from "@shared/schema";
 import { isPhysicalMetalTicker } from "@shared/physicalMetal";
 import { sumCashFlowEurFromRows } from "@shared/cashFromTransactions";
 import { buySellLineEur, inferTradeCurrency } from "@shared/transactionEur";
+import {
+  closeTradeIdsDuplicatingMarketSellProceeds,
+  isCloseTradeCashRow,
+} from "@shared/sellCloseTradeFallback";
 import { buildEurPerUnitByTxnIdForTransactions } from "./eurAtTransactionDate";
 import { convertAmountBetween, type AllExchangeRates } from "./convertAmountBetween";
 
@@ -25,6 +29,12 @@ export type CashLedgerBreakdownEur = {
   sellsEur: number;
   dividendsEur: number;
   taxEur: number;
+  /** Close-trade P/L započítaný do peňaženky */
+  closeTradeEur: number;
+  /** Close-trade vynechaný (duplicita voči stock sale v trhovej cene) */
+  closeTradeExcludedEur: number;
+  /** Presuny medzi účtami XTB */
+  interWalletTransferEur: number;
   netCashEur: number;
   /** Počty riadkov podľa typu; `unknown` = neznámy typ (nemal by nastať) */
   counts: Record<string, number>;
@@ -47,6 +57,9 @@ export async function computeCashLedgerBreakdownEur(
     sellsEur: 0,
     dividendsEur: 0,
     taxEur: 0,
+    closeTradeEur: 0,
+    closeTradeExcludedEur: 0,
+    interWalletTransferEur: 0,
     netCashEur: 0,
     counts: {},
   };
@@ -54,6 +67,7 @@ export async function computeCashLedgerBreakdownEur(
 
   const eurM =
     prebuiltEurPerTxn ?? (await buildEurPerUnitByTxnIdForTransactions(list));
+  const excludeCloseIds = closeTradeIdsDuplicatingMarketSellProceeds(list);
   const counts: Record<string, number> = {};
   const bump = (k: string) => {
     counts[k] = (counts[k] ?? 0) + 1;
@@ -65,18 +79,40 @@ export async function computeCashLedgerBreakdownEur(
   let sellsEur = 0;
   let dividendsEur = 0;
   let taxEur = 0;
+  let closeTradeEur = 0;
+  let closeTradeExcludedEur = 0;
+  let interWalletTransferEur = 0;
   let net = 0;
 
   for (const t of list) {
     if (t.type === "DEPOSIT" || t.type === "WITHDRAWAL") {
       const line = sumCashFlowEurFromRows([t]);
+      const isClose = isCloseTradeCashRow(t);
+      const isTransfer = /presun medzi|inter-?wallet|transfer from|transfer to/i.test(
+        String(t.companyName || ""),
+      );
+
+      if (isClose && excludeCloseIds.has(t.id)) {
+        closeTradeExcludedEur += line;
+        bump("CLOSE_TRADE_EXCLUDED");
+        continue;
+      }
+
       if (t.type === "DEPOSIT") {
         depositsEur += line;
       } else {
         withdrawalsEur += line;
       }
+      if (isClose) {
+        closeTradeEur += line;
+        bump("CLOSE_TRADE");
+      } else if (isTransfer) {
+        interWalletTransferEur += line;
+        bump("INTER_WALLET");
+      } else {
+        bump(t.type);
+      }
       net += line;
-      bump(t.type);
       continue;
     }
     if (t.type === "BUY" || t.type === "SELL") {
@@ -142,6 +178,9 @@ export async function computeCashLedgerBreakdownEur(
     sellsEur,
     dividendsEur,
     taxEur,
+    closeTradeEur,
+    closeTradeExcludedEur,
+    interWalletTransferEur,
     netCashEur: net,
     counts,
   };
