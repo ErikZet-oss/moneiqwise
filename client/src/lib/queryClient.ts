@@ -76,6 +76,7 @@ function shouldSkipPersistQueryKey(keyStr: string): boolean {
   if (keyStr.includes("/api/news")) return true;
   if (keyStr.includes("/api/portfolio-history")) return true;
   if (keyStr.includes("/api/tax-summary")) return true;
+  if (keyStr.includes("/api/exchange-rate")) return true;
   return false;
 }
 

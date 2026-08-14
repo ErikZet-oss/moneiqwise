@@ -455,6 +455,10 @@ interface AllExchangeRates {
   hkdToEur: number;
 }
 
+/** Posledný zdroj FX (pre /api/exchange-rate diagnostiku). */
+let lastExchangeRateSource: "yahoo-spot" | "ecb-frankfurter" | "er-api" | "fallback" | "cache" =
+  "fallback";
+
 function withHkdRates(partial: Omit<AllExchangeRates, "eurToHkd" | "hkdToEur"> & { eurToHkd?: number }): AllExchangeRates {
   const eurToHkd = partial.eurToHkd ?? 8.45;
   const { eurToHkd: _drop, ...rest } = partial;
@@ -527,10 +531,18 @@ async function fetchAllExchangeRates(): Promise<AllExchangeRates> {
   const cacheKey = "ALL_RATES_SPOT_V2";
   const cached = exchangeRateCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < EXCHANGE_RATE_CACHE_TTL) {
-    return cached.data;
+    const payload = cached.data as { rates: AllExchangeRates; source?: typeof lastExchangeRateSource };
+    if (payload?.rates?.eurToUsd) {
+      lastExchangeRateSource = payload.source ?? "cache";
+      return payload.rates;
+    }
+    // legacy shape (plain rates)
+    lastExchangeRateSource = "cache";
+    return cached.data as AllExchangeRates;
   }
 
   let baseline: AllExchangeRates | null = null;
+  let baselineSource: "ecb-frankfurter" | "er-api" | "fallback" = "fallback";
 
   // Baseline: Frankfurter (ECB) — spoľahlivý fallback / doplnenie mien.
   try {
@@ -538,6 +550,7 @@ async function fetchAllExchangeRates(): Promise<AllExchangeRates> {
     if (response.ok) {
       const data = await response.json();
       if (data.rates?.USD && data.rates?.CZK) {
+        baselineSource = "ecb-frankfurter";
         baseline = withHkdRates({
           eurToUsd: data.rates.USD,
           usdToEur: 1 / data.rates.USD,
@@ -562,6 +575,7 @@ async function fetchAllExchangeRates(): Promise<AllExchangeRates> {
       if (response.ok) {
         const data = await response.json();
         if (data.rates?.USD) {
+          baselineSource = "er-api";
           baseline = withHkdRates({
             eurToUsd: data.rates.USD,
             usdToEur: 1 / data.rates.USD,
@@ -581,10 +595,17 @@ async function fetchAllExchangeRates(): Promise<AllExchangeRates> {
   }
 
   if (!baseline && cached) {
-    return cached.data;
+    const payload = cached.data as { rates: AllExchangeRates; source?: typeof lastExchangeRateSource };
+    if (payload?.rates?.eurToUsd) {
+      lastExchangeRateSource = payload.source ?? "cache";
+      return payload.rates;
+    }
+    lastExchangeRateSource = "cache";
+    return cached.data as AllExchangeRates;
   }
 
   if (!baseline) {
+    baselineSource = "fallback";
     baseline = withHkdRates({
       eurToUsd: 1.08,
       usdToEur: 0.926,
@@ -616,11 +637,15 @@ async function fetchAllExchangeRates(): Promise<AllExchangeRates> {
     eurToHkd,
   });
 
-  exchangeRateCache.set(cacheKey, { data: result, timestamp: Date.now() });
+  lastExchangeRateSource = spot.eurToUsd != null ? "yahoo-spot" : baselineSource;
+  exchangeRateCache.set(cacheKey, {
+    data: { rates: result, source: lastExchangeRateSource },
+    timestamp: Date.now(),
+  });
   scheduleCacheSave();
   console.log(
     `Exchange rates: 1 EUR = ${result.eurToUsd.toFixed(4)} USD` +
-      (spot.eurToUsd != null ? " (Yahoo spot)" : " (ECB/fallback)") +
+      (spot.eurToUsd != null ? " (Yahoo spot)" : ` (${baselineSource})`) +
       `, ${result.eurToCzk.toFixed(2)} CZK, ${result.eurToPln.toFixed(3)} PLN`,
   );
   return result;
@@ -4818,7 +4843,10 @@ export async function registerRoutes(
   app.get("/api/exchange-rate", isAuthenticated, async (req: any, res) => {
     try {
       const rates = await fetchAllExchangeRates();
-      res.json(rates);
+      res.json({
+        ...rates,
+        fxSource: lastExchangeRateSource,
+      });
     } catch (error) {
       console.error("Error fetching exchange rate:", error);
       res.status(500).json({ message: "Nepodarilo sa načítať kurz." });
