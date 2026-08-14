@@ -848,8 +848,8 @@ export default function Dashboard() {
     valueTestId: string,
   ) => (
     <div key={row.ticker} className="border-b border-border/60 last:border-0" data-testid={rowTestId}>
-      {/* Mobile — kompaktný layout, názov je stále viditeľný */}
-      <div className="flex gap-2 items-start py-1.5 md:hidden">
+      {/* Mobile — rovnaké fonty / usporiadanie ako Prehľad aktív (suma a % vedľa seba) */}
+      <div className="flex gap-2 items-start py-2 md:hidden">
         <span className="text-[9px] text-muted-foreground tabular-nums shrink-0 w-3 pt-0.5">
           {idx + 1}.
         </span>
@@ -862,24 +862,29 @@ export default function Dashboard() {
           </span>
           <span className="text-[9px] text-muted-foreground truncate">{row.name}</span>
         </div>
-        <div className="shrink-0 max-w-[46%] flex flex-col items-end justify-center gap-0 leading-none">
-          <span
-            className={`text-xs font-semibold tabular-nums leading-tight inline-flex items-center justify-end gap-0.5 ${pctColorClass}`}
+        <div className="text-right shrink-0 flex flex-col items-end justify-center gap-0.5 max-w-[46%]">
+          <div
+            className={`text-[10px] font-medium tabular-nums leading-tight inline-flex flex-wrap items-center justify-end gap-x-1 ${
+              row.dayValueEur != null && Number.isFinite(row.dayValueEur)
+                ? getChangeColor(row.dayValueEur)
+                : pctColorClass
+            }`}
           >
             {row.useExtended && (
               <Moon className={`h-2.5 w-2.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
             )}
-            {formatSignedDayPct(row.pct)}
-          </span>
-          {row.dayValueEur != null && Number.isFinite(row.dayValueEur) && (
-            <span
-              className={`text-[8px] font-medium tabular-nums leading-tight mt-0.5 ${getChangeColor(row.dayValueEur)}`}
-              data-testid={valueTestId}
-            >
-              {row.dayValueEur >= 0 ? "+" : ""}
-              {maskAmount(formatCurrency(row.dayValueEur))}
-            </span>
-          )}
+            {row.dayValueEur != null && Number.isFinite(row.dayValueEur) ? (
+              <>
+                <span data-testid={valueTestId}>
+                  {row.dayValueEur >= 0 ? "+" : ""}
+                  {maskAmount(formatCurrency(row.dayValueEur))}
+                </span>
+                <span className="whitespace-nowrap">({formatSignedDayPct(row.pct)})</span>
+              </>
+            ) : (
+              <span className="whitespace-nowrap">{formatSignedDayPct(row.pct)}</span>
+            )}
+          </div>
         </div>
       </div>
 
