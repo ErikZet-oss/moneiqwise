@@ -544,18 +544,234 @@ export default function Overview() {
 
   const usSessionState = getUsMarketSessionState();
   const showExtendedSession = shouldUseExtendedQuotes(usSessionState);
-  const grandTotal = useMemo(() => {
-    let total = 0;
+
+  const aggregatedMetrics = useMemo((): PortfolioMetrics | null => {
+    if (metricsByPortfolioId.size === 0) return null;
+    let totalValue = 0;
+    let stockValue = 0;
+    let cashValue = 0;
+    let totalInvested = 0;
+    let realizedGain = 0;
+    let unrealizedGain = 0;
+    let totalProfit = 0;
+    let dailyChange = 0;
+    let passiveIncome = 0;
+    let hasQuotes = false;
+
     metricsByPortfolioId.forEach((m) => {
-      total += m.totalValue;
+      totalValue += m.totalValue;
+      stockValue += m.stockValue;
+      cashValue += m.cashValue;
+      totalInvested += m.totalInvested;
+      realizedGain += m.realizedGain;
+      unrealizedGain += m.unrealizedGain;
+      totalProfit += m.totalProfit;
+      dailyChange += m.dailyChange;
+      passiveIncome += m.passiveIncome;
+      if (m.hasQuotes) hasQuotes = true;
     });
-    return total;
+
+    const totalProfitPercent = totalInvested > 0 ? (totalProfit / totalInvested) * 100 : 0;
+    const baseValue = stockValue - dailyChange;
+    const dailyChangePercent = baseValue > 0 ? (dailyChange / baseValue) * 100 : 0;
+    const passiveIncomePercent = stockValue > 0 ? (passiveIncome / stockValue) * 100 : 0;
+
+    return {
+      totalValue,
+      stockValue,
+      cashValue,
+      totalInvested,
+      realizedGain,
+      unrealizedGain,
+      totalProfit,
+      totalProfitPercent,
+      dailyChange,
+      dailyChangePercent,
+      passiveIncome,
+      passiveIncomePercent,
+      hasQuotes,
+    };
   }, [metricsByPortfolioId]);
+
+  const allHoldingsFlat = useMemo(() => {
+    if (!overview?.byPortfolioId) return [] as HoldingWithCostCurrency[];
+    const out: HoldingWithCostCurrency[] = [];
+    for (const p of portfolios) {
+      const holdings = overview.byPortfolioId[p.id]?.holdings ?? [];
+      out.push(...holdings);
+    }
+    return out;
+  }, [overview, portfolios]);
+
+  const aggregatedPreOpen = useMemo(
+    () => computePreOpenPreview(allHoldingsFlat),
+    [computePreOpenPreview, allHoldingsFlat],
+  );
+
+  const { data: ytdAllPortfolios = null } = useQuery<number | null>({
+    queryKey: ["/api/portfolio-history", "overview-ytd", "all"],
+    enabled: portfolios.length > 0,
+    queryFn: async () => {
+      try {
+        const params = new URLSearchParams();
+        params.set("portfolio", "all");
+        params.set("range", "ytd");
+        const res = await fetch(`/api/portfolio-history?${params.toString()}`, {
+          credentials: "include",
+        });
+        if (!res.ok) return null;
+        const data = (await res.json()) as PortfolioHistoryYtdRes;
+        const last = data.points?.[data.points.length - 1];
+        return last && Number.isFinite(last.portfolioCumulativePct)
+          ? last.portfolioCumulativePct
+          : null;
+      } catch {
+        return null;
+      }
+    },
+    staleTime: 15 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
 
   const overviewLoading = overviewPending || (!overview && overviewFetching);
 
-  const anyLoading =
-    portfoliosLoading || overviewLoading;
+  const renderYtdBadge = (ytdPct: number | null | undefined, testId: string) => (
+    <span
+      className={`text-[10px] font-medium tabular-nums shrink-0 ${
+        ytdPct != null ? getChangeTone(ytdPct) : "text-muted-foreground"
+      }`}
+      data-testid={testId}
+      title="YTD výkonnosť"
+    >
+      YTD {ytdPct != null ? formatPercent(ytdPct) : "—"}
+    </span>
+  );
+
+  const renderMetricRows = (
+    m: PortfolioMetrics,
+    opts: {
+      preOpen: PreOpenPreview;
+      idPrefix: string;
+    },
+  ) => {
+    const displayedDaily = usSessionState === "LIVE" ? m.dailyChange : 0;
+    const displayedDailyPct = usSessionState === "LIVE" ? m.dailyChangePercent : 0;
+
+    return (
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] text-muted-foreground">Celkový zisk</span>
+          <span className="inline-flex items-center gap-1.5 min-w-0 justify-end">
+            <span className={`text-xs font-semibold tabular-nums ${getChangeTone(m.totalProfit)}`}>
+              {maskAmount(formatSignedCurrency(m.totalProfit))}
+            </span>
+            <span
+              className={`text-[10px] px-1 py-0.5 rounded font-medium tabular-nums shrink-0 ${pctBadgeClass(m.totalProfitPercent)}`}
+            >
+              {formatPercent(m.totalProfitPercent)}
+            </span>
+          </span>
+        </div>
+
+        <div
+          className="flex items-center justify-between gap-2"
+          data-testid={`${opts.idPrefix}-unrealized`}
+        >
+          <span className="text-[10px] text-muted-foreground">Nerealizovaný</span>
+          <span className={`text-xs font-medium tabular-nums ${getChangeTone(m.unrealizedGain)}`}>
+            {maskAmount(formatSignedCurrency(m.unrealizedGain))}
+          </span>
+        </div>
+
+        <div
+          className="flex items-center justify-between gap-2"
+          data-testid={`${opts.idPrefix}-realized-gain`}
+        >
+          <span className="text-[10px] text-muted-foreground">Realizovaný</span>
+          <span className={`text-xs font-medium tabular-nums ${getChangeTone(m.realizedGain)}`}>
+            {maskAmount(formatSignedCurrency(m.realizedGain))}
+          </span>
+        </div>
+
+        {usSessionState === "LIVE" ? (
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10px] text-muted-foreground">Denná zmena</span>
+            {m.hasQuotes ? (
+              <span className="inline-flex items-center gap-1.5 min-w-0 justify-end">
+                <span className={`text-xs font-medium tabular-nums ${getChangeTone(displayedDaily)}`}>
+                  {maskAmount(formatSignedCurrency(displayedDaily))}
+                </span>
+                <span
+                  className={`text-[10px] px-1 py-0.5 rounded font-medium tabular-nums shrink-0 ${pctBadgeClass(displayedDailyPct)}`}
+                >
+                  {formatPercent(displayedDailyPct)}
+                </span>
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground">—</span>
+            )}
+          </div>
+        ) : showExtendedSession ? (
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1">
+              <Moon className={`h-2.5 w-2.5 shrink-0 ${PREMARKET_MOON_CLASS}`} />
+              {getExtendedSessionLabel(usSessionState)}
+            </span>
+            {opts.preOpen.available ? (
+              <span className="inline-flex items-center gap-1.5 min-w-0 justify-end">
+                <span
+                  className={`text-xs font-medium tabular-nums ${getChangeTone(opts.preOpen.amount)}`}
+                  data-testid={`${opts.idPrefix}-pre-open`}
+                >
+                  {maskAmount(formatSignedCurrency(opts.preOpen.amount))}
+                </span>
+                <span
+                  className={`text-[10px] px-1 py-0.5 rounded font-medium tabular-nums shrink-0 ${pctBadgeClass(opts.preOpen.percent)}`}
+                >
+                  {formatPercent(opts.preOpen.percent)}
+                </span>
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground">bez dát</span>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10px] text-muted-foreground">Denná zmena</span>
+            <span className="text-xs text-muted-foreground">Trh uzatvorený</span>
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1">
+            Pasívny príjem
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <HelpCircle className="h-3 w-3 shrink-0 text-muted-foreground cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[280px] text-xs">
+                <p className="font-medium mb-1">Čo znamenajú čísla</p>
+                <p>
+                  Suma = očakávaný ročný príjem (Forward Dividend): počet držaných kusov × ročná
+                  dividenda na akciu z aktuálnej kotácie, prepočítaná FX kurzom do vašej meny.
+                  Percentá = očakávaný ročný dividendový výnos voči aktuálnej hodnote akcií.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </span>
+          <span className="text-xs font-medium tabular-nums text-right">
+            <span className={m.passiveIncome > 0 ? "text-green-500" : "text-muted-foreground"}>
+              {formatPercent(m.passiveIncomePercent)}
+            </span>
+            <span className="text-[10px] text-muted-foreground">
+              {" "}
+              ({maskAmount(formatCurrency(m.passiveIncome))})
+            </span>
+          </span>
+        </div>
+      </div>
+    );
+  };
 
   if (portfoliosLoading) {
     return (
@@ -567,48 +783,13 @@ export default function Overview() {
 
   return (
     <div className="flex flex-col gap-3 md:gap-6 max-w-6xl mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
-        <div>
-          <h1 className="text-lg font-semibold" data-testid="text-overview-title">
-            Prehľad portfólií
-          </h1>
-          <p className="text-xs text-muted-foreground">
-            Rýchly prehľad výkonnosti všetkých vašich portfólií.
-          </p>
-        </div>
-        {!anyLoading && portfolios.length > 0 && (
-          <div className="text-right">
-            <div className="text-xs text-muted-foreground uppercase tracking-wide">
-              Celková hodnota
-            </div>
-            <div className="flex items-center justify-end gap-1">
-              <div
-                className="text-2xl font-semibold leading-tight tracking-tight"
-                data-testid="text-overview-grand-total"
-              >
-                {maskAmount(formatCurrency(grandTotal))}
-              </div>
-              {allTickers.length > 0 && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 shrink-0"
-                  disabled={quotesFetching || refreshingPortfolioId !== null}
-                  onClick={() => refreshAllQuotes()}
-                  aria-label="Obnoviť ceny všetkých portfólií"
-                  data-testid="button-overview-refresh-all-quotes"
-                >
-                  {quotesFetching ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4" />
-                  )}
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
+      <div>
+        <h1 className="text-lg font-semibold" data-testid="text-overview-title">
+          Prehľad portfólií
+        </h1>
+        <p className="text-xs text-muted-foreground">
+          Rýchly prehľad výkonnosti všetkých vašich portfólií.
+        </p>
       </div>
 
       {portfolios.length === 0 ? (
@@ -619,6 +800,73 @@ export default function Overview() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+          <Card
+            className="md:col-span-2 border-border/70 bg-card/95 shadow-sm"
+            data-testid="overview-card-total"
+          >
+            <CardContent className="p-3 md:p-4 space-y-2.5">
+              <div className="flex items-center justify-between gap-2 min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Briefcase className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="font-semibold text-sm truncate">Celková hodnota</span>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {renderYtdBadge(ytdAllPortfolios, "overview-ytd-all")}
+                  {allTickers.length > 0 && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 shrink-0"
+                      disabled={quotesFetching || refreshingPortfolioId !== null}
+                      onClick={() => refreshAllQuotes()}
+                      aria-label="Obnoviť ceny všetkých portfólií"
+                      data-testid="button-overview-refresh-all-quotes"
+                    >
+                      {quotesFetching ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-3.5 w-3.5" />
+                      )}
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              {overviewLoading || !aggregatedMetrics ? (
+                <>
+                  <Skeleton className="h-8 w-40" />
+                  <Skeleton className="h-24 w-full" />
+                </>
+              ) : (
+                <>
+                  <div>
+                    <div
+                      className="text-2xl font-semibold leading-tight tracking-tight tabular-nums"
+                      data-testid="text-overview-grand-total"
+                    >
+                      {maskAmount(formatCurrency(aggregatedMetrics.totalValue))}
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground">
+                      <span>
+                        Investované: {maskAmount(formatCurrency(aggregatedMetrics.totalInvested))}
+                      </span>
+                      {aggregatedMetrics.cashValue !== 0 && (
+                        <span>
+                          Hotovosť: {maskAmount(formatCurrency(aggregatedMetrics.cashValue))}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {renderMetricRows(aggregatedMetrics, {
+                    preOpen: aggregatedPreOpen,
+                    idPrefix: "overview-total",
+                  })}
+                </>
+              )}
+            </CardContent>
+          </Card>
+
           {portfolios.map((portfolio) => {
             const m = metricsByPortfolioId.get(portfolio.id);
             const bundleRow = overview?.byPortfolioId[portfolio.id];
@@ -631,10 +879,6 @@ export default function Overview() {
               (m?.cashValue ?? 0) !== 0 ||
               (bundleRow?.totalRealized ?? 0) !== 0 ||
               (bundleRow?.closeTradeNetEur ?? 0) !== 0;
-
-            const displayedDaily = usSessionState === "LIVE" ? (m?.dailyChange ?? 0) : 0;
-            const displayedDailyPct =
-              usSessionState === "LIVE" ? (m?.dailyChangePercent ?? 0) : 0;
 
             return (
               <Card
@@ -663,27 +907,30 @@ export default function Overview() {
                         {portfolio.name}
                       </span>
                     </div>
-                    {bundleRow &&
-                      bundleRow.holdings &&
-                      bundleRow.holdings.length > 0 &&
-                      allTickers.length > 0 && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 shrink-0"
-                          disabled={quotesFetching || refreshingPortfolioId !== null}
-                          onClick={(e) => refreshPortfolioQuotes(portfolio.id, e)}
-                          aria-label="Obnoviť ceny a dennú zmenu"
-                          data-testid={`button-overview-refresh-quotes-${portfolio.id}`}
-                        >
-                          {quotesFetching || refreshingPortfolioId === portfolio.id ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <RefreshCw className="h-3.5 w-3.5" />
-                          )}
-                        </Button>
-                      )}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {renderYtdBadge(ytdPct, `overview-ytd-${portfolio.id}`)}
+                      {bundleRow &&
+                        bundleRow.holdings &&
+                        bundleRow.holdings.length > 0 &&
+                        allTickers.length > 0 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 shrink-0"
+                            disabled={quotesFetching || refreshingPortfolioId !== null}
+                            onClick={(e) => refreshPortfolioQuotes(portfolio.id, e)}
+                            aria-label="Obnoviť ceny a dennú zmenu"
+                            data-testid={`button-overview-refresh-quotes-${portfolio.id}`}
+                          >
+                            {quotesFetching || refreshingPortfolioId === portfolio.id ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                        )}
+                    </div>
                   </div>
 
                   {overviewLoading || !m ? (
@@ -712,140 +959,10 @@ export default function Overview() {
                   {overviewLoading || !m ? (
                     <Skeleton className="h-24 w-full" />
                   ) : hasAnyActivity ? (
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] text-muted-foreground">Celkový zisk</span>
-                        <span className="inline-flex items-center gap-1.5 min-w-0 justify-end">
-                          <span
-                            className={`text-xs font-semibold tabular-nums ${getChangeTone(m.totalProfit)}`}
-                          >
-                            {maskAmount(formatSignedCurrency(m.totalProfit))}
-                          </span>
-                          <span
-                            className={`text-[10px] px-1 py-0.5 rounded font-medium tabular-nums shrink-0 ${pctBadgeClass(m.totalProfitPercent)}`}
-                          >
-                            {formatPercent(m.totalProfitPercent)}
-                          </span>
-                        </span>
-                      </div>
-
-                      <div
-                        className="flex items-center justify-between gap-2"
-                        data-testid={`overview-unrealized-${portfolio.id}`}
-                      >
-                        <span className="text-[10px] text-muted-foreground">Nerealizovaný</span>
-                        <span
-                          className={`text-xs font-medium tabular-nums ${getChangeTone(m.unrealizedGain)}`}
-                        >
-                          {maskAmount(formatSignedCurrency(m.unrealizedGain))}
-                        </span>
-                      </div>
-
-                      <div
-                        className="flex items-center justify-between gap-2"
-                        data-testid={`overview-realized-gain-${portfolio.id}`}
-                      >
-                        <span className="text-[10px] text-muted-foreground">Realizovaný</span>
-                        <span
-                          className={`text-xs font-medium tabular-nums ${getChangeTone(m.realizedGain)}`}
-                        >
-                          {maskAmount(formatSignedCurrency(m.realizedGain))}
-                        </span>
-                      </div>
-
-                      {usSessionState === "LIVE" ? (
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[10px] text-muted-foreground">Denná zmena</span>
-                          {m.hasQuotes ? (
-                            <span className="inline-flex items-center gap-1.5 min-w-0 justify-end">
-                              <span
-                                className={`text-xs font-medium tabular-nums ${getChangeTone(displayedDaily)}`}
-                              >
-                                {maskAmount(formatSignedCurrency(displayedDaily))}
-                              </span>
-                              <span
-                                className={`text-[10px] px-1 py-0.5 rounded font-medium tabular-nums shrink-0 ${pctBadgeClass(displayedDailyPct)}`}
-                              >
-                                {formatPercent(displayedDailyPct)}
-                              </span>
-                            </span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </div>
-                      ) : showExtendedSession ? (
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1">
-                            <Moon className={`h-2.5 w-2.5 shrink-0 ${PREMARKET_MOON_CLASS}`} />
-                            {getExtendedSessionLabel(usSessionState)}
-                          </span>
-                          {preOpen.available ? (
-                            <span className="inline-flex items-center gap-1.5 min-w-0 justify-end">
-                              <span
-                                className={`text-xs font-medium tabular-nums ${getChangeTone(preOpen.amount)}`}
-                                data-testid={`overview-pre-open-${portfolio.id}`}
-                              >
-                                {maskAmount(formatSignedCurrency(preOpen.amount))}
-                              </span>
-                              <span
-                                className={`text-[10px] px-1 py-0.5 rounded font-medium tabular-nums shrink-0 ${pctBadgeClass(preOpen.percent)}`}
-                              >
-                                {formatPercent(preOpen.percent)}
-                              </span>
-                            </span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">bez dát</span>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[10px] text-muted-foreground">Denná zmena</span>
-                          <span className="text-xs text-muted-foreground">Trh uzatvorený</span>
-                        </div>
-                      )}
-
-                      <div
-                        className="flex items-center justify-between gap-2"
-                        data-testid={`overview-ytd-${portfolio.id}`}
-                      >
-                        <span className="text-[10px] text-muted-foreground">YTD</span>
-                        {ytdPct != null ? (
-                          <span className={`text-xs font-medium tabular-nums ${getChangeTone(ytdPct)}`}>
-                            {formatPercent(ytdPct)}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1">
-                          Pasívny príjem
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <HelpCircle className="h-3 w-3 shrink-0 text-muted-foreground cursor-help" />
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-[280px] text-xs">
-                              <p className="font-medium mb-1">Čo znamenajú čísla</p>
-                              <p>
-                                Suma = očakávaný ročný príjem (Forward Dividend): počet držaných kusov × ročná
-                                dividenda na akciu z aktuálnej kotácie, prepočítaná FX kurzom do vašej meny.
-                                Percentá = očakávaný ročný dividendový výnos voči aktuálnej hodnote akcií.
-                              </p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </span>
-                        <span className="text-xs font-medium tabular-nums text-right">
-                          <span className={m.passiveIncome > 0 ? "text-green-500" : "text-muted-foreground"}>
-                            {formatPercent(m.passiveIncomePercent)}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground">
-                            {" "}
-                            ({maskAmount(formatCurrency(m.passiveIncome))})
-                          </span>
-                        </span>
-                      </div>
-                    </div>
+                    renderMetricRows(m, {
+                      preOpen,
+                      idPrefix: `overview-${portfolio.id}`,
+                    })
                   ) : (
                     <p className="text-xs text-muted-foreground">
                       V tomto portfóliu zatiaľ nie sú žiadne transakcie.
