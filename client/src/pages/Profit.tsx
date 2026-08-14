@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -142,15 +142,47 @@ export default function Profit() {
 
   // Pre-aggregated year + month performance from server; cached per user and
   // invalidated on any transaction write so repeated opens are instant.
-  const { data: performanceData, isLoading: performanceLoading } = useQuery<PerformanceResponse>({
-    queryKey: ["/api/portfolio-performance", portfolioParam],
+  // Query key v2: response includes twrPercentReturn (busts older client cache).
+  const queryClient = useQueryClient();
+  const [twrRefreshing, setTwrRefreshing] = useState(false);
+
+  const {
+    data: performanceData,
+    isLoading: performanceLoading,
+    isFetching: performanceFetching,
+  } = useQuery<PerformanceResponse>({
+    queryKey: ["/api/portfolio-performance", portfolioParam, "v2-twr"],
     queryFn: async () => {
-      const res = await fetch(`/api/portfolio-performance?portfolio=${portfolioParam}`);
+      const params = new URLSearchParams();
+      params.set("portfolio", portfolioParam);
+      const res = await fetch(`/api/portfolio-performance?${params.toString()}`, {
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed to fetch portfolio performance");
       return res.json();
     },
     staleTime: 5 * 60 * 1000,
   });
+
+  const refreshPerformanceWithTwr = useCallback(async () => {
+    setTwrRefreshing(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("portfolio", portfolioParam);
+      params.set("refresh", "1");
+      const res = await fetch(`/api/portfolio-performance?${params.toString()}`, {
+        credentials: "include",
+      });
+      if (!res.ok) return;
+      const json = (await res.json()) as PerformanceResponse;
+      queryClient.setQueryData(
+        ["/api/portfolio-performance", portfolioParam, "v2-twr"],
+        json,
+      );
+    } finally {
+      setTwrRefreshing(false);
+    }
+  }, [portfolioParam, queryClient]);
 
   const { data: historySeries, isLoading: historySeriesLoading } = useQuery<PortfolioHistoryResponse>({
     queryKey: ["/api/portfolio-history", portfolioParam, "all", "profit"],
@@ -275,6 +307,8 @@ export default function Profit() {
       <YearMonthPerformance
         data={performanceData}
         loading={performanceLoading}
+        fetching={performanceFetching || twrRefreshing}
+        onRefreshTwr={refreshPerformanceWithTwr}
         formatCurrency={formatCurrency}
         formatPercent={formatPercent}
       />
@@ -588,11 +622,15 @@ export default function Profit() {
 function YearMonthPerformance({
   data,
   loading,
+  fetching,
+  onRefreshTwr,
   formatCurrency,
   formatPercent,
 }: {
   data?: PerformanceResponse;
   loading: boolean;
+  fetching?: boolean;
+  onRefreshTwr?: () => void;
   formatCurrency: (n: number) => string;
   formatPercent: (n: number) => string;
 }) {
@@ -607,8 +645,24 @@ function YearMonthPerformance({
     }
   }, [method]);
 
-  const pctFor = (row: PerformancePeriodStats) =>
-    method === "twr" ? (row.twrPercentReturn ?? row.percentReturn) : row.percentReturn;
+  const hasTwrData =
+    !!data?.years?.length &&
+    data.years.every((y) => typeof y.twrPercentReturn === "number");
+
+  const twrRefreshAttempted = useRef(false);
+  useEffect(() => {
+    if (method !== "twr" || !data || hasTwrData || !onRefreshTwr) return;
+    if (twrRefreshAttempted.current) return;
+    twrRefreshAttempted.current = true;
+    onRefreshTwr();
+  }, [method, data, hasTwrData, onRefreshTwr]);
+
+  const pctFor = (row: PerformancePeriodStats): number | null => {
+    if (method === "twr") {
+      return typeof row.twrPercentReturn === "number" ? row.twrPercentReturn : null;
+    }
+    return row.percentReturn;
+  };
 
   if (loading && !data) {
     return (
@@ -684,12 +738,19 @@ function YearMonthPerformance({
             </CardTitle>
             <CardDescription className="text-xs leading-snug md:text-sm">
               Ročný prehľad s rozbalením na mesiace. Prepni % medzi jednoduchým výpočtom a TWR.
+              {method === "twr" && fetching && !hasTwrData ? (
+                <span className="ml-1 text-muted-foreground">(načítavam TWR…)</span>
+              ) : null}
             </CardDescription>
           </div>
           <ToggleGroup
             type="single"
+            variant="outline"
+            size="sm"
             value={method}
-            onValueChange={(v) => v && setMethod(v as PerformanceMethod)}
+            onValueChange={(v) => {
+              if (v === "simple" || v === "twr") setMethod(v);
+            }}
             className="justify-start sm:justify-end shrink-0"
             data-testid="toggle-profit-performance-method"
           >
@@ -753,8 +814,12 @@ function YearMonthPerformance({
                       <TableCell className={`text-right text-[10px] font-semibold tabular-nums md:text-sm ${signClass(year.profit)}`}>
                         {formatCurrency(year.profit)}
                       </TableCell>
-                      <TableCell className={`text-right text-[10px] font-semibold tabular-nums md:text-sm ${signClass(yearPct)}`}>
-                        {formatPercent(yearPct)}
+                      <TableCell
+                        className={`text-right text-[10px] font-semibold tabular-nums md:text-sm ${
+                          yearPct == null ? "text-muted-foreground" : signClass(yearPct)
+                        }`}
+                      >
+                        {yearPct == null ? "—" : formatPercent(yearPct)}
                       </TableCell>
                       <TableCell className="text-right hidden lg:table-cell">
                         {year.dividends > 0 ? formatCurrency(year.dividends) : "—"}
@@ -794,8 +859,12 @@ function YearMonthPerformance({
                             <TableCell className={`text-right text-[10px] tabular-nums md:text-sm ${signClass(m.profit)}`}>
                               {formatCurrency(m.profit)}
                             </TableCell>
-                            <TableCell className={`text-right text-[10px] tabular-nums md:text-sm ${signClass(mPct)}`}>
-                              {formatPercent(mPct)}
+                            <TableCell
+                              className={`text-right text-[10px] tabular-nums md:text-sm ${
+                                mPct == null ? "text-muted-foreground" : signClass(mPct)
+                              }`}
+                            >
+                              {mPct == null ? "—" : formatPercent(mPct)}
                             </TableCell>
                             <TableCell className="text-right hidden lg:table-cell text-muted-foreground">
                               {m.dividends > 0 ? formatCurrency(m.dividends) : "—"}
@@ -825,8 +894,12 @@ function YearMonthPerformance({
                     <TableCell className={`text-right ${signClass(data.totals.profit)}`}>
                       {formatCurrency(data.totals.profit)}
                     </TableCell>
-                    <TableCell className={`text-right ${signClass(totalPct)}`}>
-                      {formatPercent(totalPct)}
+                    <TableCell
+                      className={`text-right ${
+                        totalPct == null ? "text-muted-foreground" : signClass(totalPct)
+                      }`}
+                    >
+                      {totalPct == null ? "—" : formatPercent(totalPct)}
                     </TableCell>
                     <TableCell className="text-right hidden lg:table-cell">
                       {data.totals.dividends > 0 ? formatCurrency(data.totals.dividends) : "—"}
