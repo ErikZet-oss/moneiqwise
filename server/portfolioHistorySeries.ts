@@ -274,3 +274,20 @@ export function computeChainedTwrPercent(
   }
   return (cumFactor - 1) * 100;
 }
+
+/**
+ * Buy-and-hold výnos S&P 500 (^GSPC) v období: (uzávierka_koniec / uzávierka_začiatok − 1) × 100.
+ * Rovnaká logika ako `sp500CumulativePct` na dashboarde / YTD.
+ */
+export function computeSp500PercentForRange(
+  spHist: Record<string, number>,
+  startIso: string,
+  endIso: string,
+): number | null {
+  if (!startIso || !endIso || startIso > endIso) return null;
+  if (!spHist || Object.keys(spHist).length === 0) return null;
+  const s0 = spCloseOnOrBefore(spHist, startIso);
+  const s1 = spCloseOnOrBefore(spHist, endIso);
+  if (s0 == null || s1 == null || !(s0 > 0)) return null;
+  return (s1 / s0 - 1) * 100;
+}

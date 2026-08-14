@@ -51,6 +51,7 @@ import { computeGipsTwr } from "./twrGips";
 import {
   computeChainedTwrPercent,
   computePortfolioHistorySeries,
+  computeSp500PercentForRange,
   type PortfolioHistoryRange,
 } from "./portfolioHistorySeries";
 import { buildCalculationAuditWorkbook } from "./calculationAuditXlsx";
@@ -2299,6 +2300,8 @@ interface PerformancePeriodStats {
    * rovnaká logika ako YTD na dashboarde.
    */
   twrPercentReturn: number;
+  /** Buy-and-hold S&P 500 % v tom istom období (null ak chýbajú dáta). */
+  sp500PercentReturn: number | null;
   realizedGain: number;
   dividends: number;
   transactionCount: number;
@@ -2325,7 +2328,7 @@ const performanceCache = new Map<
 const PERFORMANCE_CACHE_TTL = 30 * 60 * 1000;
 
 function perfCacheKey(userId: string, portfolioParam: string): string {
-  return `${userId}:${portfolioParam || "all"}:v2-twr`;
+  return `${userId}:${portfolioParam || "all"}:v3-twr-spx`;
 }
 
 function invalidatePerformanceCache(userId: string): void {
@@ -2438,6 +2441,13 @@ async function computePortfolioPerformance(
       }
     }),
   );
+
+  let spHist: Record<string, number> = {};
+  try {
+    spHist = (await fetchHistoricalPrices("^GSPC")) || {};
+  } catch {
+    spHist = {};
+  }
 
   const rates = await fetchAllExchangeRates();
   const todayIso = now.toISOString().slice(0, 10);
@@ -2622,6 +2632,7 @@ async function computePortfolioPerformance(
       todayIso,
       52,
     );
+    const yearSpxPct = computeSp500PercentForRange(spHist, yearStartIso, yearEndIso);
 
     const monthsOut: PerformancePeriodStats[] = [];
     for (let m = 0; m < 12; m++) {
@@ -2654,6 +2665,7 @@ async function computePortfolioPerformance(
         todayIso,
         24,
       );
+      const mSpxPct = computeSp500PercentForRange(spHist, monthStartIso, boundedMonthEnd);
 
       monthsOut.push({
         label: `${String(m + 1).padStart(2, "0")}/${yr}`,
@@ -2665,6 +2677,7 @@ async function computePortfolioPerformance(
         profit: mProfit,
         percentReturn: mPct,
         twrPercentReturn: mTwrPct,
+        sp500PercentReturn: mSpxPct,
         realizedGain: mRealizedGain,
         dividends: mAgg.dividends,
         transactionCount: mAgg.count,
@@ -2682,6 +2695,7 @@ async function computePortfolioPerformance(
       profit: yearProfit,
       percentReturn: yearPct,
       twrPercentReturn: yearTwrPct,
+      sp500PercentReturn: yearSpxPct,
       realizedGain: yearRealizedGain,
       dividends: agg.dividends,
       transactionCount: agg.count,
@@ -2711,6 +2725,7 @@ async function computePortfolioPerformance(
     todayIso,
     80,
   );
+  const allSpxPct = computeSp500PercentForRange(spHist, firstIso, todayIso);
   const totals: PerformancePeriodStats = {
     label: "Celkovo",
     startDate: firstIso,
@@ -2721,6 +2736,7 @@ async function computePortfolioPerformance(
     profit: allProfit,
     percentReturn: allBaseline > 0 ? (allProfit / allBaseline) * 100 : 0,
     twrPercentReturn: allTwrPct,
+    sp500PercentReturn: allSpxPct,
     realizedGain: allRealized,
     dividends: allDividends,
     transactionCount: allCount,

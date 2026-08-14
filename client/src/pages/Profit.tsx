@@ -77,6 +77,8 @@ interface PerformancePeriodStats {
   percentReturn: number;
   /** Reťazený TWR % (rovnaká logika ako YTD na dashboarde). */
   twrPercentReturn?: number;
+  /** Buy-and-hold S&P 500 % v tom istom období. */
+  sp500PercentReturn?: number | null;
   realizedGain: number;
   dividends: number;
   transactionCount: number;
@@ -151,7 +153,7 @@ export default function Profit() {
     isLoading: performanceLoading,
     isFetching: performanceFetching,
   } = useQuery<PerformanceResponse>({
-    queryKey: ["/api/portfolio-performance", portfolioParam, "v2-twr"],
+    queryKey: ["/api/portfolio-performance", portfolioParam, "v3-twr-spx"],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set("portfolio", portfolioParam);
@@ -176,7 +178,7 @@ export default function Profit() {
       if (!res.ok) return;
       const json = (await res.json()) as PerformanceResponse;
       queryClient.setQueryData(
-        ["/api/portfolio-performance", portfolioParam, "v2-twr"],
+        ["/api/portfolio-performance", portfolioParam, "v3-twr-spx"],
         json,
       );
     } finally {
@@ -664,6 +666,15 @@ function YearMonthPerformance({
     return row.percentReturn;
   };
 
+  const spxFor = (row: PerformancePeriodStats): number | null => {
+    if (typeof row.sp500PercentReturn === "number" && Number.isFinite(row.sp500PercentReturn)) {
+      return row.sp500PercentReturn;
+    }
+    return null;
+  };
+
+  const colCount = method === "twr" ? 9 : 8;
+
   if (loading && !data) {
     return (
       <Card className="max-w-full overflow-x-hidden">
@@ -730,6 +741,11 @@ function YearMonthPerformance({
                   <code className="text-[10px]">(∏(1+r) − 1) × 100</code>. Očisťuje timing
                   vkladov/výberov — vhodné na porovnanie s indexom.
                 </p>
+                <p>
+                  <strong>S&amp;P 500 %</strong> (len v režime TWR): buy-and-hold výnos indexu{" "}
+                  <code className="text-[10px]">^GSPC</code> v tom istom období:{" "}
+                  <code className="text-[10px]">(cena_koniec / cena_začiatok − 1) × 100</code>.
+                </p>
                 <p className="text-muted-foreground">
                   Dividendy sú v tabuľke samostatne; do jednoduchého % nie sú priamo pripočítané.
                   TWR ich zachytáva cez zmenu peňaženky/MTM.
@@ -780,6 +796,9 @@ function YearMonthPerformance({
                 <TableHead className="text-right whitespace-nowrap">
                   {method === "twr" ? "TWR %" : "%"}
                 </TableHead>
+                {method === "twr" && (
+                  <TableHead className="text-right whitespace-nowrap">S&amp;P %</TableHead>
+                )}
                 <TableHead className="text-right hidden lg:table-cell">Dividendy</TableHead>
               </TableRow>
             </TableHeader>
@@ -821,6 +840,18 @@ function YearMonthPerformance({
                       >
                         {yearPct == null ? "—" : formatPercent(yearPct)}
                       </TableCell>
+                      {method === "twr" && (() => {
+                        const spx = spxFor(year);
+                        return (
+                          <TableCell
+                            className={`text-right text-[10px] font-semibold tabular-nums md:text-sm ${
+                              spx == null ? "text-muted-foreground" : signClass(spx)
+                            }`}
+                          >
+                            {spx == null ? "—" : formatPercent(spx)}
+                          </TableCell>
+                        );
+                      })()}
                       <TableCell className="text-right hidden lg:table-cell">
                         {year.dividends > 0 ? formatCurrency(year.dividends) : "—"}
                       </TableCell>
@@ -828,7 +859,7 @@ function YearMonthPerformance({
 
                     {isOpen && year.months.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={8} className="py-2 text-center text-xs text-muted-foreground md:py-3 md:text-sm">
+                        <TableCell colSpan={colCount} className="py-2 text-center text-xs text-muted-foreground md:py-3 md:text-sm">
                           Žiadne dáta za tento rok.
                         </TableCell>
                       </TableRow>
@@ -837,6 +868,7 @@ function YearMonthPerformance({
                     {isOpen &&
                       year.months.map((m) => {
                         const mPct = pctFor(m);
+                        const mSpx = spxFor(m);
                         return (
                           <TableRow
                             key={m.label}
@@ -866,6 +898,15 @@ function YearMonthPerformance({
                             >
                               {mPct == null ? "—" : formatPercent(mPct)}
                             </TableCell>
+                            {method === "twr" && (
+                              <TableCell
+                                className={`text-right text-[10px] tabular-nums md:text-sm ${
+                                  mSpx == null ? "text-muted-foreground" : signClass(mSpx)
+                                }`}
+                              >
+                                {mSpx == null ? "—" : formatPercent(mSpx)}
+                              </TableCell>
+                            )}
                             <TableCell className="text-right hidden lg:table-cell text-muted-foreground">
                               {m.dividends > 0 ? formatCurrency(m.dividends) : "—"}
                             </TableCell>
@@ -878,6 +919,7 @@ function YearMonthPerformance({
 
               {data.totals && (() => {
                 const totalPct = pctFor(data.totals);
+                const totalSpx = spxFor(data.totals);
                 return (
                   <TableRow className="border-t-2 font-semibold" data-testid="row-perf-total">
                     <TableCell></TableCell>
@@ -901,6 +943,15 @@ function YearMonthPerformance({
                     >
                       {totalPct == null ? "—" : formatPercent(totalPct)}
                     </TableCell>
+                    {method === "twr" && (
+                      <TableCell
+                        className={`text-right ${
+                          totalSpx == null ? "text-muted-foreground" : signClass(totalSpx)
+                        }`}
+                      >
+                        {totalSpx == null ? "—" : formatPercent(totalSpx)}
+                      </TableCell>
+                    )}
                     <TableCell className="text-right hidden lg:table-cell">
                       {data.totals.dividends > 0 ? formatCurrency(data.totals.dividends) : "—"}
                     </TableCell>
