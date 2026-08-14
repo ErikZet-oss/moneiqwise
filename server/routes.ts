@@ -2297,7 +2297,7 @@ interface PerformancePeriodStats {
   percentReturn: number;
   /**
    * Reťazený TWR % v období (MTM + hotovosť, očistené o Δ vkladov/výberov) —
-   * rovnaká logika ako YTD na dashboarde.
+   * rovnaká logika, FX a hustota vzorkovania ako YTD na dashboarde.
    */
   twrPercentReturn: number;
   /** Buy-and-hold S&P 500 % v tom istom období (null ak chýbajú dáta). */
@@ -2328,7 +2328,8 @@ const performanceCache = new Map<
 const PERFORMANCE_CACHE_TTL = 30 * 60 * 1000;
 
 function perfCacheKey(userId: string, portfolioParam: string): string {
-  return `${userId}:${portfolioParam || "all"}:v3-twr-spx`;
+  // v4: TWR uses historical FX + 150 year samples (same as dashboard YTD).
+  return `${userId}:${portfolioParam || "all"}:v4-twr-fx`;
 }
 
 function invalidatePerformanceCache(userId: string): void {
@@ -2426,31 +2427,61 @@ async function computePortfolioPerformance(
 
   const historicalPrices: Record<string, Record<string, number>> = {};
   const currentPrices: Record<string, number> = {};
-  await Promise.all(
-    tickers.map(async (ticker) => {
-      try {
-        historicalPrices[ticker] = (await fetchHistoricalPrices(ticker)) || {};
-      } catch {
-        historicalPrices[ticker] = {};
-      }
-      try {
-        const q = await fetchStockQuote(ticker);
-        if (q && typeof q.price === "number") currentPrices[ticker] = q.price;
-      } catch {
-        // swallow – forward-fill will cover it
+  const spHist: Record<string, number> = {};
+  const historicalFxEurPerUnitByCurrency: Record<string, Record<string, number>> = {};
+  const fxCurrencies = new Set<string>();
+  for (const t of tickers) {
+    const c = getTickerCurrency(t);
+    if (c !== "EUR") fxCurrencies.add(c);
+  }
+
+  await Promise.all([
+    Promise.all(
+      tickers.map(async (ticker) => {
+        try {
+          historicalPrices[ticker] = (await fetchHistoricalPrices(ticker)) || {};
+        } catch {
+          historicalPrices[ticker] = {};
+        }
+        try {
+          const q = await fetchStockQuote(ticker);
+          if (q && typeof q.price === "number") currentPrices[ticker] = q.price;
+        } catch {
+          // swallow – forward-fill will cover it
+        }
+      }),
+    ),
+    fetchHistoricalPrices("^GSPC")
+      .then((h) => {
+        Object.assign(spHist, h || {});
+      })
+      .catch(() => {
+        /* keep empty */
+      }),
+    Promise.all(
+      Array.from(fxCurrencies).map(async (c) => {
+        try {
+          return [c, (await fetchHistoricalPrices(`EUR${c}=X`)) || {}] as const;
+        } catch {
+          return [c, {}] as const;
+        }
+      }),
+    ).then((pairs) => {
+      for (const [ccy, h] of pairs) {
+        const eurPerUnit: Record<string, number> = {};
+        for (const [iso, eurToCcy] of Object.entries(h)) {
+          if (Number.isFinite(eurToCcy) && eurToCcy > 0) {
+            eurPerUnit[iso] = 1 / eurToCcy;
+          }
+        }
+        historicalFxEurPerUnitByCurrency[ccy] = eurPerUnit;
       }
     }),
-  );
-
-  let spHist: Record<string, number> = {};
-  try {
-    spHist = (await fetchHistoricalPrices("^GSPC")) || {};
-  } catch {
-    spHist = {};
-  }
+  ]);
 
   const rates = await fetchAllExchangeRates();
   const todayIso = now.toISOString().slice(0, 10);
+  const firstTxIso = firstTxnDate.toISOString().slice(0, 10);
 
   const eurM = await buildEurPerUnitByTxnIdForTransactions(sorted);
   const fifoPerformance = computeFifoRealizedGainsFromTransactions(
@@ -2620,19 +2651,43 @@ async function computePortfolioPerformance(
     const yearProfit = yearEndVal - yearStartVal - agg.netInflow;
     const yearBaseline = yearStartVal + Math.max(agg.netInflow, 0);
     const yearPct = yearBaseline > 0 ? (yearProfit / yearBaseline) * 100 : 0;
-    const yearTwrPct = computeChainedTwrPercent(
-      sorted,
-      yearStartIso,
-      yearEndIso,
-      historicalPrices,
-      {},
-      currentPrices,
-      rates,
-      userCurrency,
-      todayIso,
-      52,
-    );
-    const yearSpxPct = computeSp500PercentForRange(spHist, yearStartIso, yearEndIso);
+    // Same sampling + FX as dashboard YTD (`/api/portfolio-history?range=ytd`).
+    let yearTwrStart = yearStartIso;
+    if (yearTwrStart < firstTxIso) yearTwrStart = firstTxIso;
+    let yearTwrPct = 0;
+    let yearSpxPct: number | null = null;
+    if (yr === lastYear && yearTwrStart <= yearEndIso) {
+      // Exact same code path as dashboard YTD card.
+      const ytdSeries = computePortfolioHistorySeries(
+        sorted,
+        spHist,
+        historicalPrices,
+        historicalFxEurPerUnitByCurrency,
+        currentPrices,
+        rates,
+        userCurrency,
+        todayIso,
+        "ytd",
+        150,
+      );
+      const lastPt = ytdSeries.points[ytdSeries.points.length - 1];
+      yearTwrPct = lastPt?.portfolioCumulativePct ?? 0;
+      yearSpxPct = lastPt != null ? lastPt.sp500CumulativePct : null;
+    } else if (yearTwrStart <= yearEndIso) {
+      yearTwrPct = computeChainedTwrPercent(
+        sorted,
+        yearTwrStart,
+        yearEndIso,
+        historicalPrices,
+        historicalFxEurPerUnitByCurrency,
+        currentPrices,
+        rates,
+        userCurrency,
+        todayIso,
+        150,
+      );
+      yearSpxPct = computeSp500PercentForRange(spHist, yearTwrStart, yearEndIso);
+    }
 
     const monthsOut: PerformancePeriodStats[] = [];
     for (let m = 0; m < 12; m++) {
@@ -2658,12 +2713,12 @@ async function computePortfolioPerformance(
         monthStartIso,
         boundedMonthEnd,
         historicalPrices,
-        {},
+        historicalFxEurPerUnitByCurrency,
         currentPrices,
         rates,
         userCurrency,
         todayIso,
-        24,
+        48,
       );
       const mSpxPct = computeSp500PercentForRange(spHist, monthStartIso, boundedMonthEnd);
 
@@ -2718,12 +2773,12 @@ async function computePortfolioPerformance(
     firstIso,
     todayIso,
     historicalPrices,
-    {},
+    historicalFxEurPerUnitByCurrency,
     currentPrices,
     rates,
     userCurrency,
     todayIso,
-    80,
+    150,
   );
   const allSpxPct = computeSp500PercentForRange(spHist, firstIso, todayIso);
   const totals: PerformancePeriodStats = {

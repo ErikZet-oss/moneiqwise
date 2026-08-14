@@ -75,7 +75,7 @@ interface PerformancePeriodStats {
   netInflow: number;
   profit: number;
   percentReturn: number;
-  /** Reťazený TWR % (rovnaká logika ako YTD na dashboarde). */
+  /** Reťazený TWR % (rovnaký výpočet ako YTD na dashboarde). */
   twrPercentReturn?: number;
   /** Buy-and-hold S&P 500 % v tom istom období. */
   sp500PercentReturn?: number | null;
@@ -153,7 +153,7 @@ export default function Profit() {
     isLoading: performanceLoading,
     isFetching: performanceFetching,
   } = useQuery<PerformanceResponse>({
-    queryKey: ["/api/portfolio-performance", portfolioParam, "v3-twr-spx"],
+    queryKey: ["/api/portfolio-performance", portfolioParam, "v4-twr-fx"],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set("portfolio", portfolioParam);
@@ -178,7 +178,7 @@ export default function Profit() {
       if (!res.ok) return;
       const json = (await res.json()) as PerformanceResponse;
       queryClient.setQueryData(
-        ["/api/portfolio-performance", portfolioParam, "v3-twr-spx"],
+        ["/api/portfolio-performance", portfolioParam, "v4-twr-fx"],
         json,
       );
     } finally {
@@ -733,8 +733,8 @@ function YearMonthPerformance({
                   Stĺpec Zisk/Strata v € vždy používa tento vzorec.
                 </p>
                 <p>
-                  <strong>TWR %</strong> (Time-Weighted Return): rovnaká logika ako YTD na hlavnom
-                  dashboarde. Medzi dňami v období:{" "}
+                  <strong>TWR %</strong> (Time-Weighted Return): rovnaká logika, historické FX a
+                  hustota vzorkovania ako YTD na hlavnom dashboarde. Medzi dňami v období:{" "}
                   <code className="text-[10px]">r = (V₁ − V₀ − Δvklady) / V₀</code>, potom sa
                   násobí <code className="text-[10px]">(1+r)</code>. V = MTM hodnoty (akcie +
                   hotovosť). Δvklady = zmena súčtu DEPOSIT/WITHDRAWAL. Výsledok:{" "}
