@@ -700,6 +700,41 @@ export class DatabaseStorage implements IStorage {
     opts?: { includeHidden?: boolean },
   ): Promise<Transaction[]> {
     if (portfolioId && portfolioId !== "all") {
+      // Viac portfólií: "id1,id2,id3" (Profit multi-select).
+      if (portfolioId.includes(",")) {
+        const ids = Array.from(
+          new Set(
+            portfolioId
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean),
+          ),
+        );
+        if (ids.length === 0) return [];
+        if (ids.length === 1) {
+          return await db
+            .select()
+            .from(transactions)
+            .where(
+              and(
+                eq(transactions.userId, userId),
+                eq(transactions.portfolioId, ids[0]!),
+              ),
+            )
+            .orderBy(desc(transactions.transactionDate));
+        }
+        return await db
+          .select()
+          .from(transactions)
+          .where(
+            and(
+              eq(transactions.userId, userId),
+              inArray(transactions.portfolioId, ids),
+            ),
+          )
+          .orderBy(desc(transactions.transactionDate));
+      }
+
       return await db
         .select()
         .from(transactions)

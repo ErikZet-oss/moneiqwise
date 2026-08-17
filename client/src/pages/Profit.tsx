@@ -3,7 +3,16 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CalendarDays, AlertCircle, Wallet, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { CalendarDays, AlertCircle, Wallet, ChevronRight, ChevronDown, Briefcase } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, ReferenceLine } from "recharts";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, eachMonthOfInterval, parseISO, isAfter, isBefore, isSameDay, subDays, isWeekend, startOfDay } from "date-fns";
 import { sk } from "date-fns/locale";
@@ -15,11 +24,33 @@ import { useChartSettings } from "@/hooks/useChartSettings";
 import { CompanyLogo } from "@/components/CompanyLogo";
 import { HelpTip } from "@/components/HelpTip";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { cn } from "@/lib/utils";
 import type { Transaction } from "@shared/schema";
 
 type PerformanceMethod = "simple" | "twr";
 
 const PROFIT_PERF_METHOD_KEY = "moneiqwise.profit.performanceMethod";
+const PROFIT_PORTFOLIOS_KEY = "moneiqwise.profit.selectedPortfolioIds";
+
+function readStoredProfitPortfolioIds(): string[] | null {
+  try {
+    const raw = localStorage.getItem(PROFIT_PORTFOLIOS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return null;
+    const ids = parsed.filter((x): x is string => typeof x === "string" && x.trim() !== "");
+    return ids.length > 0 ? ids : null;
+  } catch {
+    return null;
+  }
+}
+
+function buildProfitPortfolioParam(selectedIds: string[], visibleIds: string[]): string {
+  const valid = Array.from(new Set(selectedIds.filter((id) => visibleIds.includes(id)))).sort();
+  if (valid.length === 0 || valid.length >= visibleIds.length) return "all";
+  if (valid.length === 1) return valid[0]!;
+  return valid.join(",");
+}
 
 function readStoredPerformanceMethod(): PerformanceMethod {
   try {
@@ -139,8 +170,82 @@ export default function Profit() {
   const { formatCurrency: formatCurrencyRaw } = useCurrency();
   const { hideAmounts } = useChartSettings();
   const formatCurrency = (n: number) => (hideAmounts ? "••••••" : formatCurrencyRaw(n));
-  const { getQueryParam } = usePortfolio();
+  const { portfolios } = usePortfolio();
   const [narrowViewport, setNarrowViewport] = useState(false);
+
+  const visiblePortfolioIds = useMemo(() => portfolios.map((p) => p.id), [portfolios]);
+
+  const [selectedPortfolioIds, setSelectedPortfolioIds] = useState<string[]>(() => {
+    const stored = readStoredProfitPortfolioIds();
+    return stored ?? [];
+  });
+
+  // Sync selection with visible portfolios (prune hidden/removed; default = all).
+  useEffect(() => {
+    if (visiblePortfolioIds.length === 0) return;
+    setSelectedPortfolioIds((prev) => {
+      const base =
+        prev.length > 0 ? prev : readStoredProfitPortfolioIds() ?? visiblePortfolioIds;
+      const pruned = base.filter((id) => visiblePortfolioIds.includes(id));
+      if (pruned.length === 0) return visiblePortfolioIds;
+
+      const missing = visiblePortfolioIds.filter((id) => !pruned.includes(id));
+      // Ak bolo vybrané celé predchádzajúce množstvo a pribudli nové, ber ako „všetky“.
+      const onlyGainedNew = pruned.length === base.length && missing.length > 0;
+      const resolved =
+        onlyGainedNew && pruned.length + missing.length === visiblePortfolioIds.length
+          ? visiblePortfolioIds
+          : pruned;
+
+      const same =
+        resolved.length === prev.length && resolved.every((id) => prev.includes(id));
+      return same ? prev : resolved;
+    });
+  }, [visiblePortfolioIds]);
+
+  useEffect(() => {
+    if (selectedPortfolioIds.length === 0) return;
+    try {
+      localStorage.setItem(PROFIT_PORTFOLIOS_KEY, JSON.stringify(selectedPortfolioIds));
+    } catch {
+      /* ignore */
+    }
+  }, [selectedPortfolioIds]);
+
+  const portfolioParam = useMemo(
+    () => buildProfitPortfolioParam(selectedPortfolioIds, visiblePortfolioIds),
+    [selectedPortfolioIds, visiblePortfolioIds],
+  );
+
+  const allPortfoliosSelected =
+    visiblePortfolioIds.length > 0 &&
+    selectedPortfolioIds.length >= visiblePortfolioIds.length &&
+    visiblePortfolioIds.every((id) => selectedPortfolioIds.includes(id));
+
+  const portfolioFilterLabel = useMemo(() => {
+    if (allPortfoliosSelected || selectedPortfolioIds.length === 0) return "Všetky portfóliá";
+    if (selectedPortfolioIds.length === 1) {
+      return portfolios.find((p) => p.id === selectedPortfolioIds[0])?.name ?? "1 portfólio";
+    }
+    const n = selectedPortfolioIds.length;
+    if (n >= 5) return `${n} portfólií`;
+    return `${n} portfóliá`;
+  }, [allPortfoliosSelected, selectedPortfolioIds, portfolios]);
+
+  const togglePortfolioId = (id: string, checked: boolean) => {
+    setSelectedPortfolioIds((prev) => {
+      const base = prev.length > 0 ? prev : visiblePortfolioIds;
+      if (checked) {
+        const next = Array.from(new Set([...base, id]));
+        return next.length >= visiblePortfolioIds.length ? [...visiblePortfolioIds] : next;
+      }
+      const next = base.filter((x) => x !== id);
+      // Aspoň jedno portfólio musí ostať vybrané.
+      return next.length > 0 ? next : [id];
+    });
+  };
+
+  const selectAllPortfolios = () => setSelectedPortfolioIds([...visiblePortfolioIds]);
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 767px)");
@@ -150,12 +255,10 @@ export default function Profit() {
     return () => mq.removeEventListener("change", apply);
   }, []);
 
-  const portfolioParam = getQueryParam();
-
   const { data: transactions, isLoading: transactionsLoading } = useQuery<Transaction[]>({
     queryKey: ["/api/transactions", portfolioParam],
     queryFn: async () => {
-      const res = await fetch(`/api/transactions?portfolio=${portfolioParam}`);
+      const res = await fetch(`/api/transactions?portfolio=${encodeURIComponent(portfolioParam)}`);
       if (!res.ok) throw new Error("Failed to fetch transactions");
       return res.json();
     },
@@ -165,7 +268,7 @@ export default function Profit() {
   const { data: realizedGains } = useQuery<RealizedGainSummary>({
     queryKey: ["/api/realized-gains", portfolioParam],
     queryFn: async () => {
-      const res = await fetch(`/api/realized-gains?portfolio=${portfolioParam}`, {
+      const res = await fetch(`/api/realized-gains?portfolio=${encodeURIComponent(portfolioParam)}`, {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to fetch realized gains");
@@ -335,7 +438,61 @@ export default function Profit() {
         </Alert>
       )}
 
-      <h2 className="text-lg font-semibold">Analýza zisku</h2>
+      <div className="flex items-center justify-between gap-2 min-w-0">
+        <h2 className="min-w-0 truncate text-lg font-semibold">Analýza zisku</h2>
+        {portfolios.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 max-w-[58%] shrink-0 gap-1.5 px-2.5 text-xs md:max-w-xs"
+                data-testid="button-profit-portfolio-filter"
+              >
+                <Briefcase className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <span className="truncate">{portfolioFilterLabel}</span>
+                <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="w-[min(calc(100vw-2rem),17.5rem)] max-h-[min(60vh,22rem)] overflow-y-auto"
+              onCloseAutoFocus={(e) => e.preventDefault()}
+            >
+              <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
+                Portfóliá vo výkonnosti
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem
+                checked={allPortfoliosSelected}
+                onCheckedChange={(checked) => {
+                  if (checked) selectAllPortfolios();
+                }}
+                onSelect={(e) => e.preventDefault()}
+                className="text-sm"
+              >
+                Všetky portfóliá
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              {portfolios.map((p) => {
+                const checked =
+                  allPortfoliosSelected || selectedPortfolioIds.includes(p.id);
+                return (
+                  <DropdownMenuCheckboxItem
+                    key={p.id}
+                    checked={checked}
+                    onCheckedChange={(v) => togglePortfolioId(p.id, !!v)}
+                    onSelect={(e) => e.preventDefault()}
+                    className="text-sm"
+                  >
+                    <span className="truncate">{p.name}</span>
+                  </DropdownMenuCheckboxItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
 
       {/* Year / month performance breakdown (server-aggregated, cached) */}
       <YearMonthPerformance
