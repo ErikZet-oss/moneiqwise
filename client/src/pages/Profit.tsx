@@ -4,14 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CalendarDays, AlertCircle, Wallet, ChevronRight, ChevronDown, Briefcase } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, ReferenceLine } from "recharts";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, eachMonthOfInterval, parseISO, isAfter, isBefore, isSameDay, subDays, isWeekend, startOfDay } from "date-fns";
@@ -24,7 +18,6 @@ import { useChartSettings } from "@/hooks/useChartSettings";
 import { CompanyLogo } from "@/components/CompanyLogo";
 import { HelpTip } from "@/components/HelpTip";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { cn } from "@/lib/utils";
 import type { Transaction } from "@shared/schema";
 
 type PerformanceMethod = "simple" | "twr";
@@ -175,22 +168,24 @@ export default function Profit() {
 
   const visiblePortfolioIds = useMemo(() => portfolios.map((p) => p.id), [portfolios]);
 
-  const [selectedPortfolioIds, setSelectedPortfolioIds] = useState<string[]>(() => {
+  // Applied = drives API queries. Draft = checkbox UI until user confirms.
+  const [appliedPortfolioIds, setAppliedPortfolioIds] = useState<string[]>(() => {
     const stored = readStoredProfitPortfolioIds();
     return stored ?? [];
   });
+  const [draftPortfolioIds, setDraftPortfolioIds] = useState<string[]>([]);
+  const [portfolioFilterOpen, setPortfolioFilterOpen] = useState(false);
 
-  // Sync selection with visible portfolios (prune hidden/removed; default = all).
+  // Sync applied selection with visible portfolios (prune hidden/removed; default = all).
   useEffect(() => {
     if (visiblePortfolioIds.length === 0) return;
-    setSelectedPortfolioIds((prev) => {
+    setAppliedPortfolioIds((prev) => {
       const base =
         prev.length > 0 ? prev : readStoredProfitPortfolioIds() ?? visiblePortfolioIds;
       const pruned = base.filter((id) => visiblePortfolioIds.includes(id));
       if (pruned.length === 0) return visiblePortfolioIds;
 
       const missing = visiblePortfolioIds.filter((id) => !pruned.includes(id));
-      // Ak bolo vybrané celé predchádzajúce množstvo a pribudli nové, ber ako „všetky“.
       const onlyGainedNew = pruned.length === base.length && missing.length > 0;
       const resolved =
         onlyGainedNew && pruned.length + missing.length === visiblePortfolioIds.length
@@ -204,48 +199,75 @@ export default function Profit() {
   }, [visiblePortfolioIds]);
 
   useEffect(() => {
-    if (selectedPortfolioIds.length === 0) return;
+    if (appliedPortfolioIds.length === 0) return;
     try {
-      localStorage.setItem(PROFIT_PORTFOLIOS_KEY, JSON.stringify(selectedPortfolioIds));
+      localStorage.setItem(PROFIT_PORTFOLIOS_KEY, JSON.stringify(appliedPortfolioIds));
     } catch {
       /* ignore */
     }
-  }, [selectedPortfolioIds]);
+  }, [appliedPortfolioIds]);
 
   const portfolioParam = useMemo(
-    () => buildProfitPortfolioParam(selectedPortfolioIds, visiblePortfolioIds),
-    [selectedPortfolioIds, visiblePortfolioIds],
+    () => buildProfitPortfolioParam(appliedPortfolioIds, visiblePortfolioIds),
+    [appliedPortfolioIds, visiblePortfolioIds],
   );
 
-  const allPortfoliosSelected =
+  const allAppliedSelected =
     visiblePortfolioIds.length > 0 &&
-    selectedPortfolioIds.length >= visiblePortfolioIds.length &&
-    visiblePortfolioIds.every((id) => selectedPortfolioIds.includes(id));
+    appliedPortfolioIds.length >= visiblePortfolioIds.length &&
+    visiblePortfolioIds.every((id) => appliedPortfolioIds.includes(id));
+
+  const allDraftSelected =
+    visiblePortfolioIds.length > 0 &&
+    draftPortfolioIds.length >= visiblePortfolioIds.length &&
+    visiblePortfolioIds.every((id) => draftPortfolioIds.includes(id));
 
   const portfolioFilterLabel = useMemo(() => {
-    if (allPortfoliosSelected || selectedPortfolioIds.length === 0) return "Všetky portfóliá";
-    if (selectedPortfolioIds.length === 1) {
-      return portfolios.find((p) => p.id === selectedPortfolioIds[0])?.name ?? "1 portfólio";
+    if (allAppliedSelected || appliedPortfolioIds.length === 0) return "Všetky portfóliá";
+    if (appliedPortfolioIds.length === 1) {
+      return portfolios.find((p) => p.id === appliedPortfolioIds[0])?.name ?? "1 portfólio";
     }
-    const n = selectedPortfolioIds.length;
+    const n = appliedPortfolioIds.length;
     if (n >= 5) return `${n} portfólií`;
     return `${n} portfóliá`;
-  }, [allPortfoliosSelected, selectedPortfolioIds, portfolios]);
+  }, [allAppliedSelected, appliedPortfolioIds, portfolios]);
 
-  const togglePortfolioId = (id: string, checked: boolean) => {
-    setSelectedPortfolioIds((prev) => {
+  const draftDirty = useMemo(() => {
+    if (draftPortfolioIds.length !== appliedPortfolioIds.length) return true;
+    return !draftPortfolioIds.every((id) => appliedPortfolioIds.includes(id));
+  }, [draftPortfolioIds, appliedPortfolioIds]);
+
+  const openPortfolioFilter = (open: boolean) => {
+    if (open) {
+      setDraftPortfolioIds(
+        appliedPortfolioIds.length > 0 ? [...appliedPortfolioIds] : [...visiblePortfolioIds],
+      );
+    }
+    setPortfolioFilterOpen(open);
+  };
+
+  const toggleDraftPortfolioId = (id: string, checked: boolean) => {
+    setDraftPortfolioIds((prev) => {
       const base = prev.length > 0 ? prev : visiblePortfolioIds;
       if (checked) {
         const next = Array.from(new Set([...base, id]));
         return next.length >= visiblePortfolioIds.length ? [...visiblePortfolioIds] : next;
       }
       const next = base.filter((x) => x !== id);
-      // Aspoň jedno portfólio musí ostať vybrané.
       return next.length > 0 ? next : [id];
     });
   };
 
-  const selectAllPortfolios = () => setSelectedPortfolioIds([...visiblePortfolioIds]);
+  const selectAllDraftPortfolios = () => setDraftPortfolioIds([...visiblePortfolioIds]);
+
+  const confirmPortfolioFilter = () => {
+    if (draftDirty) {
+      const next =
+        draftPortfolioIds.length > 0 ? [...draftPortfolioIds] : [...visiblePortfolioIds];
+      setAppliedPortfolioIds(next);
+    }
+    setPortfolioFilterOpen(false);
+  };
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 767px)");
@@ -441,8 +463,8 @@ export default function Profit() {
       <div className="flex items-center justify-between gap-2 min-w-0">
         <h2 className="min-w-0 truncate text-lg font-semibold">Analýza zisku</h2>
         {portfolios.length > 0 && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+          <Popover open={portfolioFilterOpen} onOpenChange={openPortfolioFilter}>
+            <PopoverTrigger asChild>
               <Button
                 variant="outline"
                 size="sm"
@@ -453,44 +475,76 @@ export default function Profit() {
                 <span className="truncate">{portfolioFilterLabel}</span>
                 <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" />
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
+            </PopoverTrigger>
+            <PopoverContent
               align="end"
-              className="w-[min(calc(100vw-2rem),17.5rem)] max-h-[min(60vh,22rem)] overflow-y-auto"
-              onCloseAutoFocus={(e) => e.preventDefault()}
+              className="w-[min(calc(100vw-2rem),18rem)] p-0"
+              onOpenAutoFocus={(e) => e.preventDefault()}
             >
-              <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
-                Portfóliá vo výkonnosti
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuCheckboxItem
-                checked={allPortfoliosSelected}
-                onCheckedChange={(checked) => {
-                  if (checked) selectAllPortfolios();
-                }}
-                onSelect={(e) => e.preventDefault()}
-                className="text-sm"
-              >
-                Všetky portfóliá
-              </DropdownMenuCheckboxItem>
-              <DropdownMenuSeparator />
-              {portfolios.map((p) => {
-                const checked =
-                  allPortfoliosSelected || selectedPortfolioIds.includes(p.id);
-                return (
-                  <DropdownMenuCheckboxItem
-                    key={p.id}
-                    checked={checked}
-                    onCheckedChange={(v) => togglePortfolioId(p.id, !!v)}
-                    onSelect={(e) => e.preventDefault()}
-                    className="text-sm"
-                  >
-                    <span className="truncate">{p.name}</span>
-                  </DropdownMenuCheckboxItem>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
+              <div className="border-b px-3 py-2">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Portfóliá vo výkonnosti
+                </p>
+              </div>
+              <div className="max-h-[min(50vh,16rem)] space-y-0.5 overflow-y-auto p-2">
+                <label
+                  className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 text-sm hover:bg-muted/60"
+                  htmlFor="profit-pf-all"
+                >
+                  <Checkbox
+                    id="profit-pf-all"
+                    checked={allDraftSelected}
+                    onCheckedChange={(v) => {
+                      if (v) selectAllDraftPortfolios();
+                    }}
+                    data-testid="checkbox-profit-portfolio-all"
+                  />
+                  <span className="font-medium">Všetky portfóliá</span>
+                </label>
+                <div className="my-1 border-t" />
+                {portfolios.map((p) => {
+                  const checked =
+                    allDraftSelected || draftPortfolioIds.includes(p.id);
+                  const inputId = `profit-pf-${p.id}`;
+                  return (
+                    <label
+                      key={p.id}
+                      htmlFor={inputId}
+                      className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 text-sm hover:bg-muted/60"
+                    >
+                      <Checkbox
+                        id={inputId}
+                        checked={checked}
+                        onCheckedChange={(v) => toggleDraftPortfolioId(p.id, !!v)}
+                        data-testid={`checkbox-profit-portfolio-${p.id}`}
+                      />
+                      <span className="min-w-0 truncate">{p.name}</span>
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="flex items-center gap-2 border-t p-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 flex-1 text-xs"
+                  onClick={() => setPortfolioFilterOpen(false)}
+                >
+                  Zrušiť
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-8 flex-1 text-xs"
+                  onClick={confirmPortfolioFilter}
+                  data-testid="button-profit-portfolio-confirm"
+                >
+                  {draftDirty ? "Potvrdiť" : "Hotovo"}
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
         )}
       </div>
 
