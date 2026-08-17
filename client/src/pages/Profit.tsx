@@ -287,7 +287,7 @@ export default function Profit() {
     isLoading: performanceLoading,
     isFetching: performanceFetching,
   } = useQuery<PerformanceResponse>({
-    queryKey: ["/api/portfolio-performance", portfolioParam, "v5-twr-spx10y"],
+    queryKey: ["/api/portfolio-performance", portfolioParam, "v6-twr-spx"],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set("portfolio", portfolioParam);
@@ -312,7 +312,7 @@ export default function Profit() {
       if (!res.ok) return;
       const json = (await res.json()) as PerformanceResponse;
       queryClient.setQueryData(
-        ["/api/portfolio-performance", portfolioParam, "v5-twr-spx10y"],
+        ["/api/portfolio-performance", portfolioParam, "v6-twr-spx"],
         json,
       );
     } finally {
@@ -879,7 +879,7 @@ function YearMonthPerformance({
     );
     if (avg == null || years == null) return null;
     const spxAvg =
-      method === "twr" && typeof data.totals.sp500PercentReturn === "number"
+      typeof data.totals.sp500PercentReturn === "number"
         ? annualizePercentReturn(
             data.totals.sp500PercentReturn,
             data.totals.startDate,
@@ -889,7 +889,7 @@ function YearMonthPerformance({
     return { avg, years, spxAvg };
   }, [data, method]);
 
-  const colCount = method === "twr" ? 9 : 8;
+  const colCount = 9;
 
   if (loading && !data) {
     return (
@@ -958,9 +958,10 @@ function YearMonthPerformance({
                   vkladov/výberov — vhodné na porovnanie s indexom.
                 </p>
                 <p>
-                  <strong>S&amp;P 500 %</strong> (len v režime TWR): buy-and-hold výnos indexu{" "}
+                  <strong>S&amp;P 500 %</strong>: buy-and-hold výnos indexu{" "}
                   <code className="text-[10px]">^GSPC</code> v tom istom období:{" "}
                   <code className="text-[10px]">(cena_koniec / cena_začiatok − 1) × 100</code>.
+                  Vhodné na porovnanie s TWR aj s jednoduchým %.
                 </p>
                 <p className="text-muted-foreground">
                   Dividendy sú v tabuľke samostatne; do jednoduchého % nie sú priamo pripočítané.
@@ -1020,7 +1021,7 @@ function YearMonthPerformance({
                 ? `${Math.max(1, Math.round(annualized.years * 365))} dní`
                 : `${annualized.years.toFixed(1).replace(".", ",")} r.`}
             </span>
-            {method === "twr" && annualized.spxAvg != null && (
+            {annualized.spxAvg != null && (
               <span className="text-[10px] text-muted-foreground md:text-xs">
                 · S&amp;P 500{" "}
                 <span className={`font-medium tabular-nums ${signClass(annualized.spxAvg)}`}>
@@ -1048,9 +1049,7 @@ function YearMonthPerformance({
                 <TableHead className="text-right whitespace-nowrap">
                   {method === "twr" ? "TWR %" : "%"}
                 </TableHead>
-                {method === "twr" && (
-                  <TableHead className="text-right whitespace-nowrap">S&amp;P %</TableHead>
-                )}
+                <TableHead className="text-right whitespace-nowrap">S&amp;P %</TableHead>
                 <TableHead className="text-right hidden lg:table-cell">Dividendy</TableHead>
               </TableRow>
             </TableHeader>
@@ -1092,7 +1091,7 @@ function YearMonthPerformance({
                       >
                         {yearPct == null ? "—" : formatPercent(yearPct)}
                       </TableCell>
-                      {method === "twr" && (() => {
+                      {(() => {
                         const spx = spxFor(year);
                         return (
                           <TableCell
@@ -1150,15 +1149,13 @@ function YearMonthPerformance({
                             >
                               {mPct == null ? "—" : formatPercent(mPct)}
                             </TableCell>
-                            {method === "twr" && (
-                              <TableCell
-                                className={`text-right text-[10px] tabular-nums md:text-sm ${
-                                  mSpx == null ? "text-muted-foreground" : signClass(mSpx)
-                                }`}
-                              >
-                                {mSpx == null ? "—" : formatPercent(mSpx)}
-                              </TableCell>
-                            )}
+                            <TableCell
+                              className={`text-right text-[10px] tabular-nums md:text-sm ${
+                                mSpx == null ? "text-muted-foreground" : signClass(mSpx)
+                              }`}
+                            >
+                              {mSpx == null ? "—" : formatPercent(mSpx)}
+                            </TableCell>
                             <TableCell className="text-right hidden lg:table-cell text-muted-foreground">
                               {m.dividends > 0 ? formatCurrency(m.dividends) : "—"}
                             </TableCell>
@@ -1195,15 +1192,13 @@ function YearMonthPerformance({
                     >
                       {totalPct == null ? "—" : formatPercent(totalPct)}
                     </TableCell>
-                    {method === "twr" && (
-                      <TableCell
-                        className={`text-right ${
-                          totalSpx == null ? "text-muted-foreground" : signClass(totalSpx)
-                        }`}
-                      >
-                        {totalSpx == null ? "—" : formatPercent(totalSpx)}
-                      </TableCell>
-                    )}
+                    <TableCell
+                      className={`text-right ${
+                        totalSpx == null ? "text-muted-foreground" : signClass(totalSpx)
+                      }`}
+                    >
+                      {totalSpx == null ? "—" : formatPercent(totalSpx)}
+                    </TableCell>
                     <TableCell className="text-right hidden lg:table-cell">
                       {data.totals.dividends > 0 ? formatCurrency(data.totals.dividends) : "—"}
                     </TableCell>

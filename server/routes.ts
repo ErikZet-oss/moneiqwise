@@ -1840,6 +1840,23 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
 /** Koľko rokov dennej histórie ťahať (S&P / TWR / Profit potrebujú >5 r. pri starších portfóliách). */
 const YAHOO_HISTORICAL_YEARS = 10;
 
+function parseYahooChartCloses(data: any): Record<string, number> {
+  const prices: Record<string, number> = {};
+  const result = data?.chart?.result?.[0];
+  if (!result) return prices;
+  const timestamps: number[] = result.timestamp || [];
+  const closes: Array<number | null | undefined> =
+    result.indicators?.quote?.[0]?.close || [];
+  for (let i = 0; i < timestamps.length; i++) {
+    const close = closes[i];
+    if (close !== null && close !== undefined && Number.isFinite(close)) {
+      const date = new Date(timestamps[i]! * 1000).toISOString().split("T")[0]!;
+      prices[date] = close;
+    }
+  }
+  return prices;
+}
+
 async function fetchYahooHistoricalPrices(ticker: string): Promise<Record<string, number>> {
   try {
     const yahooTicker = toYahooTicker(ticker);
@@ -1859,26 +1876,103 @@ async function fetchYahooHistoricalPrices(ticker: string): Promise<Record<string
     }
     
     const data = await response.json();
-    const prices: Record<string, number> = {};
-    
-    if (data.chart?.result?.[0]) {
-      const result = data.chart.result[0];
-      const timestamps = result.timestamp || [];
-      const closes = result.indicators?.quote?.[0]?.close || [];
-      
-      for (let i = 0; i < timestamps.length; i++) {
-        if (closes[i] !== null && closes[i] !== undefined) {
-          const date = new Date(timestamps[i] * 1000).toISOString().split('T')[0];
-          prices[date] = closes[i];
-        }
-      }
-    }
-    
-    return prices;
+    return parseYahooChartCloses(data);
   } catch (error) {
     console.error(`Error fetching Yahoo Finance historical for ${ticker}:`, error);
     return {};
   }
+}
+
+/**
+ * Denná história S&P 500 pre benchmark. Samostatne od bežných tickerov:
+ * retry + SPY fallback (keď Yahoo throttlne ^GSPC pri paralelnom fetche).
+ * Voliteľne dokladá staršie 10y okná, aby Celkovo / skoršie roky neboli prázdne.
+ */
+async function fetchSp500HistoricalPrices(): Promise<Record<string, number>> {
+  const cacheKey = `^GSPC:v3-spx-bench`;
+  const cached = historicalCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < HISTORICAL_CACHE_TTL) {
+    return cached.data;
+  }
+
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  async function fetchWindow(
+    symbol: string,
+    period1: number,
+    period2: number,
+  ): Promise<Record<string, number>> {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${period1}&period2=${period2}&interval=1d`;
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      },
+    });
+    if (!response.ok) throw new Error(`Yahoo ${symbol} ${response.status}`);
+    return parseYahooChartCloses(await response.json());
+  }
+
+  async function fetchSymbolHistory(symbol: string): Promise<Record<string, number>> {
+    const now = Math.floor(Date.now() / 1000);
+    const day = 24 * 60 * 60;
+    const decade = 10 * 365 * day;
+    const merged: Record<string, number> = {};
+    // 4×10y denných okien (~40y) — range=max by Yahoo zrazil na štvrťročné body.
+    for (let i = 0; i < 4; i++) {
+      const period2 = now - i * decade;
+      const period1 = period2 - decade;
+      let chunk: Record<string, number> = {};
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          chunk = await fetchWindow(symbol, period1, period2);
+          if (Object.keys(chunk).length > 0) break;
+        } catch (err) {
+          if (attempt === 2) {
+            console.warn(`S&P hist window failed for ${symbol} [${i}]:`, err);
+          } else {
+            await sleep(200 * (attempt + 1));
+          }
+        }
+      }
+      Object.assign(merged, chunk);
+      if (Object.keys(chunk).length === 0 && i > 0) break;
+    }
+    return merged;
+  }
+
+  for (const symbol of ["^GSPC", "SPY"] as const) {
+    try {
+      const prices = await fetchSymbolHistory(symbol);
+      if (Object.keys(prices).length > 0) {
+        console.log(
+          `S&P benchmark historical success via ${symbol}: ${Object.keys(prices).length} days`,
+        );
+        historicalCache.set(cacheKey, { data: prices, timestamp: Date.now() });
+        scheduleCacheSave();
+        return prices;
+      }
+    } catch (err) {
+      console.warn(`S&P benchmark fetch failed for ${symbol}:`, err);
+    }
+  }
+
+  // Posledný pokus cez všeobecný historical helper (Alpha/Finnhub).
+  try {
+    const fallback = await fetchYahooHistoricalPrices("^GSPC");
+    if (Object.keys(fallback).length > 0) {
+      historicalCache.set(cacheKey, { data: fallback, timestamp: Date.now() });
+      scheduleCacheSave();
+      return fallback;
+    }
+  } catch {
+    /* ignore */
+  }
+
+  if (cached) {
+    console.log("Using expired S&P benchmark cache");
+    return cached.data;
+  }
+  return {};
 }
 
 // Fetch quote from Finnhub (backup API)
@@ -2444,8 +2538,8 @@ const performanceCache = new Map<
 const PERFORMANCE_CACHE_TTL = 30 * 60 * 1000;
 
 function perfCacheKey(userId: string, portfolioParam: string): string {
-  // v5: Yahoo hist 10y so S&P covers early years + Celkovo.
-  return `${userId}:${portfolioParam || "all"}:v5-twr-spx10y`;
+  // v6: dedicated S&P benchmark fetch (retry/SPY/multi-decade) + no empty-SP cache.
+  return `${userId}:${portfolioParam || "all"}:v6-twr-spx`;
 }
 
 function invalidatePerformanceCache(userId: string): void {
@@ -2567,7 +2661,7 @@ async function computePortfolioPerformance(
         }
       }),
     ),
-    fetchHistoricalPrices("^GSPC")
+    fetchSp500HistoricalPrices()
       .then((h) => {
         Object.assign(spHist, h || {});
       })
@@ -2773,7 +2867,7 @@ async function computePortfolioPerformance(
     let yearTwrPct = 0;
     let yearSpxPct: number | null = null;
     if (yr === lastYear && yearTwrStart <= yearEndIso) {
-      // Exact same code path as dashboard YTD card.
+      // Exact same code path as dashboard YTD card (TWR only).
       const ytdSeries = computePortfolioHistorySeries(
         sorted,
         spHist,
@@ -2788,7 +2882,6 @@ async function computePortfolioPerformance(
       );
       const lastPt = ytdSeries.points[ytdSeries.points.length - 1];
       yearTwrPct = lastPt?.portfolioCumulativePct ?? 0;
-      yearSpxPct = lastPt != null ? lastPt.sp500CumulativePct : null;
     } else if (yearTwrStart <= yearEndIso) {
       yearTwrPct = computeChainedTwrPercent(
         sorted,
@@ -2802,6 +2895,9 @@ async function computePortfolioPerformance(
         todayIso,
         150,
       );
+    }
+    // S&P vždy z denných uzávierok (nie 0 z prázdneho YTD benchmarku).
+    if (yearTwrStart <= yearEndIso) {
       yearSpxPct = computeSp500PercentForRange(spHist, yearTwrStart, yearEndIso);
     }
 
@@ -4875,8 +4971,21 @@ export async function registerRoutes(
       }
 
       const data = await computePortfolioPerformance(userId, portfolioParam);
-      performanceCache.set(cacheKey, { data, timestamp: Date.now() });
+      const hasSpx =
+        (data.totals != null &&
+          typeof data.totals.sp500PercentReturn === "number" &&
+          Number.isFinite(data.totals.sp500PercentReturn)) ||
+        data.years.some(
+          (y) =>
+            typeof y.sp500PercentReturn === "number" &&
+            Number.isFinite(y.sp500PercentReturn),
+        );
+      // Neukladaj výsledok bez S&P — inak 30 min držíme „—“ po zlyhaní Yahoo.
+      if (hasSpx) {
+        performanceCache.set(cacheKey, { data, timestamp: Date.now() });
+      }
       res.setHeader("X-Performance-Cache", cached ? "refresh" : "miss");
+      res.setHeader("X-Performance-Spx", hasSpx ? "1" : "0");
       res.json(data);
     } catch (error) {
       console.error("Error computing portfolio performance:", error);
@@ -5424,7 +5533,7 @@ export async function registerRoutes(
           }
         }),
       ),
-      fetchHistoricalPrices("^GSPC")
+      fetchSp500HistoricalPrices()
         .then((h) => h || {})
         .catch(() => ({})),
       Promise.all(
@@ -5684,7 +5793,7 @@ export async function registerRoutes(
             }
           }),
         ),
-        fetchHistoricalPrices("^GSPC")
+        fetchSp500HistoricalPrices()
           .then((h) => h || {})
           .catch(() => ({})),
         Promise.all(

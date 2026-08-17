@@ -16,12 +16,30 @@ export function spCloseOnOrBefore(
   iso: string,
 ): number | null {
   if (!h) return null;
-  if (h[iso] != null && Number.isFinite(h[iso])) return h[iso]!;
-  for (let i = 1; i <= 30; i++) {
+  if (h[iso] != null && Number.isFinite(h[iso]!)) return h[iso]!;
+  // Rýchly lookback na víkendy / sviatky.
+  for (let i = 1; i <= 10; i++) {
     const t = addDaysIso(iso, -i);
-    if (h[t] != null && Number.isFinite(h[t])) return h[t]!;
+    if (h[t] != null && Number.isFinite(h[t]!)) return h[t]!;
   }
-  return null;
+  const sorted = Object.keys(h)
+    .filter((k) => Number.isFinite(h[k]!))
+    .sort();
+  if (sorted.length === 0) return null;
+  let lo = 0;
+  let hi = sorted.length - 1;
+  let best: string | null = null;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const k = sorted[mid]!;
+    if (k <= iso) {
+      best = k;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return best != null ? h[best]! : null;
 }
 
 function toUserCcy(
