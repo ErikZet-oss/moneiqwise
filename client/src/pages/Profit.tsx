@@ -30,6 +30,34 @@ function readStoredPerformanceMethod(): PerformanceMethod {
   return "simple";
 }
 
+/**
+ * Prepočet kumulatívneho % na priemerné ročné (CAGR / annualized):
+ * (1 + r)^(1/roky) − 1.
+ */
+function annualizePercentReturn(
+  cumulativePct: number,
+  startIso: string,
+  endIso: string,
+): number | null {
+  if (!Number.isFinite(cumulativePct) || !startIso || !endIso || startIso > endIso) return null;
+  const startMs = new Date(`${startIso}T12:00:00.000Z`).getTime();
+  const endMs = new Date(`${endIso}T12:00:00.000Z`).getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return null;
+  const years = (endMs - startMs) / (365.25 * 24 * 60 * 60 * 1000);
+  if (!(years > 0)) return null;
+  const r = cumulativePct / 100;
+  if (r <= -1) return -100;
+  const annualized = (Math.pow(1 + r, 1 / years) - 1) * 100;
+  return Number.isFinite(annualized) ? annualized : null;
+}
+
+function yearsBetweenIso(startIso: string, endIso: string): number | null {
+  const startMs = new Date(`${startIso}T12:00:00.000Z`).getTime();
+  const endMs = new Date(`${endIso}T12:00:00.000Z`).getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return null;
+  return (endMs - startMs) / (365.25 * 24 * 60 * 60 * 1000);
+}
+
 interface RealizedGainSummary {
   totalRealized: number;
   closeTradeNetEur?: number;
@@ -673,6 +701,33 @@ function YearMonthPerformance({
     return null;
   };
 
+  const annualized = useMemo(() => {
+    if (!data?.totals) return null;
+    const totalPct =
+      method === "twr"
+        ? typeof data.totals.twrPercentReturn === "number"
+          ? data.totals.twrPercentReturn
+          : null
+        : data.totals.percentReturn;
+    if (totalPct == null || !Number.isFinite(totalPct)) return null;
+    const years = yearsBetweenIso(data.totals.startDate, data.totals.endDate);
+    const avg = annualizePercentReturn(
+      totalPct,
+      data.totals.startDate,
+      data.totals.endDate,
+    );
+    if (avg == null || years == null) return null;
+    const spxAvg =
+      method === "twr" && typeof data.totals.sp500PercentReturn === "number"
+        ? annualizePercentReturn(
+            data.totals.sp500PercentReturn,
+            data.totals.startDate,
+            data.totals.endDate,
+          )
+        : null;
+    return { avg, years, spxAvg };
+  }, [data, method]);
+
   const colCount = method === "twr" ? 9 : 8;
 
   if (loading && !data) {
@@ -750,6 +805,12 @@ function YearMonthPerformance({
                   Dividendy sú v tabuľke samostatne; do jednoduchého % nie sú priamo pripočítané.
                   TWR ich zachytáva cez zmenu peňaženky/MTM.
                 </p>
+                <p>
+                  <strong>Priemerné ročné %</strong>: annualizácia celkového % (CAGR) —{" "}
+                  <code className="text-[10px]">(1 + r)^(1/roky) − 1</code>, kde{" "}
+                  <code className="text-[10px]">r</code> je kumulatívny výnos (jednoduchý alebo TWR)
+                  od prvej transakcie doteraz a roky = počet dní / 365,25.
+                </p>
               </HelpTip>
             </CardTitle>
             <CardDescription className="text-xs leading-snug md:text-sm">
@@ -778,6 +839,36 @@ function YearMonthPerformance({
             </ToggleGroupItem>
           </ToggleGroup>
         </div>
+        {annualized && (
+          <div
+            className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md border border-border/60 bg-muted/30 px-3 py-2"
+            data-testid="text-avg-annual-return"
+          >
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground md:text-xs md:normal-case md:tracking-normal">
+              Priemerné ročné zhodnotenie
+              {method === "twr" ? " (TWR)" : ""}
+            </span>
+            <span className={`text-sm font-semibold tabular-nums md:text-base ${signClass(annualized.avg)}`}>
+              {formatPercent(annualized.avg)}
+              <span className="ml-1 text-[10px] font-medium text-muted-foreground md:text-xs">
+                p.a.
+              </span>
+            </span>
+            <span className="text-[10px] text-muted-foreground md:text-xs">
+              za {annualized.years < 1
+                ? `${Math.max(1, Math.round(annualized.years * 365))} dní`
+                : `${annualized.years.toFixed(1).replace(".", ",")} r.`}
+            </span>
+            {method === "twr" && annualized.spxAvg != null && (
+              <span className="text-[10px] text-muted-foreground md:text-xs">
+                · S&amp;P 500{" "}
+                <span className={`font-medium tabular-nums ${signClass(annualized.spxAvg)}`}>
+                  {formatPercent(annualized.spxAvg)} p.a.
+                </span>
+              </span>
+            )}
+          </div>
+        )}
       </CardHeader>
       <CardContent className="p-4 pt-3">
         <div className="w-full max-w-full overflow-x-hidden">
