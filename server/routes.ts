@@ -1837,13 +1837,16 @@ async function fetchYahooQuote(ticker: string): Promise<any> {
 }
 
 // Fetch historical prices from Yahoo Finance
+/** Koľko rokov dennej histórie ťahať (S&P / TWR / Profit potrebujú >5 r. pri starších portfóliách). */
+const YAHOO_HISTORICAL_YEARS = 10;
+
 async function fetchYahooHistoricalPrices(ticker: string): Promise<Record<string, number>> {
   try {
     const yahooTicker = toYahooTicker(ticker);
     const now = Math.floor(Date.now() / 1000);
-    const fiveYearsAgo = now - (5 * 365 * 24 * 60 * 60);
+    const period1 = now - YAHOO_HISTORICAL_YEARS * 365 * 24 * 60 * 60;
     
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooTicker)}?period1=${fiveYearsAgo}&period2=${now}&interval=1d`;
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooTicker)}?period1=${period1}&period2=${now}&interval=1d`;
     
     const response = await fetch(url, {
       headers: {
@@ -2060,8 +2063,9 @@ async function fetchFinnhubCandles(ticker: string): Promise<Record<string, numbe
 
 // Fetch historical daily prices - Yahoo Finance first, then Alpha Vantage, then Finnhub
 async function fetchHistoricalPrices(ticker: string): Promise<Record<string, number>> {
-  // Check cache
-  const cached = historicalCache.get(ticker);
+  // v2-10y: Yahoo history extended beyond 5y (needed for S&P Celkovo / early years).
+  const cacheKey = `${ticker}:v2-${YAHOO_HISTORICAL_YEARS}y`;
+  const cached = historicalCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < HISTORICAL_CACHE_TTL) {
     return cached.data;
   }
@@ -2070,7 +2074,7 @@ async function fetchHistoricalPrices(ticker: string): Promise<Record<string, num
     try {
       const prices = await fetchSilverHistoricalPrices();
       if (Object.keys(prices).length > 0) {
-        historicalCache.set(ticker, { data: prices, timestamp: Date.now() });
+        historicalCache.set(cacheKey, { data: prices, timestamp: Date.now() });
         scheduleCacheSave();
         console.log(`Silver historical success: ${Object.keys(prices).length} days`);
         return prices;
@@ -2087,7 +2091,7 @@ async function fetchHistoricalPrices(ticker: string): Promise<Record<string, num
     prices = await fetchYahooHistoricalPrices(ticker);
     if (Object.keys(prices).length > 0) {
       console.log(`Yahoo Finance historical success for ${ticker}: ${Object.keys(prices).length} days`);
-      historicalCache.set(ticker, { data: prices, timestamp: Date.now() });
+      historicalCache.set(cacheKey, { data: prices, timestamp: Date.now() });
       scheduleCacheSave();
       return prices;
     }
@@ -2109,7 +2113,7 @@ async function fetchHistoricalPrices(ticker: string): Promise<Record<string, num
         }
         
         if (Object.keys(prices).length > 0) {
-          historicalCache.set(ticker, { data: prices, timestamp: Date.now() });
+          historicalCache.set(cacheKey, { data: prices, timestamp: Date.now() });
           scheduleCacheSave();
           return prices;
         }
@@ -2128,7 +2132,7 @@ async function fetchHistoricalPrices(ticker: string): Promise<Record<string, num
     try {
       prices = await fetchFinnhubCandles(ticker);
       if (Object.keys(prices).length > 0) {
-        historicalCache.set(ticker, { data: prices, timestamp: Date.now() });
+        historicalCache.set(cacheKey, { data: prices, timestamp: Date.now() });
         scheduleCacheSave();
         return prices;
       }
@@ -2440,8 +2444,8 @@ const performanceCache = new Map<
 const PERFORMANCE_CACHE_TTL = 30 * 60 * 1000;
 
 function perfCacheKey(userId: string, portfolioParam: string): string {
-  // v4: TWR uses historical FX + 150 year samples (same as dashboard YTD).
-  return `${userId}:${portfolioParam || "all"}:v4-twr-fx`;
+  // v5: Yahoo hist 10y so S&P covers early years + Celkovo.
+  return `${userId}:${portfolioParam || "all"}:v5-twr-spx10y`;
 }
 
 function invalidatePerformanceCache(userId: string): void {

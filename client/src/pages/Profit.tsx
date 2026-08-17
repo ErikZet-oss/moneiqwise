@@ -181,7 +181,7 @@ export default function Profit() {
     isLoading: performanceLoading,
     isFetching: performanceFetching,
   } = useQuery<PerformanceResponse>({
-    queryKey: ["/api/portfolio-performance", portfolioParam, "v4-twr-fx"],
+    queryKey: ["/api/portfolio-performance", portfolioParam, "v5-twr-spx10y"],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set("portfolio", portfolioParam);
@@ -206,7 +206,7 @@ export default function Profit() {
       if (!res.ok) return;
       const json = (await res.json()) as PerformanceResponse;
       queryClient.setQueryData(
-        ["/api/portfolio-performance", portfolioParam, "v4-twr-fx"],
+        ["/api/portfolio-performance", portfolioParam, "v5-twr-spx10y"],
         json,
       );
     } finally {
