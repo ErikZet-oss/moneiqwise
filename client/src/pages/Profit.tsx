@@ -11,6 +11,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
+import { useChartSettings } from "@/hooks/useChartSettings";
 import { CompanyLogo } from "@/components/CompanyLogo";
 import { HelpTip } from "@/components/HelpTip";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -135,7 +136,9 @@ interface PortfolioHistoryResponse {
 }
 
 export default function Profit() {
-  const { formatCurrency } = useCurrency();
+  const { formatCurrency: formatCurrencyRaw } = useCurrency();
+  const { hideAmounts } = useChartSettings();
+  const formatCurrency = (n: number) => (hideAmounts ? "••••••" : formatCurrencyRaw(n));
   const { getQueryParam } = usePortfolio();
   const [narrowViewport, setNarrowViewport] = useState(false);
 
@@ -313,6 +316,7 @@ export default function Profit() {
   }
 
   const chartYTick = (v: number) => {
+    if (hideAmounts) return "••";
     const n = Number(v);
     if (!Number.isFinite(n)) return "";
     if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
