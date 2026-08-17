@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -285,6 +285,7 @@ export default function Profit() {
       return res.json();
     },
     staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 
   const { data: realizedGains } = useQuery<RealizedGainSummary>({
@@ -296,11 +297,12 @@ export default function Profit() {
       if (!res.ok) throw new Error("Failed to fetch realized gains");
       return res.json();
     },
+    staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 
   // Pre-aggregated year + month performance from server; cached per user and
   // invalidated on any transaction write so repeated opens are instant.
-  // Query key v2: response includes twrPercentReturn (busts older client cache).
   const queryClient = useQueryClient();
   const [twrRefreshing, setTwrRefreshing] = useState(false);
 
@@ -309,7 +311,7 @@ export default function Profit() {
     isLoading: performanceLoading,
     isFetching: performanceFetching,
   } = useQuery<PerformanceResponse>({
-    queryKey: ["/api/portfolio-performance", portfolioParam, "v6-twr-spx"],
+    queryKey: ["/api/portfolio-performance", portfolioParam, "v7-twr-spx"],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set("portfolio", portfolioParam);
@@ -320,6 +322,7 @@ export default function Profit() {
       return res.json();
     },
     staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 
   const refreshPerformanceWithTwr = useCallback(async () => {
@@ -334,7 +337,7 @@ export default function Profit() {
       if (!res.ok) return;
       const json = (await res.json()) as PerformanceResponse;
       queryClient.setQueryData(
-        ["/api/portfolio-performance", portfolioParam, "v6-twr-spx"],
+        ["/api/portfolio-performance", portfolioParam, "v7-twr-spx"],
         json,
       );
     } finally {
@@ -342,17 +345,20 @@ export default function Profit() {
     }
   }, [portfolioParam, queryClient]);
 
+  // Graf potrebuje len totalValue/netInvested — bez S&P benchmarku (rýchlejšie).
   const { data: historySeries, isLoading: historySeriesLoading } = useQuery<PortfolioHistoryResponse>({
-    queryKey: ["/api/portfolio-history", portfolioParam, "all", "profit"],
+    queryKey: ["/api/portfolio-history", portfolioParam, "all", "profit", "nobench"],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set("portfolio", portfolioParam);
       params.set("range", "all");
+      params.set("benchmark", "0");
       const res = await fetch(`/api/portfolio-history?${params.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch portfolio history");
       return res.json();
     },
     staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
   });
 
   const dailyData = useMemo(() => {
@@ -403,7 +409,8 @@ export default function Profit() {
     return `${sign}${value.toFixed(2)}%`;
   };
 
-  const isLoading = transactionsLoading || historySeriesLoading;
+  // Nečakaj na ťažkú históriu grafu — tabuľka výkonnosti môže ísť skôr.
+  const isLoading = transactionsLoading;
 
   if (isLoading) {
     return (
@@ -451,7 +458,7 @@ export default function Profit() {
 
   return (
     <div className="max-w-full space-y-3 overflow-x-hidden pb-6 md:space-y-6 md:pb-10">
-      {dailyData.length === 0 && (
+      {!historySeriesLoading && dailyData.length === 0 && (
         <Alert className="px-3 py-2 text-xs md:px-4 md:py-3 md:text-sm">
           <AlertCircle className="h-3.5 w-3.5 md:h-4 md:w-4" />
           <AlertDescription>
@@ -704,6 +711,9 @@ export default function Profit() {
           <CardDescription className="text-xs md:text-sm">Od prvého obchodu po dnes (obchodné dni)</CardDescription>
         </CardHeader>
         <CardContent className="p-4 pt-3">
+          {historySeriesLoading && dailyData.length === 0 ? (
+            <Skeleton className="h-[200px] w-full md:h-[280px]" />
+          ) : (
           <div className="h-[200px] w-full max-w-full min-w-0 md:h-[280px]">
             <ResponsiveContainer width="100%" height="100%">
             <LineChart data={dailyData} margin={{ top: 4, right: 4, left: -8, bottom: 4 }}>
@@ -752,6 +762,7 @@ export default function Profit() {
             </LineChart>
           </ResponsiveContainer>
           </div>
+          )}
         </CardContent>
       </Card>
 

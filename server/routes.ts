@@ -1884,18 +1884,16 @@ async function fetchYahooHistoricalPrices(ticker: string): Promise<Record<string
 }
 
 /**
- * Denná história S&P 500 pre benchmark. Samostatne od bežných tickerov:
- * retry + SPY fallback (keď Yahoo throttlne ^GSPC pri paralelnom fetche).
- * Voliteľne dokladá staršie 10y okná, aby Celkovo / skoršie roky neboli prázdne.
+ * Denná história S&P 500 pre benchmark.
+ * Rýchla cesta: 1× ~10y (prípadne +1 staršie okno paralelne). SPY fallback.
+ * (Skôr 4 sekvenčné dekády + retry spomalili celú sekciu Zisk.)
  */
 async function fetchSp500HistoricalPrices(): Promise<Record<string, number>> {
-  const cacheKey = `^GSPC:v3-spx-bench`;
+  const cacheKey = `^GSPC:v4-spx-fast`;
   const cached = historicalCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < HISTORICAL_CACHE_TTL) {
     return cached.data;
   }
-
-  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
   async function fetchWindow(
     symbol: string,
@@ -1912,37 +1910,22 @@ async function fetchSp500HistoricalPrices(): Promise<Record<string, number>> {
     return parseYahooChartCloses(await response.json());
   }
 
-  async function fetchSymbolHistory(symbol: string): Promise<Record<string, number>> {
+  async function fetchRecentAndPrior(symbol: string): Promise<Record<string, number>> {
     const now = Math.floor(Date.now() / 1000);
-    const day = 24 * 60 * 60;
-    const decade = 10 * 365 * day;
-    const merged: Record<string, number> = {};
-    // 4×10y denných okien (~40y) — range=max by Yahoo zrazil na štvrťročné body.
-    for (let i = 0; i < 4; i++) {
-      const period2 = now - i * decade;
-      const period1 = period2 - decade;
-      let chunk: Record<string, number> = {};
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          chunk = await fetchWindow(symbol, period1, period2);
-          if (Object.keys(chunk).length > 0) break;
-        } catch (err) {
-          if (attempt === 2) {
-            console.warn(`S&P hist window failed for ${symbol} [${i}]:`, err);
-          } else {
-            await sleep(200 * (attempt + 1));
-          }
-        }
-      }
-      Object.assign(merged, chunk);
-      if (Object.keys(chunk).length === 0 && i > 0) break;
-    }
-    return merged;
+    const decade = 10 * 365 * 24 * 60 * 60;
+    const windows = [
+      fetchWindow(symbol, now - decade, now).catch(() => ({}) as Record<string, number>),
+      fetchWindow(symbol, now - 2 * decade, now - decade).catch(
+        () => ({}) as Record<string, number>,
+      ),
+    ];
+    const [recent, prior] = await Promise.all(windows);
+    return { ...prior, ...recent };
   }
 
   for (const symbol of ["^GSPC", "SPY"] as const) {
     try {
-      const prices = await fetchSymbolHistory(symbol);
+      const prices = await fetchRecentAndPrior(symbol);
       if (Object.keys(prices).length > 0) {
         console.log(
           `S&P benchmark historical success via ${symbol}: ${Object.keys(prices).length} days`,
@@ -1956,7 +1939,6 @@ async function fetchSp500HistoricalPrices(): Promise<Record<string, number>> {
     }
   }
 
-  // Posledný pokus cez všeobecný historical helper (Alpha/Finnhub).
   try {
     const fallback = await fetchYahooHistoricalPrices("^GSPC");
     if (Object.keys(fallback).length > 0) {
@@ -2537,15 +2519,34 @@ const performanceCache = new Map<
 // could move the numbers (transactions, imports, migrations, data wipe).
 const PERFORMANCE_CACHE_TTL = 30 * 60 * 1000;
 
+/** In-memory cache for /api/portfolio-history (Profit chart / dashboard). */
+const portfolioHistoryCache = new Map<
+  string,
+  { data: unknown; timestamp: number }
+>();
+const PORTFOLIO_HISTORY_CACHE_TTL = 15 * 60 * 1000;
+
 function perfCacheKey(userId: string, portfolioParam: string): string {
-  // v6: dedicated S&P benchmark fetch (retry/SPY/multi-decade) + no empty-SP cache.
-  return `${userId}:${portfolioParam || "all"}:v6-twr-spx`;
+  // v7: fast S&P fetch; always cache performance (even if SPX briefly missing).
+  return `${userId}:${portfolioParam || "all"}:v7-twr-spx`;
+}
+
+function portfolioHistoryCacheKey(
+  userId: string,
+  portfolioParam: string,
+  range: string,
+  includeBenchmark: boolean,
+): string {
+  return `${userId}:${portfolioParam || "all"}:${range}:bench${includeBenchmark ? 1 : 0}:v1`;
 }
 
 function invalidatePerformanceCache(userId: string): void {
   const prefix = `${userId}:`;
   for (const key of Array.from(performanceCache.keys())) {
     if (key.startsWith(prefix)) performanceCache.delete(key);
+  }
+  for (const key of Array.from(portfolioHistoryCache.keys())) {
+    if (key.startsWith(prefix)) portfolioHistoryCache.delete(key);
   }
 }
 
@@ -4980,10 +4981,8 @@ export async function registerRoutes(
             typeof y.sp500PercentReturn === "number" &&
             Number.isFinite(y.sp500PercentReturn),
         );
-      // Neukladaj výsledok bez S&P — inak 30 min držíme „—“ po zlyhaní Yahoo.
-      if (hasSpx) {
-        performanceCache.set(cacheKey, { data, timestamp: Date.now() });
-      }
+      // Vždy cache — drahý výpočet sa inak opakuje pri každom otvorení Zisku.
+      performanceCache.set(cacheKey, { data, timestamp: Date.now() });
       res.setHeader("X-Performance-Cache", cached ? "refresh" : "miss");
       res.setHeader("X-Performance-Spx", hasSpx ? "1" : "0");
       res.json(data);
@@ -5747,6 +5746,29 @@ export async function registerRoutes(
       const rates = await fetchAllExchangeRates();
       const todayIso = new Date().toISOString().slice(0, 10);
       const range = parsePortfolioHistoryRange(req.query.range as string | undefined);
+      // Profit chart needs only totalValue/netInvested — skip Yahoo ^GSPC.
+      const benchRaw = String(req.query.benchmark ?? "1").toLowerCase();
+      const includeBenchmark = !(
+        benchRaw === "0" ||
+        benchRaw === "false" ||
+        benchRaw === "off" ||
+        benchRaw === "none"
+      );
+
+      const histCacheKey = portfolioHistoryCacheKey(
+        userId,
+        portfolioParam,
+        range,
+        includeBenchmark,
+      );
+      const histCached = portfolioHistoryCache.get(histCacheKey);
+      if (
+        histCached &&
+        Date.now() - histCached.timestamp < PORTFOLIO_HISTORY_CACHE_TTL
+      ) {
+        res.setHeader("X-History-Cache", "hit");
+        return res.json(histCached.data);
+      }
 
       const tx = await storage.getTransactionsByUser(
         userId,
@@ -5793,9 +5815,11 @@ export async function registerRoutes(
             }
           }),
         ),
-        fetchSp500HistoricalPrices()
-          .then((h) => h || {})
-          .catch(() => ({})),
+        includeBenchmark
+          ? fetchSp500HistoricalPrices()
+              .then((h) => h || {})
+              .catch(() => ({}))
+          : Promise.resolve({} as Record<string, number>),
         Promise.all(
           Array.from(currencies).map(async (c) => {
             try {
@@ -5839,12 +5863,18 @@ export async function registerRoutes(
         range,
         150,
       );
-      res.json({
+      const payload = {
         ...out,
         range,
         portfolio: portfolioParam,
-        benchmark: "^GSPC",
+        benchmark: includeBenchmark ? "^GSPC" : null,
+      };
+      portfolioHistoryCache.set(histCacheKey, {
+        data: payload,
+        timestamp: Date.now(),
       });
+      res.setHeader("X-History-Cache", "miss");
+      res.json(payload);
     } catch (error) {
       console.error("Error computing portfolio history:", error);
       res.status(500).json({ message: "Nepodarilo sa vypočítať históriu portfólia." });
