@@ -24,42 +24,79 @@ function getEtParts(now = new Date()): EtParts {
   const get = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((p) => p.type === type)?.value ?? "";
 
+  // Niektoré runtime vracajú "24" o polnoci.
+  let hour = Number(get("hour"));
+  if (hour === 24) hour = 0;
+
   return {
     dateKey: `${get("year")}-${get("month")}-${get("day")}`,
     weekday: get("weekday"),
-    hour: Number(get("hour")),
+    hour,
     minute: Number(get("minute")),
   };
 }
 
-function detectSlot(et: EtParts): Exclude<AiBotSlot, "manual"> | null {
+/**
+ * Široké okná — stačí, aby server bežal niekedy v okne (nie len v :00).
+ * Lock (dateKey:slot) zabezpečí max 1 beh / slot / deň.
+ */
+export function detectSlot(et: EtParts): Exclude<AiBotSlot, "manual"> | null {
   const wd = et.weekday;
   if (wd === "Sat" || wd === "Sun") return null;
-  // Pred open: 09:00 ET (RTH open 09:30)
-  if (et.hour === 9 && et.minute === 0) return "preopen";
-  // 15 min pred close: 15:45 ET (RTH close 16:00)
-  if (et.hour === 15 && et.minute === 45) return "preclose";
+  // Pred open: 09:00–09:29 ET (do RTH open 09:30) ≈ 15:00–15:29 SEČ/SELČ
+  if (et.hour === 9 && et.minute >= 0 && et.minute <= 29) return "preopen";
+  // Pred close: 15:45–15:59 ET ≈ 21:45–21:59 SEČ/SELČ
+  if (et.hour === 15 && et.minute >= 45 && et.minute <= 59) return "preclose";
   return null;
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let running = false;
 
-async function tick() {
-  if (running) return;
-  const et = getEtParts();
+export async function runDueAiBotSchedule(
+  now = new Date(),
+  opts?: { force?: boolean },
+): Promise<{
+  slot: Exclude<AiBotSlot, "manual"> | null;
+  ran: boolean;
+  reason?: string;
+  users?: number;
+}> {
+  const et = getEtParts(now);
   const slot = detectSlot(et);
-  if (!slot) return;
+  if (!slot) {
+    return { slot: null, ran: false, reason: "not_in_window" };
+  }
 
-  const lockKey = `${et.dateKey}:${slot}`;
-  const got = await tryAcquireScheduleLock(lockKey);
-  if (!got) return;
+  if (running) {
+    return { slot, ran: false, reason: "already_running" };
+  }
 
   running = true;
   try {
     const users = await listEnabledAiBotUsers();
+    if (users.length === 0) {
+      console.warn(
+        "[ai-bot] no enabled users in ai_bot_settings — open AI Bot page once (Zapnuté) to create settings",
+      );
+      return { slot, ran: false, reason: "no_users", users: 0 };
+    }
+
+    const lockKey = `${et.dateKey}:${slot}`;
+    if (!opts?.force) {
+      const got = await tryAcquireScheduleLock(lockKey);
+      if (!got) {
+        return {
+          slot,
+          ran: false,
+          reason: "already_ran_today",
+          users: users.length,
+        };
+      }
+    }
+
     console.log(
-      `[ai-bot] scheduled ${slot} for ${users.length} user(s) (${lockKey}) — each PTF + all`,
+      `[ai-bot] scheduled ${slot} for ${users.length} user(s) (${lockKey}${opts?.force ? ", force" : ""}) — each PTF + all`,
     );
     for (const u of users) {
       try {
@@ -74,18 +111,34 @@ async function tick() {
         console.error(`[ai-bot] schedule batch failed for ${u.userId}:`, err);
       }
     }
+    return { slot, ran: true, users: users.length };
   } finally {
     running = false;
   }
 }
 
+async function tick() {
+  try {
+    const result = await runDueAiBotSchedule();
+    if (result.ran) {
+      console.log(`[ai-bot] tick completed slot=${result.slot} users=${result.users}`);
+    } else if (result.slot && result.reason !== "already_ran_today") {
+      console.log(`[ai-bot] tick skipped: ${result.reason} slot=${result.slot}`);
+    }
+  } catch (err) {
+    console.error("[ai-bot] tick error:", err);
+  }
+}
+
 export function startAiBotScheduler() {
   if (timer) return;
-  // Každých 30s — trafíme minútu 09:00 / 15:45 ET.
+  // Každých 30s — v okne 09:00–09:29 / 15:45–15:59 ET to určite trafí.
   timer = setInterval(() => {
     void tick();
   }, 30_000);
+  // Catch-up hneď po štarte (nasadenie / restart uprostred okna).
+  void tick();
   console.log(
-    "[ai-bot] scheduler started (preopen 09:00 ET, preclose 15:45 ET; all PTF + each)",
+    "[ai-bot] scheduler started (preopen 09:00–09:29 ET ≈ 15:00–15:29 local, preclose 15:45–15:59 ET)",
   );
 }

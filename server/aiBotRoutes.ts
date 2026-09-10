@@ -8,6 +8,7 @@ import {
   saveAiBotSettings,
 } from "./aiBot/store";
 import { runAiBotForUser } from "./aiBot/runner";
+import { runDueAiBotSchedule } from "./aiBot/scheduler";
 import { storage } from "./storage";
 
 type AuthReq = {
@@ -181,4 +182,33 @@ export function registerAiBotRoutes(app: Express, isAuthenticated: any) {
       res.status(status).json({ message });
     }
   });
+
+  // Kick scheduleru (catch-up / externý cron).
+  // 1) Header x-cron-secret = AI_BOT_CRON_SECRET
+  // 2) alebo prihlásený user
+  app.post(
+    "/api/ai-bot/cron",
+    (req: any, res: Response, next: any) => {
+      const secret = process.env.AI_BOT_CRON_SECRET?.trim();
+      const headerSecret = String(req.headers?.["x-cron-secret"] || "");
+      if (secret && headerSecret && headerSecret === secret) {
+        (req as any).__aiBotCronSecretOk = true;
+        return next();
+      }
+      return isAuthenticated(req, res, next);
+    },
+    async (req: AuthReq, res) => {
+      try {
+        const force =
+          req.query?.force === "1" ||
+          req.body?.force === true ||
+          req.body?.force === "1";
+        const result = await runDueAiBotSchedule(new Date(), { force });
+        res.json(result);
+      } catch (error) {
+        console.error("ai-bot cron:", error);
+        res.status(500).json({ message: "Cron beh zlyhal." });
+      }
+    },
+  );
 }
