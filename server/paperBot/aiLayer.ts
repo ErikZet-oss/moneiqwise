@@ -21,20 +21,90 @@ function getAnthropicClient(): Anthropic | null {
   return new Anthropic({ apiKey: key });
 }
 
+function repairJsonLike(raw: string): string {
+  return raw
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/,\s*([}\]])/g, "$1");
+}
+
 function extractJson(text: string): unknown {
   const trimmed = text.trim();
-  const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const raw = fence?.[1]?.trim() || trimmed;
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
-  if (start < 0 || end <= start) throw new Error("AI_JSON_PARSE");
-  return JSON.parse(raw.slice(start, end + 1));
+  if (!trimmed) throw new Error("AI_JSON_PARSE");
+
+  const candidates: string[] = [];
+  const fenceRegex = /```(?:json)?\s*([\s\S]*?)```/gi;
+  let fenceMatch: RegExpExecArray | null;
+  while ((fenceMatch = fenceRegex.exec(trimmed)) !== null) {
+    if (fenceMatch[1]?.trim()) candidates.push(fenceMatch[1].trim());
+  }
+
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    candidates.push(trimmed.slice(start, end + 1));
+  }
+  candidates.push(trimmed);
+
+  for (const candidate of candidates) {
+    for (const attempt of [candidate, repairJsonLike(candidate)]) {
+      try {
+        return JSON.parse(attempt);
+      } catch {
+        // try next
+      }
+    }
+  }
+  throw new Error("AI_JSON_PARSE");
 }
 
 function biasToScore(bias: AiSymbolVerdict["bias"]): number {
   if (bias === "bullish") return 80;
   if (bias === "bearish") return 20;
   return 50;
+}
+
+function parseVerdicts(
+  parsed: unknown,
+  symbols: string[],
+): Map<string, AiSymbolVerdict> {
+  const map = new Map<string, AiSymbolVerdict>();
+  const root = parsed as {
+    verdicts?: Array<{
+      symbol?: string;
+      bias?: string;
+      confidence?: number;
+      reason?: string;
+    }>;
+  };
+  for (const v of root.verdicts ?? []) {
+    const symbol = String(v.symbol || "")
+      .trim()
+      .toUpperCase();
+    if (!symbol) continue;
+    const biasRaw = String(v.bias || "neutral").toLowerCase();
+    const bias: AiSymbolVerdict["bias"] =
+      biasRaw === "bullish" || biasRaw === "bearish" ? biasRaw : "neutral";
+    const confidence = Math.min(100, Math.max(0, Number(v.confidence) || 0));
+    map.set(symbol, {
+      symbol,
+      bias,
+      confidence,
+      reason: String(v.reason || "").slice(0, 160),
+    });
+  }
+  // Ensure every requested symbol has at least a neutral fallback if model skipped some
+  for (const symbol of symbols) {
+    if (!map.has(symbol)) {
+      map.set(symbol, {
+        symbol,
+        bias: "neutral",
+        confidence: 40,
+        reason: "Model nevyplnil verdict — neutral default",
+      });
+    }
+  }
+  return map;
 }
 
 export type AiMarketSnapshot = {
@@ -45,6 +115,33 @@ export type AiMarketSnapshot = {
   ema200: number | null;
   macdHist: number | null;
 };
+
+async function requestVerdictJson(
+  client: Anthropic,
+  prompt: string,
+  maxTokens: number,
+  extraInstruction?: string,
+): Promise<string> {
+  const userContent = extraInstruction
+    ? `${prompt}\n\n${extraInstruction}`
+    : prompt;
+  const msg = await client.messages.create({
+    model: MODEL,
+    max_tokens: maxTokens,
+    system:
+      "You are a JSON API. Reply with a single valid JSON object only. No markdown fences, no commentary.",
+    messages: [
+      { role: "user", content: userContent },
+      // Prefill forces JSON object start — reduces prose / invalid schemas.
+      { role: "assistant", content: '{"verdicts":[' },
+    ],
+  });
+  const continuation = msg.content
+    .filter((b) => b.type === "text")
+    .map((b) => (b.type === "text" ? b.text : ""))
+    .join("\n");
+  return `{"verdicts":[${continuation}`;
+}
 
 /**
  * Fetch news for universe and ask Claude for per-symbol verdicts.
@@ -60,7 +157,10 @@ export async function fetchPaperBotAiVerdicts(input: {
   error: string | null;
   newsCount: number;
 }> {
-  const symbols = input.symbols.map((s) => s.toUpperCase()).filter(Boolean);
+  const symbols = input.symbols
+    .map((s) => s.toUpperCase())
+    .filter(Boolean)
+    .slice(0, 12);
   const empty = {
     verdicts: new Map<string, AiSymbolVerdict>(),
     model: null as string | null,
@@ -76,17 +176,22 @@ export async function fetchPaperBotAiVerdicts(input: {
 
   const { news } = await collectAiBotNewsContext({ holdingTickers: symbols });
   const newsLines = news
-    .slice(0, 18)
+    .slice(0, 12)
     .map(
       (n) =>
-        `- [${n.ticker ?? "MACRO"}] ${n.title}${n.summary ? ` — ${n.summary}` : ""}`,
+        `- [${n.ticker ?? "MACRO"}] ${n.title}${n.summary ? ` — ${n.summary.slice(0, 160)}` : ""}`,
     )
     .join("\n");
 
-  const marketLines = (input.market ?? [])
-    .map((m) => {
+  const marketBySymbol = new Map(
+    (input.market ?? []).map((m) => [m.symbol.toUpperCase(), m]),
+  );
+  const marketLines = symbols
+    .map((symbol) => {
+      const m = marketBySymbol.get(symbol);
+      if (!m) return `- ${symbol}`;
       const parts = [
-        m.symbol,
+        symbol,
         m.close != null ? `close=${m.close.toFixed(2)}` : null,
         m.rsi14 != null ? `RSI14=${m.rsi14.toFixed(1)}` : null,
         m.ema50 != null ? `EMA50=${m.ema50.toFixed(2)}` : null,
@@ -97,10 +202,11 @@ export async function fetchPaperBotAiVerdicts(input: {
     })
     .join("\n");
 
+  const exampleSymbol = symbols[0] ?? "AAPL";
   const prompt = `Si AI vrstva paper trading bota. AI NIKDY nevytvára trade sama — len sentiment k tickerom.
 Zohľadni správy AJ trhový snapshot (RSI/EMA/MACD). Ak správa a technika idú proti sebe, zníž confidence.
 
-Tickery: ${symbols.join(", ")}
+Tickery (povinné — jeden verdict pre každý): ${symbols.join(", ")}
 
 Trhový snapshot:
 ${marketLines || "(nedostupný)"}
@@ -108,52 +214,45 @@ ${marketLines || "(nedostupný)"}
 Správy:
 ${newsLines || "(žiadne správy)"}
 
-Vráť LEN JSON:
-{
-  "verdicts": [
-    { "symbol": "AAPL", "bias": "bullish"|"bearish"|"neutral", "confidence": 0-100, "reason": "max 120 znakov" }
-  ]
-}
-Jeden verdict na každý ticker zo zoznamu. Ak nie sú relevantné správy ani jasný technický bias, bias=neutral, confidence nižšie.`;
+Schéma odpovede (platný JSON, bez markdown):
+{"verdicts":[{"symbol":"${exampleSymbol}","bias":"neutral","confidence":50,"reason":"kratky dovod"}]}
+
+Pravidlá:
+- bias je presne jedna z hodnôt: bullish, bearish, neutral
+- confidence je číslo 0 až 100
+- reason max 120 znakov, bez úvodzoviek vo vnútri textu
+- vráť práve ${symbols.length} verdictov, jeden na každý ticker zo zoznamu`;
+
+  const maxTokens = Math.min(2500, 400 + symbols.length * 120);
 
   try {
-    const msg = await client.messages.create({
-      model: MODEL,
-      max_tokens: 1200,
-      messages: [{ role: "user", content: prompt }],
-    });
-    const text = msg.content
-      .filter((b) => b.type === "text")
-      .map((b) => (b.type === "text" ? b.text : ""))
-      .join("\n");
-    const parsed = extractJson(text) as {
-      verdicts?: Array<{
-        symbol?: string;
-        bias?: string;
-        confidence?: number;
-        reason?: string;
-      }>;
-    };
-    const map = new Map<string, AiSymbolVerdict>();
-    for (const v of parsed.verdicts ?? []) {
-      const symbol = String(v.symbol || "")
-        .trim()
-        .toUpperCase();
-      if (!symbol) continue;
-      const biasRaw = String(v.bias || "neutral").toLowerCase();
-      const bias: AiSymbolVerdict["bias"] =
-        biasRaw === "bullish" || biasRaw === "bearish" ? biasRaw : "neutral";
-      const confidence = Math.min(
-        100,
-        Math.max(0, Number(v.confidence) || 0),
+    let text = await requestVerdictJson(client, prompt, maxTokens);
+    let parsed: unknown;
+    try {
+      parsed = extractJson(text);
+    } catch (firstErr) {
+      console.warn(
+        "[paper-bot] AI JSON parse failed, retrying. Preview:",
+        text.slice(0, 400),
       );
-      map.set(symbol, {
-        symbol,
-        bias,
-        confidence,
-        reason: String(v.reason || "").slice(0, 160),
-      });
+      text = await requestVerdictJson(
+        client,
+        prompt,
+        maxTokens,
+        "IMPORTANT: Previous reply was invalid JSON. Continue only with valid JSON array elements and closing braces. bias must be bullish, bearish, or neutral.",
+      );
+      try {
+        parsed = extractJson(text);
+      } catch (secondErr) {
+        console.warn(
+          "[paper-bot] AI JSON parse failed after retry. Preview:",
+          text.slice(0, 600),
+        );
+        throw secondErr instanceof Error ? secondErr : firstErr;
+      }
     }
+
+    const map = parseVerdicts(parsed, symbols);
     return {
       verdicts: map,
       model: MODEL,
@@ -205,7 +304,6 @@ export function applyAiNudge(input: {
   const aiScore = biasToScore(verdict.bias);
   const finalScore = quantScore * (1 - w) + aiScore * w;
 
-  // Strong bearish AI can block a BUY entry
   const aiBlocked =
     signal.action === "BUY" &&
     verdict.bias === "bearish" &&

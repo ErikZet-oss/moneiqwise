@@ -392,7 +392,8 @@ export default function FaqPage() {
                 <li>E-mail vyžaduje SMTP env (<code>SMTP_HOST</code>, <code>SMTP_USER</code>, …)</li>
                 <li>
                   AI vrstva vyžaduje <code>ANTHROPIC_API_KEY</code>; bez kľúča beží quant-only
-                  (novšie Claude modely nepoužívajú <code>temperature</code>)
+                  (novšie Claude modely nepoužívajú <code>temperature</code>). Pri chybnom JSON
+                  AI skúsi 1× retry, inak fallback na čistý quant.
                 </li>
                 <li>Paper vs. benchmark (S&amp;P) zatiaľ nie je</li>
               </ul>
