@@ -15,7 +15,7 @@ export const QUICK_NAV_SECTIONS: QuickNavSection[] = [
   { path: "/dividends", label: "Dividendy" },
   { path: "/events", label: "Kalendár udalostí" },
   { path: "/watchlist", label: "Watchlist" },
-  { path: "/ai-skener", label: "AI Skener" },
+  { path: "/ai-agent/bot", label: "AI Agent" },
   { path: "/tax", label: "Daňový asistent" },
   { path: "/options", label: "Opcie" },
   { path: "/import", label: "Import brokera" },
@@ -30,6 +30,7 @@ export function getQuickNavSection(path: string): QuickNavSection | undefined {
 
 export function normalizeQuickNavPath(raw: unknown): string {
   const path = typeof raw === "string" ? raw.trim() : "";
+  if (path === "/ai-skener" || path === "/ai-agent") return "/ai-agent/bot";
   if (QUICK_NAV_SECTIONS.some((s) => s.path === path)) return path;
   return DEFAULT_QUICK_NAV_PATH;
 }

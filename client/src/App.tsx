@@ -24,7 +24,7 @@ import Grafy from "@/pages/Grafy";
 import GoalTracker from "@/pages/GoalTracker";
 import EventsCalendar from "@/pages/EventsCalendar";
 import Watchlist from "@/pages/Watchlist";
-import AiSkener from "@/pages/AiSkener";
+import AiAgent from "@/pages/AiAgent";
 import AssetDetail from "@/pages/AssetDetail";
 import TaxSummaryPage from "@/pages/TaxSummaryPage";
 import FaqPage from "@/pages/FaqPage";
@@ -42,6 +42,22 @@ function RedirectToHistory() {
   const [, setLocation] = useLocation();
   useEffect(() => {
     setLocation("/history");
+  }, [setLocation]);
+  return null;
+}
+
+function RedirectToAiAgentSkener() {
+  const [, setLocation] = useLocation();
+  useEffect(() => {
+    setLocation("/ai-agent/skener");
+  }, [setLocation]);
+  return null;
+}
+
+function RedirectToAiAgentBot() {
+  const [, setLocation] = useLocation();
+  useEffect(() => {
+    setLocation("/ai-agent/bot");
   }, [setLocation]);
   return null;
 }
@@ -80,7 +96,10 @@ function Router() {
       <Route path="/goal" component={GoalTracker} />
       <Route path="/events" component={EventsCalendar} />
       <Route path="/watchlist" component={Watchlist} />
-      <Route path="/ai-skener" component={AiSkener} />
+      <Route path="/ai-agent" component={RedirectToAiAgentBot} />
+      <Route path="/ai-agent/bot" component={AiAgent} />
+      <Route path="/ai-agent/skener" component={AiAgent} />
+      <Route path="/ai-skener" component={RedirectToAiAgentSkener} />
       <Route path="/settings" component={Settings} />
       <Route path="/admin/registrations" component={AdminRegistrations} />
       <Route path="/faq" component={FaqPage} />

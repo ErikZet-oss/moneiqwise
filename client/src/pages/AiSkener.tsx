@@ -86,7 +86,7 @@ function changeColor(n: number | null | undefined): string {
 }
 
 
-export default function AiSkener() {
+export default function AiSkener({ embedded = false }: { embedded?: boolean }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { currency, exchangeRate, getTickerCurrency } = useCurrency();
@@ -184,6 +184,7 @@ export default function AiSkener() {
 
   return (
     <div className="flex flex-col gap-3 md:gap-6 pb-6 md:pb-8">
+      {!embedded && (
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-lg font-semibold flex items-center gap-2 flex-wrap">
@@ -196,6 +197,12 @@ export default function AiSkener() {
         </div>
         <AiSkenerPromptsEditor />
       </div>
+      )}
+      {embedded && (
+        <div className="flex items-center justify-end">
+          <AiSkenerPromptsEditor />
+        </div>
+      )}
 
       <div className="relative">
         <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />

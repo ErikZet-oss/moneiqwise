@@ -107,5 +107,8 @@ app.use((req, res, next) => {
   // Avoid reusePort: true — not supported on Windows and can make listen() fail.
   httpServer.listen(port, "0.0.0.0", () => {
     log(`serving on port ${port}`);
+    void import("./aiBot/scheduler")
+      .then(({ startAiBotScheduler }) => startAiBotScheduler())
+      .catch((err) => console.error("[ai-bot] scheduler start failed:", err));
   });
 })();

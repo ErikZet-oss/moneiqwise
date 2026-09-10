@@ -3100,6 +3100,8 @@ export async function registerRoutes(
 
   const { registerAiScannerRoutes } = await import("./aiScannerRoutes");
   registerAiScannerRoutes(app, isAuthenticated);
+  const { registerAiBotRoutes } = await import("./aiBotRoutes");
+  registerAiBotRoutes(app, isAuthenticated);
 
   // Auth routes
   app.get("/api/auth/user", isAuthenticated, async (req: any, res) => {

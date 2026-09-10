@@ -81,8 +81,8 @@ const menuItems = [
     icon: Eye,
   },
   {
-    title: "AI Skener",
-    url: "/ai-skener",
+    title: "AI Agent",
+    url: "/ai-agent/bot",
     icon: Brain,
   },
   {
@@ -234,7 +234,11 @@ export function AppSidebar() {
                 >
                   <SidebarMenuButton 
                     asChild
-                    isActive={location === item.url}
+                    isActive={
+                      item.url.startsWith("/ai-agent")
+                        ? location.startsWith("/ai-agent") || location.startsWith("/ai-skener")
+                        : location === item.url
+                    }
                     data-testid={`nav-${item.url.replace("/", "") || "dashboard"}`}
                     className="text-xs md:text-sm py-1.5 md:py-2"
                   >
