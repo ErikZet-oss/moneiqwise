@@ -33,6 +33,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { HelpTip } from "@/components/HelpTip";
 
 type PaperStrategyId =
   | "ema_rsi_trend"
@@ -280,6 +281,23 @@ function needsPeriod(kind: string): boolean {
   return !PERIOD_FREE_KINDS.has(kind);
 }
 
+function FieldLabel({
+  children,
+  tipTitle,
+  tip,
+}: {
+  children: ReactNode;
+  tipTitle: string;
+  tip: ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <Label className="leading-none">{children}</Label>
+      <HelpTip title={tipTitle}>{tip}</HelpTip>
+    </div>
+  );
+}
+
 function money(n: number | null | undefined, currency = "EUR") {
   const v = Number(n);
   const safe = Number.isFinite(v) ? v : 0;
@@ -508,7 +526,16 @@ function CustomStrategyEditor({
 }) {
   return (
     <div className="space-y-3 rounded-md border bg-muted/20 p-3 sm:col-span-2">
-      <div className="text-xs font-medium">Vlastná stratégia (podmienky)</div>
+      <div className="flex items-center gap-1 text-xs font-medium">
+        Vlastná stratégia (podmienky)
+        <HelpTip title="Vlastná stratégia">
+          <p>
+            Entry/exit podmienky s logikou ALL (všetky) alebo ANY (aspoň jedna). Indikátory:
+            EMA, SMA, RSI, ATR, MACD, Bollinger, volume. Porovnávaš indikátor s číslom alebo
+            iným indikátorom.
+          </p>
+        </HelpTip>
+      </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[11px] text-muted-foreground">Entry logika</span>
@@ -899,11 +926,26 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
           <CardContent className="space-y-3 pt-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label>Názov</Label>
+                <FieldLabel
+                  tipTitle="Názov"
+                  tip={<p>Len pre teba — ako bota rozlíšiš v zozname (napr. „EMA US tech“).</p>}
+                >
+                  Názov
+                </FieldLabel>
                 <Input value={name} onChange={(e) => setName(e.target.value)} />
               </div>
               <div className="space-y-1.5">
-                <Label>Kapitál (EUR)</Label>
+                <FieldLabel
+                  tipTitle="Kapitál (EUR)"
+                  tip={
+                    <p>
+                      Fiktívny počiatočný kapitál paper účtu. Nie sú to reálne peniaze — bot s nimi
+                      obchoduje v simulácii.
+                    </p>
+                  }
+                >
+                  Kapitál (EUR)
+                </FieldLabel>
                 <Input
                   inputMode="decimal"
                   value={startingCash}
@@ -911,7 +953,17 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
                 />
               </div>
               <div className="space-y-1.5 sm:col-span-2">
-                <Label>Tickery (oddelené čiarkou)</Label>
+                <FieldLabel
+                  tipTitle="Tickery"
+                  tip={
+                    <p>
+                      Universe symbolov, ktoré bot sleduje (Yahoo formát, oddelené čiarkou). Príklad:
+                      AAPL, MSFT, NVDA. Čím viac tickerov, tým viac dát a AI volaní pri ticku.
+                    </p>
+                  }
+                >
+                  Tickery (oddelené čiarkou)
+                </FieldLabel>
                 <Input
                   value={symbols}
                   onChange={(e) => setSymbols(e.target.value)}
@@ -919,7 +971,18 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
                 />
               </div>
               <div className="space-y-1.5 sm:col-span-2">
-                <Label>Stratégia</Label>
+                <FieldLabel
+                  tipTitle="Stratégia"
+                  tip={
+                    <p>
+                      Pravidlá, kedy bot chce BUY / SELL / HOLD. Prednastavené stratégie sú hotové
+                      kvant pravidlá; „Vlastná“ = editor podmienok ALL/ANY. Claude AI trade sám
+                      nevytvára — len môže upraviť skóre.
+                    </p>
+                  }
+                >
+                  Stratégia
+                </FieldLabel>
                 <Select
                   value={strategyId}
                   onValueChange={(v) => {
@@ -964,7 +1027,24 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
               ) : null}
 
               <div className="space-y-1.5 sm:col-span-2">
-                <Label>Timeframe signálov</Label>
+                <FieldLabel
+                  tipTitle="Timeframe signálov"
+                  tip={
+                    <>
+                      <p>
+                        Veľkosť sviečky, na ktorej sa počítajú indikátory a signály stratégie:
+                      </p>
+                      <p>
+                        <strong>1d</strong> — denné bary (menej šumu, pomalšie).{" "}
+                        <strong>1h</strong> — hodinové. <strong>15m</strong> — rýchlejšie, viac
+                        šumu, kratšia história (~60 dní).
+                      </p>
+                      <p>Mark-to-market počas LIVE stále používa čerstvejšie 1m ceny.</p>
+                    </>
+                  }
+                >
+                  Timeframe signálov
+                </FieldLabel>
                 <Select
                   value={candleTf}
                   onValueChange={(v) => setCandleTf(v as PaperCandleTf)}
@@ -1007,54 +1087,146 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
               </div>
 
               <div className="space-y-1.5">
-                <Label>Max otvorené pozície</Label>
+                <FieldLabel
+                  tipTitle="Max otvorené pozície"
+                  tip={
+                    <p>
+                      Horný počet súčasne otvorených long pozícií. Keď je limit plný, bot
+                      neotvára nové nákupy (môže stále zatvárať).
+                    </p>
+                  }
+                >
+                  Max otvorené pozície
+                </FieldLabel>
                 <Input value={maxOpen} onChange={(e) => setMaxOpen(e.target.value)} />
               </div>
               <div className="space-y-1.5">
-                <Label>Max % na 1 pozíciu</Label>
+                <FieldLabel
+                  tipTitle="Max % na 1 pozíciu"
+                  tip={
+                    <p>
+                      Koľko percent aktuálnej equity smie ísť do jedného nákupu. Napr. 20 % pri
+                      10 000 € ≈ max ~2 000 € na ticker.
+                    </p>
+                  }
+                >
+                  Max % na 1 pozíciu
+                </FieldLabel>
                 <Input
                   value={maxPosPct}
                   onChange={(e) => setMaxPosPct(e.target.value)}
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Daily loss limit %</Label>
+                <FieldLabel
+                  tipTitle="Daily loss limit %"
+                  tip={
+                    <p>
+                      Ak denná strata equity dosiahne tento %, bot prestane otvárať nové
+                      pozície do konca dňa (ochrana pred „zlým dňom“).
+                    </p>
+                  }
+                >
+                  Daily loss limit %
+                </FieldLabel>
                 <Input
                   value={dailyLoss}
                   onChange={(e) => setDailyLoss(e.target.value)}
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Max drawdown %</Label>
+                <FieldLabel
+                  tipTitle="Max drawdown %"
+                  tip={
+                    <p>
+                      Maximálny pokles od peak equity. Po dosiahnutí limitu bot neotvára nové
+                      nákupy, kým sa DD nezlepší / bot neresetuješ.
+                    </p>
+                  }
+                >
+                  Max drawdown %
+                </FieldLabel>
                 <Input value={maxDd} onChange={(e) => setMaxDd(e.target.value)} />
               </div>
               <div className="space-y-1.5">
-                <Label>Trailing ATR×</Label>
+                <FieldLabel
+                  tipTitle="Trailing ATR×"
+                  tip={
+                    <p>
+                      Posuvný stop pod peak cenou: vzdialenosť = násobok ATR (volatilita). 0 =
+                      vypnuté. Príklad: 3.5×ATR — keď cena klesne o 3.5 ATR od maxima, zatvorí.
+                    </p>
+                  }
+                >
+                  Trailing ATR×
+                </FieldLabel>
                 <Input value={trailAtr} onChange={(e) => setTrailAtr(e.target.value)} />
               </div>
               <div className="space-y-1.5">
-                <Label>Take profit %</Label>
+                <FieldLabel
+                  tipTitle="Take profit %"
+                  tip={
+                    <p>
+                      Cieľový zisk od entry. Napr. 12 % — pri +12 % od nákupnej ceny bot pozíciu
+                      zatvorí. 0 = vypnuté.
+                    </p>
+                  }
+                >
+                  Take profit %
+                </FieldLabel>
                 <Input
                   value={takeProfit}
                   onChange={(e) => setTakeProfit(e.target.value)}
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Hard stop %</Label>
+                <FieldLabel
+                  tipTitle="Hard stop %"
+                  tip={
+                    <p>
+                      Pevný stop-loss od entry. Napr. 8 % — pri −8 % od nákupu zatvorí ihneď. 0 =
+                      vypnuté. Má prioritu pred trailingom.
+                    </p>
+                  }
+                >
+                  Hard stop %
+                </FieldLabel>
                 <Input
                   value={hardStop}
                   onChange={(e) => setHardStop(e.target.value)}
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>AI influence %</Label>
+                <FieldLabel
+                  tipTitle="AI influence %"
+                  tip={
+                    <p>
+                      Váha Claude AI pri mixe so skóre stratégie. 0 = čistý quant. 20 = 80 %
+                      stratégia + 20 % AI sentiment zo správ a technického snapshotu. AI nikdy
+                      neotvorí trade sama.
+                    </p>
+                  }
+                >
+                  AI influence %
+                </FieldLabel>
                 <Input
                   value={aiInfluence}
                   onChange={(e) => setAiInfluence(e.target.value)}
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>AI min confidence %</Label>
+                <FieldLabel
+                  tipTitle="AI min confidence %"
+                  tip={
+                    <p>
+                      Minimálna istota AI verdictu, aby sa vôbec použil. Pod týmto prahom bot
+                      ignoruje AI a ide podľa kvant skóre. Silný bearish s vysokou confidence
+                      môže zablokovať BUY.
+                    </p>
+                  }
+                >
+                  AI min confidence %
+                </FieldLabel>
                 <Input
                   value={aiMinConf}
                   onChange={(e) => setAiMinConf(e.target.value)}
@@ -1062,9 +1234,17 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
               </div>
               <div className="flex items-center justify-between gap-2 space-y-0 rounded-md border px-3 py-2 sm:col-span-2">
                 <div className="space-y-0.5">
-                  <Label htmlFor="notify-trade" className="text-sm">
-                    Notifikácia pri obchode
-                  </Label>
+                  <div className="flex items-center gap-1">
+                    <Label htmlFor="notify-trade" className="text-sm">
+                      Notifikácia pri obchode
+                    </Label>
+                    <HelpTip title="Notifikácia pri obchode">
+                      <p>
+                        Pošle e-mail pri open / close / kill (ak je na serveri SMTP). Bez SMTP
+                        ostane udalosť len v logu bota.
+                      </p>
+                    </HelpTip>
+                  </div>
                   <p className="text-[11px] text-muted-foreground">
                     {strategiesPayload?.smtpConfigured
                       ? "SMTP je nastavené — e-mail pôjde von."
@@ -1079,7 +1259,17 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
               </div>
               {notifyOnTrade ? (
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label>E-mail (voliteľné)</Label>
+                  <FieldLabel
+                    tipTitle="E-mail"
+                    tip={
+                      <p>
+                        Kam posielať notifikácie. Prázdne = e-mail z tvojho účtu (ak ho appka
+                        pozná).
+                      </p>
+                    }
+                  >
+                    E-mail (voliteľné)
+                  </FieldLabel>
                   <Input
                     type="email"
                     value={notifyEmail}
