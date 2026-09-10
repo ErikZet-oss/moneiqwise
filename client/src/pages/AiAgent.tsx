@@ -27,6 +27,8 @@ export default function AiAgent() {
       if (!res.ok) throw new Error("unread");
       return res.json();
     },
+    staleTime: 0,
+    refetchOnMount: "always",
     refetchInterval: 60_000,
   });
 

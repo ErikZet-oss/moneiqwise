@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
@@ -82,7 +82,7 @@ export default function AiAlerts({ embedded = false }: { embedded?: boolean }) {
     },
   });
 
-  const { data: alertsPayload, isLoading: alertsLoading } = useQuery<{
+  const { data: alertsPayload, isLoading: alertsLoading, isError: alertsError, refetch: refetchAlerts } = useQuery<{
     alerts: AlertItem[];
   }>({
     queryKey: ["/api/ai-bot/alerts"],
@@ -91,6 +91,9 @@ export default function AiAlerts({ embedded = false }: { embedded?: boolean }) {
       if (!res.ok) throw new Error("alerts");
       return res.json();
     },
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchInterval: 60_000,
   });
 
   const saveSettings = useMutation({
@@ -111,9 +114,11 @@ export default function AiAlerts({ embedded = false }: { embedded?: boolean }) {
       const res = await apiRequest("POST", "/api/ai-bot/alerts/mark-read", opts);
       return res.json() as Promise<{ updated: number; count: number }>;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/ai-bot/alerts"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/ai-bot/alerts/unread-count"] });
+      queryClient.setQueryData(["/api/ai-bot/alerts/unread-count"], {
+        count: data.count,
+      });
     },
     onError: () => {
       toast({ title: "Nepodarilo sa označiť", variant: "destructive" });
@@ -125,6 +130,14 @@ export default function AiAlerts({ embedded = false }: { embedded?: boolean }) {
     () => alerts.filter((a) => !a.readAt).length,
     [alerts],
   );
+
+  // Badge na tabe = rovnaký zdroj ako inbox (po načítaní zoznamu).
+  useEffect(() => {
+    if (!alertsPayload) return;
+    queryClient.setQueryData(["/api/ai-bot/alerts/unread-count"], {
+      count: unreadCount,
+    });
+  }, [alertsPayload, unreadCount, queryClient]);
 
   const lastScanLabel = useMemo(() => {
     if (!settings?.lastScanAt) return "Posledný scan: ešte nebežal";
@@ -256,6 +269,23 @@ export default function AiAlerts({ embedded = false }: { embedded?: boolean }) {
 
       {alertsLoading ? (
         <Skeleton className="h-28 w-full" />
+      ) : alertsError ? (
+        <Card>
+          <CardContent className="space-y-2 p-4 text-center">
+            <p className="text-sm text-muted-foreground">
+              Inbox sa nepodarilo načítať.
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs"
+              onClick={() => void refetchAlerts()}
+            >
+              Skúsiť znova
+            </Button>
+          </CardContent>
+        </Card>
       ) : alerts.length === 0 ? (
         <Card>
           <CardContent className="space-y-1 p-4 text-center">
