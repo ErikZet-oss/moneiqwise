@@ -268,7 +268,7 @@ export async function tickPaperBot(
       detail: {
         model: ai.model,
         error: ai.error,
-        verdicts: [...ai.verdicts.values()],
+        verdicts: Array.from(ai.verdicts.values()),
       },
     });
   }

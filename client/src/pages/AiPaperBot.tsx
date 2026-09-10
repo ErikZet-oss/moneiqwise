@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Component, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
@@ -14,15 +14,6 @@ import {
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { sk } from "date-fns/locale";
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -147,8 +138,10 @@ const STATUS_STYLE: Record<PaperBotStatus, string> = {
   killed: "bg-red-600/15 text-red-700 dark:text-red-400",
 };
 
-function money(n: number, currency = "EUR") {
-  return `${n.toLocaleString("sk-SK", {
+function money(n: number | null | undefined, currency = "EUR") {
+  const v = Number(n);
+  const safe = Number.isFinite(v) ? v : 0;
+  return `${safe.toLocaleString("sk-SK", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })} ${currency}`;
@@ -162,7 +155,80 @@ function fmtTime(iso: string) {
   }
 }
 
+function EquitySparkline({ points }: { points: number[] }) {
+  if (points.length < 2) return null;
+  const w = 320;
+  const h = 120;
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const span = max - min || 1;
+  const coords = points
+    .map((v, i) => {
+      const x = (i / (points.length - 1)) * (w - 8) + 4;
+      const y = h - 8 - ((v - min) / span) * (h - 16);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+  return (
+    <svg
+      viewBox={`0 0 ${w} ${h}`}
+      className="h-40 w-full text-primary"
+      role="img"
+      aria-label="Equity krivka"
+    >
+      <polyline
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        points={coords}
+      />
+    </svg>
+  );
+}
+
+class PaperBotErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: Error | null }
+> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <Card>
+          <CardContent className="space-y-2 py-8 text-center text-sm">
+            <p className="font-medium text-destructive">
+              Paper Bot sa nepodarilo zobraziť.
+            </p>
+            <p className="text-muted-foreground">{this.state.error.message}</p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => this.setState({ error: null })}
+            >
+              Skúsiť znova
+            </Button>
+          </CardContent>
+        </Card>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function AiPaperBot({ embedded = false }: { embedded?: boolean }) {
+  return (
+    <PaperBotErrorBoundary>
+      <AiPaperBotInner embedded={embedded} />
+    </PaperBotErrorBoundary>
+  );
+}
+
+function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -492,7 +558,7 @@ export default function AiPaperBot({ embedded = false }: { embedded?: boolean })
             >
               <div className="font-medium">{b.name}</div>
               <div className="text-[10px] text-muted-foreground">
-                {STATUS_LABEL[b.status]} · {money(b.cash, b.currency)}
+                {STATUS_LABEL[b.status] ?? b.status} · {money(b.cash, b.currency)}
               </div>
             </button>
           ))}
@@ -512,20 +578,22 @@ export default function AiPaperBot({ embedded = false }: { embedded?: boolean })
                     <span
                       className={cn(
                         "rounded px-1.5 py-0.5 text-[10px] font-medium",
-                        STATUS_STYLE[detail.bot.status],
+                        STATUS_STYLE[detail.bot.status] ?? STATUS_STYLE.paused,
                       )}
                     >
-                      {STATUS_LABEL[detail.bot.status]}
+                      {STATUS_LABEL[detail.bot.status] ?? detail.bot.status}
                     </span>
                     <Badge variant="outline" className="text-[10px]">
                       {strategyLabel}
                     </Badge>
                     <Badge variant="outline" className="text-[10px]">
-                      AI {detail.bot.aiInfluencePct}%
+                      AI {detail.bot.aiInfluencePct ?? 0}%
                     </Badge>
                   </div>
                   <p className="mt-1 text-[11px] text-muted-foreground">
-                    {detail.bot.symbols.join(", ")}
+                    {(Array.isArray(detail.bot.symbols) ? detail.bot.symbols : []).join(
+                      ", ",
+                    ) || "—"}
                     {detail.bot.lastTickAt
                       ? ` · posledný tick ${fmtTime(detail.bot.lastTickAt)}`
                       : ""}
@@ -610,25 +678,25 @@ export default function AiPaperBot({ embedded = false }: { embedded?: boolean })
                   >
                     {detail.dayPnl >= 0 ? "+" : ""}
                     {money(detail.dayPnl, detail.bot.currency)} (
-                    {detail.dayPnlPct.toFixed(2)} %)
+                    {(detail.dayPnlPct ?? 0).toFixed(2)} %)
                   </div>
                 </div>
                 <div className="rounded-md border p-2">
                   <div className="text-[10px] text-muted-foreground">Drawdown</div>
                   <div className="text-sm font-semibold">
-                    {detail.drawdownPct.toFixed(2)} %
+                    {(detail.drawdownPct ?? 0).toFixed(2)} %
                   </div>
                 </div>
               </div>
 
               <p className="text-[11px] text-muted-foreground">
-                Risk: daily {detail.bot.risk.dailyLossLimitPct}% · DD{" "}
-                {detail.bot.risk.maxDrawdownPct}% · max pos{" "}
-                {detail.bot.risk.maxOpenPositions} · size{" "}
-                {detail.bot.risk.maxPositionPct}% · exits ATR×
-                {detail.bot.exits.trailingAtrMult} / TP{" "}
-                {detail.bot.exits.takeProfitPct}% / SL{" "}
-                {detail.bot.exits.hardStopPct}%
+                Risk: daily {detail.bot.risk?.dailyLossLimitPct ?? 2}% · DD{" "}
+                {detail.bot.risk?.maxDrawdownPct ?? 15}% · max pos{" "}
+                {detail.bot.risk?.maxOpenPositions ?? 5} · size{" "}
+                {detail.bot.risk?.maxPositionPct ?? 20}% · exits ATR×
+                {detail.bot.exits?.trailingAtrMult ?? 3.5} / TP{" "}
+                {detail.bot.exits?.takeProfitPct ?? 12}% / SL{" "}
+                {detail.bot.exits?.hardStopPct ?? 8}%
               </p>
             </CardContent>
           </Card>
@@ -652,13 +720,13 @@ export default function AiPaperBot({ embedded = false }: { embedded?: boolean })
                     <div
                       className={cn(
                         "text-sm font-semibold",
-                        detail.stats.returnPct >= 0
+                        (detail.stats.returnPct ?? 0) >= 0
                           ? "text-emerald-600"
                           : "text-red-600",
                       )}
                     >
                       {detail.stats.returnPct >= 0 ? "+" : ""}
-                      {detail.stats.returnPct.toFixed(2)} %
+                      {(detail.stats.returnPct ?? 0).toFixed(2)} %
                     </div>
                   </div>
                   <div className="rounded-md border p-2">
@@ -668,7 +736,7 @@ export default function AiPaperBot({ embedded = false }: { embedded?: boolean })
                     <div
                       className={cn(
                         "text-sm font-semibold",
-                        detail.stats.realizedPnl >= 0
+                        (detail.stats.realizedPnl ?? 0) >= 0
                           ? "text-emerald-600"
                           : "text-red-600",
                       )}
@@ -679,8 +747,8 @@ export default function AiPaperBot({ embedded = false }: { embedded?: boolean })
                   <div className="rounded-md border p-2">
                     <div className="text-[10px] text-muted-foreground">Win rate</div>
                     <div className="text-sm font-semibold">
-                      {detail.stats.winRatePct.toFixed(1)} % (
-                      {detail.stats.wins}/{detail.stats.closedTrades})
+                      {(detail.stats.winRatePct ?? 0).toFixed(1)} % (
+                      {detail.stats.wins ?? 0}/{detail.stats.closedTrades ?? 0})
                     </div>
                   </div>
                   <div className="rounded-md border p-2">
@@ -688,8 +756,8 @@ export default function AiPaperBot({ embedded = false }: { embedded?: boolean })
                       Open / Close / Block
                     </div>
                     <div className="text-sm font-semibold">
-                      {detail.stats.openEvents} / {detail.stats.closeEvents} /{" "}
-                      {detail.stats.blockedEvents}
+                      {detail.stats.openEvents ?? 0} / {detail.stats.closeEvents ?? 0} /{" "}
+                      {detail.stats.blockedEvents ?? 0}
                     </div>
                   </div>
                   <div className="rounded-md border p-2">
@@ -735,45 +803,19 @@ export default function AiPaperBot({ embedded = false }: { embedded?: boolean })
                       Po niekoľkých tickoch sa tu zobrazí equity krivka.
                     </p>
                   ) : (
-                    <div className="h-48 w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={chartData}>
-                          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                          <XAxis dataKey="t" hide />
-                          <YAxis
-                            width={48}
-                            tick={{ fontSize: 10 }}
-                            domain={["auto", "auto"]}
-                          />
-                          <Tooltip
-                            contentStyle={{ fontSize: 12 }}
-                            formatter={(v: number) => [
-                              money(v, detail.bot.currency),
-                              "Equity",
-                            ]}
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="equity"
-                            stroke="hsl(var(--primary))"
-                            strokeWidth={2}
-                            dot={false}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
+                    <EquitySparkline points={chartData.map((p) => p.equity)} />
                   )}
                 </CardContent>
               </Card>
             </TabsContent>
 
             <TabsContent value="positions" className="space-y-2">
-              {detail.positions.length === 0 ? (
+              {(detail.positions ?? []).length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">
                   Žiadne otvorené pozície.
                 </p>
               ) : (
-                detail.positions.map((p) => (
+                (detail.positions ?? []).map((p) => (
                   <Card key={p.id}>
                     <CardContent className="flex items-center justify-between gap-2 py-3">
                       <div>
@@ -802,12 +844,12 @@ export default function AiPaperBot({ embedded = false }: { embedded?: boolean })
             </TabsContent>
 
             <TabsContent value="trades" className="space-y-2">
-              {detail.trades.length === 0 ? (
+              {(detail.trades ?? []).length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">
                   Zatiaľ žiadne obchody.
                 </p>
               ) : (
-                detail.trades.map((t) => (
+                (detail.trades ?? []).map((t) => (
                   <Card key={t.id}>
                     <CardContent className="space-y-1 py-3">
                       <div className="flex items-center justify-between gap-2">
@@ -842,13 +884,13 @@ export default function AiPaperBot({ embedded = false }: { embedded?: boolean })
             </TabsContent>
 
             <TabsContent value="log" className="space-y-1.5">
-              {detail.logs.length === 0 ? (
+              {(detail.logs ?? []).length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">
                   Log je prázdny.
                 </p>
               ) : (
                 <div className="max-h-[28rem] space-y-1.5 overflow-y-auto rounded-lg border p-2">
-                  {detail.logs.map((l) => (
+                  {(detail.logs ?? []).map((l) => (
                     <div
                       key={l.id}
                       className="border-b border-border/60 pb-1.5 last:border-0"
