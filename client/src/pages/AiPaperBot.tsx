@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity,
   Loader2,
+  Mail,
   OctagonX,
   Pause,
   Play,
@@ -20,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -36,8 +38,31 @@ type PaperStrategyId =
   | "ema_rsi_trend"
   | "ma_crossover"
   | "rsi_mean_reversion"
-  | "dual_momentum";
+  | "dual_momentum"
+  | "custom";
 type PaperBotStatus = "running" | "paused" | "killed";
+
+type IndicatorKind = "ema" | "sma" | "rsi" | "close" | "atr";
+type RightIndicatorKind = "ema" | "sma" | "rsi" | "atr";
+type ConditionOp = "gt" | "gte" | "lt" | "lte";
+
+type ConditionLeft = { kind: IndicatorKind; period?: number };
+type ConditionRight =
+  | { kind: "number"; value: number }
+  | { kind: RightIndicatorKind; period: number };
+
+type StrategyCondition = {
+  left: ConditionLeft;
+  op: ConditionOp;
+  right: ConditionRight;
+};
+
+type CustomStrategyDef = {
+  entryLogic: "all" | "any";
+  exitLogic: "all" | "any";
+  entry: StrategyCondition[];
+  exit: StrategyCondition[];
+};
 
 type PaperBot = {
   id: string;
@@ -63,6 +88,10 @@ type PaperBot = {
   aiMinConfidence: number;
   lastTickAt: string | null;
   createdAt: string;
+  customStrategy?: unknown | null;
+  notifyEmail?: string | null;
+  notifyOnTrade?: boolean;
+  lastPipelineStage?: string | null;
 };
 
 type PaperPosition = {
@@ -126,6 +155,13 @@ type BotDetail = {
   stats: PaperStats;
 };
 
+type BacktestResult = {
+  returnPct: number;
+  winRatePct: number;
+  endingEquity: number;
+  trades: unknown[];
+};
+
 const STATUS_LABEL: Record<PaperBotStatus, string> = {
   running: "Beží",
   paused: "Pauza",
@@ -137,6 +173,57 @@ const STATUS_STYLE: Record<PaperBotStatus, string> = {
   paused: "bg-amber-500/15 text-amber-800 dark:text-amber-400",
   killed: "bg-red-600/15 text-red-700 dark:text-red-400",
 };
+
+const DEFAULT_CUSTOM_STRATEGY: CustomStrategyDef = {
+  entryLogic: "all",
+  entry: [
+    {
+      left: { kind: "ema", period: 50 },
+      op: "gt",
+      right: { kind: "ema", period: 200 },
+    },
+    {
+      left: { kind: "close" },
+      op: "gt",
+      right: { kind: "sma", period: 50 },
+    },
+    {
+      left: { kind: "rsi", period: 14 },
+      op: "gt",
+      right: { kind: "number", value: 45 },
+    },
+    {
+      left: { kind: "rsi", period: 14 },
+      op: "lt",
+      right: { kind: "number", value: 75 },
+    },
+  ],
+  exitLogic: "any",
+  exit: [
+    {
+      left: { kind: "rsi", period: 14 },
+      op: "gt",
+      right: { kind: "number", value: 75 },
+    },
+    {
+      left: { kind: "ema", period: 50 },
+      op: "lt",
+      right: { kind: "ema", period: 200 },
+    },
+  ],
+};
+
+const LEFT_KINDS: IndicatorKind[] = ["ema", "sma", "rsi", "close", "atr"];
+const RIGHT_IND_KINDS: RightIndicatorKind[] = ["ema", "sma", "rsi", "atr"];
+const OPS: { value: ConditionOp; label: string }[] = [
+  { value: "gt", label: ">" },
+  { value: "gte", label: "≥" },
+  { value: "lt", label: "<" },
+  { value: "lte", label: "≤" },
+];
+
+const MAX_ENTRY = 6;
+const MAX_EXIT = 4;
 
 function money(n: number | null | undefined, currency = "EUR") {
   const v = Number(n);
@@ -153,6 +240,20 @@ function fmtTime(iso: string) {
   } catch {
     return iso;
   }
+}
+
+function defaultPeriod(kind: IndicatorKind | RightIndicatorKind): number {
+  if (kind === "rsi" || kind === "atr") return 14;
+  if (kind === "ema") return 50;
+  return 50;
+}
+
+function newCondition(): StrategyCondition {
+  return {
+    left: { kind: "rsi", period: 14 },
+    op: "gt",
+    right: { kind: "number", value: 50 },
+  };
 }
 
 function EquitySparkline({ points }: { points: number[] }) {
@@ -183,6 +284,276 @@ function EquitySparkline({ points }: { points: number[] }) {
         points={coords}
       />
     </svg>
+  );
+}
+
+function ConditionRow({
+  cond,
+  onChange,
+  onRemove,
+  canRemove,
+}: {
+  cond: StrategyCondition;
+  onChange: (c: StrategyCondition) => void;
+  onRemove: () => void;
+  canRemove: boolean;
+}) {
+  const rightIsNumber = cond.right.kind === "number";
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      <Select
+        value={cond.left.kind}
+        onValueChange={(v) => {
+          const kind = v as IndicatorKind;
+          onChange({
+            ...cond,
+            left:
+              kind === "close"
+                ? { kind: "close" }
+                : { kind, period: cond.left.period ?? defaultPeriod(kind) },
+          });
+        }}
+      >
+        <SelectTrigger className="h-8 w-[72px] text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {LEFT_KINDS.map((k) => (
+            <SelectItem key={k} value={k}>
+              {k}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {cond.left.kind !== "close" ? (
+        <Input
+          className="h-8 w-14 text-xs"
+          inputMode="numeric"
+          value={cond.left.period ?? ""}
+          onChange={(e) =>
+            onChange({
+              ...cond,
+              left: {
+                ...cond.left,
+                period: Number(e.target.value) || undefined,
+              },
+            })
+          }
+        />
+      ) : null}
+      <Select
+        value={cond.op}
+        onValueChange={(v) => onChange({ ...cond, op: v as ConditionOp })}
+      >
+        <SelectTrigger className="h-8 w-14 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {OPS.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select
+        value={rightIsNumber ? "number" : (cond.right as { kind: string }).kind}
+        onValueChange={(v) => {
+          if (v === "number") {
+            onChange({
+              ...cond,
+              right: {
+                kind: "number",
+                value:
+                  cond.right.kind === "number" ? cond.right.value : 50,
+              },
+            });
+          } else {
+            const kind = v as RightIndicatorKind;
+            onChange({
+              ...cond,
+              right: {
+                kind,
+                period:
+                  cond.right.kind !== "number"
+                    ? cond.right.period
+                    : defaultPeriod(kind),
+              },
+            });
+          }
+        }}
+      >
+        <SelectTrigger className="h-8 w-[78px] text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="number">číslo</SelectItem>
+          {RIGHT_IND_KINDS.map((k) => (
+            <SelectItem key={k} value={k}>
+              {k}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {rightIsNumber ? (
+        <Input
+          className="h-8 w-16 text-xs"
+          inputMode="decimal"
+          value={cond.right.kind === "number" ? cond.right.value : ""}
+          onChange={(e) =>
+            onChange({
+              ...cond,
+              right: { kind: "number", value: Number(e.target.value) || 0 },
+            })
+          }
+        />
+      ) : (
+        <Input
+          className="h-8 w-14 text-xs"
+          inputMode="numeric"
+          value={
+            cond.right.kind !== "number" ? cond.right.period : ""
+          }
+          onChange={(e) =>
+            onChange({
+              ...cond,
+              right: {
+                kind: (cond.right as { kind: RightIndicatorKind }).kind,
+                period: Number(e.target.value) || 1,
+              },
+            })
+          }
+        />
+      )}
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="h-8 w-8 p-0"
+        disabled={!canRemove}
+        onClick={onRemove}
+      >
+        <Trash2 className="h-3 w-3" />
+      </Button>
+    </div>
+  );
+}
+
+function CustomStrategyEditor({
+  value,
+  onChange,
+}: {
+  value: CustomStrategyDef;
+  onChange: (v: CustomStrategyDef) => void;
+}) {
+  return (
+    <div className="space-y-3 rounded-md border bg-muted/20 p-3 sm:col-span-2">
+      <div className="text-xs font-medium">Vlastná stratégia (podmienky)</div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11px] text-muted-foreground">Entry logika</span>
+        <Select
+          value={value.entryLogic}
+          onValueChange={(v) =>
+            onChange({ ...value, entryLogic: v as "all" | "any" })
+          }
+        >
+          <SelectTrigger className="h-8 w-28 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">všetky (AND)</SelectItem>
+            <SelectItem value="any">ktorákoľvek (OR)</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1.5">
+        {value.entry.map((c, i) => (
+          <ConditionRow
+            key={`entry-${i}`}
+            cond={c}
+            canRemove={value.entry.length > 1}
+            onChange={(next) => {
+              const entry = [...value.entry];
+              entry[i] = next;
+              onChange({ ...value, entry });
+            }}
+            onRemove={() =>
+              onChange({
+                ...value,
+                entry: value.entry.filter((_, j) => j !== i),
+              })
+            }
+          />
+        ))}
+        {value.entry.length < MAX_ENTRY ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={() =>
+              onChange({ ...value, entry: [...value.entry, newCondition()] })
+            }
+          >
+            <Plus className="mr-1 h-3 w-3" />
+            Entry podmienka
+          </Button>
+        ) : null}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 border-t pt-2">
+        <span className="text-[11px] text-muted-foreground">Exit logika</span>
+        <Select
+          value={value.exitLogic}
+          onValueChange={(v) =>
+            onChange({ ...value, exitLogic: v as "all" | "any" })
+          }
+        >
+          <SelectTrigger className="h-8 w-28 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">všetky (AND)</SelectItem>
+            <SelectItem value="any">ktorákoľvek (OR)</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1.5">
+        {value.exit.map((c, i) => (
+          <ConditionRow
+            key={`exit-${i}`}
+            cond={c}
+            canRemove={value.exit.length > 1}
+            onChange={(next) => {
+              const exit = [...value.exit];
+              exit[i] = next;
+              onChange({ ...value, exit });
+            }}
+            onRemove={() =>
+              onChange({
+                ...value,
+                exit: value.exit.filter((_, j) => j !== i),
+              })
+            }
+          />
+        ))}
+        {value.exit.length < MAX_EXIT ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs"
+            onClick={() =>
+              onChange({ ...value, exit: [...value.exit, newCondition()] })
+            }
+          >
+            <Plus className="mr-1 h-3 w-3" />
+            Exit podmienka
+          </Button>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -247,9 +618,22 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
   const [hardStop, setHardStop] = useState("8");
   const [aiInfluence, setAiInfluence] = useState("20");
   const [aiMinConf, setAiMinConf] = useState("60");
+  const [notifyOnTrade, setNotifyOnTrade] = useState(false);
+  const [notifyEmail, setNotifyEmail] = useState("");
+  const [customStrategy, setCustomStrategy] = useState<CustomStrategyDef>(
+    () => structuredClone(DEFAULT_CUSTOM_STRATEGY),
+  );
+  const [backtestResult, setBacktestResult] = useState<BacktestResult | null>(
+    null,
+  );
 
   const { data: strategiesPayload } = useQuery<{
     strategies: Array<{ id: PaperStrategyId; label: string; description: string }>;
+    pipelineStages?: string[];
+    smtpConfigured?: boolean;
+    session?: string;
+    tickMs?: number;
+    defaultCustomStrategy?: CustomStrategyDef;
   }>({
     queryKey: ["/api/paper-bots/strategies"],
     queryFn: async () => {
@@ -298,34 +682,61 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
     }
   };
 
+  const formPayload = () => ({
+    name,
+    startingCash: Number(startingCash),
+    symbols,
+    strategyId,
+    dailyLossLimitPct: Number(dailyLoss),
+    maxDrawdownPct: Number(maxDd),
+    maxOpenPositions: Number(maxOpen),
+    maxPositionPct: Number(maxPosPct),
+    trailingAtrMult: Number(trailAtr),
+    takeProfitPct: Number(takeProfit),
+    hardStopPct: Number(hardStop),
+    aiInfluencePct: Number(aiInfluence),
+    aiMinConfidence: Number(aiMinConf),
+    notifyOnTrade,
+    notifyEmail: notifyEmail.trim() || undefined,
+    ...(strategyId === "custom" ? { customStrategy } : {}),
+  });
+
   const createMut = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/paper-bots", {
-        name,
-        startingCash: Number(startingCash),
-        symbols,
-        strategyId,
-        dailyLossLimitPct: Number(dailyLoss),
-        maxDrawdownPct: Number(maxDd),
-        maxOpenPositions: Number(maxOpen),
-        maxPositionPct: Number(maxPosPct),
-        trailingAtrMult: Number(trailAtr),
-        takeProfitPct: Number(takeProfit),
-        hardStopPct: Number(hardStop),
-        aiInfluencePct: Number(aiInfluence),
-        aiMinConfidence: Number(aiMinConf),
-      });
+      const res = await apiRequest("POST", "/api/paper-bots", formPayload());
       return res.json() as Promise<{ bot: PaperBot }>;
     },
     onSuccess: (data) => {
       toast({ title: "Paper bot vytvorený" });
       setShowCreate(false);
+      setBacktestResult(null);
       setSelectedId(data.bot.id);
       invalidate();
     },
     onError: (err: Error) => {
       toast({
         title: "Vytvorenie zlyhalo",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const backtestMut = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/paper-bots/backtest", formPayload());
+      return res.json() as Promise<{ result: BacktestResult }>;
+    },
+    onSuccess: (data) => {
+      setBacktestResult(data.result);
+      toast({
+        title: "Backtest hotový",
+        description: `Return ${data.result.returnPct?.toFixed?.(1) ?? data.result.returnPct} % · win ${(data.result.winRatePct ?? 0).toFixed(0)} %`,
+      });
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Backtest zlyhal",
         description: err.message,
         variant: "destructive",
       });
@@ -375,6 +786,16 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
       equity: Math.round(p.equity * 100) / 100,
     }));
   }, [detail?.equityCurve]);
+
+  const pipelineStages =
+    strategiesPayload?.pipelineStages ?? [
+      "INGEST",
+      "DEDUP",
+      "SIGNAL",
+      "AI",
+      "RISK",
+      "EXEC",
+    ];
 
   return (
     <div className={cn("space-y-3", !embedded && "mx-auto max-w-3xl pb-8")}>
@@ -438,7 +859,20 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
                 <Label>Stratégia</Label>
                 <Select
                   value={strategyId}
-                  onValueChange={(v) => setStrategyId(v as PaperStrategyId)}
+                  onValueChange={(v) => {
+                    const id = v as PaperStrategyId;
+                    setStrategyId(id);
+                    if (
+                      id === "custom" &&
+                      strategiesPayload?.defaultCustomStrategy
+                    ) {
+                      setCustomStrategy(
+                        structuredClone(
+                          strategiesPayload.defaultCustomStrategy,
+                        ),
+                      );
+                    }
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -458,6 +892,14 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
                   }
                 </p>
               </div>
+
+              {strategyId === "custom" ? (
+                <CustomStrategyEditor
+                  value={customStrategy}
+                  onChange={setCustomStrategy}
+                />
+              ) : null}
+
               <div className="space-y-1.5">
                 <Label>Max otvorené pozície</Label>
                 <Input value={maxOpen} onChange={(e) => setMaxOpen(e.target.value)} />
@@ -512,10 +954,75 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
                   onChange={(e) => setAiMinConf(e.target.value)}
                 />
               </div>
+              <div className="flex items-center justify-between gap-2 space-y-0 rounded-md border px-3 py-2 sm:col-span-2">
+                <div className="space-y-0.5">
+                  <Label htmlFor="notify-trade" className="text-sm">
+                    Notifikácia pri obchode
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    {strategiesPayload?.smtpConfigured
+                      ? "SMTP je nastavené — e-mail pôjde von."
+                      : "SMTP nie je nastavené — notifikácie môžu zostať len v logu."}
+                  </p>
+                </div>
+                <Switch
+                  id="notify-trade"
+                  checked={notifyOnTrade}
+                  onCheckedChange={setNotifyOnTrade}
+                />
+              </div>
+              {notifyOnTrade ? (
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>E-mail (voliteľné)</Label>
+                  <Input
+                    type="email"
+                    value={notifyEmail}
+                    onChange={(e) => setNotifyEmail(e.target.value)}
+                    placeholder="nechaj prázdne = účet"
+                  />
+                </div>
+              ) : null}
             </div>
+
+            {backtestResult ? (
+              <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs">
+                <div className="font-medium">Výsledok backtestu</div>
+                <div className="mt-1 text-muted-foreground">
+                  Return{" "}
+                  <span
+                    className={cn(
+                      "font-semibold",
+                      (backtestResult.returnPct ?? 0) >= 0
+                        ? "text-emerald-600"
+                        : "text-red-600",
+                    )}
+                  >
+                    {(backtestResult.returnPct ?? 0) >= 0 ? "+" : ""}
+                    {(backtestResult.returnPct ?? 0).toFixed(2)} %
+                  </span>
+                  {" · "}win rate {(backtestResult.winRatePct ?? 0).toFixed(1)} %
+                  {" · "}equity {money(backtestResult.endingEquity)}
+                  {" · "}obchody {backtestResult.trades?.length ?? 0}
+                </div>
+              </div>
+            ) : null}
+
             <div className="flex justify-end gap-2">
               <Button variant="ghost" size="sm" onClick={() => setShowCreate(false)}>
                 Zrušiť
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={backtestMut.isPending}
+                onClick={() => backtestMut.mutate()}
+              >
+                {backtestMut.isPending ? (
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Activity className="mr-1 h-3.5 w-3.5" />
+                )}
+                Backtest
               </Button>
               <Button
                 size="sm"
@@ -569,6 +1076,48 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
         <Skeleton className="h-64 w-full" />
       ) : detail ? (
         <div className="space-y-3">
+          <div className="rounded-lg border px-3 py-2">
+            <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-1">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                Signal Chain
+              </div>
+              {(strategiesPayload?.session || strategiesPayload?.tickMs) && (
+                <div className="text-[10px] text-muted-foreground">
+                  {strategiesPayload.session
+                    ? `session ${strategiesPayload.session}`
+                    : null}
+                  {strategiesPayload.session && strategiesPayload.tickMs
+                    ? " · "
+                    : null}
+                  {strategiesPayload.tickMs
+                    ? `tick ${Math.round(strategiesPayload.tickMs / 1000)}s`
+                    : null}
+                </div>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {pipelineStages.map((stage) => {
+                const active =
+                  detail.bot.lastPipelineStage === stage ||
+                  detail.bot.lastPipelineStage?.toUpperCase() ===
+                    stage.toUpperCase();
+                return (
+                  <span
+                    key={stage}
+                    className={cn(
+                      "rounded px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide",
+                      active
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {stage}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+
           <Card>
             <CardContent className="space-y-3 pt-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
@@ -589,6 +1138,15 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
                     <Badge variant="outline" className="text-[10px]">
                       AI {detail.bot.aiInfluencePct ?? 0}%
                     </Badge>
+                    {detail.bot.notifyOnTrade ? (
+                      <Badge variant="secondary" className="text-[10px]">
+                        <Mail className="mr-0.5 h-3 w-3" />
+                        Notify
+                        {detail.bot.notifyEmail
+                          ? ` · ${detail.bot.notifyEmail}`
+                          : ""}
+                      </Badge>
+                    ) : null}
                   </div>
                   <p className="mt-1 text-[11px] text-muted-foreground">
                     {(Array.isArray(detail.bot.symbols) ? detail.bot.symbols : []).join(

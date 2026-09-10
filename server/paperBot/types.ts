@@ -4,7 +4,8 @@ export type PaperStrategyId =
   | "ema_rsi_trend"
   | "ma_crossover"
   | "rsi_mean_reversion"
-  | "dual_momentum";
+  | "dual_momentum"
+  | "custom";
 
 export type PaperBotRiskSettings = {
   dailyLossLimitPct: number;
@@ -29,17 +30,21 @@ export type PaperBot = {
   cash: number;
   currency: string;
   strategyId: PaperStrategyId;
+  /** Custom strategy JSON when strategyId === "custom". */
+  customStrategy: unknown | null;
   symbols: string[];
   candleTf: string;
   risk: PaperBotRiskSettings;
   exits: PaperBotExitSettings;
-  /** 0–100; Claude nudge of quant score. */
   aiInfluencePct: number;
-  /** Ignore AI verdicts below this confidence. */
   aiMinConfidence: number;
+  notifyEmail: string | null;
+  notifyOnTrade: boolean;
   dayStartEquity: number;
   peakEquity: number;
   lastTickAt: string | null;
+  /** Last completed pipeline stage for UI signal chain. */
+  lastPipelineStage: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -51,7 +56,6 @@ export type PaperPosition = {
   symbol: string;
   qty: number;
   entryPrice: number;
-  /** Highest mark since entry — for trailing stop. */
   peakPrice: number;
   markPrice: number | null;
   unrealizedPnl: number | null;
@@ -84,7 +88,8 @@ export type PaperLogEventType =
   | "kill"
   | "status"
   | "error"
-  | "ai";
+  | "ai"
+  | "pipeline";
 
 export type PaperBotLog = {
   id: string;
@@ -132,6 +137,15 @@ export const DEFAULT_EXITS: PaperBotExitSettings = {
   hardStopPct: 8,
 };
 
+export const PIPELINE_STAGES = [
+  "INGEST",
+  "DEDUP",
+  "SIGNAL",
+  "AI",
+  "RISK",
+  "EXEC",
+] as const;
+
 export const STRATEGY_META: Record<
   PaperStrategyId,
   { label: string; description: string }
@@ -153,5 +167,10 @@ export const STRATEGY_META: Record<
     label: "Dual Momentum",
     description:
       "Long: close > SMA200 a SMA50 > SMA200. Exit: close < SMA200 + exit rules.",
+  },
+  custom: {
+    label: "Vlastná (editor)",
+    description:
+      "Podmienky ALL/ANY z editora — indikátory EMA/SMA/RSI/ATR/close oproti číslu alebo inému indikátoru.",
   },
 };

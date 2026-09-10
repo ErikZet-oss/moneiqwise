@@ -104,3 +104,36 @@ export async function fetchDailyCloses(
   const ohlc = await fetchDailyOhlc(ticker, range);
   return { closes: ohlc.closes, lastPrice: ohlc.lastPrice };
 }
+
+/** Fresher mark during RTH — last 1m bar if available. */
+export async function fetchLiveMark(ticker: string): Promise<number | null> {
+  const yahoo = toYahooTicker(ticker);
+  try {
+    const yf = getYahooFinance();
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahoo)}`;
+    const data = (await yf._fetch(
+      url,
+      { interval: "1m", range: "1d", includePrePost: "true" },
+      {},
+      "json",
+      true,
+    )) as {
+      chart?: {
+        result?: Array<{
+          meta?: { regularMarketPrice?: number };
+          indicators?: { quote?: Array<{ close?: (number | null)[] }> };
+        }>;
+      };
+    };
+    const result = data?.chart?.result?.[0];
+    const closes = result?.indicators?.quote?.[0]?.close ?? [];
+    for (let i = closes.length - 1; i >= 0; i--) {
+      const n = Number(closes[i]);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+    const meta = Number(result?.meta?.regularMarketPrice);
+    return Number.isFinite(meta) && meta > 0 ? meta : null;
+  } catch {
+    return null;
+  }
+}

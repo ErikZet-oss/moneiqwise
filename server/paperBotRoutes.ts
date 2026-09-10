@@ -15,9 +15,14 @@ import {
   killPaperBot,
   tickPaperBot,
 } from "./paperBot/engine";
-import { DEFAULT_EXITS, DEFAULT_RISK, STRATEGY_META, type PaperStrategyId } from "./paperBot/types";
+import { DEFAULT_EXITS, DEFAULT_RISK, PIPELINE_STAGES, STRATEGY_META, type PaperStrategyId } from "./paperBot/types";
 import { runPaperBotSchedulerTick } from "./paperBot/scheduler";
 import { computePaperBotStats } from "./paperBot/stats";
+import { runPaperBacktest } from "./paperBot/backtest";
+import { DEFAULT_CUSTOM_STRATEGY, parseCustomStrategy } from "./paperBot/customStrategy";
+import { isSmtpConfigured } from "./aiBot/mailer";
+import { storage } from "./storage";
+import { getUsSession, getPaperBotTickMs } from "./paperBot/session";
 
 type AuthReq = {
   user?: { claims?: { sub?: string } };
@@ -61,6 +66,11 @@ export function registerPaperBotRoutes(app: Express, isAuthenticated: any) {
       })),
       defaultRisk: DEFAULT_RISK,
       defaultExits: DEFAULT_EXITS,
+      defaultCustomStrategy: DEFAULT_CUSTOM_STRATEGY,
+      pipelineStages: PIPELINE_STAGES,
+      smtpConfigured: isSmtpConfigured(),
+      session: getUsSession(),
+      tickMs: getPaperBotTickMs(),
     });
   });
 
@@ -125,17 +135,40 @@ export function registerPaperBotRoutes(app: Express, isAuthenticated: any) {
       };
       const aiInfluencePct = Number(req.body?.aiInfluencePct ?? 20);
       const aiMinConfidence = Number(req.body?.aiMinConfidence ?? 60);
+      let notifyEmail =
+        typeof req.body?.notifyEmail === "string"
+          ? req.body.notifyEmail.trim()
+          : "";
+      if (!notifyEmail) {
+        try {
+          const user = await storage.getUser(userId);
+          notifyEmail = String((user as any)?.email || "").trim();
+        } catch {
+          /* ignore */
+        }
+      }
+      const notifyOnTrade = !!req.body?.notifyOnTrade;
+      const customStrategy =
+        strategyId === "custom"
+          ? parseCustomStrategy(req.body?.customStrategy) ||
+            DEFAULT_CUSTOM_STRATEGY
+          : req.body?.customStrategy
+            ? parseCustomStrategy(req.body.customStrategy)
+            : null;
       const bot = await createPaperBot({
         userId,
         name,
         startingCash,
         currency: String(req.body?.currency || "EUR"),
         strategyId,
+        customStrategy,
         symbols,
         risk,
         exits,
         aiInfluencePct,
         aiMinConfidence,
+        notifyEmail: notifyEmail || null,
+        notifyOnTrade,
       });
       res.status(201).json({ bot });
     } catch (error) {
@@ -145,6 +178,61 @@ export function registerPaperBotRoutes(app: Express, isAuthenticated: any) {
   });
 
   // Before /:id routes
+  app.post(
+    "/api/paper-bots/backtest",
+    isAuthenticated,
+    async (req: AuthReq, res) => {
+      try {
+        const userId = requireUserId(req, res);
+        if (!userId) return;
+        const symbols = parseSymbols(req.body?.symbols);
+        const strategyId = String(
+          req.body?.strategyId || "ema_rsi_trend",
+        ) as PaperStrategyId;
+        const startingCash = Number(req.body?.startingCash ?? 10000);
+        if (symbols.length === 0) {
+          return res.status(400).json({ message: "Zadaj tickery pre backtest." });
+        }
+        if (!(strategyId in STRATEGY_META)) {
+          return res.status(400).json({ message: "Neznáma stratégia." });
+        }
+        const customStrategy =
+          strategyId === "custom"
+            ? parseCustomStrategy(req.body?.customStrategy) ||
+              DEFAULT_CUSTOM_STRATEGY
+            : null;
+        const result = await runPaperBacktest({
+          symbols,
+          strategyId,
+          customStrategy,
+          startingCash: Number.isFinite(startingCash) ? startingCash : 10000,
+          maxPositionPct: Number(
+            req.body?.maxPositionPct ?? DEFAULT_RISK.maxPositionPct,
+          ),
+          maxOpenPositions: Number(
+            req.body?.maxOpenPositions ?? DEFAULT_RISK.maxOpenPositions,
+          ),
+          exits: {
+            trailingAtrMult: Number(
+              req.body?.trailingAtrMult ?? DEFAULT_EXITS.trailingAtrMult,
+            ),
+            takeProfitPct: Number(
+              req.body?.takeProfitPct ?? DEFAULT_EXITS.takeProfitPct,
+            ),
+            hardStopPct: Number(
+              req.body?.hardStopPct ?? DEFAULT_EXITS.hardStopPct,
+            ),
+          },
+          lookbackBars: Number(req.body?.lookbackBars ?? 180),
+        });
+        res.json({ result });
+      } catch (error) {
+        console.error("paper-bots backtest:", error);
+        res.status(500).json({ message: "Backtest zlyhal." });
+      }
+    },
+  );
+
   app.post(
     "/api/paper-bots/scheduler/tick",
     isAuthenticated,

@@ -276,7 +276,8 @@ export default function FaqPage() {
                 <li>Názov a počiatočný kapitál (EUR)</li>
                 <li>Zoznam tickerov (universe)</li>
                 <li>
-                  Stratégiu: EMA+RSI Trend, MA Crossover, RSI Mean Reversion, Dual Momentum
+                  Stratégiu: EMA+RSI Trend, MA Crossover, RSI Mean Reversion, Dual Momentum, alebo{" "}
+                  <strong>Vlastná (editor)</strong> s podmienkami ALL/ANY
                 </li>
                 <li>
                   Risk: denný loss limit %, max drawdown %, max počet otvorených pozícií, max % equity
@@ -288,6 +289,13 @@ export default function FaqPage() {
                 <li>
                   AI: influence % (typicky 20) a minimálna confidence; Claude sám trade nevytvára
                 </li>
+                <li>
+                  E-mail notifikácie pri open/close/kill (vyžaduje SMTP na serveri; inak sa skipne)
+                </li>
+                <li>
+                  <strong>Backtest</strong> pred štartom — spustí stratégiu na histórii (Yahoo denné
+                  bary) a ukáže return / win rate / počet obchodov (bez AI nudge)
+                </li>
               </ul>
             </section>
 
@@ -296,37 +304,43 @@ export default function FaqPage() {
             <section>
               <h3 className="text-sm font-semibold mb-2">Ako beží automatika na pozadí?</h3>
               <p>
-                Po kliknutí na <strong>Štart</strong> je bot v stave <code>running</code>. Server má
-                scheduler, ktorý každú <strong>minútu</strong> spustí „tick“ pre všetkých bežiacich
-                botov (alebo hneď po tlačidle <strong>Tick teraz</strong>).
+                Po kliknutí na <strong>Štart</strong> je bot v stave <code>running</code>. Scheduler
+                mení interval podľa US relácie (čas Bratislava):{" "}
+                <strong>LIVE ~20 s</strong>, pre/post ~45 s, mimo trhu ~90 s. Manuálne:{" "}
+                <strong>Tick teraz</strong>.
               </p>
-              <p className="mt-2">Jeden tick urobí približne toto:</p>
+              <p className="mt-2">
+                Počas LIVE/EXTENDED sa mark ceny dopĺňa aj z 1-minútových Yahoo barov (čerstjší MTM);
+                signály stratégií stále počítajú z denných OHLC (EMA200 a pod.).
+              </p>
+              <p className="mt-2">Jeden tick prechádza <strong>Signal Chain</strong>:</p>
               <ol className="list-decimal pl-5 space-y-1.5 mt-2">
                 <li>
-                  <strong>INGEST</strong> — stiahne denné OHLCV z Yahoo pre každý ticker.
+                  <strong>INGEST</strong> — Yahoo denné OHLCV + live mark
                 </li>
                 <li>
-                  <strong>AI</strong> (ak influence &gt; 0) — načíta správy, Claude priradí bias
-                  (bullish/bearish/neutral) + confidence. AI len moduluje skóre; silný bearish môže
-                  zablokovať nákup.
+                  <strong>DEDUP</strong> — príprava / zoskupenie tickerov
                 </li>
                 <li>
-                  <strong>Mark-to-market</strong> — prepočíta equity = cash + hodnota pozícií; sleduje
-                  peak equity a denný P&amp;L.
+                  <strong>SIGNAL</strong> — kvant stratégia (prednastavená alebo custom editor)
                 </li>
                 <li>
-                  <strong>EXIT</strong> — najprv hard stop / take profit / trailing ATR; potom
-                  strategický SELL.
+                  <strong>AI</strong> (ak influence &gt; 0) — Claude news verdict moduluje skóre;
+                  silný bearish môže zablokovať nákup
                 </li>
                 <li>
-                  <strong>ENTRY</strong> — ak stratégia (+ AI nudge) dá BUY a risk limity dovolia,
-                  paper nákup (zníži cash, otvorí pozíciu).
+                  <strong>RISK</strong> — daily loss, max DD, max pozície, veľkosť pozície
                 </li>
                 <li>
-                  <strong>LOG</strong> — všetko do auditu: tick, signal, ai, open, close, blocked,
-                  error, kill.
+                  <strong>EXEC</strong> — paper open/close + e-mail ak je zapnutý
                 </li>
               </ol>
+              <p className="mt-2">
+                Exity: najprv hard stop / take profit / trailing ATR, potom strategický SELL.
+                Všetko ide do logu (<code>tick</code>, <code>pipeline</code>, <code>signal</code>,{" "}
+                <code>ai</code>, <code>open</code>, <code>close</code>, <code>blocked</code>,{" "}
+                <code>kill</code>).
+              </p>
               <p className="mt-2 text-muted-foreground text-xs">
                 Ak server (hosting) nebeží, boty netickujú. Lokálne vypnutý PC = žiadny nonstop beh.
               </p>
@@ -338,21 +352,24 @@ export default function FaqPage() {
               <h3 className="text-sm font-semibold mb-2">Čo vidíš v UI?</h3>
               <ul className="list-disc pl-5 space-y-1.5">
                 <li>
+                  <strong>Signal Chain</strong> — vizuálny pipeline INGEST→…→EXEC s posledným
+                  aktívnym krokom
+                </li>
+                <li>
                   <strong>Výkon</strong> — return %, realizovaný P&amp;L, win rate, avg win/loss,
-                  počty open/close/blocked, equity graf
+                  open/close/blocked, equity krivka
                 </li>
                 <li>
-                  <strong>Otvorené</strong> — aktuálne paper pozície s mark a unrealized P&amp;L
-                </li>
-                <li>
-                  <strong>Obchody</strong> — história BUY/SELL s dôvodom a PnL
-                </li>
-                <li>
-                  <strong>Log</strong> — kompletný chronologický záznam rozhodnutí bota
+                  <strong>Otvorené / Obchody / Log</strong> — pozície, história fills, kompletný
+                  audit
                 </li>
                 <li>
                   <strong>Kill Switch</strong> — zatvorí pozície a zastaví bota; Pauza len zastaví
-                  nové tickovanie
+                  tickovanie
+                </li>
+                <li>
+                  <strong>Backtest</strong> — výsledok paper simulácie na histórii pred live paper
+                  behom
                 </li>
               </ul>
             </section>
@@ -363,9 +380,13 @@ export default function FaqPage() {
               <h3 className="text-sm font-semibold mb-2">Dôležité limity dnešnej verzie</h3>
               <ul className="list-disc pl-5 space-y-1.5">
                 <li>Len paper (interný ledger), nie Alpaca/Binance ani reálne peniaze</li>
-                <li>Len long smer; denné sviečky (nie 1-minútové HFT)</li>
-                <li>Prednastavené stratégie (nie plný vizuálny editor podmienok ako Signalet)</li>
-                <li>Vyžaduje <code>ANTHROPIC_API_KEY</code> pre AI vrstvu; bez kľúča beží quant-only</li>
+                <li>Len long smer; stratégia na denných baroch (nie plný HFT)</li>
+                <li>Backtest bez Claude AI nudge (čistá matematika + exit rules)</li>
+                <li>E-mail vyžaduje SMTP env (<code>SMTP_HOST</code>, <code>SMTP_USER</code>, …)</li>
+                <li>
+                  AI vrstva vyžaduje <code>ANTHROPIC_API_KEY</code>; bez kľúča beží quant-only
+                </li>
+                <li>Paper vs. benchmark (S&amp;P) zatiaľ nie je</li>
               </ul>
             </section>
           </CardContent>

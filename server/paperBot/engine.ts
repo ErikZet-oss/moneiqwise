@@ -8,7 +8,13 @@ import {
   type SignalDecision,
 } from "./indicators";
 import { applyAiNudge, fetchPaperBotAiVerdicts, type AiSymbolVerdict } from "./aiLayer";
-import { fetchDailyOhlc, type OhlcSeries } from "./marketData";
+import {
+  evaluateCustomStrategy,
+  parseCustomStrategy,
+} from "./customStrategy";
+import { fetchDailyOhlc, fetchLiveMark, type OhlcSeries } from "./marketData";
+import { notifyPaperBotEvent } from "./notify";
+import { getUsSession } from "./session";
 import {
   deletePosition,
   getPaperBot,
@@ -21,16 +27,37 @@ import {
   updatePaperBotStatus,
   updatePositionPeak,
 } from "./store";
-import type { PaperBot, PaperPosition, PaperStrategyId } from "./types";
+import type { PaperBot, PaperPosition } from "./types";
 
 function evaluateStrategy(
-  strategyId: PaperStrategyId,
+  bot: PaperBot,
   closes: number[],
+  highs: number[],
+  lows: number[],
 ): SignalDecision {
-  if (strategyId === "ma_crossover") return evaluateMaCrossover(closes);
-  if (strategyId === "rsi_mean_reversion") return evaluateRsiMeanReversion(closes);
-  if (strategyId === "dual_momentum") return evaluateDualMomentum(closes);
+  if (bot.strategyId === "custom") {
+    const custom = parseCustomStrategy(bot.customStrategy);
+    if (custom) return evaluateCustomStrategy(custom, closes, highs, lows);
+  }
+  if (bot.strategyId === "ma_crossover") return evaluateMaCrossover(closes);
+  if (bot.strategyId === "rsi_mean_reversion") return evaluateRsiMeanReversion(closes);
+  if (bot.strategyId === "dual_momentum") return evaluateDualMomentum(closes);
   return evaluateEmaRsiTrend(closes);
+}
+
+async function logPipeline(
+  bot: PaperBot,
+  stage: string,
+  message: string,
+  detail?: Record<string, unknown>,
+) {
+  await insertPaperLog({
+    botId: bot.id,
+    userId: bot.userId,
+    eventType: "pipeline",
+    message: `[${stage}] ${message}`,
+    detail: { stage, ...(detail || {}) },
+  });
 }
 
 function roundMoney(n: number): number {
@@ -146,6 +173,13 @@ async function openLong(input: {
     message: `OPEN LONG ${symbol} qty=${qty} @ ${price}`,
     detail: { qty, price, cost, reason, signal },
   });
+  void notifyPaperBotEvent({
+    enabled: bot.notifyOnTrade,
+    email: bot.notifyEmail,
+    botName: bot.name,
+    event: "open",
+    message: `OPEN LONG ${symbol}\nqty=${qty} @ ${price}\n${reason}`,
+  });
   return { cash: newCash, opened: true };
 }
 
@@ -181,6 +215,13 @@ async function closeLong(input: {
     symbol: position.symbol,
     message: `CLOSE ${position.symbol} qty=${position.qty} @ ${price} PnL=${pnl}`,
     detail: { qty: position.qty, price, pnl, reason, signal: signal ?? null },
+  });
+  void notifyPaperBotEvent({
+    enabled: bot.notifyOnTrade,
+    email: bot.notifyEmail,
+    botName: bot.name,
+    event: "close",
+    message: `CLOSE ${position.symbol}\nqty=${position.qty} @ ${price}\nPnL=${pnl}\n${reason}`,
   });
   return { cash: newCash };
 }
@@ -231,15 +272,23 @@ export async function tickPaperBot(
       exits: working.exits,
     },
   });
+  await logPipeline(working, "INGEST", "Načítavam Yahoo OHLCV / live mark");
 
   const prices = new Map<string, number>();
   const ohlcBySymbol = new Map<string, OhlcSeries>();
+  const session = getUsSession();
+  const live = session === "LIVE" || session === "EXTENDED";
 
   for (const symbol of working.symbols) {
     try {
       const ohlc = await fetchDailyOhlc(symbol);
       ohlcBySymbol.set(symbol, ohlc);
-      if (ohlc.lastPrice != null) prices.set(symbol, ohlc.lastPrice);
+      let mark = ohlc.lastPrice;
+      if (live) {
+        const livePx = await fetchLiveMark(symbol);
+        if (livePx != null) mark = livePx;
+      }
+      if (mark != null) prices.set(symbol, mark);
     } catch (err) {
       errors += 1;
       await insertPaperLog({
@@ -252,10 +301,12 @@ export async function tickPaperBot(
       });
     }
   }
+  await logPipeline(working, "DEDUP", `Pripravené ${prices.size} tickerov`);
 
   // AI layer once per tick (only if influence > 0)
   let aiVerdicts = new Map<string, AiSymbolVerdict>();
   if (working.aiInfluencePct > 0) {
+    await logPipeline(working, "AI", "Claude news verdicts");
     const ai = await fetchPaperBotAiVerdicts({ symbols: working.symbols });
     aiVerdicts = ai.verdicts;
     await insertPaperLog({
@@ -289,6 +340,7 @@ export async function tickPaperBot(
   working = { ...working, dayStartEquity, peakEquity };
 
   // Exits: absolute rules first, then strategy SELL
+  await logPipeline(working, "SIGNAL", "Vyhodnocujem exits / signály");
   for (const pos of marked) {
     const ohlc = ohlcBySymbol.get(pos.symbol);
     const price = prices.get(pos.symbol);
@@ -314,6 +366,7 @@ export async function tickPaperBot(
         message: `Exit rule — ${exitHit.reason}`,
         detail: exitHit.detail,
       });
+      await logPipeline(working, "EXEC", `Close ${pos.symbol}: ${exitHit.reason}`);
       const res = await closeLong({
         bot: working,
         position: pos,
@@ -325,7 +378,12 @@ export async function tickPaperBot(
       continue;
     }
 
-    const signal = evaluateStrategy(working.strategyId, ohlc.closes);
+    const signal = evaluateStrategy(
+      working,
+      ohlc.closes,
+      ohlc.highs,
+      ohlc.lows,
+    );
     await insertPaperLog({
       botId: working.id,
       userId: working.userId,
@@ -335,6 +393,7 @@ export async function tickPaperBot(
       detail: signal,
     });
     if (signal.action === "SELL") {
+      await logPipeline(working, "EXEC", `Close ${pos.symbol}: ${signal.reason}`);
       const res = await closeLong({
         bot: working,
         position: pos,
@@ -370,7 +429,12 @@ export async function tickPaperBot(
       continue;
     }
 
-    const quant = evaluateStrategy(working.strategyId, ohlc.closes);
+    const quant = evaluateStrategy(
+      working,
+      ohlc.closes,
+      ohlc.highs,
+      ohlc.lows,
+    );
     const nudged = applyAiNudge({
       signal: quant,
       verdict: aiVerdicts.get(symbol) ?? null,
@@ -405,6 +469,7 @@ export async function tickPaperBot(
     const blockReason = riskBlocksOpen(working, equity, positions.length);
     if (blockReason) {
       blocked += 1;
+      await logPipeline(working, "RISK", blockReason, { symbol });
       await insertPaperLog({
         botId: working.id,
         userId: working.userId,
@@ -416,6 +481,7 @@ export async function tickPaperBot(
       continue;
     }
 
+    await logPipeline(working, "EXEC", `Open ${symbol}: ${nudged.reason}`);
     const res = await openLong({
       bot: working,
       symbol,
@@ -445,6 +511,7 @@ export async function tickPaperBot(
     dayStartEquity,
     peakEquity,
     lastTickAt: new Date(),
+    lastPipelineStage: "EXEC",
   });
   await insertEquityTick(working.id, equity, working.cash);
 
@@ -491,6 +558,14 @@ export async function killPaperBot(
     }
     await updatePaperBotLedger(botId, { cash, lastTickAt: new Date() });
   }
+
+  void notifyPaperBotEvent({
+    enabled: bot.notifyOnTrade,
+    email: bot.notifyEmail,
+    botName: bot.name,
+    event: "kill",
+    message: `Kill Switch — bot ${bot.name} zastavený${closePositions ? ", pozície zatvorené" : ""}.`,
+  });
 
   return updatePaperBotStatus(botId, userId, "killed");
 }
