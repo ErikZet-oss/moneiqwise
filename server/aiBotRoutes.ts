@@ -7,6 +7,16 @@ import {
   listAiBotBriefs,
   saveAiBotSettings,
 } from "./aiBot/store";
+import {
+  countUnreadAiBotAlerts,
+  ensureAiAlertTables,
+  getAiAlertSettings,
+  listAiBotAlerts,
+  markAiBotAlertsRead,
+  saveAiAlertSettings,
+} from "./aiBot/alertsStore";
+import { isSmtpConfigured } from "./aiBot/mailer";
+import { runAlertRadar } from "./aiBot/alertRadar";
 import { runAiBotForUser } from "./aiBot/runner";
 import { runDueAiBotSchedule } from "./aiBot/scheduler";
 import { storage } from "./storage";
@@ -30,6 +40,9 @@ function requireUserId(req: AuthReq, res: Response): string | null {
 export function registerAiBotRoutes(app: Express, isAuthenticated: any) {
   void ensureAiBotTables().catch((err) =>
     console.error("[ai-bot] ensure tables failed:", err),
+  );
+  void ensureAiAlertTables().catch((err) =>
+    console.error("[ai-alerts] ensure tables failed:", err),
   );
 
   app.get("/api/ai-bot/settings", isAuthenticated, async (req: AuthReq, res) => {
@@ -66,6 +79,100 @@ export function registerAiBotRoutes(app: Express, isAuthenticated: any) {
     } catch (error) {
       console.error("ai-bot settings put:", error);
       res.status(500).json({ message: "Nepodarilo sa uložiť nastavenia AI Bota." });
+    }
+  });
+
+  app.get("/api/ai-bot/alert-settings", isAuthenticated, async (req: AuthReq, res) => {
+    try {
+      const userId = requireUserId(req, res);
+      if (!userId) return;
+      const settings = await getAiAlertSettings(userId);
+      res.json({
+        ...settings,
+        smtpConfigured: isSmtpConfigured(),
+      });
+    } catch (error) {
+      console.error("ai-alerts settings get:", error);
+      res.status(500).json({ message: "Nepodarilo sa načítať nastavenia alertov." });
+    }
+  });
+
+  app.put("/api/ai-bot/alert-settings", isAuthenticated, async (req: AuthReq, res) => {
+    try {
+      const userId = requireUserId(req, res);
+      if (!userId) return;
+      const alertsEnabled =
+        typeof req.body?.alertsEnabled === "boolean"
+          ? req.body.alertsEnabled
+          : undefined;
+      const emailEnabled =
+        typeof req.body?.emailEnabled === "boolean"
+          ? req.body.emailEnabled
+          : undefined;
+      let priceThresholdPct: number | undefined;
+      if (req.body?.priceThresholdPct != null) {
+        const n = Number(req.body.priceThresholdPct);
+        if (Number.isFinite(n)) priceThresholdPct = n;
+      }
+      const settings = await saveAiAlertSettings(userId, {
+        alertsEnabled,
+        emailEnabled,
+        priceThresholdPct,
+      });
+      res.json({
+        ...settings,
+        smtpConfigured: isSmtpConfigured(),
+      });
+    } catch (error) {
+      console.error("ai-alerts settings put:", error);
+      res.status(500).json({ message: "Nepodarilo sa uložiť nastavenia alertov." });
+    }
+  });
+
+  app.get("/api/ai-bot/alerts", isAuthenticated, async (req: AuthReq, res) => {
+    try {
+      const userId = requireUserId(req, res);
+      if (!userId) return;
+      const limit = parseInt(String(req.query?.limit ?? "40"), 10);
+      const alerts = await listAiBotAlerts(
+        userId,
+        Number.isFinite(limit) ? limit : 40,
+      );
+      res.json({ alerts });
+    } catch (error) {
+      console.error("ai-alerts list:", error);
+      res.status(500).json({ message: "Nepodarilo sa načítať alerty." });
+    }
+  });
+
+  app.get("/api/ai-bot/alerts/unread-count", isAuthenticated, async (req: AuthReq, res) => {
+    try {
+      const userId = requireUserId(req, res);
+      if (!userId) return;
+      const count = await countUnreadAiBotAlerts(userId);
+      res.json({ count });
+    } catch (error) {
+      console.error("ai-alerts unread:", error);
+      res.status(500).json({ message: "Nepodarilo sa spočítať neprečítané." });
+    }
+  });
+
+  app.post("/api/ai-bot/alerts/mark-read", isAuthenticated, async (req: AuthReq, res) => {
+    try {
+      const userId = requireUserId(req, res);
+      if (!userId) return;
+      const all = req.body?.all === true || req.body?.all === "1";
+      const alertId =
+        typeof req.body?.alertId === "string" ? req.body.alertId.trim() : undefined;
+      if (!all && !alertId) {
+        return res.status(400).json({ message: "Chýba alertId alebo all." });
+      }
+      const updated = await markAiBotAlertsRead(userId, { all, alertId });
+      const count = await countUnreadAiBotAlerts(userId);
+      res.json({ updated, count });
+    } catch (error) {
+      console.error("ai-alerts mark-read:", error);
+      res.status(500).json({ message: "Nepodarilo sa označiť ako prečítané." });
     }
   });
 
@@ -204,7 +311,8 @@ export function registerAiBotRoutes(app: Express, isAuthenticated: any) {
           req.body?.force === true ||
           req.body?.force === "1";
         const result = await runDueAiBotSchedule(new Date(), { force });
-        res.json(result);
+        const radar = await runAlertRadar(new Date(), { force });
+        res.json({ ...result, radar });
       } catch (error) {
         console.error("ai-bot cron:", error);
         res.status(500).json({ message: "Cron beh zlyhal." });

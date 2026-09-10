@@ -30,7 +30,9 @@ export function getQuickNavSection(path: string): QuickNavSection | undefined {
 
 export function normalizeQuickNavPath(raw: unknown): string {
   const path = typeof raw === "string" ? raw.trim() : "";
-  if (path === "/ai-skener" || path === "/ai-agent") return "/ai-agent/bot";
+  if (path === "/ai-skener" || path === "/ai-agent" || path === "/ai-agent/alerty") {
+    return "/ai-agent/bot";
+  }
   if (QUICK_NAV_SECTIONS.some((s) => s.path === path)) return path;
   return DEFAULT_QUICK_NAV_PATH;
 }

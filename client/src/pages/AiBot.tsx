@@ -30,6 +30,7 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CompanyLogo } from "@/components/CompanyLogo";
+import { HelpTip } from "@/components/HelpTip";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -486,15 +487,20 @@ export default function AiBot({ embedded = false }: { embedded?: boolean }) {
 
       <Card className="overflow-hidden">
         <CardContent className="space-y-3 p-3 md:p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 space-y-0.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-1.5">
               <p className="text-sm font-medium">Automatické behy</p>
-              <p className="text-[11px] leading-snug text-muted-foreground md:text-xs">
-                Pred open ~15:00–15:29 SEČ/SELČ (do US open 15:30) a pred close
-                ~21:45–21:59 (US close 22:00), pracovné dni.
-                Automat spraví brief pre <span className="font-medium text-foreground/80">každé portfólio</span> zvlášť aj pre{" "}
-                <span className="font-medium text-foreground/80">Všetky portfóliá</span>.
-              </p>
+              <HelpTip title="Automatické behy">
+                <p>
+                  Pred open ~15:00–15:29 SEČ/SELČ (do US open 15:30) a pred close
+                  ~21:45–21:59 (US close 22:00), pracovné dni.
+                </p>
+                <p>
+                  Automat spraví brief pre{" "}
+                  <span className="font-medium">každé portfólio</span> zvlášť aj pre{" "}
+                  <span className="font-medium">Všetky portfóliá</span>.
+                </p>
+              </HelpTip>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <Label htmlFor="ai-bot-enabled" className="text-xs text-muted-foreground">

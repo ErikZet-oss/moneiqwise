@@ -35,6 +35,7 @@ const ICON_BY_PATH: Record<string, LucideIcon> = {
   "/events": CalendarClock,
   "/watchlist": Eye,
   "/ai-agent/bot": Brain,
+  "/ai-agent/alerty": Brain,
   "/ai-agent/skener": Brain,
   "/ai-skener": Brain,
   "/tax": Scale,

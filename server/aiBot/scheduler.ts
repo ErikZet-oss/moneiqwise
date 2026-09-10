@@ -1,5 +1,6 @@
 import { listEnabledAiBotUsers, tryAcquireScheduleLock } from "./store";
 import { runAiBotScheduledForUser } from "./runner";
+import { runAlertRadar } from "./alertRadar";
 import type { AiBotSlot } from "./types";
 
 type EtParts = {
@@ -52,6 +53,8 @@ export function detectSlot(et: EtParts): Exclude<AiBotSlot, "manual"> | null {
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let running = false;
+let lastRadarAt = 0;
+const RADAR_INTERVAL_MS = 5 * 60_000;
 
 export async function runDueAiBotSchedule(
   now = new Date(),
@@ -117,6 +120,22 @@ export async function runDueAiBotSchedule(
   }
 }
 
+async function tickRadar() {
+  const now = Date.now();
+  if (now - lastRadarAt < RADAR_INTERVAL_MS) return;
+  lastRadarAt = now;
+  try {
+    const result = await runAlertRadar();
+    if (result.ran) {
+      console.log(
+        `[ai-alerts] radar users=${result.users} created=${result.created}`,
+      );
+    }
+  } catch (err) {
+    console.error("[ai-alerts] radar tick error:", err);
+  }
+}
+
 async function tick() {
   try {
     const result = await runDueAiBotSchedule();
@@ -128,17 +147,19 @@ async function tick() {
   } catch (err) {
     console.error("[ai-bot] tick error:", err);
   }
+  void tickRadar();
 }
 
 export function startAiBotScheduler() {
   if (timer) return;
   // Každých 30s — v okne 09:00–09:29 / 15:45–15:59 ET to určite trafí.
+  // Radar beží max raz za ~5 min (RTH), cez ten istý timer.
   timer = setInterval(() => {
     void tick();
   }, 30_000);
   // Catch-up hneď po štarte (nasadenie / restart uprostred okna).
   void tick();
   console.log(
-    "[ai-bot] scheduler started (preopen 09:00–09:29 ET ≈ 15:00–15:29 local, preclose 15:45–15:59 ET)",
+    "[ai-bot] scheduler started (preopen 09:00–09:29 ET ≈ 15:00–15:29 local, preclose 15:45–15:59 ET; alerts radar ~5 min RTH)",
   );
 }
