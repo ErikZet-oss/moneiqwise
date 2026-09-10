@@ -15,8 +15,9 @@ import {
   killPaperBot,
   tickPaperBot,
 } from "./paperBot/engine";
-import { DEFAULT_RISK, STRATEGY_META, type PaperStrategyId } from "./paperBot/types";
+import { DEFAULT_EXITS, DEFAULT_RISK, STRATEGY_META, type PaperStrategyId } from "./paperBot/types";
 import { runPaperBotSchedulerTick } from "./paperBot/scheduler";
+import { computePaperBotStats } from "./paperBot/stats";
 
 type AuthReq = {
   user?: { claims?: { sub?: string } };
@@ -59,6 +60,7 @@ export function registerPaperBotRoutes(app: Express, isAuthenticated: any) {
         ...meta,
       })),
       defaultRisk: DEFAULT_RISK,
+      defaultExits: DEFAULT_EXITS,
     });
   });
 
@@ -110,7 +112,19 @@ export function registerPaperBotRoutes(app: Express, isAuthenticated: any) {
           req.body?.maxPositionPct ?? DEFAULT_RISK.maxPositionPct,
         ),
       };
-      const aiInfluencePct = Number(req.body?.aiInfluencePct ?? 0);
+      const exits = {
+        trailingAtrMult: Number(
+          req.body?.trailingAtrMult ?? DEFAULT_EXITS.trailingAtrMult,
+        ),
+        takeProfitPct: Number(
+          req.body?.takeProfitPct ?? DEFAULT_EXITS.takeProfitPct,
+        ),
+        hardStopPct: Number(
+          req.body?.hardStopPct ?? DEFAULT_EXITS.hardStopPct,
+        ),
+      };
+      const aiInfluencePct = Number(req.body?.aiInfluencePct ?? 20);
+      const aiMinConfidence = Number(req.body?.aiMinConfidence ?? 60);
       const bot = await createPaperBot({
         userId,
         name,
@@ -119,7 +133,9 @@ export function registerPaperBotRoutes(app: Express, isAuthenticated: any) {
         strategyId,
         symbols,
         risk,
+        exits,
         aiInfluencePct,
+        aiMinConfidence,
       });
       res.status(201).json({ bot });
     } catch (error) {
@@ -156,16 +172,18 @@ export function registerPaperBotRoutes(app: Express, isAuthenticated: any) {
         if (!snapshot) {
           return res.status(404).json({ message: "Bot nenájdený." });
         }
-        const [trades, logs, equity] = await Promise.all([
+        const [trades, logs, equity, stats] = await Promise.all([
           listTrades(snapshot.bot.id, userId, 80),
           listPaperLogs(snapshot.bot.id, userId, 150),
           listEquityTicks(snapshot.bot.id, userId, 120),
+          computePaperBotStats(snapshot.bot, snapshot.equity),
         ]);
         res.json({
           ...snapshot,
           trades,
           logs,
           equityCurve: equity,
+          stats,
         });
       } catch (error) {
         console.error("paper-bots get:", error);

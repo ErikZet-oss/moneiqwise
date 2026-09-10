@@ -247,7 +247,133 @@ export default function FaqPage() {
 
         <Card>
           <CardHeader className="p-4 pb-2">
-            <CardTitle className="text-sm font-medium">5. Riešenie problémov</CardTitle>
+            <CardTitle className="text-sm font-medium">5. AI Agent — Paper Bot</CardTitle>
+            <CardDescription>
+              Kompletný popis paper trading sekcie: čo robí, čo beží na pozadí a čo ešte nie je.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 pt-3 space-y-4 text-sm text-foreground leading-relaxed">
+            <section>
+              <h3 className="text-sm font-semibold mb-2">Čo to je?</h3>
+              <p>
+                <strong>Paper Bot</strong> je samostatná záložka v <strong>AI Agent → Paper</strong>.
+                Umožňuje vytvoriť jeden alebo viac botov s <strong>fiktívnym kapitálom</strong>.
+                Bot <strong>sám otvára a zatvára paper pozície</strong> podľa kvantitatívnej stratégie,
+                risk limitov a voliteľného Claude AI „nudge“ zo správ. Nič sa neposiela na brokera —
+                peniaze nie sú reálne. Ceny sú však reálne (Yahoo Finance).
+              </p>
+              <p className="mt-2 text-muted-foreground text-xs">
+                Oddelené od klasického <strong>AI Bot</strong> (denný audit / odporúčania BUY-SELL-HOLD
+                bez automatickej exekúcie).
+              </p>
+            </section>
+
+            <Separator />
+
+            <section>
+              <h3 className="text-sm font-semibold mb-2">Čo nastavíš pri vytvorení bota?</h3>
+              <ul className="list-disc pl-5 space-y-1.5">
+                <li>Názov a počiatočný kapitál (EUR)</li>
+                <li>Zoznam tickerov (universe)</li>
+                <li>
+                  Stratégiu: EMA+RSI Trend, MA Crossover, RSI Mean Reversion, Dual Momentum
+                </li>
+                <li>
+                  Risk: denný loss limit %, max drawdown %, max počet otvorených pozícií, max % equity
+                  na jednu pozíciu
+                </li>
+                <li>
+                  Exity: trailing stop (násobok ATR), take profit %, hard stop %
+                </li>
+                <li>
+                  AI: influence % (typicky 20) a minimálna confidence; Claude sám trade nevytvára
+                </li>
+              </ul>
+            </section>
+
+            <Separator />
+
+            <section>
+              <h3 className="text-sm font-semibold mb-2">Ako beží automatika na pozadí?</h3>
+              <p>
+                Po kliknutí na <strong>Štart</strong> je bot v stave <code>running</code>. Server má
+                scheduler, ktorý každú <strong>minútu</strong> spustí „tick“ pre všetkých bežiacich
+                botov (alebo hneď po tlačidle <strong>Tick teraz</strong>).
+              </p>
+              <p className="mt-2">Jeden tick urobí približne toto:</p>
+              <ol className="list-decimal pl-5 space-y-1.5 mt-2">
+                <li>
+                  <strong>INGEST</strong> — stiahne denné OHLCV z Yahoo pre každý ticker.
+                </li>
+                <li>
+                  <strong>AI</strong> (ak influence &gt; 0) — načíta správy, Claude priradí bias
+                  (bullish/bearish/neutral) + confidence. AI len moduluje skóre; silný bearish môže
+                  zablokovať nákup.
+                </li>
+                <li>
+                  <strong>Mark-to-market</strong> — prepočíta equity = cash + hodnota pozícií; sleduje
+                  peak equity a denný P&amp;L.
+                </li>
+                <li>
+                  <strong>EXIT</strong> — najprv hard stop / take profit / trailing ATR; potom
+                  strategický SELL.
+                </li>
+                <li>
+                  <strong>ENTRY</strong> — ak stratégia (+ AI nudge) dá BUY a risk limity dovolia,
+                  paper nákup (zníži cash, otvorí pozíciu).
+                </li>
+                <li>
+                  <strong>LOG</strong> — všetko do auditu: tick, signal, ai, open, close, blocked,
+                  error, kill.
+                </li>
+              </ol>
+              <p className="mt-2 text-muted-foreground text-xs">
+                Ak server (hosting) nebeží, boty netickujú. Lokálne vypnutý PC = žiadny nonstop beh.
+              </p>
+            </section>
+
+            <Separator />
+
+            <section>
+              <h3 className="text-sm font-semibold mb-2">Čo vidíš v UI?</h3>
+              <ul className="list-disc pl-5 space-y-1.5">
+                <li>
+                  <strong>Výkon</strong> — return %, realizovaný P&amp;L, win rate, avg win/loss,
+                  počty open/close/blocked, equity graf
+                </li>
+                <li>
+                  <strong>Otvorené</strong> — aktuálne paper pozície s mark a unrealized P&amp;L
+                </li>
+                <li>
+                  <strong>Obchody</strong> — história BUY/SELL s dôvodom a PnL
+                </li>
+                <li>
+                  <strong>Log</strong> — kompletný chronologický záznam rozhodnutí bota
+                </li>
+                <li>
+                  <strong>Kill Switch</strong> — zatvorí pozície a zastaví bota; Pauza len zastaví
+                  nové tickovanie
+                </li>
+              </ul>
+            </section>
+
+            <Separator />
+
+            <section>
+              <h3 className="text-sm font-semibold mb-2">Dôležité limity dnešnej verzie</h3>
+              <ul className="list-disc pl-5 space-y-1.5">
+                <li>Len paper (interný ledger), nie Alpaca/Binance ani reálne peniaze</li>
+                <li>Len long smer; denné sviečky (nie 1-minútové HFT)</li>
+                <li>Prednastavené stratégie (nie plný vizuálny editor podmienok ako Signalet)</li>
+                <li>Vyžaduje <code>ANTHROPIC_API_KEY</code> pre AI vrstvu; bez kľúča beží quant-only</li>
+              </ul>
+            </section>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-medium">6. Riešenie problémov</CardTitle>
             <CardDescription>Keď niečo nenájdeš alebo import zlyhá.</CardDescription>
           </CardHeader>
           <CardContent className="p-4 pt-3 space-y-4 text-sm text-foreground leading-relaxed">

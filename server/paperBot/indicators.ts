@@ -31,6 +31,30 @@ export function rsi(values: number[], period = 14): number | null {
   return 100 - 100 / (1 + rs);
 }
 
+/** Wilder ATR from OHLC arrays (aligned). */
+export function atr(
+  highs: number[],
+  lows: number[],
+  closes: number[],
+  period = 14,
+): number | null {
+  const n = Math.min(highs.length, lows.length, closes.length);
+  if (n < period + 1) return null;
+  const trs: number[] = [];
+  for (let i = 1; i < n; i++) {
+    const h = highs[i]!;
+    const l = lows[i]!;
+    const prevC = closes[i - 1]!;
+    trs.push(Math.max(h - l, Math.abs(h - prevC), Math.abs(l - prevC)));
+  }
+  if (trs.length < period) return null;
+  let atrVal = trs.slice(0, period).reduce((a, b) => a + b, 0) / period;
+  for (let i = period; i < trs.length; i++) {
+    atrVal = (atrVal * (period - 1) + trs[i]!) / period;
+  }
+  return atrVal;
+}
+
 export type SignalDecision = {
   action: "BUY" | "SELL" | "HOLD";
   score: number;
@@ -131,4 +155,148 @@ export function evaluateMaCrossover(closes: number[]): SignalDecision {
     reason: "SMA20 ≈ SMA50",
     indicators,
   };
+}
+
+export function evaluateRsiMeanReversion(closes: number[]): SignalDecision {
+  const close = closes[closes.length - 1] ?? null;
+  const rsi14 = rsi(closes, 14);
+  const indicators = { close, rsi14 };
+  if (rsi14 == null) {
+    return {
+      action: "HOLD",
+      score: 0,
+      reason: "Nedostatok dát pre RSI",
+      indicators,
+    };
+  }
+  if (rsi14 < 30) {
+    return {
+      action: "BUY",
+      score: Math.min(100, 40 + (30 - rsi14)),
+      reason: `RSI prepredané (${rsi14.toFixed(1)})`,
+      indicators,
+    };
+  }
+  if (rsi14 > 55) {
+    return {
+      action: "SELL",
+      score: Math.min(100, rsi14),
+      reason: `RSI rebound exit (${rsi14.toFixed(1)})`,
+      indicators,
+    };
+  }
+  return {
+    action: "HOLD",
+    score: 40,
+    reason: "RSI v neutrálnej zóne",
+    indicators,
+  };
+}
+
+export function evaluateDualMomentum(closes: number[]): SignalDecision {
+  const close = closes[closes.length - 1] ?? null;
+  const sma50 = sma(closes, 50);
+  const sma200 = sma(closes, 200);
+  const indicators = { close, sma50, sma200 };
+  if (close == null || sma50 == null || sma200 == null) {
+    return {
+      action: "HOLD",
+      score: 0,
+      reason: "Nedostatok dát pre momentum",
+      indicators,
+    };
+  }
+  if (close > sma200 && sma50 > sma200) {
+    return {
+      action: "BUY",
+      score: 72,
+      reason: "Dual momentum: close a SMA50 nad SMA200",
+      indicators,
+    };
+  }
+  if (close < sma200) {
+    return {
+      action: "SELL",
+      score: 68,
+      reason: "Close pod SMA200",
+      indicators,
+    };
+  }
+  return {
+    action: "HOLD",
+    score: 40,
+    reason: "Momentum neutrálne",
+    indicators,
+  };
+}
+
+export type ExitHit = {
+  hit: boolean;
+  reason: string;
+  detail: Record<string, number | null>;
+};
+
+/** Absolute exit rules — whichever hits first. */
+export function evaluateExitRules(input: {
+  entryPrice: number;
+  peakPrice: number;
+  markPrice: number;
+  atr: number | null;
+  trailingAtrMult: number;
+  takeProfitPct: number;
+  hardStopPct: number;
+}): ExitHit {
+  const {
+    entryPrice,
+    peakPrice,
+    markPrice,
+    atr: atrVal,
+    trailingAtrMult,
+    takeProfitPct,
+    hardStopPct,
+  } = input;
+  const detail: Record<string, number | null> = {
+    entryPrice,
+    peakPrice,
+    markPrice,
+    atr: atrVal,
+  };
+
+  if (hardStopPct > 0) {
+    const stop = entryPrice * (1 - hardStopPct / 100);
+    detail.hardStop = stop;
+    if (markPrice <= stop) {
+      return {
+        hit: true,
+        reason: `Hard stop −${hardStopPct}%`,
+        detail,
+      };
+    }
+  }
+
+  if (takeProfitPct > 0) {
+    const tp = entryPrice * (1 + takeProfitPct / 100);
+    detail.takeProfit = tp;
+    if (markPrice >= tp) {
+      return {
+        hit: true,
+        reason: `Take profit +${takeProfitPct}%`,
+        detail,
+      };
+    }
+  }
+
+  if (trailingAtrMult > 0 && atrVal != null && atrVal > 0) {
+    const trail = peakPrice - trailingAtrMult * atrVal;
+    detail.trailStop = trail;
+    if (markPrice <= trail && peakPrice > entryPrice) {
+      return {
+        hit: true,
+        reason: `Trailing stop ${trailingAtrMult}×ATR`,
+        detail,
+      };
+    }
+  }
+
+  return { hit: false, reason: "", detail };
 }

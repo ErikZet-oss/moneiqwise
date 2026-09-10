@@ -1,12 +1,23 @@
 export type PaperBotStatus = "running" | "paused" | "killed";
 
-export type PaperStrategyId = "ema_rsi_trend" | "ma_crossover";
+export type PaperStrategyId =
+  | "ema_rsi_trend"
+  | "ma_crossover"
+  | "rsi_mean_reversion"
+  | "dual_momentum";
 
 export type PaperBotRiskSettings = {
   dailyLossLimitPct: number;
   maxDrawdownPct: number;
   maxOpenPositions: number;
   maxPositionPct: number;
+};
+
+/** Exit rules — 0 = vypnuté. */
+export type PaperBotExitSettings = {
+  trailingAtrMult: number;
+  takeProfitPct: number;
+  hardStopPct: number;
 };
 
 export type PaperBot = {
@@ -21,8 +32,11 @@ export type PaperBot = {
   symbols: string[];
   candleTf: string;
   risk: PaperBotRiskSettings;
-  /** 0–100; Claude nudge of quant score (0 = quant only for now). */
+  exits: PaperBotExitSettings;
+  /** 0–100; Claude nudge of quant score. */
   aiInfluencePct: number;
+  /** Ignore AI verdicts below this confidence. */
+  aiMinConfidence: number;
   dayStartEquity: number;
   peakEquity: number;
   lastTickAt: string | null;
@@ -37,6 +51,8 @@ export type PaperPosition = {
   symbol: string;
   qty: number;
   entryPrice: number;
+  /** Highest mark since entry — for trailing stop. */
+  peakPrice: number;
   markPrice: number | null;
   unrealizedPnl: number | null;
   openedAt: string;
@@ -87,11 +103,33 @@ export type PaperEquityTick = {
   cash: number;
 };
 
+export type PaperBotStats = {
+  realizedPnl: number;
+  returnPct: number;
+  closedTrades: number;
+  wins: number;
+  losses: number;
+  winRatePct: number;
+  avgWin: number | null;
+  avgLoss: number | null;
+  openPositions: number;
+  blockedEvents: number;
+  openEvents: number;
+  closeEvents: number;
+  aiEvents: number;
+};
+
 export const DEFAULT_RISK: PaperBotRiskSettings = {
   dailyLossLimitPct: 2,
   maxDrawdownPct: 15,
   maxOpenPositions: 5,
   maxPositionPct: 20,
+};
+
+export const DEFAULT_EXITS: PaperBotExitSettings = {
+  trailingAtrMult: 3.5,
+  takeProfitPct: 12,
+  hardStopPct: 8,
 };
 
 export const STRATEGY_META: Record<
@@ -101,10 +139,19 @@ export const STRATEGY_META: Record<
   ema_rsi_trend: {
     label: "EMA + RSI Trend",
     description:
-      "Long: EMA50 > EMA200, close > SMA50, RSI 45–75. Exit: RSI > 75 alebo strata trendu.",
+      "Long: EMA50 > EMA200, close > SMA50, RSI 45–75. Exit: RSI > 75 alebo strata trendu + exit rules.",
   },
   ma_crossover: {
     label: "MA Crossover",
-    description: "Long: SMA20 > SMA50. Exit: SMA20 < SMA50.",
+    description: "Long: SMA20 > SMA50. Exit: SMA20 < SMA50 + exit rules.",
+  },
+  rsi_mean_reversion: {
+    label: "RSI Mean Reversion",
+    description: "Long: RSI < 30 (prepredané). Exit: RSI > 55 alebo exit rules.",
+  },
+  dual_momentum: {
+    label: "Dual Momentum",
+    description:
+      "Long: close > SMA200 a SMA50 > SMA200. Exit: close < SMA200 + exit rules.",
   },
 };

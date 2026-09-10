@@ -14,6 +14,15 @@ import {
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { sk } from "date-fns/locale";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,7 +41,11 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
-type PaperStrategyId = "ema_rsi_trend" | "ma_crossover";
+type PaperStrategyId =
+  | "ema_rsi_trend"
+  | "ma_crossover"
+  | "rsi_mean_reversion"
+  | "dual_momentum";
 type PaperBotStatus = "running" | "paused" | "killed";
 
 type PaperBot = {
@@ -50,7 +63,13 @@ type PaperBot = {
     maxOpenPositions: number;
     maxPositionPct: number;
   };
+  exits: {
+    trailingAtrMult: number;
+    takeProfitPct: number;
+    hardStopPct: number;
+  };
   aiInfluencePct: number;
+  aiMinConfidence: number;
   lastTickAt: string | null;
   createdAt: string;
 };
@@ -60,6 +79,7 @@ type PaperPosition = {
   symbol: string;
   qty: number;
   entryPrice: number;
+  peakPrice: number;
   markPrice: number | null;
   unrealizedPnl: number | null;
   openedAt: string;
@@ -84,6 +104,24 @@ type PaperLog = {
   createdAt: string;
 };
 
+type PaperStats = {
+  realizedPnl: number;
+  returnPct: number;
+  closedTrades: number;
+  wins: number;
+  losses: number;
+  winRatePct: number;
+  avgWin: number | null;
+  avgLoss: number | null;
+  openPositions: number;
+  blockedEvents: number;
+  openEvents: number;
+  closeEvents: number;
+  aiEvents: number;
+};
+
+type EquityPoint = { ts: string; equity: number; cash: number };
+
 type BotDetail = {
   bot: PaperBot;
   equity: number;
@@ -93,6 +131,8 @@ type BotDetail = {
   drawdownPct: number;
   trades: PaperTrade[];
   logs: PaperLog[];
+  equityCurve: EquityPoint[];
+  stats: PaperStats;
 };
 
 const STATUS_LABEL: Record<PaperBotStatus, string> = {
@@ -136,6 +176,11 @@ export default function AiPaperBot({ embedded = false }: { embedded?: boolean })
   const [dailyLoss, setDailyLoss] = useState("2");
   const [maxDd, setMaxDd] = useState("15");
   const [maxPosPct, setMaxPosPct] = useState("20");
+  const [trailAtr, setTrailAtr] = useState("3.5");
+  const [takeProfit, setTakeProfit] = useState("12");
+  const [hardStop, setHardStop] = useState("8");
+  const [aiInfluence, setAiInfluence] = useState("20");
+  const [aiMinConf, setAiMinConf] = useState("60");
 
   const { data: strategiesPayload } = useQuery<{
     strategies: Array<{ id: PaperStrategyId; label: string; description: string }>;
@@ -198,7 +243,11 @@ export default function AiPaperBot({ embedded = false }: { embedded?: boolean })
         maxDrawdownPct: Number(maxDd),
         maxOpenPositions: Number(maxOpen),
         maxPositionPct: Number(maxPosPct),
-        aiInfluencePct: 0,
+        trailingAtrMult: Number(trailAtr),
+        takeProfitPct: Number(takeProfit),
+        hardStopPct: Number(hardStop),
+        aiInfluencePct: Number(aiInfluence),
+        aiMinConfidence: Number(aiMinConf),
       });
       return res.json() as Promise<{ bot: PaperBot }>;
     },
@@ -254,11 +303,18 @@ export default function AiPaperBot({ embedded = false }: { embedded?: boolean })
     );
   }, [detail?.bot.strategyId, strategiesPayload]);
 
+  const chartData = useMemo(() => {
+    return (detail?.equityCurve ?? []).map((p) => ({
+      t: fmtTime(p.ts),
+      equity: Math.round(p.equity * 100) / 100,
+    }));
+  }, [detail?.equityCurve]);
+
   return (
     <div className={cn("space-y-3", !embedded && "mx-auto max-w-3xl pb-8")}>
       <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
-        PAPER TRADING — fiktívne peniaze. Bot sám otvára/zatvára pozície podľa
-        stratégie; Claude AI nudge príde v ďalšej fáze.
+        PAPER TRADING — fiktívne peniaze. Quant stratégia + Claude AI nudge
+        (news) + exit rules. Claude sám trade nevytvára.
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -267,7 +323,7 @@ export default function AiPaperBot({ embedded = false }: { embedded?: boolean })
             Paper Bot
           </h2>
           <p className="text-xs text-muted-foreground">
-            Viac botov, každý s vlastným kapitálom. Kompletný log rozhodnutí.
+            Viac botov, každý s vlastným kapitálom, AI a kompletným logom.
           </p>
         </div>
         <div className="flex gap-1.5">
@@ -358,6 +414,38 @@ export default function AiPaperBot({ embedded = false }: { embedded?: boolean })
                 <Label>Max drawdown %</Label>
                 <Input value={maxDd} onChange={(e) => setMaxDd(e.target.value)} />
               </div>
+              <div className="space-y-1.5">
+                <Label>Trailing ATR×</Label>
+                <Input value={trailAtr} onChange={(e) => setTrailAtr(e.target.value)} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Take profit %</Label>
+                <Input
+                  value={takeProfit}
+                  onChange={(e) => setTakeProfit(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Hard stop %</Label>
+                <Input
+                  value={hardStop}
+                  onChange={(e) => setHardStop(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>AI influence %</Label>
+                <Input
+                  value={aiInfluence}
+                  onChange={(e) => setAiInfluence(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>AI min confidence %</Label>
+                <Input
+                  value={aiMinConf}
+                  onChange={(e) => setAiMinConf(e.target.value)}
+                />
+              </div>
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="ghost" size="sm" onClick={() => setShowCreate(false)}>
@@ -431,6 +519,9 @@ export default function AiPaperBot({ embedded = false }: { embedded?: boolean })
                     </span>
                     <Badge variant="outline" className="text-[10px]">
                       {strategyLabel}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px]">
+                      AI {detail.bot.aiInfluencePct}%
                     </Badge>
                   </div>
                   <p className="mt-1 text-[11px] text-muted-foreground">
@@ -531,16 +622,20 @@ export default function AiPaperBot({ embedded = false }: { embedded?: boolean })
               </div>
 
               <p className="text-[11px] text-muted-foreground">
-                Risk: daily loss {detail.bot.risk.dailyLossLimitPct} % · max DD{" "}
-                {detail.bot.risk.maxDrawdownPct} % · max pozícií{" "}
-                {detail.bot.risk.maxOpenPositions} · max size{" "}
-                {detail.bot.risk.maxPositionPct} %
+                Risk: daily {detail.bot.risk.dailyLossLimitPct}% · DD{" "}
+                {detail.bot.risk.maxDrawdownPct}% · max pos{" "}
+                {detail.bot.risk.maxOpenPositions} · size{" "}
+                {detail.bot.risk.maxPositionPct}% · exits ATR×
+                {detail.bot.exits.trailingAtrMult} / TP{" "}
+                {detail.bot.exits.takeProfitPct}% / SL{" "}
+                {detail.bot.exits.hardStopPct}%
               </p>
             </CardContent>
           </Card>
 
-          <Tabs defaultValue="positions">
-            <TabsList className="grid w-full grid-cols-3">
+          <Tabs defaultValue="perf">
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="perf">Výkon</TabsTrigger>
               <TabsTrigger value="positions">Otvorené</TabsTrigger>
               <TabsTrigger value="trades">Obchody</TabsTrigger>
               <TabsTrigger value="log">
@@ -548,6 +643,129 @@ export default function AiPaperBot({ embedded = false }: { embedded?: boolean })
                 Log
               </TabsTrigger>
             </TabsList>
+
+            <TabsContent value="perf" className="space-y-3">
+              {detail.stats ? (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div className="rounded-md border p-2">
+                    <div className="text-[10px] text-muted-foreground">Return</div>
+                    <div
+                      className={cn(
+                        "text-sm font-semibold",
+                        detail.stats.returnPct >= 0
+                          ? "text-emerald-600"
+                          : "text-red-600",
+                      )}
+                    >
+                      {detail.stats.returnPct >= 0 ? "+" : ""}
+                      {detail.stats.returnPct.toFixed(2)} %
+                    </div>
+                  </div>
+                  <div className="rounded-md border p-2">
+                    <div className="text-[10px] text-muted-foreground">
+                      Realizovaný P&L
+                    </div>
+                    <div
+                      className={cn(
+                        "text-sm font-semibold",
+                        detail.stats.realizedPnl >= 0
+                          ? "text-emerald-600"
+                          : "text-red-600",
+                      )}
+                    >
+                      {money(detail.stats.realizedPnl, detail.bot.currency)}
+                    </div>
+                  </div>
+                  <div className="rounded-md border p-2">
+                    <div className="text-[10px] text-muted-foreground">Win rate</div>
+                    <div className="text-sm font-semibold">
+                      {detail.stats.winRatePct.toFixed(1)} % (
+                      {detail.stats.wins}/{detail.stats.closedTrades})
+                    </div>
+                  </div>
+                  <div className="rounded-md border p-2">
+                    <div className="text-[10px] text-muted-foreground">
+                      Open / Close / Block
+                    </div>
+                    <div className="text-sm font-semibold">
+                      {detail.stats.openEvents} / {detail.stats.closeEvents} /{" "}
+                      {detail.stats.blockedEvents}
+                    </div>
+                  </div>
+                  <div className="rounded-md border p-2">
+                    <div className="text-[10px] text-muted-foreground">Avg win</div>
+                    <div className="text-sm font-semibold">
+                      {detail.stats.avgWin != null
+                        ? money(detail.stats.avgWin, detail.bot.currency)
+                        : "—"}
+                    </div>
+                  </div>
+                  <div className="rounded-md border p-2">
+                    <div className="text-[10px] text-muted-foreground">Avg loss</div>
+                    <div className="text-sm font-semibold">
+                      {detail.stats.avgLoss != null
+                        ? money(detail.stats.avgLoss, detail.bot.currency)
+                        : "—"}
+                    </div>
+                  </div>
+                  <div className="rounded-md border p-2">
+                    <div className="text-[10px] text-muted-foreground">
+                      Otvorené pozície
+                    </div>
+                    <div className="text-sm font-semibold">
+                      {detail.stats.openPositions}
+                    </div>
+                  </div>
+                  <div className="rounded-md border p-2">
+                    <div className="text-[10px] text-muted-foreground">AI eventy</div>
+                    <div className="text-sm font-semibold">
+                      {detail.stats.aiEvents}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              <Card>
+                <CardContent className="pt-4">
+                  <div className="mb-2 text-xs font-medium text-muted-foreground">
+                    Equity v čase
+                  </div>
+                  {chartData.length < 2 ? (
+                    <p className="py-8 text-center text-sm text-muted-foreground">
+                      Po niekoľkých tickoch sa tu zobrazí equity krivka.
+                    </p>
+                  ) : (
+                    <div className="h-48 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={chartData}>
+                          <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                          <XAxis dataKey="t" hide />
+                          <YAxis
+                            width={48}
+                            tick={{ fontSize: 10 }}
+                            domain={["auto", "auto"]}
+                          />
+                          <Tooltip
+                            contentStyle={{ fontSize: 12 }}
+                            formatter={(v: number) => [
+                              money(v, detail.bot.currency),
+                              "Equity",
+                            ]}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="equity"
+                            stroke="hsl(var(--primary))"
+                            strokeWidth={2}
+                            dot={false}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
 
             <TabsContent value="positions" className="space-y-2">
               {detail.positions.length === 0 ? (
@@ -562,7 +780,8 @@ export default function AiPaperBot({ embedded = false }: { embedded?: boolean })
                         <div className="font-medium">{p.symbol}</div>
                         <div className="text-[11px] text-muted-foreground">
                           qty {p.qty} · entry {p.entryPrice.toFixed(2)} · mark{" "}
-                          {(p.markPrice ?? p.entryPrice).toFixed(2)}
+                          {(p.markPrice ?? p.entryPrice).toFixed(2)} · peak{" "}
+                          {(p.peakPrice ?? p.entryPrice).toFixed(2)}
                         </div>
                       </div>
                       <div

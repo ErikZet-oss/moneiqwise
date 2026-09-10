@@ -12,10 +12,49 @@ function getYahooFinance(): InstanceType<typeof YahooFinance> {
   return yahooFinance;
 }
 
-export async function fetchDailyCloses(
+export type OhlcSeries = {
+  closes: number[];
+  highs: number[];
+  lows: number[];
+  lastPrice: number | null;
+};
+
+function alignPositive(
+  high: (number | null)[] | undefined,
+  low: (number | null)[] | undefined,
+  close: (number | null)[] | undefined,
+): { highs: number[]; lows: number[]; closes: number[] } {
+  const h = high ?? [];
+  const l = low ?? [];
+  const c = close ?? [];
+  const n = Math.min(h.length, l.length, c.length);
+  const highs: number[] = [];
+  const lows: number[] = [];
+  const closes: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const hv = Number(h[i]);
+    const lv = Number(l[i]);
+    const cv = Number(c[i]);
+    if (
+      Number.isFinite(hv) &&
+      hv > 0 &&
+      Number.isFinite(lv) &&
+      lv > 0 &&
+      Number.isFinite(cv) &&
+      cv > 0
+    ) {
+      highs.push(hv);
+      lows.push(lv);
+      closes.push(cv);
+    }
+  }
+  return { highs, lows, closes };
+}
+
+export async function fetchDailyOhlc(
   ticker: string,
   range = "1y",
-): Promise<{ closes: number[]; lastPrice: number | null }> {
+): Promise<OhlcSeries> {
   const yahoo = toYahooTicker(ticker);
   try {
     const yf = getYahooFinance();
@@ -30,15 +69,19 @@ export async function fetchDailyCloses(
       chart?: {
         result?: Array<{
           meta?: { regularMarketPrice?: number };
-          indicators?: { quote?: Array<{ close?: (number | null)[] }> };
+          indicators?: {
+            quote?: Array<{
+              high?: (number | null)[];
+              low?: (number | null)[];
+              close?: (number | null)[];
+            }>;
+          };
         }>;
       };
     };
     const result = data?.chart?.result?.[0];
-    const raw = result?.indicators?.quote?.[0]?.close ?? [];
-    const closes = raw
-      .map((c) => Number(c))
-      .filter((n) => Number.isFinite(n) && n > 0);
+    const q = result?.indicators?.quote?.[0];
+    const { highs, lows, closes } = alignPositive(q?.high, q?.low, q?.close);
     const metaPrice = Number(result?.meta?.regularMarketPrice);
     const lastPrice =
       Number.isFinite(metaPrice) && metaPrice > 0
@@ -46,9 +89,18 @@ export async function fetchDailyCloses(
         : closes.length
           ? closes[closes.length - 1]!
           : null;
-    return { closes, lastPrice };
+    return { closes, highs, lows, lastPrice };
   } catch (err) {
     console.warn(`[paper-bot] chart failed for ${yahoo}:`, err);
-    return { closes: [], lastPrice: null };
+    return { closes: [], highs: [], lows: [], lastPrice: null };
   }
+}
+
+/** Back-compat helper. */
+export async function fetchDailyCloses(
+  ticker: string,
+  range = "1y",
+): Promise<{ closes: number[]; lastPrice: number | null }> {
+  const ohlc = await fetchDailyOhlc(ticker, range);
+  return { closes: ohlc.closes, lastPrice: ohlc.lastPrice };
 }

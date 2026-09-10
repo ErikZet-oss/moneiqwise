@@ -1,8 +1,10 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db";
 import {
+  DEFAULT_EXITS,
   DEFAULT_RISK,
   type PaperBot,
+  type PaperBotExitSettings,
   type PaperBotLog,
   type PaperBotRiskSettings,
   type PaperBotStatus,
@@ -51,6 +53,15 @@ function mapRisk(raw: unknown): PaperBotRiskSettings {
   };
 }
 
+function mapExits(raw: unknown): PaperBotExitSettings {
+  const r = parseJson<Partial<PaperBotExitSettings>>(raw, {});
+  return {
+    trailingAtrMult: num(r.trailingAtrMult, DEFAULT_EXITS.trailingAtrMult),
+    takeProfitPct: num(r.takeProfitPct, DEFAULT_EXITS.takeProfitPct),
+    hardStopPct: num(r.hardStopPct, DEFAULT_EXITS.hardStopPct),
+  };
+}
+
 function mapBot(row: any): PaperBot {
   return {
     id: String(row.id),
@@ -64,7 +75,9 @@ function mapBot(row: any): PaperBot {
     symbols: parseJson<string[]>(row.symbols_json, []),
     candleTf: String(row.candle_tf || "1d"),
     risk: mapRisk(row.risk_json),
-    aiInfluencePct: num(row.ai_influence_pct, 0),
+    exits: mapExits(row.exit_json),
+    aiInfluencePct: num(row.ai_influence_pct, 20),
+    aiMinConfidence: num(row.ai_min_confidence, 60),
     dayStartEquity: num(row.day_start_equity, num(row.starting_cash)),
     peakEquity: num(row.peak_equity, num(row.starting_cash)),
     lastTickAt: row.last_tick_at
@@ -72,6 +85,23 @@ function mapBot(row: any): PaperBot {
       : null,
     createdAt: new Date(row.created_at).toISOString(),
     updatedAt: new Date(row.updated_at).toISOString(),
+  };
+}
+
+function mapPosition(row: any): PaperPosition {
+  const entry = num(row.entry_price);
+  return {
+    id: String(row.id),
+    botId: String(row.bot_id),
+    userId: String(row.user_id),
+    symbol: String(row.symbol),
+    qty: num(row.qty),
+    entryPrice: entry,
+    peakPrice: num(row.peak_price, entry),
+    markPrice: null,
+    unrealizedPnl: null,
+    openedAt: new Date(row.opened_at).toISOString(),
+    strategyId: row.strategy_id as PaperStrategyId,
   };
 }
 
@@ -91,13 +121,23 @@ export function ensurePaperBotTables(): Promise<void> {
           symbols_json JSONB NOT NULL DEFAULT '[]'::jsonb,
           candle_tf TEXT NOT NULL DEFAULT '1d',
           risk_json JSONB NOT NULL DEFAULT '{}'::jsonb,
-          ai_influence_pct DOUBLE PRECISION NOT NULL DEFAULT 0,
+          exit_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+          ai_influence_pct DOUBLE PRECISION NOT NULL DEFAULT 20,
+          ai_min_confidence DOUBLE PRECISION NOT NULL DEFAULT 60,
           day_start_equity DOUBLE PRECISION NOT NULL,
           peak_equity DOUBLE PRECISION NOT NULL,
           last_tick_at TIMESTAMPTZ,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
+      `);
+      await db.execute(sql`
+        ALTER TABLE paper_bots
+          ADD COLUMN IF NOT EXISTS exit_json JSONB NOT NULL DEFAULT '{}'::jsonb
+      `);
+      await db.execute(sql`
+        ALTER TABLE paper_bots
+          ADD COLUMN IF NOT EXISTS ai_min_confidence DOUBLE PRECISION NOT NULL DEFAULT 60
       `);
       await db.execute(sql`
         CREATE INDEX IF NOT EXISTS paper_bots_user_idx
@@ -115,9 +155,19 @@ export function ensurePaperBotTables(): Promise<void> {
           symbol TEXT NOT NULL,
           qty DOUBLE PRECISION NOT NULL,
           entry_price DOUBLE PRECISION NOT NULL,
+          peak_price DOUBLE PRECISION,
           opened_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           strategy_id TEXT NOT NULL
         );
+      `);
+      await db.execute(sql`
+        ALTER TABLE paper_positions
+          ADD COLUMN IF NOT EXISTS peak_price DOUBLE PRECISION
+      `);
+      await db.execute(sql`
+        UPDATE paper_positions
+        SET peak_price = entry_price
+        WHERE peak_price IS NULL
       `);
       await db.execute(sql`
         CREATE UNIQUE INDEX IF NOT EXISTS paper_positions_bot_symbol_idx
@@ -185,30 +235,40 @@ export async function createPaperBot(input: {
   strategyId?: PaperStrategyId;
   symbols: string[];
   risk?: Partial<PaperBotRiskSettings>;
+  exits?: Partial<PaperBotExitSettings>;
   aiInfluencePct?: number;
+  aiMinConfidence?: number;
 }): Promise<PaperBot> {
   await ensurePaperBotTables();
   const cash = Math.max(1, Number(input.startingCash) || 0);
   const risk = { ...DEFAULT_RISK, ...(input.risk || {}) };
+  const exits = { ...DEFAULT_EXITS, ...(input.exits || {}) };
   const strategyId = input.strategyId || "ema_rsi_trend";
   const symbols = input.symbols.map((s) => s.trim().toUpperCase()).filter(Boolean);
   const currency = (input.currency || "EUR").toUpperCase();
   const name = input.name.trim() || "Paper Bot";
   const aiInfluencePct = Math.min(
     100,
-    Math.max(0, num(input.aiInfluencePct, 0)),
+    Math.max(0, num(input.aiInfluencePct, 20)),
+  );
+  const aiMinConfidence = Math.min(
+    100,
+    Math.max(0, num(input.aiMinConfidence, 60)),
   );
   const riskJson = JSON.stringify(risk);
+  const exitJson = JSON.stringify(exits);
   const symbolsJson = JSON.stringify(symbols);
 
   const result = await db.execute(sql`
     INSERT INTO paper_bots (
       user_id, name, status, starting_cash, cash, currency,
-      strategy_id, symbols_json, risk_json, ai_influence_pct,
+      strategy_id, symbols_json, risk_json, exit_json,
+      ai_influence_pct, ai_min_confidence,
       day_start_equity, peak_equity
     ) VALUES (
       ${input.userId}, ${name}, 'paused', ${cash}, ${cash}, ${currency},
-      ${strategyId}, ${symbolsJson}::jsonb, ${riskJson}::jsonb, ${aiInfluencePct},
+      ${strategyId}, ${symbolsJson}::jsonb, ${riskJson}::jsonb, ${exitJson}::jsonb,
+      ${aiInfluencePct}, ${aiMinConfidence},
       ${cash}, ${cash}
     )
     RETURNING *
@@ -222,7 +282,7 @@ export async function createPaperBot(input: {
     userId: input.userId,
     eventType: "status",
     message: `Bot vytvorený s kapitálom ${cash} ${currency}`,
-    detail: { strategyId, symbols, risk },
+    detail: { strategyId, symbols, risk, exits, aiInfluencePct },
   });
   await insertEquityTick(bot.id, cash, cash);
   return bot;
@@ -336,18 +396,7 @@ export async function listPositions(
     WHERE bot_id = ${botId} AND user_id = ${userId}
     ORDER BY opened_at DESC
   `);
-  return asRows(result).map((row: any) => ({
-    id: String(row.id),
-    botId: String(row.bot_id),
-    userId: String(row.user_id),
-    symbol: String(row.symbol),
-    qty: num(row.qty),
-    entryPrice: num(row.entry_price),
-    markPrice: null,
-    unrealizedPnl: null,
-    openedAt: new Date(row.opened_at).toISOString(),
-    strategyId: row.strategy_id as PaperStrategyId,
-  }));
+  return asRows(result).map(mapPosition);
 }
 
 export async function insertPosition(input: {
@@ -361,26 +410,32 @@ export async function insertPosition(input: {
   await ensurePaperBotTables();
   const result = await db.execute(sql`
     INSERT INTO paper_positions (
-      bot_id, user_id, symbol, qty, entry_price, strategy_id
+      bot_id, user_id, symbol, qty, entry_price, peak_price, strategy_id
     ) VALUES (
       ${input.botId}, ${input.userId}, ${input.symbol},
-      ${input.qty}, ${input.entryPrice}, ${input.strategyId}
+      ${input.qty}, ${input.entryPrice}, ${input.entryPrice}, ${input.strategyId}
     )
     RETURNING *
   `);
   const row = asRows(result)[0] as any;
+  const pos = mapPosition(row);
   return {
-    id: String(row.id),
-    botId: String(row.bot_id),
-    userId: String(row.user_id),
-    symbol: String(row.symbol),
-    qty: num(row.qty),
-    entryPrice: num(row.entry_price),
+    ...pos,
     markPrice: input.entryPrice,
     unrealizedPnl: 0,
-    openedAt: new Date(row.opened_at).toISOString(),
-    strategyId: row.strategy_id as PaperStrategyId,
   };
+}
+
+export async function updatePositionPeak(
+  positionId: string,
+  peakPrice: number,
+): Promise<void> {
+  await ensurePaperBotTables();
+  await db.execute(sql`
+    UPDATE paper_positions
+    SET peak_price = ${peakPrice}
+    WHERE id = ${positionId} AND peak_price < ${peakPrice}
+  `);
 }
 
 export async function deletePosition(positionId: string): Promise<void> {

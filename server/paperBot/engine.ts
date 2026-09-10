@@ -1,9 +1,14 @@
 import {
+  atr,
+  evaluateDualMomentum,
   evaluateEmaRsiTrend,
+  evaluateExitRules,
   evaluateMaCrossover,
+  evaluateRsiMeanReversion,
   type SignalDecision,
 } from "./indicators";
-import { fetchDailyCloses } from "./marketData";
+import { applyAiNudge, fetchPaperBotAiVerdicts, type AiSymbolVerdict } from "./aiLayer";
+import { fetchDailyOhlc, type OhlcSeries } from "./marketData";
 import {
   deletePosition,
   getPaperBot,
@@ -14,6 +19,7 @@ import {
   listPositions,
   updatePaperBotLedger,
   updatePaperBotStatus,
+  updatePositionPeak,
 } from "./store";
 import type { PaperBot, PaperPosition, PaperStrategyId } from "./types";
 
@@ -22,6 +28,8 @@ function evaluateStrategy(
   closes: number[],
 ): SignalDecision {
   if (strategyId === "ma_crossover") return evaluateMaCrossover(closes);
+  if (strategyId === "rsi_mean_reversion") return evaluateRsiMeanReversion(closes);
+  if (strategyId === "dual_momentum") return evaluateDualMomentum(closes);
   return evaluateEmaRsiTrend(closes);
 }
 
@@ -39,12 +47,17 @@ async function markPositions(
   prices: Map<string, number>,
 ): Promise<{ marked: PaperPosition[]; positionsValue: number }> {
   let positionsValue = 0;
-  const marked = positions.map((p) => {
+  const marked: PaperPosition[] = [];
+  for (const p of positions) {
     const mark = prices.get(p.symbol) ?? p.entryPrice;
+    const peakPrice = Math.max(p.peakPrice || p.entryPrice, mark);
+    if (peakPrice > (p.peakPrice || p.entryPrice)) {
+      await updatePositionPeak(p.id, peakPrice);
+    }
     const unrealizedPnl = (mark - p.entryPrice) * p.qty;
     positionsValue += mark * p.qty;
-    return { ...p, markPrice: mark, unrealizedPnl };
-  });
+    marked.push({ ...p, markPrice: mark, peakPrice, unrealizedPnl });
+  }
   return { marked, positionsValue };
 }
 
@@ -211,18 +224,22 @@ export async function tickPaperBot(
     botId: working.id,
     userId: working.userId,
     eventType: "tick",
-    message: `Tick začal (${working.strategyId})`,
-    detail: { symbols: working.symbols, cash: working.cash },
+    message: `Tick začal (${working.strategyId}, AI ${working.aiInfluencePct}%)`,
+    detail: {
+      symbols: working.symbols,
+      cash: working.cash,
+      exits: working.exits,
+    },
   });
 
   const prices = new Map<string, number>();
-  const closesBySymbol = new Map<string, number[]>();
+  const ohlcBySymbol = new Map<string, OhlcSeries>();
 
   for (const symbol of working.symbols) {
     try {
-      const { closes: bars, lastPrice } = await fetchDailyCloses(symbol);
-      closesBySymbol.set(symbol, bars);
-      if (lastPrice != null) prices.set(symbol, lastPrice);
+      const ohlc = await fetchDailyOhlc(symbol);
+      ohlcBySymbol.set(symbol, ohlc);
+      if (ohlc.lastPrice != null) prices.set(symbol, ohlc.lastPrice);
     } catch (err) {
       errors += 1;
       await insertPaperLog({
@@ -236,11 +253,30 @@ export async function tickPaperBot(
     }
   }
 
+  // AI layer once per tick (only if influence > 0)
+  let aiVerdicts = new Map<string, AiSymbolVerdict>();
+  if (working.aiInfluencePct > 0) {
+    const ai = await fetchPaperBotAiVerdicts({ symbols: working.symbols });
+    aiVerdicts = ai.verdicts;
+    await insertPaperLog({
+      botId: working.id,
+      userId: working.userId,
+      eventType: "ai",
+      message: ai.error
+        ? `AI vrstva zlyhala — fallback na quant (${ai.error})`
+        : `AI verdicts pre ${ai.verdicts.size} tickerov (news=${ai.newsCount})`,
+      detail: {
+        model: ai.model,
+        error: ai.error,
+        verdicts: [...ai.verdicts.values()],
+      },
+    });
+  }
+
   let positions = await listPositions(working.id, working.userId);
   const { marked, positionsValue } = await markPositions(positions, prices);
   let equity = roundMoney(working.cash + positionsValue);
 
-  // Reset day start equity on new UTC day
   const lastTickDay = working.lastTickAt
     ? working.lastTickAt.slice(0, 10)
     : null;
@@ -250,18 +286,46 @@ export async function tickPaperBot(
     dayStartEquity = equity;
   }
   let peakEquity = Math.max(working.peakEquity, equity);
-  working = {
-    ...working,
-    dayStartEquity,
-    peakEquity,
-  };
+  working = { ...working, dayStartEquity, peakEquity };
 
-  // Exits first
+  // Exits: absolute rules first, then strategy SELL
   for (const pos of marked) {
-    const bars = closesBySymbol.get(pos.symbol) ?? [];
+    const ohlc = ohlcBySymbol.get(pos.symbol);
     const price = prices.get(pos.symbol);
-    if (price == null || bars.length < 30) continue;
-    const signal = evaluateStrategy(working.strategyId, bars);
+    if (price == null || !ohlc || ohlc.closes.length < 30) continue;
+
+    const atrVal = atr(ohlc.highs, ohlc.lows, ohlc.closes, 14);
+    const exitHit = evaluateExitRules({
+      entryPrice: pos.entryPrice,
+      peakPrice: pos.peakPrice,
+      markPrice: price,
+      atr: atrVal,
+      trailingAtrMult: working.exits.trailingAtrMult,
+      takeProfitPct: working.exits.takeProfitPct,
+      hardStopPct: working.exits.hardStopPct,
+    });
+
+    if (exitHit.hit) {
+      await insertPaperLog({
+        botId: working.id,
+        userId: working.userId,
+        eventType: "signal",
+        symbol: pos.symbol,
+        message: `Exit rule — ${exitHit.reason}`,
+        detail: exitHit.detail,
+      });
+      const res = await closeLong({
+        bot: working,
+        position: pos,
+        price,
+        reason: exitHit.reason,
+      });
+      working = { ...working, cash: res.cash };
+      closes += 1;
+      continue;
+    }
+
+    const signal = evaluateStrategy(working.strategyId, ohlc.closes);
     await insertPaperLog({
       botId: working.id,
       userId: working.userId,
@@ -292,9 +356,9 @@ export async function tickPaperBot(
   // Entries
   for (const symbol of working.symbols) {
     if (positions.some((p) => p.symbol === symbol)) continue;
-    const bars = closesBySymbol.get(symbol) ?? [];
+    const ohlc = ohlcBySymbol.get(symbol);
     const price = prices.get(symbol);
-    if (price == null || bars.length < 30) {
+    if (price == null || !ohlc || ohlc.closes.length < 30) {
       await insertPaperLog({
         botId: working.id,
         userId: working.userId,
@@ -306,23 +370,39 @@ export async function tickPaperBot(
       continue;
     }
 
-    const signal = evaluateStrategy(working.strategyId, bars);
+    const quant = evaluateStrategy(working.strategyId, ohlc.closes);
+    const nudged = applyAiNudge({
+      signal: quant,
+      verdict: aiVerdicts.get(symbol) ?? null,
+      influencePct: working.aiInfluencePct,
+      minConfidence: working.aiMinConfidence,
+    });
+
     await insertPaperLog({
       botId: working.id,
       userId: working.userId,
       eventType: "signal",
       symbol,
-      message: `Signal ${signal.action} — ${signal.reason}`,
-      detail: signal,
+      message: `Signal ${nudged.action} — ${nudged.reason}`,
+      detail: nudged,
     });
 
-    if (signal.action !== "BUY") continue;
+    if (nudged.aiBlocked || (nudged.aiApplied && nudged.action === "HOLD" && quant.action === "BUY")) {
+      blocked += 1;
+      await insertPaperLog({
+        botId: working.id,
+        userId: working.userId,
+        eventType: "blocked",
+        symbol,
+        message: nudged.reason,
+        detail: nudged,
+      });
+      continue;
+    }
 
-    const blockReason = riskBlocksOpen(
-      working,
-      equity,
-      positions.length,
-    );
+    if (nudged.action !== "BUY") continue;
+
+    const blockReason = riskBlocksOpen(working, equity, positions.length);
     if (blockReason) {
       blocked += 1;
       await insertPaperLog({
@@ -341,8 +421,8 @@ export async function tickPaperBot(
       symbol,
       price,
       equity,
-      reason: signal.reason,
-      signal,
+      reason: nudged.reason,
+      signal: nudged,
     });
     working = { ...working, cash: res.cash };
     if (res.opened) {
@@ -399,8 +479,8 @@ export async function killPaperBot(
     const positions = await listPositions(botId, userId);
     let cash = bot.cash;
     for (const pos of positions) {
-      const { lastPrice } = await fetchDailyCloses(pos.symbol, "5d");
-      const price = lastPrice ?? pos.entryPrice;
+      const ohlc = await fetchDailyOhlc(pos.symbol, "5d");
+      const price = ohlc.lastPrice ?? pos.entryPrice;
       const res = await closeLong({
         bot: { ...bot, cash },
         position: pos,
@@ -431,8 +511,8 @@ export async function computeBotEquity(
   const positions = await listPositions(botId, userId);
   const prices = new Map<string, number>();
   for (const p of positions) {
-    const { lastPrice } = await fetchDailyCloses(p.symbol, "5d");
-    if (lastPrice != null) prices.set(p.symbol, lastPrice);
+    const ohlc = await fetchDailyOhlc(p.symbol, "5d");
+    if (ohlc.lastPrice != null) prices.set(p.symbol, ohlc.lastPrice);
   }
   const { marked, positionsValue } = await markPositions(positions, prices);
   const equity = roundMoney(bot.cash + positionsValue);
