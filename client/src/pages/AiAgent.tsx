@@ -1,14 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Bell, Brain, Bot, ScanSearch } from "lucide-react";
+import { Bell, Brain, Bot, ScanSearch, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import AiSkener from "@/pages/AiSkener";
 import AiBot from "@/pages/AiBot";
 import AiAlerts from "@/pages/AiAlerts";
+import AiPaperBot from "@/pages/AiPaperBot";
 
-type TabId = "bot" | "alerts" | "skener";
+type TabId = "bot" | "paper" | "alerts" | "skener";
 
 function tabFromPath(path: string): TabId {
+  if (path.includes("/paper")) return "paper";
   if (path.includes("/skener")) return "skener";
   if (path.includes("/alerty") || path.includes("/alerts")) return "alerts";
   return "bot";
@@ -43,12 +45,12 @@ export default function AiAgent() {
           <h1 className="text-lg font-semibold tracking-tight md:text-xl">AI Agent</h1>
         </div>
         <p className="text-xs text-muted-foreground md:text-sm">
-          Bot na denný audit, Alerty na pohyby a novinky, Skener na tipy z trhu.
+          Audit bot, Paper trading, Alerty a Skener tipov z trhu.
         </p>
       </div>
 
       <div
-        className="sticky top-0 z-20 -mx-1 grid grid-cols-3 gap-1 rounded-xl border bg-background/95 p-1 backdrop-blur supports-[backdrop-filter]:bg-background/80"
+        className="sticky top-0 z-20 -mx-1 grid grid-cols-4 gap-1 rounded-xl border bg-background/95 p-1 backdrop-blur supports-[backdrop-filter]:bg-background/80"
         role="tablist"
         aria-label="AI Agent sekcie"
       >
@@ -67,6 +69,22 @@ export default function AiAgent() {
         >
           <Bot className="h-3.5 w-3.5 shrink-0" />
           <span className="truncate">AI Bot</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "paper"}
+          className={cn(
+            "flex h-10 items-center justify-center gap-1 rounded-lg text-[11px] font-medium transition-colors sm:gap-1.5 sm:text-xs md:text-sm",
+            tab === "paper"
+              ? "bg-primary text-primary-foreground shadow-sm"
+              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+          )}
+          onClick={() => setLocation("/ai-agent/paper")}
+          data-testid="tab-ai-paper"
+        >
+          <Wallet className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">Paper</span>
         </button>
         <button
           type="button"
@@ -110,13 +128,15 @@ export default function AiAgent() {
           data-testid="tab-ai-skener"
         >
           <ScanSearch className="h-3.5 w-3.5 shrink-0" />
-          <span className="truncate">AI Skener</span>
+          <span className="truncate">Skener</span>
         </button>
       </div>
 
       <div className="min-w-0">
         {tab === "bot" ? (
           <AiBot embedded />
+        ) : tab === "paper" ? (
+          <AiPaperBot embedded />
         ) : tab === "alerts" ? (
           <AiAlerts embedded />
         ) : (

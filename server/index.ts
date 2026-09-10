@@ -110,5 +110,10 @@ app.use((req, res, next) => {
     void import("./aiBot/scheduler")
       .then(({ startAiBotScheduler }) => startAiBotScheduler())
       .catch((err) => console.error("[ai-bot] scheduler start failed:", err));
+    void import("./paperBot/scheduler")
+      .then(({ startPaperBotScheduler }) => startPaperBotScheduler())
+      .catch((err) =>
+        console.error("[paper-bot] scheduler start failed:", err),
+      );
   });
 })();

@@ -98,6 +98,7 @@ function Router() {
       <Route path="/watchlist" component={Watchlist} />
       <Route path="/ai-agent" component={RedirectToAiAgentBot} />
       <Route path="/ai-agent/bot" component={AiAgent} />
+      <Route path="/ai-agent/paper" component={AiAgent} />
       <Route path="/ai-agent/alerty" component={AiAgent} />
       <Route path="/ai-agent/skener" component={AiAgent} />
       <Route path="/ai-skener" component={RedirectToAiAgentSkener} />
