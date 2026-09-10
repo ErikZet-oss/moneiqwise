@@ -337,8 +337,8 @@ function looseFallbackFromContext(
 }
 
 function sanitizeContext(ctx: AiBotRunContext) {
-  // Top 20 podľa váhy — kratší prompt = menej orezaných JSON odpovedí.
-  const holdings = ctx.holdings.slice(0, 20).map((h) => ({
+  // Top 25 podľa váhy — pri „Všetkých“ je toť pozícií.
+  const holdings = ctx.holdings.slice(0, 25).map((h) => ({
     ticker: h.ticker,
     companyName: h.companyName,
     shares: Number.isFinite(h.shares) ? Number(h.shares.toFixed(4)) : 0,
@@ -371,7 +371,9 @@ function sanitizeContext(ctx: AiBotRunContext) {
     sector: m.sector,
   }));
 
-  const news = (ctx.news || []).slice(0, 24).map((n) => ({
+  // Pri veľa holdingoch skráť news, aby v odpovedi ostalo miesto na portfolioAudit.
+  const newsCap = holdings.length >= 15 ? 14 : holdings.length >= 10 ? 18 : 24;
+  const news = (ctx.news || []).slice(0, newsCap).map((n) => ({
     title: n.title.slice(0, 160),
     publisher: n.publisher?.slice(0, 40) || null,
     link: n.link || null,
@@ -402,44 +404,61 @@ function sanitizeContext(ctx: AiBotRunContext) {
 function buildPrompt(userPayload: unknown, compact: boolean): string {
   if (compact) {
     return `Return ONLY valid minified JSON. No markdown.
-Keys IN THIS ORDER: summary,
+Keys IN THIS ORDER (portfolioAudit EARLY — never omit):
+summary,
 marketOutlook:{sentiment:risk_on|risk_off|mixed|uncertain,narrative,drivers[]},
+portfolioAudit:[{ticker,companyName,action,weightPct,horizon,conviction,rationale,risks,invalidation,newsDrivers[]}],
 sectorTrends:[{sector,bias:bullish|bearish|neutral,why}],
 newsDigest:[{title,publisher,link,whyItMatters,relatedTickers[]}],
 newOpportunities:[{ticker,companyName,thesis,horizon,risks,whyNow,conviction,newsDrivers[]}],
-portfolioAudit:[{ticker,companyName,action,weightPct,horizon,conviction,rationale,risks,invalidation,newsDrivers[]}],
 marketNotes:[{title,detail}].
-CRITICAL: each newOpportunity MUST have thesis = 2-4 Slovak sentences (catalyst, edge, risks). Never empty thesis. Never "Bez tézy".
-Cite headlines from recentNews. action=BUY|SELL|TRIM|HOLD.
+MUST include EVERY holdings[] ticker in portfolioAudit.
+rationale = 3-5 clear Slovak sentences. thesis = 2-4 Slovak sentences. Never "Bez tézy".
+action=BUY|SELL|TRIM|HOLD. Cite recentNews.
 Context:
 ${JSON.stringify(userPayload)}`;
   }
 
-  return `Si senior investičný analytik pre retail investora v appke Moneiqwise (slovensky).
+  return `Si senior investičný analytik pre retail investora v appke Moneiqwise.
+Píš po SLOVENSKY, kultivovane a zrozumiteľne — ako v kvalitnom investičnom bulletine (nie heslá, nie anglické skratky bez vysvetlenia).
 
-Musíš spraviť HĹBKOVÝ rozbor podľa aktuálnych noviniek v poli recentNews (Yahoo Finance titulky + krátke súhrny).
+Musíš spraviť HĹBKOVÝ rozbor podľa aktuálnych noviniek v poli recentNews.
 Nestačí všeobecné frázovanie — viaž rozhodnutia na konkrétne titulky (Fed/inflácia, Trump/cla, geopolitika, sektory, firemné správy).
 
-Úlohy (poradie v JSON dodrž):
-1) marketOutlook: nálada trhu (risk_on|risk_off|mixed|uncertain), naratív 3–5 viet, drivers = kľúčové témy z noviniek.
-2) sectorTrends: 3–5 sektorov relevantných k portfóliu / novinkám, bias + prečo (podľa článkov).
-3) newsDigest: 4–6 najdôležitejších článkov z recentNews — skopíruj title/publisher/link ak sú, a napíš whyItMatters pre investora.
-4) newOpportunities: 1–2 tipy mimo alreadyOwnedOrWatching.
-   - thesis je POVINNÁ: 3–5 viet po slovensky — čo je príbeh/edge, katalyzátor z noviniek, valuácia/setup, hlavné riziko.
-   - Zakázané: prázdna thesis, "Bez tézy", jednoslovné frázovanie.
-   - whyNow: 1–2 vety prečo práve teraz (aktuálne novinky).
-   - newsDrivers: 1–3 konkrétne titulky z recentNews.
-5) Pre každú holding pozíciu: BUY|SELL|TRIM|HOLD + rationale (2–4 vety) s odkazom na novinky; newsDrivers = 1–3 krátke citácie/titulky.
-6) marketNotes: krátke doplnkové poznámky.
+KRITICKÉ: portfolioAudit je jadro briefu. Musí obsahovať KAŽDÚ pozíciu z holdings[].
+Ak by odpoveď bola dlhá, radšej skráť newsDigest/marketNotes — NIKDY nevynechaj portfolioAudit.
+
+Úlohy (poradie v JSON STRIKTNE dodrž — audit hneď po outlooku):
+1) summary: 2–4 vety, čo je dnes najdôležitejšie pre toto portfólio.
+2) marketOutlook: sentiment (risk_on|risk_off|mixed|uncertain), naratív 3–5 viet, drivers[].
+3) portfolioAudit: pre KAŽDÝ ticker z holdings:
+   - action: BUY|SELL|TRIM|HOLD
+   - rationale: 4–6 viet, plynulý text — váha v portfóliu, P/L, denný pohyb, novinky, prečo táto akcia; formuluj ako radu investorovi.
+   - risks + invalidation: 1–2 vety každá
+   - newsDrivers: 1–3 titulky z recentNews (ak relevantné)
+   - horizon: swing|long, conviction 1–5
+4) sectorTrends: 3–5 sektorov, bias + why (2–3 vety).
+5) newsDigest: 3–5 článkov (title/publisher/link + whyItMatters).
+6) newOpportunities: 1–2 tipy mimo alreadyOwnedOrWatching; thesis 3–5 viet (povinná).
+7) marketNotes: max 3 krátke poznámky.
 
 Pravidlá:
 - Odpovedz VÝHRADNE platným JSON. Žiadny markdown, žiadny text okolo.
 - Neklaď titulky, ktoré nie sú v recentNews.
 - Ak recentNews je prázdne, povedz to v marketOutlook.narrative a buď opatrný.
-- horizon: swing|long, conviction 1–5.
-- JSON polia v poradí: summary, marketOutlook, sectorTrends, newsDigest, newOpportunities, portfolioAudit, marketNotes.
+- JSON polia v poradí: summary, marketOutlook, portfolioAudit, sectorTrends, newsDigest, newOpportunities, marketNotes.
 
 Kontext:
+${JSON.stringify(userPayload)}`;
+}
+
+function buildAuditOnlyPrompt(userPayload: unknown): string {
+  return `Si senior investičný analytik (slovensky, kultivovane).
+Doplň LEN portfolioAudit pre KAŽDÚ pozíciu z holdings.
+Return ONLY JSON: {"portfolioAudit":[{ticker,companyName,action,weightPct,horizon,conviction,rationale,risks,invalidation,newsDrivers[]}]}
+action=BUY|SELL|TRIM|HOLD. rationale = 4–6 viet (váha, P/L, novinky, odporúčanie).
+Cite recentNews where relevant. Never omit a holding ticker.
+Context:
 ${JSON.stringify(userPayload)}`;
 }
 
@@ -454,34 +473,77 @@ async function callClaude(prompt: string, maxTokens: number): Promise<string> {
   return textBlock && textBlock.type === "text" ? textBlock.text : "";
 }
 
+function auditCoverageOk(
+  analysis: AiBotAnalysisPayload,
+  holdingsCount: number,
+): boolean {
+  if (holdingsCount <= 0) return true;
+  const n = analysis.portfolioAudit.length;
+  // Aspoň polovica pozícií (pri veľkom PTF), inak považuj za orezané.
+  const minNeeded = Math.min(holdingsCount, Math.max(3, Math.ceil(holdingsCount * 0.6)));
+  return n >= minNeeded;
+}
+
 export async function runClaudeAiBotAnalysis(
   ctx: AiBotRunContext,
 ): Promise<AiBotAnalysisPayload> {
   const userPayload = sanitizeContext(ctx);
+  const holdingsCount = userPayload.holdings.length;
   let lastText = "";
 
   try {
-    // 1) bežný prompt, viac tokenov (menej orezania)
-    lastText = await callClaude(buildPrompt(userPayload, false), 8192);
+    // Viac tokenov — plnší audit pozícií (hlavne „Všetky portfóliá“).
+    lastText = await callClaude(buildPrompt(userPayload, false), 12288);
+    let analysis: AiBotAnalysisPayload | null = null;
     try {
-      return normalizeAnalysis(extractJsonObject(lastText), ctx.sourcesUsed);
+      analysis = normalizeAnalysis(extractJsonObject(lastText), ctx.sourcesUsed);
     } catch {
       /* retry */
     }
 
-    // 2) kompaktný retry
-    lastText = await callClaude(buildPrompt(userPayload, true), 4096);
-    try {
-      return normalizeAnalysis(extractJsonObject(lastText), ctx.sourcesUsed);
-    } catch {
-      /* fallback */
+    if (!analysis) {
+      lastText = await callClaude(buildPrompt(userPayload, true), 8192);
+      try {
+        analysis = normalizeAnalysis(extractJsonObject(lastText), ctx.sourcesUsed);
+      } catch {
+        /* fallback */
+      }
     }
 
-    console.warn(
-      "[ai-bot] JSON parse failed after retry, using loose fallback. Preview:",
-      lastText.slice(0, 400),
-    );
-    return looseFallbackFromContext(ctx, lastText, ctx.sourcesUsed);
+    if (!analysis) {
+      console.warn(
+        "[ai-bot] JSON parse failed after retry, using loose fallback. Preview:",
+        lastText.slice(0, 400),
+      );
+      return looseFallbackFromContext(ctx, lastText, ctx.sourcesUsed);
+    }
+
+    // Ak chýba audit pozícií (často orezanie pri veľkom PTF) — druhý pass len na audit.
+    if (!auditCoverageOk(analysis, holdingsCount)) {
+      console.warn(
+        `[ai-bot] thin portfolioAudit (${analysis.portfolioAudit.length}/${holdingsCount}), running audit-only pass`,
+      );
+      try {
+        const auditText = await callClaude(buildAuditOnlyPrompt(userPayload), 8192);
+        const auditRaw = extractJsonObject(auditText) as any;
+        const patched = normalizeAnalysis(
+          { ...analysis, portfolioAudit: auditRaw?.portfolioAudit ?? auditRaw },
+          ctx.sourcesUsed,
+        );
+        if (patched.portfolioAudit.length > analysis.portfolioAudit.length) {
+          analysis = {
+            ...analysis,
+            portfolioAudit: patched.portfolioAudit,
+            model: analysis.model,
+            sourcesUsed: analysis.sourcesUsed,
+          };
+        }
+      } catch (err) {
+        console.warn("[ai-bot] audit-only pass failed:", err);
+      }
+    }
+
+    return analysis;
   } catch (err) {
     if (err instanceof Error && err.message === "AI_JSON_PARSE") {
       return looseFallbackFromContext(ctx, lastText, ctx.sourcesUsed);

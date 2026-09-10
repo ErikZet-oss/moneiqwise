@@ -713,7 +713,9 @@ export default function AiBot({ embedded = false }: { embedded?: boolean }) {
                       </p>
                     </div>
                   </div>
-                  <p className="text-xs leading-relaxed md:text-sm">{item.rationale}</p>
+                  <p className="text-xs leading-relaxed md:text-sm whitespace-pre-line">
+                    {item.rationale}
+                  </p>
                   <NewsDrivers drivers={item.newsDrivers} />
                   {item.risks ? (
                     <p className="text-[11px] text-muted-foreground">
