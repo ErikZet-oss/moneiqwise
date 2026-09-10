@@ -357,6 +357,26 @@ function sanitizeContext(ctx: AiBotRunContext) {
         ? Number(h.unrealizedPnlPct.toFixed(2))
         : null,
     pe: h.pe != null && Number.isFinite(h.pe) ? Number(h.pe.toFixed(2)) : null,
+    high52w: h.high52w != null && Number.isFinite(h.high52w) ? Number(h.high52w.toFixed(2)) : null,
+    low52w: h.low52w != null && Number.isFinite(h.low52w) ? Number(h.low52w.toFixed(2)) : null,
+    pctFrom52wHigh:
+      h.pctFrom52wHigh != null && Number.isFinite(h.pctFrom52wHigh)
+        ? Number(h.pctFrom52wHigh.toFixed(1))
+        : null,
+    pctFrom52wLow:
+      h.pctFrom52wLow != null && Number.isFinite(h.pctFrom52wLow)
+        ? Number(h.pctFrom52wLow.toFixed(1))
+        : null,
+    sma50: h.sma50 != null && Number.isFinite(h.sma50) ? Number(h.sma50.toFixed(2)) : null,
+    sma200: h.sma200 != null && Number.isFinite(h.sma200) ? Number(h.sma200.toFixed(2)) : null,
+    pctFromSma50:
+      h.pctFromSma50 != null && Number.isFinite(h.pctFromSma50)
+        ? Number(h.pctFromSma50.toFixed(1))
+        : null,
+    pctFromSma200:
+      h.pctFromSma200 != null && Number.isFinite(h.pctFromSma200)
+        ? Number(h.pctFromSma200.toFixed(1))
+        : null,
   }));
 
   const movers = ctx.movers.slice(0, 8).map((m) => ({
@@ -414,7 +434,8 @@ newOpportunities:[{ticker,companyName,thesis,horizon,risks,whyNow,conviction,new
 marketNotes:[{title,detail}].
 MUST include EVERY holdings[] ticker in portfolioAudit.
 rationale = 3-5 clear Slovak sentences. thesis = 2-4 Slovak sentences. Never "Bez tézy".
-action=BUY|SELL|TRIM|HOLD. Cite recentNews.
+Cite recentNews. Use SMA50/SMA200 and 52w high/low from holdings when writing rationale.
+action=BUY|SELL|TRIM|HOLD.
 Context:
 ${JSON.stringify(userPayload)}`;
   }
@@ -433,7 +454,8 @@ Ak by odpoveď bola dlhá, radšej skráť newsDigest/marketNotes — NIKDY nevy
 2) marketOutlook: sentiment (risk_on|risk_off|mixed|uncertain), naratív 3–5 viet, drivers[].
 3) portfolioAudit: pre KAŽDÝ ticker z holdings:
    - action: BUY|SELL|TRIM|HOLD
-   - rationale: 4–6 viet, plynulý text — váha v portfóliu, P/L, denný pohyb, novinky, prečo táto akcia; formuluj ako radu investorovi.
+   - rationale: 4–6 viet, plynulý text — váha v portfóliu, P/L, denný pohyb, technické levely (sma50/sma200, pctFromSma50/pctFromSma200, high52w/low52w, pctFrom52wHigh/pctFrom52wLow), novinky, prečo táto akcia; formuluj ako radu investorovi.
+   - Zmien techniku explicitne, ak je relevantná (napr. pod SMA200, blízko 52w low, predĺženie nad SMA50).
    - risks + invalidation: 1–2 vety každá
    - newsDrivers: 1–3 titulky z recentNews (ak relevantné)
    - horizon: swing|long, conviction 1–5
@@ -456,7 +478,7 @@ function buildAuditOnlyPrompt(userPayload: unknown): string {
   return `Si senior investičný analytik (slovensky, kultivovane).
 Doplň LEN portfolioAudit pre KAŽDÚ pozíciu z holdings.
 Return ONLY JSON: {"portfolioAudit":[{ticker,companyName,action,weightPct,horizon,conviction,rationale,risks,invalidation,newsDrivers[]}]}
-action=BUY|SELL|TRIM|HOLD. rationale = 4–6 viet (váha, P/L, novinky, odporúčanie).
+action=BUY|SELL|TRIM|HOLD. rationale = 4–6 viet (váha, P/L, SMA50/SMA200, 52w high/low a % od nich, novinky, odporúčanie).
 Cite recentNews where relevant. Never omit a holding ticker.
 Context:
 ${JSON.stringify(userPayload)}`;

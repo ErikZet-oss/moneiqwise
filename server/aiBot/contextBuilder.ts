@@ -14,6 +14,20 @@ export type AiBotHoldingContext = {
   weightPct: number | null;
   unrealizedPnlPct: number | null;
   pe: number | null;
+  /** 52-week high */
+  high52w: number | null;
+  /** 52-week low */
+  low52w: number | null;
+  /** % od 52w high (záporné = pod maximom) */
+  pctFrom52wHigh: number | null;
+  /** % od 52w low (kladné = nad minimom) */
+  pctFrom52wLow: number | null;
+  sma50: number | null;
+  sma200: number | null;
+  /** % nad/pod SMA50 */
+  pctFromSma50: number | null;
+  /** % nad/pod SMA200 */
+  pctFromSma200: number | null;
 };
 
 export type AiBotMoverContext = {
@@ -75,16 +89,36 @@ function num(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function pctFromLevel(price: number | null, level: number | null): number | null {
+  if (price == null || level == null || level === 0) return null;
+  return ((price - level) / level) * 100;
+}
+
 async function quoteForTicker(ticker: string): Promise<{
   price: number | null;
   changePercent: number | null;
   pe: number | null;
   name: string | null;
+  high52w: number | null;
+  low52w: number | null;
+  sma50: number | null;
+  sma200: number | null;
 }> {
   try {
     const yahoo = toYahooTicker(ticker);
     const row = await fetchYahooV7Quote(yahoo);
-    if (!row) return { price: null, changePercent: null, pe: null, name: null };
+    if (!row) {
+      return {
+        price: null,
+        changePercent: null,
+        pe: null,
+        name: null,
+        high52w: null,
+        low52w: null,
+        sma50: null,
+        sma200: null,
+      };
+    }
     return {
       price: num(row.regularMarketPrice),
       changePercent: num(row.regularMarketChangePercent),
@@ -93,9 +127,22 @@ async function quoteForTicker(ticker: string): Promise<{
         (typeof row.shortName === "string" && row.shortName) ||
         (typeof row.longName === "string" && row.longName) ||
         null,
+      high52w: num(row.fiftyTwoWeekHigh),
+      low52w: num(row.fiftyTwoWeekLow),
+      sma50: num(row.fiftyDayAverage),
+      sma200: num(row.twoHundredDayAverage),
     };
   } catch {
-    return { price: null, changePercent: null, pe: null, name: null };
+    return {
+      price: null,
+      changePercent: null,
+      pe: null,
+      name: null,
+      high52w: null,
+      low52w: null,
+      sma50: null,
+      sma200: null,
+    };
   }
 }
 
@@ -146,6 +193,14 @@ export async function buildAiBotContext(
       weightPct: null,
       unrealizedPnlPct,
       pe: q.pe,
+      high52w: q.high52w,
+      low52w: q.low52w,
+      pctFrom52wHigh: pctFromLevel(price, q.high52w),
+      pctFrom52wLow: pctFromLevel(price, q.low52w),
+      sma50: q.sma50,
+      sma200: q.sma200,
+      pctFromSma50: pctFromLevel(price, q.sma50),
+      pctFromSma200: pctFromLevel(price, q.sma200),
     });
   }
 

@@ -19,6 +19,8 @@ const V7_QUOTE_FIELDS = [
   "regularMarketTime",
   "fiftyTwoWeekHigh",
   "fiftyTwoWeekLow",
+  "fiftyDayAverage",
+  "twoHundredDayAverage",
   "trailingAnnualDividendRate",
   "dividendRate",
   "trailingPE",
