@@ -130,17 +130,12 @@ async function requestVerdictJson(
     max_tokens: maxTokens,
     system:
       "You are a JSON API. Reply with a single valid JSON object only. No markdown fences, no commentary.",
-    messages: [
-      { role: "user", content: userContent },
-      // Prefill forces JSON object start — reduces prose / invalid schemas.
-      { role: "assistant", content: '{"verdicts":[' },
-    ],
+    messages: [{ role: "user", content: userContent }],
   });
-  const continuation = msg.content
+  return msg.content
     .filter((b) => b.type === "text")
     .map((b) => (b.type === "text" ? b.text : ""))
     .join("\n");
-  return `{"verdicts":[${continuation}`;
 }
 
 /**
@@ -239,7 +234,7 @@ Pravidlá:
         client,
         prompt,
         maxTokens,
-        "IMPORTANT: Previous reply was invalid JSON. Continue only with valid JSON array elements and closing braces. bias must be bullish, bearish, or neutral.",
+        'IMPORTANT: Previous reply was invalid JSON. Reply with ONLY one JSON object like {"verdicts":[{"symbol":"AAPL","bias":"neutral","confidence":50,"reason":"dovod"}]}. No markdown.',
       );
       try {
         parsed = extractJson(text);
