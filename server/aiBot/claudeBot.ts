@@ -118,65 +118,94 @@ function normalizeAnalysis(raw: any, sourcesUsed: string[]): AiBotAnalysisPayloa
   };
 }
 
+function sanitizeContext(ctx: AiBotRunContext) {
+  const holdings = ctx.holdings.slice(0, 40).map((h) => ({
+    ticker: h.ticker,
+    companyName: h.companyName,
+    shares: Number.isFinite(h.shares) ? h.shares : 0,
+    averageCost: Number.isFinite(h.averageCost) ? h.averageCost : 0,
+    price: h.price != null && Number.isFinite(h.price) ? h.price : null,
+    changePercent:
+      h.changePercent != null && Number.isFinite(h.changePercent) ? h.changePercent : null,
+    marketValue:
+      h.marketValue != null && Number.isFinite(h.marketValue) ? h.marketValue : null,
+    weightPct: h.weightPct != null && Number.isFinite(h.weightPct) ? h.weightPct : null,
+    unrealizedPnlPct:
+      h.unrealizedPnlPct != null && Number.isFinite(h.unrealizedPnlPct)
+        ? h.unrealizedPnlPct
+        : null,
+    pe: h.pe != null && Number.isFinite(h.pe) ? h.pe : null,
+  }));
+
+  const movers = ctx.movers.slice(0, 10).map((m) => ({
+    ticker: m.ticker,
+    companyName: m.companyName,
+    price: m.price != null && Number.isFinite(m.price) ? m.price : null,
+    changePercent:
+      m.changePercent != null && Number.isFinite(m.changePercent) ? m.changePercent : null,
+    pe: m.pe != null && Number.isFinite(m.pe) ? m.pe : null,
+    sector: m.sector,
+  }));
+
+  return {
+    slot: ctx.slotLabel,
+    portfolio: ctx.portfolioLabel,
+    totalMarketValue: Number.isFinite(ctx.totalMarketValue)
+      ? Math.round(ctx.totalMarketValue * 100) / 100
+      : 0,
+    holdings,
+    externalCandidates: movers,
+    alreadyOwnedOrWatching: Array.from(
+      new Set([
+        ...holdings.map((h) => h.ticker),
+        ...ctx.watchlistTickers.map((t) => t.toUpperCase()),
+      ]),
+    ).slice(0, 80),
+  };
+}
+
 export async function runClaudeAiBotAnalysis(
   ctx: AiBotRunContext,
 ): Promise<AiBotAnalysisPayload> {
   const client = getAnthropicClient();
+  const userPayload = sanitizeContext(ctx);
 
-  const system = `Si investičný asistent pre retail investora v appke Moneiqwise.
+  // Rovnaký tvar requestu ako AI Skener (bez samostatného system param / temperature),
+  // aby sme sa vyhli Anthropic HTTP 400 na niektorých modeloch / konfiguráciách.
+  const prompt = `Si investičný asistent pre retail investora v appke Moneiqwise.
+
 Úlohy:
 1) Pre každú pozíciu v portfóliu navrhni akciu BUY, SELL, TRIM alebo HOLD.
-2) Zohľadni % váhu v portfóliu (koncentrácia), denný pohyb, nerealizovaný P/L a celkový kontext.
-3) Z externých trhových tipov vyber 1–2 nové akcie, ktoré používateľ ešte nemá (ani vo watchliste).
-4) Pre návrhy uveď horizon: "swing" alebo "long", conviction 1–5, riziká a invalidáciu tézy.
-5) Pridaj krátke marketNotes (dôležité veci dňa na journal).
+2) Zohľadni % váhu v portfóliu (koncentrácia), denný pohyb, nerealizovaný P/L.
+3) Z externých tipov vyber 1–2 nové akcie, ktoré používateľ ešte nemá (ani vo watchliste).
+4) Pre návrhy uveď horizon "swing" alebo "long", conviction 1–5, riziká a invalidáciu.
+5) Pridaj krátke marketNotes (dôležité veci dňa).
 
 Pravidlá:
-- Buď vecný, nie hype. Nie si finančný poradca; ide o analytický brief.
-- Neodporúčaj crypto, ani meme pump bez fundamentu.
+- Buď vecný, nie hype. Nie si finančný poradca.
+- Neodporúčaj crypto ani meme pump bez fundamentu.
 - Odpoveď VÝHRADNE ako čistý JSON objekt (bez markdown) s poliami:
-  summary (string),
-  portfolioAudit (array),
-  newOpportunities (array),
-  marketNotes (array).
-Každý portfolioAudit item: ticker, companyName, action, weightPct, horizon, conviction, rationale, risks, invalidation.
-Každý newOpportunities item: ticker, companyName, thesis, horizon, risks, whyNow, conviction.
-Každý marketNotes item: title, detail.`;
+  summary, portfolioAudit, newOpportunities, marketNotes.
+portfolioAudit item: ticker, companyName, action, weightPct, horizon, conviction, rationale, risks, invalidation.
+newOpportunities item: ticker, companyName, thesis, horizon, risks, whyNow, conviction.
+marketNotes item: title, detail.
 
-  const userPayload = {
-    slot: ctx.slotLabel,
-    portfolio: ctx.portfolioLabel,
-    totalMarketValueEurApprox: Math.round(ctx.totalMarketValue * 100) / 100,
-    holdings: ctx.holdings,
-    externalCandidates: ctx.movers,
-    alreadyOwnedOrWatching: [
-      ...ctx.holdings.map((h) => h.ticker),
-      ...ctx.watchlistTickers,
-    ],
-  };
+Kontext:
+${JSON.stringify(userPayload, null, 2)}`;
 
   try {
     const msg = await client.messages.create({
       model: MODEL,
-      max_tokens: 4096,
-      temperature: 0.3,
-      system,
-      messages: [
-        {
-          role: "user",
-          content: `Analyzuj tento JSON kontext a vráť JSON brief:\n${JSON.stringify(userPayload)}`,
-        },
-      ],
+      max_tokens: 2500,
+      messages: [{ role: "user", content: prompt }],
     });
-    const text = msg.content
-      .filter((b) => b.type === "text")
-      .map((b) => (b as { type: "text"; text: string }).text)
-      .join("\n");
+    const textBlock = msg.content.find((b) => b.type === "text");
+    const text = textBlock && textBlock.type === "text" ? textBlock.text : "";
     const parsed = extractJsonObject(text);
     return normalizeAnalysis(parsed, ctx.sourcesUsed);
   } catch (err) {
-    const friendly = formatAnthropicError(err);
-    throw new Error(friendly);
+    console.error("[ai-bot] Claude error:", err);
+    throw new Error(formatAnthropicError(err));
   }
 }
 

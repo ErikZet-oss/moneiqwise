@@ -161,7 +161,8 @@ export async function insertAiBotBrief(input: {
     )
     RETURNING *
   `);
-  const row = asRows(result)[0];
+  const rows = (result as { rows?: any[] }).rows ?? asRows(result);
+  const row = rows[0];
   if (!row) throw new Error("AI_BOT_INSERT_FAILED");
   return mapBrief(row);
 }

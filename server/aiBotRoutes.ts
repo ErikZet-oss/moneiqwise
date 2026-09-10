@@ -56,7 +56,8 @@ export function registerAiBotRoutes(app: Express, isAuthenticated: any) {
       if (portfolioId && portfolioId !== "all") {
         const pf = await storage.getPortfolioById(portfolioId, userId);
         if (!pf) {
-          return res.status(400).json({ message: "Neplatné portfólio." });
+          // Soft fallback — neblokuj UI pri zmazanom/starom ID.
+          portfolioId = "all";
         }
       }
       const settings = await saveAiBotSettings(userId, { enabled, portfolioId });
@@ -120,10 +121,14 @@ export function registerAiBotRoutes(app: Express, isAuthenticated: any) {
         typeof req.body?.portfolioId === "string"
           ? req.body.portfolioId.trim()
           : undefined;
+      if (!portfolioId) {
+        const settings = await getAiBotSettings(userId);
+        portfolioId = settings.portfolioId || "all";
+      }
       if (portfolioId && portfolioId !== "all") {
         const pf = await storage.getPortfolioById(portfolioId, userId);
         if (!pf) {
-          return res.status(400).json({ message: "Neplatné portfólio." });
+          portfolioId = "all";
         }
       }
       const brief = await runAiBotForUser({
@@ -136,7 +141,16 @@ export function registerAiBotRoutes(app: Express, isAuthenticated: any) {
       console.error("ai-bot run:", error);
       const message =
         error instanceof Error ? error.message : "Nepodarilo sa spustiť AI Bot.";
-      res.status(500).json({ message });
+      const lower = message.toLowerCase();
+      const status =
+        lower.includes("anthropic") ||
+        lower.includes("http 4") ||
+        lower.includes("model") ||
+        lower.includes("api key") ||
+        lower.includes("rate limit")
+          ? 502
+          : 500;
+      res.status(status).json({ message });
     }
   });
 }
