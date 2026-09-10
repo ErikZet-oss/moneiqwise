@@ -276,8 +276,14 @@ export default function FaqPage() {
                 <li>Názov a počiatočný kapitál (EUR)</li>
                 <li>Zoznam tickerov (universe)</li>
                 <li>
-                  Stratégiu: EMA+RSI Trend, MA Crossover, RSI Mean Reversion, Dual Momentum, alebo{" "}
+                  Stratégiu: EMA+RSI Trend, MA Crossover, RSI Mean Reversion, Dual Momentum,{" "}
+                  <strong>MACD Trend</strong>, <strong>Bollinger Reversion</strong>, alebo{" "}
                   <strong>Vlastná (editor)</strong> s podmienkami ALL/ANY
+                  (EMA/SMA/RSI/ATR/MACD/BB/volume)
+                </li>
+                <li>
+                  <strong>Timeframe signálov</strong>: 1d (denné), 1h alebo 15m — stratégie
+                  počítajú na zvolených baroch (nie len denných)
                 </li>
                 <li>
                   Risk: denný loss limit %, max drawdown %, max počet otvorených pozícií, max % equity
@@ -287,14 +293,15 @@ export default function FaqPage() {
                   Exity: trailing stop (násobok ATR), take profit %, hard stop %
                 </li>
                 <li>
-                  AI: influence % (typicky 20) a minimálna confidence; Claude sám trade nevytvára
+                  AI: influence % (typicky 20) a minimálna confidence; Claude dostane správy +
+                  snapshot (close/RSI/EMA/MACD) a sám trade nevytvára
                 </li>
                 <li>
                   E-mail notifikácie pri open/close/kill (vyžaduje SMTP na serveri; inak sa skipne)
                 </li>
                 <li>
-                  <strong>Backtest</strong> pred štartom — spustí stratégiu na histórii (Yahoo denné
-                  bary) a ukáže return / win rate / počet obchodov (bez AI nudge)
+                  <strong>Backtest</strong> pred štartom — spustí stratégiu na histórii Yahoo podľa
+                  zvoleného timeframe a ukáže return / win rate / počet obchodov (bez AI nudge)
                 </li>
               </ul>
             </section>
@@ -311,12 +318,12 @@ export default function FaqPage() {
               </p>
               <p className="mt-2">
                 Počas LIVE/EXTENDED sa mark ceny dopĺňa aj z 1-minútových Yahoo barov (čerstjší MTM);
-                signály stratégií stále počítajú z denných OHLC (EMA200 a pod.).
+                signály stratégií počítajú z zvoleného timeframe (1d / 1h / 15m OHLCV vrátane volume).
               </p>
               <p className="mt-2">Jeden tick prechádza <strong>Signal Chain</strong>:</p>
               <ol className="list-decimal pl-5 space-y-1.5 mt-2">
                 <li>
-                  <strong>INGEST</strong> — Yahoo denné OHLCV + live mark
+                  <strong>INGEST</strong> — Yahoo OHLCV podľa timeframe + live mark
                 </li>
                 <li>
                   <strong>DEDUP</strong> — príprava / zoskupenie tickerov
@@ -325,8 +332,8 @@ export default function FaqPage() {
                   <strong>SIGNAL</strong> — kvant stratégia (prednastavená alebo custom editor)
                 </li>
                 <li>
-                  <strong>AI</strong> (ak influence &gt; 0) — Claude news verdict moduluje skóre;
-                  silný bearish môže zablokovať nákup
+                  <strong>AI</strong> (ak influence &gt; 0) — Claude dostane správy + technický
+                  snapshot (RSI/EMA/MACD); moduluje skóre; silný bearish môže zablokovať nákup
                 </li>
                 <li>
                   <strong>RISK</strong> — daily loss, max DD, max pozície, veľkosť pozície
@@ -380,11 +387,12 @@ export default function FaqPage() {
               <h3 className="text-sm font-semibold mb-2">Dôležité limity dnešnej verzie</h3>
               <ul className="list-disc pl-5 space-y-1.5">
                 <li>Len paper (interný ledger), nie Alpaca/Binance ani reálne peniaze</li>
-                <li>Len long smer; stratégia na denných baroch (nie plný HFT)</li>
+                <li>Len long smer; short zatiaľ nie</li>
                 <li>Backtest bez Claude AI nudge (čistá matematika + exit rules)</li>
                 <li>E-mail vyžaduje SMTP env (<code>SMTP_HOST</code>, <code>SMTP_USER</code>, …)</li>
                 <li>
                   AI vrstva vyžaduje <code>ANTHROPIC_API_KEY</code>; bez kľúča beží quant-only
+                  (novšie Claude modely nepoužívajú <code>temperature</code>)
                 </li>
                 <li>Paper vs. benchmark (S&amp;P) zatiaľ nie je</li>
               </ul>

@@ -5,7 +5,11 @@ export type PaperStrategyId =
   | "ma_crossover"
   | "rsi_mean_reversion"
   | "dual_momentum"
+  | "macd_trend"
+  | "bollinger_reversion"
   | "custom";
+
+export type PaperCandleTf = "1d" | "1h" | "15m";
 
 export type PaperBotRiskSettings = {
   dailyLossLimitPct: number;
@@ -33,7 +37,7 @@ export type PaperBot = {
   /** Custom strategy JSON when strategyId === "custom". */
   customStrategy: unknown | null;
   symbols: string[];
-  candleTf: string;
+  candleTf: PaperCandleTf;
   risk: PaperBotRiskSettings;
   exits: PaperBotExitSettings;
   aiInfluencePct: number;
@@ -168,9 +172,37 @@ export const STRATEGY_META: Record<
     description:
       "Long: close > SMA200 a SMA50 > SMA200. Exit: close < SMA200 + exit rules.",
   },
+  macd_trend: {
+    label: "MACD Trend",
+    description:
+      "Long: MACD hist>0, MACD>signal, close>EMA200. Exit: hist<0 alebo close<EMA200 + exit rules.",
+  },
+  bollinger_reversion: {
+    label: "Bollinger Reversion",
+    description:
+      "Long: close ≤ BB lower a RSI<35. Exit: close ≥ BB mid alebo RSI>55 + exit rules.",
+  },
   custom: {
     label: "Vlastná (editor)",
     description:
-      "Podmienky ALL/ANY z editora — indikátory EMA/SMA/RSI/ATR/close oproti číslu alebo inému indikátoru.",
+      "Podmienky ALL/ANY — EMA/SMA/RSI/ATR/MACD/BB/volume/close oproti číslu alebo indikátoru.",
+  },
+};
+
+export const CANDLE_TF_META: Record<
+  PaperCandleTf,
+  { label: string; description: string }
+> = {
+  "1d": {
+    label: "Denné (1d)",
+    description: "Klasické denné bary — menej šumu, pomalšie signály.",
+  },
+  "1h": {
+    label: "Hodinové (1h)",
+    description: "Intraday signály na 60m baroch (Yahoo).",
+  },
+  "15m": {
+    label: "15-minútové",
+    description: "Rýchlejšie signály; viac šumu, kratšia história (~60d).",
   },
 };

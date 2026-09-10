@@ -1,8 +1,10 @@
 import {
+  evaluateBollingerReversion,
   evaluateDualMomentum,
   evaluateEmaRsiTrend,
   evaluateExitRules,
   evaluateMaCrossover,
+  evaluateMacdTrend,
   evaluateRsiMeanReversion,
   atr,
 } from "./indicators";
@@ -10,9 +12,14 @@ import {
   evaluateCustomStrategy,
   type CustomStrategyDef,
 } from "./customStrategy";
-import { fetchDailyOhlc } from "./marketData";
+import {
+  candleTfQuery,
+  fetchOhlc,
+  normalizeCandleTf,
+} from "./marketData";
 import type {
   PaperBotExitSettings,
+  PaperCandleTf,
   PaperStrategyId,
 } from "./types";
 
@@ -36,6 +43,7 @@ export type BacktestResult = {
   winRatePct: number;
   equityCurve: Array<{ i: number; equity: number }>;
   barsUsed: number;
+  candleTf: PaperCandleTf;
 };
 
 function evaluate(
@@ -43,19 +51,24 @@ function evaluate(
   closes: number[],
   highs: number[],
   lows: number[],
+  volumes: number[],
   custom: CustomStrategyDef | null,
 ) {
   if (strategyId === "custom" && custom) {
-    return evaluateCustomStrategy(custom, closes, highs, lows);
+    return evaluateCustomStrategy(custom, closes, highs, lows, volumes);
   }
   if (strategyId === "ma_crossover") return evaluateMaCrossover(closes);
   if (strategyId === "rsi_mean_reversion") return evaluateRsiMeanReversion(closes);
   if (strategyId === "dual_momentum") return evaluateDualMomentum(closes);
+  if (strategyId === "macd_trend") return evaluateMacdTrend(closes);
+  if (strategyId === "bollinger_reversion") {
+    return evaluateBollingerReversion(closes);
+  }
   return evaluateEmaRsiTrend(closes);
 }
 
 /**
- * Simple long-only bar-by-bar backtest on daily OHLC (no AI nudge).
+ * Simple long-only bar-by-bar backtest on chosen TF OHLC (no AI nudge).
  */
 export async function runPaperBacktest(input: {
   symbols: string[];
@@ -66,6 +79,7 @@ export async function runPaperBacktest(input: {
   maxOpenPositions: number;
   exits: PaperBotExitSettings;
   lookbackBars?: number;
+  candleTf?: PaperCandleTf | string;
 }): Promise<BacktestResult> {
   const cash0 = Math.max(100, input.startingCash);
   let cash = cash0;
@@ -75,28 +89,34 @@ export async function runPaperBacktest(input: {
   >();
   const trades: BacktestTrade[] = [];
   const equityCurve: Array<{ i: number; equity: number }> = [];
+  const candleTf = normalizeCandleTf(input.candleTf);
+  const tfQ = candleTfQuery(candleTf);
 
   const series = new Map<
     string,
-    { closes: number[]; highs: number[]; lows: number[] }
+    { closes: number[]; highs: number[]; lows: number[]; volumes: number[] }
   >();
   let maxLen = 0;
   for (const sym of input.symbols) {
-    const ohlc = await fetchDailyOhlc(sym, "2y");
-    if (ohlc.closes.length < 60) continue;
+    const ohlc = await fetchOhlc(sym, { tf: candleTf });
+    if (ohlc.closes.length < tfQ.minBars) continue;
     series.set(sym, {
       closes: ohlc.closes,
       highs: ohlc.highs,
       lows: ohlc.lows,
+      volumes: ohlc.volumes,
     });
     maxLen = Math.max(maxLen, ohlc.closes.length);
   }
 
-  const start = Math.max(60, maxLen - (input.lookbackBars ?? 180));
-  const warmup = 55;
+  const defaultLookback = candleTf === "1d" ? 180 : candleTf === "1h" ? 400 : 600;
+  const start = Math.max(
+    tfQ.minBars,
+    maxLen - (input.lookbackBars ?? defaultLookback),
+  );
+  const warmup = Math.max(55, Math.floor(tfQ.minBars * 0.9));
 
   for (let i = start; i < maxLen; i++) {
-    // mark + exits
     for (const [sym, pos] of Array.from(positions.entries())) {
       const s = series.get(sym);
       if (!s || i >= s.closes.length) continue;
@@ -105,6 +125,7 @@ export async function runPaperBacktest(input: {
       const sliceC = s.closes.slice(0, i + 1);
       const sliceH = s.highs.slice(0, i + 1);
       const sliceL = s.lows.slice(0, i + 1);
+      const sliceV = s.volumes.slice(0, i + 1);
       const atrVal = atr(sliceH, sliceL, sliceC, 14);
       const hit = evaluateExitRules({
         entryPrice: pos.entry,
@@ -122,6 +143,7 @@ export async function runPaperBacktest(input: {
           sliceC,
           sliceH,
           sliceL,
+          sliceV,
           input.customStrategy ?? null,
         );
         if (sig.action === "SELL") sellReason = sig.reason;
@@ -142,7 +164,6 @@ export async function runPaperBacktest(input: {
       }
     }
 
-    // entries
     if (i >= warmup) {
       let equity =
         cash +
@@ -160,11 +181,13 @@ export async function runPaperBacktest(input: {
         const sliceC = s.closes.slice(0, i + 1);
         const sliceH = s.highs.slice(0, i + 1);
         const sliceL = s.lows.slice(0, i + 1);
+        const sliceV = s.volumes.slice(0, i + 1);
         const sig = evaluate(
           input.strategyId,
           sliceC,
           sliceH,
           sliceL,
+          sliceV,
           input.customStrategy ?? null,
         );
         if (sig.action !== "BUY") continue;
@@ -205,7 +228,6 @@ export async function runPaperBacktest(input: {
     }
   }
 
-  // flatten open at end
   const lastI = maxLen - 1;
   for (const [sym, pos] of Array.from(positions.entries())) {
     const s = series.get(sym);
@@ -243,5 +265,6 @@ export async function runPaperBacktest(input: {
         : 0,
     equityCurve,
     barsUsed: Math.max(0, maxLen - start),
+    candleTf,
   };
 }

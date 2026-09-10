@@ -11,6 +11,7 @@ import {
   type PaperEquityTick,
   type PaperLogEventType,
   type PaperPosition,
+  type PaperCandleTf,
   type PaperStrategyId,
   type PaperTrade,
 } from "./types";
@@ -74,7 +75,9 @@ function mapBot(row: any): PaperBot {
     strategyId: (row.strategy_id as PaperStrategyId) || "ema_rsi_trend",
     customStrategy: parseJson(row.strategy_json, null),
     symbols: parseJson<string[]>(row.symbols_json, []),
-    candleTf: String(row.candle_tf || "1d"),
+    candleTf: (["1d", "1h", "15m"].includes(String(row.candle_tf))
+      ? String(row.candle_tf)
+      : "1d") as PaperCandleTf,
     risk: mapRisk(row.risk_json),
     exits: mapExits(row.exit_json),
     aiInfluencePct: num(row.ai_influence_pct, 20),
@@ -256,6 +259,7 @@ export async function createPaperBot(input: {
   strategyId?: PaperStrategyId;
   customStrategy?: unknown | null;
   symbols: string[];
+  candleTf?: PaperCandleTf | string;
   risk?: Partial<PaperBotRiskSettings>;
   exits?: Partial<PaperBotExitSettings>;
   aiInfluencePct?: number;
@@ -268,6 +272,9 @@ export async function createPaperBot(input: {
   const risk = { ...DEFAULT_RISK, ...(input.risk || {}) };
   const exits = { ...DEFAULT_EXITS, ...(input.exits || {}) };
   const strategyId = input.strategyId || "ema_rsi_trend";
+  const candleTfRaw = String(input.candleTf || "1d").toLowerCase();
+  const candleTf: PaperCandleTf =
+    candleTfRaw === "15m" || candleTfRaw === "1h" ? candleTfRaw : "1d";
   const symbols = input.symbols.map((s) => s.trim().toUpperCase()).filter(Boolean);
   const currency = (input.currency || "EUR").toUpperCase();
   const name = input.name.trim() || "Paper Bot";
@@ -292,13 +299,14 @@ export async function createPaperBot(input: {
   const result = await db.execute(sql`
     INSERT INTO paper_bots (
       user_id, name, status, starting_cash, cash, currency,
-      strategy_id, strategy_json, symbols_json, risk_json, exit_json,
+      strategy_id, strategy_json, symbols_json, candle_tf, risk_json, exit_json,
       ai_influence_pct, ai_min_confidence,
       notify_email, notify_on_trade,
       day_start_equity, peak_equity
     ) VALUES (
       ${input.userId}, ${name}, 'paused', ${cash}, ${cash}, ${currency},
-      ${strategyId}, ${strategyJson}::jsonb, ${symbolsJson}::jsonb, ${riskJson}::jsonb, ${exitJson}::jsonb,
+      ${strategyId}, ${strategyJson}::jsonb, ${symbolsJson}::jsonb, ${candleTf},
+      ${riskJson}::jsonb, ${exitJson}::jsonb,
       ${aiInfluencePct}, ${aiMinConfidence},
       ${notifyEmail}, ${notifyOnTrade},
       ${cash}, ${cash}
@@ -314,7 +322,15 @@ export async function createPaperBot(input: {
     userId: input.userId,
     eventType: "status",
     message: `Bot vytvorený s kapitálom ${cash} ${currency}`,
-    detail: { strategyId, symbols, risk, exits, aiInfluencePct, notifyOnTrade },
+    detail: {
+      strategyId,
+      candleTf,
+      symbols,
+      risk,
+      exits,
+      aiInfluencePct,
+      notifyOnTrade,
+    },
   });
   await insertEquityTick(bot.id, cash, cash);
   return bot;

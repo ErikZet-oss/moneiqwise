@@ -39,17 +39,33 @@ type PaperStrategyId =
   | "ma_crossover"
   | "rsi_mean_reversion"
   | "dual_momentum"
+  | "macd_trend"
+  | "bollinger_reversion"
   | "custom";
+type PaperCandleTf = "1d" | "1h" | "15m";
 type PaperBotStatus = "running" | "paused" | "killed";
 
-type IndicatorKind = "ema" | "sma" | "rsi" | "close" | "atr";
-type RightIndicatorKind = "ema" | "sma" | "rsi" | "atr";
+type IndicatorKind =
+  | "ema"
+  | "sma"
+  | "rsi"
+  | "close"
+  | "atr"
+  | "volume"
+  | "volume_sma"
+  | "macd"
+  | "macd_signal"
+  | "macd_hist"
+  | "bb_upper"
+  | "bb_mid"
+  | "bb_lower";
+type RightIndicatorKind = Exclude<IndicatorKind, "close" | "volume">;
 type ConditionOp = "gt" | "gte" | "lt" | "lte";
 
 type ConditionLeft = { kind: IndicatorKind; period?: number };
 type ConditionRight =
   | { kind: "number"; value: number }
-  | { kind: RightIndicatorKind; period: number };
+  | { kind: RightIndicatorKind; period?: number };
 
 type StrategyCondition = {
   left: ConditionLeft;
@@ -73,6 +89,7 @@ type PaperBot = {
   currency: string;
   strategyId: PaperStrategyId;
   symbols: string[];
+  candleTf?: PaperCandleTf;
   risk: {
     dailyLossLimitPct: number;
     maxDrawdownPct: number;
@@ -213,8 +230,34 @@ const DEFAULT_CUSTOM_STRATEGY: CustomStrategyDef = {
   ],
 };
 
-const LEFT_KINDS: IndicatorKind[] = ["ema", "sma", "rsi", "close", "atr"];
-const RIGHT_IND_KINDS: RightIndicatorKind[] = ["ema", "sma", "rsi", "atr"];
+const LEFT_KINDS: IndicatorKind[] = [
+  "ema",
+  "sma",
+  "rsi",
+  "close",
+  "atr",
+  "volume",
+  "volume_sma",
+  "macd",
+  "macd_signal",
+  "macd_hist",
+  "bb_upper",
+  "bb_mid",
+  "bb_lower",
+];
+const RIGHT_IND_KINDS: RightIndicatorKind[] = [
+  "ema",
+  "sma",
+  "rsi",
+  "atr",
+  "volume_sma",
+  "macd",
+  "macd_signal",
+  "macd_hist",
+  "bb_upper",
+  "bb_mid",
+  "bb_lower",
+];
 const OPS: { value: ConditionOp; label: string }[] = [
   { value: "gt", label: ">" },
   { value: "gte", label: "≥" },
@@ -224,6 +267,18 @@ const OPS: { value: ConditionOp; label: string }[] = [
 
 const MAX_ENTRY = 6;
 const MAX_EXIT = 4;
+
+const PERIOD_FREE_KINDS = new Set<string>([
+  "close",
+  "volume",
+  "macd",
+  "macd_signal",
+  "macd_hist",
+]);
+
+function needsPeriod(kind: string): boolean {
+  return !PERIOD_FREE_KINDS.has(kind);
+}
 
 function money(n: number | null | undefined, currency = "EUR") {
   const v = Number(n);
@@ -244,6 +299,8 @@ function fmtTime(iso: string) {
 
 function defaultPeriod(kind: IndicatorKind | RightIndicatorKind): number {
   if (kind === "rsi" || kind === "atr") return 14;
+  if (kind === "volume_sma") return 20;
+  if (kind.startsWith("bb_")) return 20;
   if (kind === "ema") return 50;
   return 50;
 }
@@ -307,14 +364,13 @@ function ConditionRow({
           const kind = v as IndicatorKind;
           onChange({
             ...cond,
-            left:
-              kind === "close"
-                ? { kind: "close" }
-                : { kind, period: cond.left.period ?? defaultPeriod(kind) },
+            left: needsPeriod(kind)
+              ? { kind, period: cond.left.period ?? defaultPeriod(kind) }
+              : ({ kind } as ConditionLeft),
           });
         }}
       >
-        <SelectTrigger className="h-8 w-[72px] text-xs">
+        <SelectTrigger className="h-8 w-[100px] text-xs">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -325,7 +381,7 @@ function ConditionRow({
           ))}
         </SelectContent>
       </Select>
-      {cond.left.kind !== "close" ? (
+      {needsPeriod(cond.left.kind) ? (
         <Input
           className="h-8 w-14 text-xs"
           inputMode="numeric"
@@ -372,18 +428,20 @@ function ConditionRow({
             const kind = v as RightIndicatorKind;
             onChange({
               ...cond,
-              right: {
-                kind,
-                period:
-                  cond.right.kind !== "number"
-                    ? cond.right.period
-                    : defaultPeriod(kind),
-              },
+              right: needsPeriod(kind)
+                ? {
+                    kind,
+                    period:
+                      cond.right.kind !== "number" && needsPeriod(cond.right.kind)
+                        ? cond.right.period
+                        : defaultPeriod(kind),
+                  }
+                : ({ kind } as ConditionRight),
             });
           }
         }}
       >
-        <SelectTrigger className="h-8 w-[78px] text-xs">
+        <SelectTrigger className="h-8 w-[100px] text-xs">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -407,7 +465,7 @@ function ConditionRow({
             })
           }
         />
-      ) : (
+      ) : needsPeriod((cond.right as { kind: string }).kind) ? (
         <Input
           className="h-8 w-14 text-xs"
           inputMode="numeric"
@@ -424,6 +482,8 @@ function ConditionRow({
             })
           }
         />
+      ) : (
+        <span className="text-[10px] text-muted-foreground">12/26/9</span>
       )}
       <Button
         type="button"
@@ -609,6 +669,7 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
   const [startingCash, setStartingCash] = useState("10000");
   const [symbols, setSymbols] = useState("AAPL, MSFT, NVDA, GOOGL, META");
   const [strategyId, setStrategyId] = useState<PaperStrategyId>("ema_rsi_trend");
+  const [candleTf, setCandleTf] = useState<PaperCandleTf>("1d");
   const [maxOpen, setMaxOpen] = useState("5");
   const [dailyLoss, setDailyLoss] = useState("2");
   const [maxDd, setMaxDd] = useState("15");
@@ -629,6 +690,7 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
 
   const { data: strategiesPayload } = useQuery<{
     strategies: Array<{ id: PaperStrategyId; label: string; description: string }>;
+    candleTfs?: Array<{ id: PaperCandleTf; label: string; description: string }>;
     pipelineStages?: string[];
     smtpConfigured?: boolean;
     session?: string;
@@ -687,6 +749,7 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
     startingCash: Number(startingCash),
     symbols,
     strategyId,
+    candleTf,
     dailyLossLimitPct: Number(dailyLoss),
     maxDrawdownPct: Number(maxDd),
     maxOpenPositions: Number(maxOpen),
@@ -899,6 +962,49 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
                   onChange={setCustomStrategy}
                 />
               ) : null}
+
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label>Timeframe signálov</Label>
+                <Select
+                  value={candleTf}
+                  onValueChange={(v) => setCandleTf(v as PaperCandleTf)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(
+                      strategiesPayload?.candleTfs ?? [
+                        {
+                          id: "1d" as PaperCandleTf,
+                          label: "Denné (1d)",
+                          description: "",
+                        },
+                        {
+                          id: "1h" as PaperCandleTf,
+                          label: "Hodinové (1h)",
+                          description: "",
+                        },
+                        {
+                          id: "15m" as PaperCandleTf,
+                          label: "15-minútové",
+                          description: "",
+                        },
+                      ]
+                    ).map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  {
+                    strategiesPayload?.candleTfs?.find((t) => t.id === candleTf)
+                      ?.description
+                  }
+                </p>
+              </div>
 
               <div className="space-y-1.5">
                 <Label>Max otvorené pozície</Label>
@@ -1137,6 +1243,9 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
                     </Badge>
                     <Badge variant="outline" className="text-[10px]">
                       AI {detail.bot.aiInfluencePct ?? 0}%
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px]">
+                      TF {detail.bot.candleTf || "1d"}
                     </Badge>
                     {detail.bot.notifyOnTrade ? (
                       <Badge variant="secondary" className="text-[10px]">

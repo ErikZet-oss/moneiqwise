@@ -12,25 +12,49 @@ function getYahooFinance(): InstanceType<typeof YahooFinance> {
   return yahooFinance;
 }
 
+export type CandleTf = "1d" | "1h" | "15m";
+
 export type OhlcSeries = {
   closes: number[];
   highs: number[];
   lows: number[];
+  volumes: number[];
   lastPrice: number | null;
+  interval: string;
 };
+
+export function normalizeCandleTf(raw: string | null | undefined): CandleTf {
+  const v = String(raw || "1d").toLowerCase();
+  if (v === "15m" || v === "15min") return "15m";
+  if (v === "1h" || v === "60m" || v === "1hr") return "1h";
+  return "1d";
+}
+
+export function candleTfQuery(tf: CandleTf): {
+  interval: string;
+  range: string;
+  minBars: number;
+} {
+  if (tf === "15m") return { interval: "15m", range: "60d", minBars: 80 };
+  if (tf === "1h") return { interval: "60m", range: "730d", minBars: 60 };
+  return { interval: "1d", range: "2y", minBars: 60 };
+}
 
 function alignPositive(
   high: (number | null)[] | undefined,
   low: (number | null)[] | undefined,
   close: (number | null)[] | undefined,
-): { highs: number[]; lows: number[]; closes: number[] } {
+  volume?: (number | null)[] | undefined,
+): { highs: number[]; lows: number[]; closes: number[]; volumes: number[] } {
   const h = high ?? [];
   const l = low ?? [];
   const c = close ?? [];
+  const vol = volume ?? [];
   const n = Math.min(h.length, l.length, c.length);
   const highs: number[] = [];
   const lows: number[] = [];
   const closes: number[] = [];
+  const volumes: number[] = [];
   for (let i = 0; i < n; i++) {
     const hv = Number(h[i]);
     const lv = Number(l[i]);
@@ -46,22 +70,28 @@ function alignPositive(
       highs.push(hv);
       lows.push(lv);
       closes.push(cv);
+      const vv = Number(vol[i]);
+      volumes.push(Number.isFinite(vv) && vv >= 0 ? vv : 0);
     }
   }
-  return { highs, lows, closes };
+  return { highs, lows, closes, volumes };
 }
 
-export async function fetchDailyOhlc(
+export async function fetchOhlc(
   ticker: string,
-  range = "1y",
+  opts?: { tf?: CandleTf | string; range?: string },
 ): Promise<OhlcSeries> {
+  const tf = normalizeCandleTf(opts?.tf);
+  const qParams = candleTfQuery(tf);
+  const interval = qParams.interval;
+  const range = opts?.range || qParams.range;
   const yahoo = toYahooTicker(ticker);
   try {
     const yf = getYahooFinance();
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahoo)}`;
     const data = (await yf._fetch(
       url,
-      { interval: "1d", range, includePrePost: "false" },
+      { interval, range, includePrePost: "false" },
       {},
       "json",
       true,
@@ -74,6 +104,7 @@ export async function fetchDailyOhlc(
               high?: (number | null)[];
               low?: (number | null)[];
               close?: (number | null)[];
+              volume?: (number | null)[];
             }>;
           };
         }>;
@@ -81,7 +112,12 @@ export async function fetchDailyOhlc(
     };
     const result = data?.chart?.result?.[0];
     const q = result?.indicators?.quote?.[0];
-    const { highs, lows, closes } = alignPositive(q?.high, q?.low, q?.close);
+    const { highs, lows, closes, volumes } = alignPositive(
+      q?.high,
+      q?.low,
+      q?.close,
+      q?.volume,
+    );
     const metaPrice = Number(result?.meta?.regularMarketPrice);
     const lastPrice =
       Number.isFinite(metaPrice) && metaPrice > 0
@@ -89,11 +125,25 @@ export async function fetchDailyOhlc(
         : closes.length
           ? closes[closes.length - 1]!
           : null;
-    return { closes, highs, lows, lastPrice };
+    return { closes, highs, lows, volumes, lastPrice, interval };
   } catch (err) {
-    console.warn(`[paper-bot] chart failed for ${yahoo}:`, err);
-    return { closes: [], highs: [], lows: [], lastPrice: null };
+    console.warn(`[paper-bot] chart failed for ${yahoo} (${interval}):`, err);
+    return {
+      closes: [],
+      highs: [],
+      lows: [],
+      volumes: [],
+      lastPrice: null,
+      interval,
+    };
   }
+}
+
+export async function fetchDailyOhlc(
+  ticker: string,
+  range = "1y",
+): Promise<OhlcSeries> {
+  return fetchOhlc(ticker, { tf: "1d", range });
 }
 
 /** Back-compat helper. */

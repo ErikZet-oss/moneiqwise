@@ -37,12 +37,23 @@ function biasToScore(bias: AiSymbolVerdict["bias"]): number {
   return 50;
 }
 
+export type AiMarketSnapshot = {
+  symbol: string;
+  close: number | null;
+  rsi14: number | null;
+  ema50: number | null;
+  ema200: number | null;
+  macdHist: number | null;
+};
+
 /**
  * Fetch news for universe and ask Claude for per-symbol verdicts.
  * Verdicts only nudge quant score — they never create a trade alone.
+ * Note: newer Claude models reject `temperature` — do not pass it.
  */
 export async function fetchPaperBotAiVerdicts(input: {
   symbols: string[];
+  market?: AiMarketSnapshot[];
 }): Promise<{
   verdicts: Map<string, AiSymbolVerdict>;
   model: string | null;
@@ -72,9 +83,27 @@ export async function fetchPaperBotAiVerdicts(input: {
     )
     .join("\n");
 
+  const marketLines = (input.market ?? [])
+    .map((m) => {
+      const parts = [
+        m.symbol,
+        m.close != null ? `close=${m.close.toFixed(2)}` : null,
+        m.rsi14 != null ? `RSI14=${m.rsi14.toFixed(1)}` : null,
+        m.ema50 != null ? `EMA50=${m.ema50.toFixed(2)}` : null,
+        m.ema200 != null ? `EMA200=${m.ema200.toFixed(2)}` : null,
+        m.macdHist != null ? `MACDhist=${m.macdHist.toFixed(3)}` : null,
+      ].filter(Boolean);
+      return `- ${parts.join(" | ")}`;
+    })
+    .join("\n");
+
   const prompt = `Si AI vrstva paper trading bota. AI NIKDY nevytvára trade sama — len sentiment k tickerom.
+Zohľadni správy AJ trhový snapshot (RSI/EMA/MACD). Ak správa a technika idú proti sebe, zníž confidence.
 
 Tickery: ${symbols.join(", ")}
+
+Trhový snapshot:
+${marketLines || "(nedostupný)"}
 
 Správy:
 ${newsLines || "(žiadne správy)"}
@@ -85,13 +114,12 @@ Vráť LEN JSON:
     { "symbol": "AAPL", "bias": "bullish"|"bearish"|"neutral", "confidence": 0-100, "reason": "max 120 znakov" }
   ]
 }
-Jeden verdict na každý ticker zo zoznamu. Ak nie sú relevantné správy, bias=neutral, confidence nižšie.`;
+Jeden verdict na každý ticker zo zoznamu. Ak nie sú relevantné správy ani jasný technický bias, bias=neutral, confidence nižšie.`;
 
   try {
     const msg = await client.messages.create({
       model: MODEL,
       max_tokens: 1200,
-      temperature: 0.2,
       messages: [{ role: "user", content: prompt }],
     });
     const text = msg.content

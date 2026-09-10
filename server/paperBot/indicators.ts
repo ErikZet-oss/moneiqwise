@@ -55,6 +55,55 @@ export function atr(
   return atrVal;
 }
 
+/** MACD line / signal / histogram (EMA fast/slow/signal). */
+export function macd(
+  values: number[],
+  fast = 12,
+  slow = 26,
+  signalPeriod = 9,
+): { macd: number; signal: number; hist: number } | null {
+  if (values.length < slow + signalPeriod) return null;
+  const kFast = 2 / (fast + 1);
+  const kSlow = 2 / (slow + 1);
+  let emaFast = values.slice(0, fast).reduce((a, b) => a + b, 0) / fast;
+  let emaSlow = values.slice(0, slow).reduce((a, b) => a + b, 0) / slow;
+  const macdLine: number[] = [];
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i]!;
+    if (i >= fast) emaFast = v * kFast + emaFast * (1 - kFast);
+    if (i >= slow) emaSlow = v * kSlow + emaSlow * (1 - kSlow);
+    if (i >= slow - 1) macdLine.push(emaFast - emaSlow);
+  }
+  if (macdLine.length < signalPeriod) return null;
+  const kSig = 2 / (signalPeriod + 1);
+  let sig =
+    macdLine.slice(0, signalPeriod).reduce((a, b) => a + b, 0) / signalPeriod;
+  for (let i = signalPeriod; i < macdLine.length; i++) {
+    sig = macdLine[i]! * kSig + sig * (1 - kSig);
+  }
+  const m = macdLine[macdLine.length - 1]!;
+  return { macd: m, signal: sig, hist: m - sig };
+}
+
+/** Bollinger bands (SMA ± stdDev * σ). */
+export function bollinger(
+  values: number[],
+  period = 20,
+  stdDev = 2,
+): { mid: number; upper: number; lower: number } | null {
+  if (values.length < period || period <= 1) return null;
+  const slice = values.slice(-period);
+  const mid = slice.reduce((a, b) => a + b, 0) / period;
+  const variance =
+    slice.reduce((a, b) => a + (b - mid) ** 2, 0) / (period - 1);
+  const sigma = Math.sqrt(variance);
+  return {
+    mid,
+    upper: mid + stdDev * sigma,
+    lower: mid - stdDev * sigma,
+  };
+}
+
 export type SignalDecision = {
   action: "BUY" | "SELL" | "HOLD";
   score: number;
@@ -226,6 +275,95 @@ export function evaluateDualMomentum(closes: number[]): SignalDecision {
     action: "HOLD",
     score: 40,
     reason: "Momentum neutrálne",
+    indicators,
+  };
+}
+
+export function evaluateMacdTrend(closes: number[]): SignalDecision {
+  const close = closes[closes.length - 1] ?? null;
+  const m = macd(closes);
+  const ema200 = ema(closes, 200);
+  const indicators = {
+    close,
+    macd: m?.macd ?? null,
+    macdSignal: m?.signal ?? null,
+    macdHist: m?.hist ?? null,
+    ema200,
+  };
+  if (!m || ema200 == null || close == null) {
+    return {
+      action: "HOLD",
+      score: 0,
+      reason: "Nedostatok dát pre MACD",
+      indicators,
+    };
+  }
+  if (m.hist > 0 && m.macd > m.signal && close > ema200) {
+    return {
+      action: "BUY",
+      score: Math.min(100, 55 + Math.abs(m.hist) * 50),
+      reason: "MACD hist>0, MACD>signal, close>EMA200",
+      indicators,
+    };
+  }
+  if (m.hist < 0 || close < ema200) {
+    return {
+      action: "SELL",
+      score: 65,
+      reason: m.hist < 0 ? "MACD hist záporný" : "Close pod EMA200",
+      indicators,
+    };
+  }
+  return {
+    action: "HOLD",
+    score: 40,
+    reason: "MACD neutrálne",
+    indicators,
+  };
+}
+
+export function evaluateBollingerReversion(closes: number[]): SignalDecision {
+  const close = closes[closes.length - 1] ?? null;
+  const bb = bollinger(closes, 20, 2);
+  const rsi14 = rsi(closes, 14);
+  const indicators = {
+    close,
+    bbMid: bb?.mid ?? null,
+    bbUpper: bb?.upper ?? null,
+    bbLower: bb?.lower ?? null,
+    rsi14,
+  };
+  if (!bb || close == null || rsi14 == null) {
+    return {
+      action: "HOLD",
+      score: 0,
+      reason: "Nedostatok dát pre Bollinger",
+      indicators,
+    };
+  }
+  if (close <= bb.lower && rsi14 < 35) {
+    return {
+      action: "BUY",
+      score: Math.min(100, 50 + (35 - rsi14)),
+      reason: `Close pri/pod BB lower, RSI ${rsi14.toFixed(1)}`,
+      indicators,
+    };
+  }
+  if (close >= bb.mid || rsi14 > 55) {
+    return {
+      action: "SELL",
+      score: 62,
+      reason:
+        close >= bb.mid
+          ? "Close späť k BB mid"
+          : `RSI rebound (${rsi14.toFixed(1)})`,
+      indicators,
+    };
+  }
+  return {
+    action: "HOLD",
+    score: 40,
+    reason: "Bollinger neutrálne",
     indicators,
   };
 }

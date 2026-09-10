@@ -1,18 +1,34 @@
 import {
   atr,
+  evaluateBollingerReversion,
   evaluateDualMomentum,
   evaluateEmaRsiTrend,
   evaluateExitRules,
   evaluateMaCrossover,
+  evaluateMacdTrend,
   evaluateRsiMeanReversion,
+  ema,
+  macd,
+  rsi,
   type SignalDecision,
 } from "./indicators";
-import { applyAiNudge, fetchPaperBotAiVerdicts, type AiSymbolVerdict } from "./aiLayer";
+import {
+  applyAiNudge,
+  fetchPaperBotAiVerdicts,
+  type AiMarketSnapshot,
+  type AiSymbolVerdict,
+} from "./aiLayer";
 import {
   evaluateCustomStrategy,
   parseCustomStrategy,
 } from "./customStrategy";
-import { fetchDailyOhlc, fetchLiveMark, type OhlcSeries } from "./marketData";
+import {
+  candleTfQuery,
+  fetchOhlc,
+  fetchLiveMark,
+  normalizeCandleTf,
+  type OhlcSeries,
+} from "./marketData";
 import { notifyPaperBotEvent } from "./notify";
 import { getUsSession } from "./session";
 import {
@@ -34,14 +50,23 @@ function evaluateStrategy(
   closes: number[],
   highs: number[],
   lows: number[],
+  volumes: number[],
 ): SignalDecision {
   if (bot.strategyId === "custom") {
     const custom = parseCustomStrategy(bot.customStrategy);
-    if (custom) return evaluateCustomStrategy(custom, closes, highs, lows);
+    if (custom) {
+      return evaluateCustomStrategy(custom, closes, highs, lows, volumes);
+    }
   }
   if (bot.strategyId === "ma_crossover") return evaluateMaCrossover(closes);
-  if (bot.strategyId === "rsi_mean_reversion") return evaluateRsiMeanReversion(closes);
+  if (bot.strategyId === "rsi_mean_reversion") {
+    return evaluateRsiMeanReversion(closes);
+  }
   if (bot.strategyId === "dual_momentum") return evaluateDualMomentum(closes);
+  if (bot.strategyId === "macd_trend") return evaluateMacdTrend(closes);
+  if (bot.strategyId === "bollinger_reversion") {
+    return evaluateBollingerReversion(closes);
+  }
   return evaluateEmaRsiTrend(closes);
 }
 
@@ -261,18 +286,25 @@ export async function tickPaperBot(
   let blocked = 0;
   let errors = 0;
 
+  const candleTf = normalizeCandleTf(working.candleTf);
+  const tfQ = candleTfQuery(candleTf);
   await insertPaperLog({
     botId: working.id,
     userId: working.userId,
     eventType: "tick",
-    message: `Tick začal (${working.strategyId}, AI ${working.aiInfluencePct}%)`,
+    message: `Tick začal (${working.strategyId}, TF ${candleTf}, AI ${working.aiInfluencePct}%)`,
     detail: {
       symbols: working.symbols,
       cash: working.cash,
       exits: working.exits,
+      candleTf,
     },
   });
-  await logPipeline(working, "INGEST", "Načítavam Yahoo OHLCV / live mark");
+  await logPipeline(
+    working,
+    "INGEST",
+    `Načítavam Yahoo OHLCV (${candleTf}) / live mark`,
+  );
 
   const prices = new Map<string, number>();
   const ohlcBySymbol = new Map<string, OhlcSeries>();
@@ -281,7 +313,7 @@ export async function tickPaperBot(
 
   for (const symbol of working.symbols) {
     try {
-      const ohlc = await fetchDailyOhlc(symbol);
+      const ohlc = await fetchOhlc(symbol, { tf: candleTf });
       ohlcBySymbol.set(symbol, ohlc);
       let mark = ohlc.lastPrice;
       if (live) {
@@ -306,8 +338,24 @@ export async function tickPaperBot(
   // AI layer once per tick (only if influence > 0)
   let aiVerdicts = new Map<string, AiSymbolVerdict>();
   if (working.aiInfluencePct > 0) {
-    await logPipeline(working, "AI", "Claude news verdicts");
-    const ai = await fetchPaperBotAiVerdicts({ symbols: working.symbols });
+    await logPipeline(working, "AI", "Claude news + market snapshot");
+    const market: AiMarketSnapshot[] = working.symbols.map((symbol) => {
+      const ohlc = ohlcBySymbol.get(symbol);
+      const closes = ohlc?.closes ?? [];
+      const m = closes.length ? macd(closes) : null;
+      return {
+        symbol,
+        close: closes.length ? closes[closes.length - 1]! : null,
+        rsi14: closes.length ? rsi(closes, 14) : null,
+        ema50: closes.length ? ema(closes, 50) : null,
+        ema200: closes.length ? ema(closes, 200) : null,
+        macdHist: m?.hist ?? null,
+      };
+    });
+    const ai = await fetchPaperBotAiVerdicts({
+      symbols: working.symbols,
+      market,
+    });
     aiVerdicts = ai.verdicts;
     await insertPaperLog({
       botId: working.id,
@@ -344,7 +392,7 @@ export async function tickPaperBot(
   for (const pos of marked) {
     const ohlc = ohlcBySymbol.get(pos.symbol);
     const price = prices.get(pos.symbol);
-    if (price == null || !ohlc || ohlc.closes.length < 30) continue;
+    if (price == null || !ohlc || ohlc.closes.length < tfQ.minBars) continue;
 
     const atrVal = atr(ohlc.highs, ohlc.lows, ohlc.closes, 14);
     const exitHit = evaluateExitRules({
@@ -383,6 +431,7 @@ export async function tickPaperBot(
       ohlc.closes,
       ohlc.highs,
       ohlc.lows,
+      ohlc.volumes,
     );
     await insertPaperLog({
       botId: working.id,
@@ -417,7 +466,7 @@ export async function tickPaperBot(
     if (positions.some((p) => p.symbol === symbol)) continue;
     const ohlc = ohlcBySymbol.get(symbol);
     const price = prices.get(symbol);
-    if (price == null || !ohlc || ohlc.closes.length < 30) {
+    if (price == null || !ohlc || ohlc.closes.length < tfQ.minBars) {
       await insertPaperLog({
         botId: working.id,
         userId: working.userId,
@@ -434,6 +483,7 @@ export async function tickPaperBot(
       ohlc.closes,
       ohlc.highs,
       ohlc.lows,
+      ohlc.volumes,
     );
     const nudged = applyAiNudge({
       signal: quant,
@@ -546,7 +596,7 @@ export async function killPaperBot(
     const positions = await listPositions(botId, userId);
     let cash = bot.cash;
     for (const pos of positions) {
-      const ohlc = await fetchDailyOhlc(pos.symbol, "5d");
+      const ohlc = await fetchOhlc(pos.symbol, { tf: "1d", range: "5d" });
       const price = ohlc.lastPrice ?? pos.entryPrice;
       const res = await closeLong({
         bot: { ...bot, cash },
@@ -586,7 +636,7 @@ export async function computeBotEquity(
   const positions = await listPositions(botId, userId);
   const prices = new Map<string, number>();
   for (const p of positions) {
-    const ohlc = await fetchDailyOhlc(p.symbol, "5d");
+    const ohlc = await fetchOhlc(p.symbol, { tf: "1d", range: "5d" });
     if (ohlc.lastPrice != null) prices.set(p.symbol, ohlc.lastPrice);
   }
   const { marked, positionsValue } = await markPositions(positions, prices);

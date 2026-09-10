@@ -15,7 +15,7 @@ import {
   killPaperBot,
   tickPaperBot,
 } from "./paperBot/engine";
-import { DEFAULT_EXITS, DEFAULT_RISK, PIPELINE_STAGES, STRATEGY_META, type PaperStrategyId } from "./paperBot/types";
+import { DEFAULT_EXITS, DEFAULT_RISK, PIPELINE_STAGES, STRATEGY_META, CANDLE_TF_META, type PaperCandleTf, type PaperStrategyId } from "./paperBot/types";
 import { runPaperBotSchedulerTick } from "./paperBot/scheduler";
 import { computePaperBotStats } from "./paperBot/stats";
 import { runPaperBacktest } from "./paperBot/backtest";
@@ -23,6 +23,7 @@ import { DEFAULT_CUSTOM_STRATEGY, parseCustomStrategy } from "./paperBot/customS
 import { isSmtpConfigured } from "./aiBot/mailer";
 import { storage } from "./storage";
 import { getUsSession, getPaperBotTickMs } from "./paperBot/session";
+import { normalizeCandleTf } from "./paperBot/marketData";
 
 type AuthReq = {
   user?: { claims?: { sub?: string } };
@@ -64,6 +65,10 @@ export function registerPaperBotRoutes(app: Express, isAuthenticated: any) {
         id,
         ...meta,
       })),
+      candleTfs: Object.entries(CANDLE_TF_META).map(([id, meta]) => ({
+        id,
+        ...meta,
+      })),
       defaultRisk: DEFAULT_RISK,
       defaultExits: DEFAULT_EXITS,
       defaultCustomStrategy: DEFAULT_CUSTOM_STRATEGY,
@@ -95,6 +100,7 @@ export function registerPaperBotRoutes(app: Express, isAuthenticated: any) {
       const symbols = parseSymbols(req.body?.symbols);
       const strategyId = (String(req.body?.strategyId || "ema_rsi_trend") ||
         "ema_rsi_trend") as PaperStrategyId;
+      const candleTf = normalizeCandleTf(req.body?.candleTf) as PaperCandleTf;
       if (!Number.isFinite(startingCash) || startingCash < 10) {
         return res
           .status(400)
@@ -163,6 +169,7 @@ export function registerPaperBotRoutes(app: Express, isAuthenticated: any) {
         strategyId,
         customStrategy,
         symbols,
+        candleTf,
         risk,
         exits,
         aiInfluencePct,
@@ -224,6 +231,7 @@ export function registerPaperBotRoutes(app: Express, isAuthenticated: any) {
             ),
           },
           lookbackBars: Number(req.body?.lookbackBars ?? 180),
+          candleTf: normalizeCandleTf(req.body?.candleTf),
         });
         res.json({ result });
       } catch (error) {
