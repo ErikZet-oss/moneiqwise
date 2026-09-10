@@ -338,7 +338,8 @@ export default function AiBot({ embedded = false }: { embedded?: boolean }) {
             <div className="min-w-0 space-y-0.5">
               <p className="text-sm font-medium">Automatické behy</p>
               <p className="text-[11px] leading-snug text-muted-foreground md:text-xs">
-                Pred open (09:00 ET) a 15&nbsp;min pred close (15:45 ET), pracovné dni.
+                Pred open ~15:00 SEČ/SELČ (US open 15:30) a pred close ~21:45
+                (US close 22:00), pracovné dni.
                 Automat spraví brief pre <span className="font-medium text-foreground/80">každé portfólio</span> zvlášť aj pre{" "}
                 <span className="font-medium text-foreground/80">Všetky portfóliá</span>.
               </p>
