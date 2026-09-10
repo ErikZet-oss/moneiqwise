@@ -1,6 +1,7 @@
 import { storage } from "../storage";
 import { toYahooTicker } from "../yahooTicker";
 import { fetchYahooV7Quote } from "../yahooQuoteClient";
+import { collectAiBotNewsContext, type AiBotNewsItem } from "./newsContext";
 
 export type AiBotHoldingContext = {
   ticker: string;
@@ -32,6 +33,7 @@ export type AiBotRunContext = {
   totalMarketValue: number;
   movers: AiBotMoverContext[];
   watchlistTickers: string[];
+  news: AiBotNewsItem[];
   sourcesUsed: string[];
 };
 
@@ -188,6 +190,11 @@ export async function buildAiBotContext(
     if (movers.length >= 12) break;
   }
 
+  const { news, sourcesUsed: newsSources } = await collectAiBotNewsContext({
+    holdingTickers: holdings.map((h) => h.ticker),
+  });
+  sourcesUsed.push(...newsSources);
+
   return {
     portfolioId: portfolioId || "all",
     portfolioLabel,
@@ -196,6 +203,7 @@ export async function buildAiBotContext(
     totalMarketValue,
     movers: movers.slice(0, 10),
     watchlistTickers,
+    news,
     sourcesUsed: Array.from(new Set(sourcesUsed)),
   };
 }

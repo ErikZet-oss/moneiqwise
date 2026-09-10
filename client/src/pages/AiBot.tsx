@@ -3,10 +3,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bot,
   CalendarClock,
+  ExternalLink,
   Loader2,
+  Newspaper,
   Plus,
   RefreshCw,
   Sparkles,
+  TrendingUp,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { sk } from "date-fns/locale";
@@ -41,6 +44,7 @@ type AuditItem = {
   rationale: string;
   risks: string | null;
   invalidation: string | null;
+  newsDrivers?: string[] | null;
 };
 
 type Opportunity = {
@@ -51,9 +55,30 @@ type Opportunity = {
   risks: string | null;
   whyNow: string | null;
   conviction: number | null;
+  newsDrivers?: string[] | null;
 };
 
 type MarketNote = { title: string; detail: string };
+
+type MarketOutlook = {
+  sentiment: "risk_on" | "risk_off" | "mixed" | "uncertain";
+  narrative: string;
+  drivers: string[];
+};
+
+type SectorTrend = {
+  sector: string;
+  bias: "bullish" | "bearish" | "neutral";
+  why: string;
+};
+
+type NewsDigestItem = {
+  title: string;
+  publisher: string | null;
+  link: string | null;
+  whyItMatters: string;
+  relatedTickers: string[] | null;
+};
 
 type Brief = {
   id: string;
@@ -62,6 +87,9 @@ type Brief = {
   summary: string;
   analysis: {
     summary: string;
+    marketOutlook?: MarketOutlook | null;
+    sectorTrends?: SectorTrend[];
+    newsDigest?: NewsDigestItem[];
     portfolioAudit: AuditItem[];
     newOpportunities: Opportunity[];
     marketNotes: MarketNote[];
@@ -90,6 +118,32 @@ const SLOT_LABEL: Record<Brief["slot"], string> = {
   manual: "Manuálne",
 };
 
+const SENTIMENT_LABEL: Record<MarketOutlook["sentiment"], string> = {
+  risk_on: "Risk-on",
+  risk_off: "Risk-off",
+  mixed: "Zmiešaná",
+  uncertain: "Neistá",
+};
+
+const SENTIMENT_STYLE: Record<MarketOutlook["sentiment"], string> = {
+  risk_on: "bg-emerald-600/15 text-emerald-700 dark:text-emerald-400",
+  risk_off: "bg-red-600/15 text-red-700 dark:text-red-400",
+  mixed: "bg-amber-500/15 text-amber-800 dark:text-amber-400",
+  uncertain: "bg-slate-500/15 text-slate-700 dark:text-slate-300",
+};
+
+const BIAS_LABEL: Record<SectorTrend["bias"], string> = {
+  bullish: "Bullish",
+  bearish: "Bearish",
+  neutral: "Neutral",
+};
+
+const BIAS_STYLE: Record<SectorTrend["bias"], string> = {
+  bullish: "text-emerald-600",
+  bearish: "text-red-600",
+  neutral: "text-muted-foreground",
+};
+
 function ActionBadge({ action }: { action: AiBotAction }) {
   return (
     <span
@@ -100,6 +154,23 @@ function ActionBadge({ action }: { action: AiBotAction }) {
     >
       {action}
     </span>
+  );
+}
+
+function NewsDrivers({ drivers }: { drivers?: string[] | null }) {
+  if (!drivers?.length) return null;
+  return (
+    <div className="flex flex-wrap gap-1 pt-0.5">
+      {drivers.map((d) => (
+        <span
+          key={d}
+          className="max-w-full truncate rounded-md bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+          title={d}
+        >
+          {d}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -341,6 +412,104 @@ export default function AiBot({ embedded = false }: { embedded?: boolean }) {
         </Card>
       )}
 
+      {analysis?.marketOutlook ? (
+        <Card>
+          <CardContent className="space-y-2 p-3 md:p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-primary" />
+              <span className="text-sm font-semibold">Nálada trhu</span>
+              <span
+                className={cn(
+                  "rounded px-1.5 py-0.5 text-[10px] font-semibold",
+                  SENTIMENT_STYLE[analysis.marketOutlook.sentiment],
+                )}
+              >
+                {SENTIMENT_LABEL[analysis.marketOutlook.sentiment]}
+              </span>
+            </div>
+            <p className="text-xs leading-relaxed md:text-sm">
+              {analysis.marketOutlook.narrative}
+            </p>
+            {analysis.marketOutlook.drivers?.length ? (
+              <div className="flex flex-wrap gap-1">
+                {analysis.marketOutlook.drivers.map((d) => (
+                  <Badge key={d} variant="secondary" className="max-w-full truncate text-[10px]">
+                    {d}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {analysis?.sectorTrends?.length ? (
+        <section className="space-y-2">
+          <h2 className="px-0.5 text-sm font-semibold">Trendy v sektore</h2>
+          <div className="space-y-2">
+            {analysis.sectorTrends.map((s) => (
+              <div key={s.sector} className="rounded-lg border px-3 py-2">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-xs font-medium">{s.sector}</p>
+                  <span className={cn("text-[10px] font-semibold", BIAS_STYLE[s.bias])}>
+                    {BIAS_LABEL[s.bias]}
+                  </span>
+                </div>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground md:text-xs">
+                  {s.why}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {analysis?.newsDigest?.length ? (
+        <section className="space-y-2">
+          <h2 className="flex items-center gap-1.5 px-0.5 text-sm font-semibold">
+            <Newspaper className="h-4 w-4" />
+            Kľúčové novinky
+          </h2>
+          <div className="space-y-2">
+            {analysis.newsDigest.map((n, i) => (
+              <Card key={`${n.title}-${i}`}>
+                <CardContent className="space-y-1.5 p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs font-medium leading-snug md:text-sm">{n.title}</p>
+                    {n.link ? (
+                      <a
+                        href={n.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 text-muted-foreground hover:text-foreground"
+                        aria-label="Otvoriť článok"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    ) : null}
+                  </div>
+                  {n.publisher ? (
+                    <p className="text-[10px] text-muted-foreground">{n.publisher}</p>
+                  ) : null}
+                  <p className="text-[11px] leading-relaxed text-muted-foreground md:text-xs">
+                    {n.whyItMatters}
+                  </p>
+                  {n.relatedTickers?.length ? (
+                    <div className="flex flex-wrap gap-1">
+                      {n.relatedTickers.map((t) => (
+                        <Badge key={t} variant="outline" className="text-[10px]">
+                          {t}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       {analysis?.portfolioAudit?.length ? (
         <section className="space-y-2">
           <h2 className="px-0.5 text-sm font-semibold">Audit portfólia</h2>
@@ -366,6 +535,7 @@ export default function AiBot({ embedded = false }: { embedded?: boolean }) {
                     </div>
                   </div>
                   <p className="text-xs leading-relaxed md:text-sm">{item.rationale}</p>
+                  <NewsDrivers drivers={item.newsDrivers} />
                   {item.risks ? (
                     <p className="text-[11px] text-muted-foreground">
                       <span className="font-medium text-foreground/80">Riziká:</span> {item.risks}
@@ -424,6 +594,7 @@ export default function AiBot({ embedded = false }: { embedded?: boolean }) {
                       {item.whyNow}
                     </p>
                   ) : null}
+                  <NewsDrivers drivers={item.newsDrivers} />
                   {item.risks ? (
                     <p className="text-[11px] text-muted-foreground">
                       <span className="font-medium text-foreground/80">Riziká:</span> {item.risks}

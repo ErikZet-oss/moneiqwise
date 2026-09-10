@@ -6,8 +6,11 @@ import type {
   AiBotAnalysisPayload,
   AiBotHorizon,
   AiBotMarketNote,
+  AiBotMarketOutlook,
+  AiBotNewsDigestItem,
   AiBotOpportunity,
   AiBotPortfolioAuditItem,
+  AiBotSectorTrend,
 } from "./types";
 
 const MODEL =
@@ -156,6 +159,31 @@ function asConviction(v: unknown): number | null {
   return Math.max(1, Math.min(5, Math.round(n)));
 }
 
+function asStringList(v: unknown, max = 4): string[] | null {
+  if (!Array.isArray(v)) return null;
+  const list = v
+    .map((x) => String(x || "").trim())
+    .filter(Boolean)
+    .slice(0, max);
+  return list.length ? list : null;
+}
+
+function asSentiment(v: unknown): AiBotMarketOutlook["sentiment"] {
+  const s = String(v || "")
+    .toLowerCase()
+    .replace(/-/g, "_");
+  if (s === "risk_on" || s === "riskon") return "risk_on";
+  if (s === "risk_off" || s === "riskoff") return "risk_off";
+  if (s === "mixed") return "mixed";
+  return "uncertain";
+}
+
+function asSectorBias(v: unknown): AiBotSectorTrend["bias"] {
+  const s = String(v || "").toLowerCase();
+  if (s === "bullish" || s === "bearish" || s === "neutral") return s;
+  return "neutral";
+}
+
 function normalizeAnalysis(raw: any, sourcesUsed: string[]): AiBotAnalysisPayload {
   const portfolioAudit: AiBotPortfolioAuditItem[] = Array.isArray(raw?.portfolioAudit)
     ? raw.portfolioAudit.map((item: any) => ({
@@ -171,6 +199,7 @@ function normalizeAnalysis(raw: any, sourcesUsed: string[]): AiBotAnalysisPayloa
         rationale: String(item?.rationale || item?.reason || "").trim() || "Bez zdôvodnenia.",
         risks: item?.risks != null ? String(item.risks) : null,
         invalidation: item?.invalidation != null ? String(item.invalidation) : null,
+        newsDrivers: asStringList(item?.newsDrivers, 4),
       }))
     : [];
 
@@ -183,6 +212,7 @@ function normalizeAnalysis(raw: any, sourcesUsed: string[]): AiBotAnalysisPayloa
         risks: item?.risks != null ? String(item.risks) : null,
         whyNow: item?.whyNow != null ? String(item.whyNow) : null,
         conviction: asConviction(item?.conviction),
+        newsDrivers: asStringList(item?.newsDrivers, 4),
       }))
     : [];
 
@@ -193,8 +223,43 @@ function normalizeAnalysis(raw: any, sourcesUsed: string[]): AiBotAnalysisPayloa
       }))
     : [];
 
+  const outlookRaw = raw?.marketOutlook;
+  const marketOutlook: AiBotMarketOutlook | null =
+    outlookRaw && typeof outlookRaw === "object"
+      ? {
+          sentiment: asSentiment(outlookRaw.sentiment),
+          narrative:
+            String(outlookRaw.narrative || outlookRaw.summary || "").trim() ||
+            "Bez makronaratívu.",
+          drivers: asStringList(outlookRaw.drivers, 6) || [],
+        }
+      : null;
+
+  const sectorTrends: AiBotSectorTrend[] = Array.isArray(raw?.sectorTrends)
+    ? raw.sectorTrends.slice(0, 6).map((item: any) => ({
+        sector: String(item?.sector || "Sektor").trim(),
+        bias: asSectorBias(item?.bias),
+        why: String(item?.why || item?.detail || "").trim() || "Bez zdôvodnenia.",
+      }))
+    : [];
+
+  const newsDigest: AiBotNewsDigestItem[] = Array.isArray(raw?.newsDigest)
+    ? raw.newsDigest.slice(0, 8).map((item: any) => ({
+        title: String(item?.title || "Článok").trim(),
+        publisher: item?.publisher != null ? String(item.publisher) : null,
+        link: item?.link != null ? String(item.link) : null,
+        whyItMatters: String(item?.whyItMatters || item?.detail || "").trim() || "—",
+        relatedTickers: asStringList(item?.relatedTickers, 6)?.map((t) =>
+          t.toUpperCase(),
+        ) ?? null,
+      }))
+    : [];
+
   return {
     summary: String(raw?.summary || "").trim() || "Analýza dokončená.",
+    marketOutlook,
+    sectorTrends: sectorTrends.filter((x) => x.sector && x.why),
+    newsDigest: newsDigest.filter((x) => x.title),
     portfolioAudit: portfolioAudit.filter((x) => x.ticker),
     newOpportunities: newOpportunities.filter((x) => x.ticker),
     marketNotes: marketNotes.filter((x) => x.detail),
@@ -213,8 +278,23 @@ function looseFallbackFromContext(
     extractJsonStringField(text, "summary") ||
     (text.trim().slice(0, 280) || "Analýza prebehla, ale Claude nevrátil čistý JSON. Skús Spustiť znova.");
 
+  const topNews = ctx.news.slice(0, 5);
   return {
     summary,
+    marketOutlook: {
+      sentiment: "uncertain",
+      narrative:
+        "Dočasný brief — Claude nevrátil platný JSON. Spusti AI Bot znova pre hĺbkový rozbor podľa noviniek.",
+      drivers: topNews.map((n) => n.title).slice(0, 4),
+    },
+    sectorTrends: [],
+    newsDigest: topNews.map((n) => ({
+      title: n.title,
+      publisher: n.publisher || null,
+      link: n.link || null,
+      whyItMatters: n.summary || "Článok z kontextu (fallback pred novým behom).",
+      relatedTickers: n.ticker ? [n.ticker] : null,
+    })),
     portfolioAudit: ctx.holdings.slice(0, 25).map((h) => ({
       ticker: h.ticker,
       companyName: h.companyName,
@@ -226,6 +306,7 @@ function looseFallbackFromContext(
         "Dočasný HOLD — odpoveď modelu nebola v platnom JSON. Spusti AI Bot znova pre plný audit.",
       risks: null,
       invalidation: null,
+      newsDrivers: null,
     })),
     newOpportunities: [],
     marketNotes: [
@@ -275,6 +356,16 @@ function sanitizeContext(ctx: AiBotRunContext) {
     sector: m.sector,
   }));
 
+  const news = (ctx.news || []).slice(0, 24).map((n) => ({
+    title: n.title.slice(0, 160),
+    publisher: n.publisher?.slice(0, 40) || null,
+    link: n.link || null,
+    publishedAt: n.publishedAt,
+    summary: n.summary?.slice(0, 180) || null,
+    relatedTicker: n.ticker,
+    topic: n.query,
+  }));
+
   return {
     slot: ctx.slotLabel,
     portfolio: ctx.portfolioLabel,
@@ -283,6 +374,7 @@ function sanitizeContext(ctx: AiBotRunContext) {
       : 0,
     holdings,
     externalCandidates: movers,
+    recentNews: news,
     alreadyOwnedOrWatching: Array.from(
       new Set([
         ...holdings.map((h) => h.ticker),
@@ -294,29 +386,38 @@ function sanitizeContext(ctx: AiBotRunContext) {
 
 function buildPrompt(userPayload: unknown, compact: boolean): string {
   if (compact) {
-    return `Return ONLY a valid minified JSON object. No markdown. No prose.
-Keys: summary (string, max 400 chars),
-portfolioAudit (array of {ticker,companyName,action,weightPct,horizon,conviction,rationale,risks,invalidation}),
-newOpportunities (array max 2 of {ticker,companyName,thesis,horizon,risks,whyNow,conviction}),
-marketNotes (array max 3 of {title,detail}).
-action must be BUY|SELL|TRIM|HOLD. Keep rationale/thesis under 160 chars each.
+    return `Return ONLY valid minified JSON. No markdown.
+Keys: summary,
+marketOutlook:{sentiment:risk_on|risk_off|mixed|uncertain,narrative,drivers[]},
+sectorTrends:[{sector,bias:bullish|bearish|neutral,why}],
+newsDigest:[{title,publisher,link,whyItMatters,relatedTickers[]}],
+portfolioAudit:[{ticker,companyName,action,weightPct,horizon,conviction,rationale,risks,invalidation,newsDrivers[]}],
+newOpportunities:[{ticker,companyName,thesis,horizon,risks,whyNow,conviction,newsDrivers[]}],
+marketNotes:[{title,detail}].
+Cite headlines from recentNews. action=BUY|SELL|TRIM|HOLD.
 Context:
 ${JSON.stringify(userPayload)}`;
   }
 
-  return `Si investičný asistent pre retail investora v appke Moneiqwise.
+  return `Si senior investičný analytik pre retail investora v appke Moneiqwise (slovensky).
+
+Musíš spraviť HĹBKOVÝ rozbor podľa aktuálnych noviniek v poli recentNews (Yahoo Finance titulky + krátke súhrny).
+Nestačí všeobecné frázovanie — viaž rozhodnutia na konkrétne titulky (Fed/inflácia, Trump/cla, geopolitika, sektory, firemné správy).
 
 Úlohy:
-1) Pre každú pozíciu navrhni BUY, SELL, TRIM alebo HOLD.
-2) Zohľadni % váhu, denný pohyb, nerealizovaný P/L.
-3) Z externalCandidates vyber 1–2 nové tipy (nie v alreadyOwnedOrWatching).
-4) horizon: swing|long, conviction 1–5.
-5) Krátke marketNotes.
+1) marketOutlook: nálada trhu (risk_on|risk_off|mixed|uncertain), naratív 3–5 viet, drivers = kľúčové témy z noviniek.
+2) sectorTrends: 3–5 sektorov relevantných k portfóliu / novinkám, bias + prečo (podľa článkov).
+3) newsDigest: 4–6 najdôležitejších článkov z recentNews — skopíruj title/publisher/link ak sú, a napíš whyItMatters pre investora.
+4) Pre každú holding pozíciu: BUY|SELL|TRIM|HOLD + rationale (2–4 vety) s odkazom na novinky; newsDrivers = 1–3 krátke citácie/titulky.
+5) 1–2 newOpportunities mimo alreadyOwnedOrWatching; whyNow musí byť aktuálne (novinky).
+6) marketNotes: krátke doplnkové poznámky.
 
-DÔLEŽITÉ:
-- Odpovedz VÝHRADNE platným JSON objektom. Žiadny markdown, žiadny text okolo.
-- Skráť texty: rationale/thesis max 2 vety.
-- Polia: summary, portfolioAudit, newOpportunities, marketNotes.
+Pravidlá:
+- Odpovedz VÝHRADNE platným JSON. Žiadny markdown, žiadny text okolo.
+- Neklaď titulky, ktoré nie sú v recentNews.
+- Ak recentNews je prázdne, povedz to v marketOutlook.narrative a buď opatrný.
+- horizon: swing|long, conviction 1–5.
+- JSON polia: summary, marketOutlook, sectorTrends, newsDigest, portfolioAudit, newOpportunities, marketNotes.
 
 Kontext:
 ${JSON.stringify(userPayload)}`;

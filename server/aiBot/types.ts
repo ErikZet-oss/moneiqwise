@@ -12,6 +12,8 @@ export type AiBotPortfolioAuditItem = {
   rationale: string;
   risks: string | null;
   invalidation: string | null;
+  /** Titulky / témy z noviniek, o ktoré sa opiera */
+  newsDrivers: string[] | null;
 };
 
 export type AiBotOpportunity = {
@@ -22,6 +24,7 @@ export type AiBotOpportunity = {
   risks: string | null;
   whyNow: string | null;
   conviction: number | null;
+  newsDrivers: string[] | null;
 };
 
 export type AiBotMarketNote = {
@@ -29,8 +32,31 @@ export type AiBotMarketNote = {
   detail: string;
 };
 
+export type AiBotMarketOutlook = {
+  sentiment: "risk_on" | "risk_off" | "mixed" | "uncertain";
+  narrative: string;
+  drivers: string[];
+};
+
+export type AiBotSectorTrend = {
+  sector: string;
+  bias: "bullish" | "bearish" | "neutral";
+  why: string;
+};
+
+export type AiBotNewsDigestItem = {
+  title: string;
+  publisher: string | null;
+  link: string | null;
+  whyItMatters: string;
+  relatedTickers: string[] | null;
+};
+
 export type AiBotAnalysisPayload = {
   summary: string;
+  marketOutlook: AiBotMarketOutlook | null;
+  sectorTrends: AiBotSectorTrend[];
+  newsDigest: AiBotNewsDigestItem[];
   portfolioAudit: AiBotPortfolioAuditItem[];
   newOpportunities: AiBotOpportunity[];
   marketNotes: AiBotMarketNote[];

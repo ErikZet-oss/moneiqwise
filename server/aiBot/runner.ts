@@ -30,6 +30,9 @@ export async function runAiBotForUser(input: {
     const emptyAnalysis = {
       summary:
         "V zvolenom portfóliu nie sú žiadne pozície na audit. Pridaj holdingy alebo vyber iné portfólio.",
+      marketOutlook: null,
+      sectorTrends: [],
+      newsDigest: [],
       portfolioAudit: [],
       newOpportunities: [],
       marketNotes: [
@@ -64,6 +67,7 @@ export async function runAiBotForUser(input: {
       totalMarketValue: ctx.totalMarketValue,
       holdingCount: ctx.holdings.length,
       moverCount: ctx.movers.length,
+      newsCount: ctx.news.length,
       sourcesUsed: ctx.sourcesUsed,
     },
     model: analysis.model,
