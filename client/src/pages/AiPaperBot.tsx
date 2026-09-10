@@ -110,6 +110,8 @@ type PaperBot = {
   notifyEmail?: string | null;
   notifyOnTrade?: boolean;
   lastPipelineStage?: string | null;
+  equity?: number;
+  returnPct?: number;
 };
 
 type PaperPosition = {
@@ -1360,6 +1362,19 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
               )}
             >
               <div className="font-medium">{b.name}</div>
+              <div
+                className={cn(
+                  "text-[10px] font-medium tabular-nums",
+                  (b.returnPct ?? 0) > 0
+                    ? "text-emerald-600 dark:text-emerald-400"
+                    : (b.returnPct ?? 0) < 0
+                      ? "text-red-600 dark:text-red-400"
+                      : "text-muted-foreground",
+                )}
+              >
+                {(b.returnPct ?? 0) > 0 ? "+" : ""}
+                {(b.returnPct ?? 0).toFixed(2)} %
+              </div>
               <div className="text-[10px] text-muted-foreground">
                 {STATUS_LABEL[b.status] ?? b.status} · {money(b.cash, b.currency)}
               </div>

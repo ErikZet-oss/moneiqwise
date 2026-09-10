@@ -7,6 +7,7 @@ import {
   listEquityTicks,
   listPaperBots,
   listPaperLogs,
+  listPositions,
   listTrades,
   updatePaperBotStatus,
 } from "./paperBot/store";
@@ -84,7 +85,24 @@ export function registerPaperBotRoutes(app: Express, isAuthenticated: any) {
       const userId = requireUserId(req, res);
       if (!userId) return;
       const bots = await listPaperBots(userId);
-      res.json({ bots });
+      const enriched = await Promise.all(
+        bots.map(async (bot) => {
+          const positions = await listPositions(bot.id, userId);
+          const positionsValue = positions.reduce(
+            (sum, p) => sum + (p.markPrice ?? p.entryPrice) * p.qty,
+            0,
+          );
+          const equity = Math.round((bot.cash + positionsValue) * 100) / 100;
+          const returnPct =
+            bot.startingCash > 0
+              ? Math.round(
+                  ((equity - bot.startingCash) / bot.startingCash) * 10000,
+                ) / 100
+              : 0;
+          return { ...bot, equity, returnPct };
+        }),
+      );
+      res.json({ bots: enriched });
     } catch (error) {
       console.error("paper-bots list:", error);
       res.status(500).json({ message: "Nepodarilo sa načítať paper botov." });
