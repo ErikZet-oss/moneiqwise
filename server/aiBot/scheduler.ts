@@ -1,5 +1,5 @@
 import { listEnabledAiBotUsers, tryAcquireScheduleLock } from "./store";
-import { runAiBotForUser } from "./runner";
+import { runAiBotScheduledForUser } from "./runner";
 import type { AiBotSlot } from "./types";
 
 type EtParts = {
@@ -32,7 +32,7 @@ function getEtParts(now = new Date()): EtParts {
   };
 }
 
-function detectSlot(et: EtParts): AiBotSlot | null {
+function detectSlot(et: EtParts): Exclude<AiBotSlot, "manual"> | null {
   const wd = et.weekday;
   if (wd === "Sat" || wd === "Sun") return null;
   // Pred open: 09:00 ET (RTH open 09:30)
@@ -59,17 +59,19 @@ async function tick() {
   try {
     const users = await listEnabledAiBotUsers();
     console.log(
-      `[ai-bot] scheduled ${slot} for ${users.length} user(s) (${lockKey})`,
+      `[ai-bot] scheduled ${slot} for ${users.length} user(s) (${lockKey}) — each PTF + all`,
     );
     for (const u of users) {
       try {
-        await runAiBotForUser({
+        const stats = await runAiBotScheduledForUser({
           userId: u.userId,
-          portfolioId: u.portfolioId,
           slot,
         });
+        console.log(
+          `[ai-bot] user=${u.userId} ran=${stats.ran} skippedEmpty=${stats.skippedEmpty} failed=${stats.failed}`,
+        );
       } catch (err) {
-        console.error(`[ai-bot] run failed for ${u.userId}:`, err);
+        console.error(`[ai-bot] schedule batch failed for ${u.userId}:`, err);
       }
     }
   } finally {
@@ -84,6 +86,6 @@ export function startAiBotScheduler() {
     void tick();
   }, 30_000);
   console.log(
-    "[ai-bot] scheduler started (preopen 09:00 ET, preclose 15:45 ET)",
+    "[ai-bot] scheduler started (preopen 09:00 ET, preclose 15:45 ET; all PTF + each)",
   );
 }

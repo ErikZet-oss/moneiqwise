@@ -75,6 +75,14 @@ export function registerAiBotRoutes(app: Express, isAuthenticated: any) {
       const portfolioId =
         typeof req.query?.portfolio === "string" ? req.query.portfolio : null;
       const brief = await getLatestAiBotBrief(userId, portfolioId);
+      if (brief) {
+        if (brief.portfolioId === "all") {
+          brief.portfolioLabel = "Všetky portfóliá";
+        } else if (!brief.portfolioLabel || brief.portfolioLabel === brief.portfolioId) {
+          const pf = await storage.getPortfolioById(brief.portfolioId, userId);
+          if (pf) brief.portfolioLabel = pf.name;
+        }
+      }
       res.json({ brief });
     } catch (error) {
       console.error("ai-bot latest brief:", error);
@@ -86,9 +94,20 @@ export function registerAiBotRoutes(app: Express, isAuthenticated: any) {
     try {
       const userId = requireUserId(req, res);
       if (!userId) return;
-      const limit = parseInt(String(req.query?.limit ?? "20"), 10);
-      const briefs = await listAiBotBriefs(userId, Number.isFinite(limit) ? limit : 20);
-      res.json({ briefs });
+      const limit = parseInt(String(req.query?.limit ?? "40"), 10);
+      const briefs = await listAiBotBriefs(userId, Number.isFinite(limit) ? limit : 40);
+      const portfolios = await storage.getPortfoliosByUser(userId);
+      const nameById = new Map(portfolios.map((p) => [p.id, p.name]));
+      const enriched = briefs.map((b) => ({
+        ...b,
+        portfolioLabel:
+          b.portfolioId === "all"
+            ? "Všetky portfóliá"
+            : b.portfolioLabel && b.portfolioLabel !== b.portfolioId
+              ? b.portfolioLabel
+              : nameById.get(b.portfolioId) || b.portfolioLabel || "Portfólio",
+      }));
+      res.json({ briefs: enriched });
     } catch (error) {
       console.error("ai-bot briefs:", error);
       res.status(500).json({ message: "Nepodarilo sa načítať históriu briefov." });
@@ -101,6 +120,12 @@ export function registerAiBotRoutes(app: Express, isAuthenticated: any) {
       if (!userId) return;
       const brief = await getAiBotBriefById(userId, String(req.params?.id || ""));
       if (!brief) return res.status(404).json({ message: "Brief neexistuje." });
+      if (brief.portfolioId !== "all" && (!brief.portfolioLabel || brief.portfolioLabel === brief.portfolioId)) {
+        const pf = await storage.getPortfolioById(brief.portfolioId, userId);
+        if (pf) brief.portfolioLabel = pf.name;
+      } else if (brief.portfolioId === "all") {
+        brief.portfolioLabel = "Všetky portfóliá";
+      }
       res.json({ brief });
     } catch (error) {
       console.error("ai-bot brief by id:", error);
@@ -136,6 +161,9 @@ export function registerAiBotRoutes(app: Express, isAuthenticated: any) {
         portfolioId,
         slot: "manual",
       });
+      if (!brief) {
+        return res.status(400).json({ message: "Portfólio je prázdne." });
+      }
       res.json({ brief });
     } catch (error) {
       console.error("ai-bot run:", error);

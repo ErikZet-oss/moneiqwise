@@ -63,6 +63,19 @@ function mapSettings(row: any): AiBotSettings {
   };
 }
 
+function resolvePortfolioLabel(
+  portfolioId: string,
+  context: any,
+): string {
+  const fromCtx =
+    context && typeof context === "object" && context.portfolioLabel != null
+      ? String(context.portfolioLabel).trim()
+      : "";
+  if (fromCtx) return fromCtx;
+  if (!portfolioId || portfolioId === "all") return "Všetky portfóliá";
+  return portfolioId;
+}
+
 function mapBrief(row: any): AiBotBrief {
   const analysis =
     typeof row.analysis_json === "string"
@@ -72,10 +85,12 @@ function mapBrief(row: any): AiBotBrief {
     typeof row.context_json === "string"
       ? JSON.parse(row.context_json)
       : row.context_json;
+  const portfolioId = String(row.portfolio_id);
   return {
     id: String(row.id),
     userId: String(row.user_id),
-    portfolioId: String(row.portfolio_id),
+    portfolioId,
+    portfolioLabel: resolvePortfolioLabel(portfolioId, context),
     slot: row.slot as AiBotSlot,
     summary: String(row.summary || ""),
     analysis: analysis as AiBotAnalysisPayload,
@@ -172,10 +187,11 @@ export async function getLatestAiBotBrief(
   portfolioId?: string | null,
 ): Promise<AiBotBrief | null> {
   await ensureAiBotTables();
-  if (portfolioId && portfolioId !== "all") {
+  const pf = portfolioId != null ? String(portfolioId).trim() : "";
+  if (pf) {
     const result = await db.execute(sql`
       SELECT * FROM ai_bot_briefs
-      WHERE user_id = ${userId} AND portfolio_id = ${portfolioId}
+      WHERE user_id = ${userId} AND portfolio_id = ${pf}
       ORDER BY created_at DESC
       LIMIT 1
     `);

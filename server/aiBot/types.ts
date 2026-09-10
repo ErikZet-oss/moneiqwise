@@ -75,6 +75,8 @@ export type AiBotBrief = {
   id: string;
   userId: string;
   portfolioId: string;
+  /** Ľudský názov PTF v čase behu (alebo „Všetky portfóliá“) */
+  portfolioLabel: string;
   slot: AiBotSlot;
   summary: string;
   analysis: AiBotAnalysisPayload;

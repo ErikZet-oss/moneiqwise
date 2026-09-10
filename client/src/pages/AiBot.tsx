@@ -83,6 +83,7 @@ type NewsDigestItem = {
 type Brief = {
   id: string;
   portfolioId: string;
+  portfolioLabel?: string;
   slot: "preopen" | "preclose" | "manual";
   summary: string;
   analysis: {
@@ -208,7 +209,7 @@ export default function AiBot({ embedded = false }: { embedded?: boolean }) {
   const { data: historyPayload } = useQuery<{ briefs: Brief[] }>({
     queryKey: ["/api/ai-bot/briefs"],
     queryFn: async () => {
-      const res = await fetch("/api/ai-bot/briefs?limit=14", { credentials: "include" });
+      const res = await fetch("/api/ai-bot/briefs?limit=40", { credentials: "include" });
       if (!res.ok) throw new Error("briefs");
       return res.json();
     },
@@ -292,6 +293,18 @@ export default function AiBot({ embedded = false }: { embedded?: boolean }) {
   const history = historyPayload?.briefs ?? [];
   const analysis = activeBrief?.analysis;
 
+  const portfolioNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    map.set("all", "Všetky portfóliá");
+    for (const p of portfolios) map.set(p.id, p.name);
+    return map;
+  }, [portfolios]);
+
+  function briefPortfolioLabel(b: Brief): string {
+    if (b.portfolioLabel) return b.portfolioLabel;
+    return portfolioNameById.get(b.portfolioId) || "Portfólio";
+  }
+
   const createdLabel = useMemo(() => {
     if (!activeBrief?.createdAt) return null;
     try {
@@ -326,6 +339,8 @@ export default function AiBot({ embedded = false }: { embedded?: boolean }) {
               <p className="text-sm font-medium">Automatické behy</p>
               <p className="text-[11px] leading-snug text-muted-foreground md:text-xs">
                 Pred open (09:00 ET) a 15&nbsp;min pred close (15:45 ET), pracovné dni.
+                Automat spraví brief pre <span className="font-medium text-foreground/80">každé portfólio</span> zvlášť aj pre{" "}
+                <span className="font-medium text-foreground/80">Všetky portfóliá</span>.
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -342,7 +357,9 @@ export default function AiBot({ embedded = false }: { embedded?: boolean }) {
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Portfólio na audit</Label>
+            <Label className="text-xs text-muted-foreground">
+              Portfólio (manuálny beh / zobrazenie)
+            </Label>
             <Select
               value={portfolioId}
               onValueChange={(v) => saveSettings.mutate({ portfolioId: v })}
@@ -387,6 +404,9 @@ export default function AiBot({ embedded = false }: { embedded?: boolean }) {
               <span className="text-sm font-semibold">Dnešný brief</span>
               <Badge variant="secondary" className="text-[10px]">
                 {SLOT_LABEL[activeBrief.slot]}
+              </Badge>
+              <Badge variant="outline" className="max-w-[11rem] truncate text-[10px]">
+                {briefPortfolioLabel(activeBrief)}
               </Badge>
               {createdLabel && (
                 <span className="text-[10px] text-muted-foreground md:text-xs">
@@ -642,21 +662,28 @@ export default function AiBot({ embedded = false }: { embedded?: boolean }) {
               Najnovší
             </Button>
             {history.map((b) => {
-              let label = b.createdAt.slice(0, 10);
+              let dateLabel = b.createdAt.slice(0, 10);
               try {
-                label = format(parseISO(b.createdAt), "d.M.", { locale: sk });
+                dateLabel = format(parseISO(b.createdAt), "d.M.", { locale: sk });
               } catch {
                 /* ignore */
               }
+              const ptf = briefPortfolioLabel(b);
               return (
                 <Button
                   key={b.id}
                   size="sm"
                   variant={selectedBriefId === b.id ? "default" : "outline"}
-                  className="h-8 shrink-0 text-xs"
+                  className="h-auto min-h-8 shrink-0 flex-col items-start gap-0 px-2.5 py-1.5 text-left text-xs"
                   onClick={() => setSelectedBriefId(b.id)}
+                  title={`${ptf} · ${SLOT_LABEL[b.slot]}`}
                 >
-                  {label} · {SLOT_LABEL[b.slot]}
+                  <span>
+                    {dateLabel} · {SLOT_LABEL[b.slot]}
+                  </span>
+                  <span className="max-w-[9.5rem] truncate text-[10px] font-normal opacity-80">
+                    {ptf}
+                  </span>
                 </Button>
               );
             })}
