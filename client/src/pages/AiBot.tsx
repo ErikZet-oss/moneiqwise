@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Bot,
-  CalendarClock,
+  Calendar as CalendarIcon,
   ExternalLink,
   Loader2,
   Newspaper,
@@ -10,8 +10,9 @@ import {
   RefreshCw,
   Sparkles,
   TrendingUp,
+  X,
 } from "lucide-react";
-import { format, parseISO } from "date-fns";
+import { format, isSameDay, parseISO, startOfDay } from "date-fns";
 import { sk } from "date-fns/locale";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CompanyLogo } from "@/components/CompanyLogo";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { apiRequest } from "@/lib/queryClient";
@@ -180,6 +183,8 @@ export default function AiBot({ embedded = false }: { embedded?: boolean }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selectedBriefId, setSelectedBriefId] = useState<string | null>(null);
+  const [historyDate, setHistoryDate] = useState<Date | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   const { data: settings, isLoading: settingsLoading } = useQuery<Settings>({
     queryKey: ["/api/ai-bot/settings"],
@@ -305,6 +310,35 @@ export default function AiBot({ embedded = false }: { embedded?: boolean }) {
     return portfolioNameById.get(b.portfolioId) || "Portfólio";
   }
 
+  const briefDates = useMemo(() => {
+    const dates: Date[] = [];
+    const seen = new Set<string>();
+    for (const b of history) {
+      try {
+        const d = startOfDay(parseISO(b.createdAt));
+        const key = format(d, "yyyy-MM-dd");
+        if (!seen.has(key)) {
+          seen.add(key);
+          dates.push(d);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    return dates;
+  }, [history]);
+
+  const briefsOnSelectedDay = useMemo(() => {
+    if (!historyDate) return [];
+    return history.filter((b) => {
+      try {
+        return isSameDay(parseISO(b.createdAt), historyDate);
+      } catch {
+        return false;
+      }
+    });
+  }, [history, historyDate]);
+
   const createdLabel = useMemo(() => {
     if (!activeBrief?.createdAt) return null;
     try {
@@ -313,6 +347,25 @@ export default function AiBot({ embedded = false }: { embedded?: boolean }) {
       return activeBrief.createdAt;
     }
   }, [activeBrief?.createdAt]);
+
+  function selectLatest() {
+    setHistoryDate(null);
+    setSelectedBriefId(null);
+  }
+
+  function pickHistoryDate(day: Date | undefined) {
+    if (!day) return;
+    setHistoryDate(startOfDay(day));
+    setCalendarOpen(false);
+    const onDay = history.filter((b) => {
+      try {
+        return isSameDay(parseISO(b.createdAt), day);
+      } catch {
+        return false;
+      }
+    });
+    setSelectedBriefId(onDay[0]?.id ?? null);
+  }
 
   if (settingsLoading) {
     return (
@@ -325,12 +378,111 @@ export default function AiBot({ embedded = false }: { embedded?: boolean }) {
 
   return (
     <div className={cn("space-y-3 md:space-y-4", !embedded && "mx-auto max-w-3xl pb-8")}>
-      {!embedded && (
-        <div className="flex items-center gap-2">
-          <Bot className="h-5 w-5 text-primary" />
-          <h1 className="text-lg font-semibold">AI Bot</h1>
+      <div className="flex items-center justify-between gap-2">
+        {!embedded ? (
+          <div className="flex items-center gap-2">
+            <Bot className="h-5 w-5 text-primary" />
+            <h1 className="text-lg font-semibold">AI Bot</h1>
+          </div>
+        ) : (
+          <span className="text-sm font-medium text-muted-foreground">História</span>
+        )}
+        <div className="flex items-center gap-1.5">
+          {historyDate ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-9 gap-1 px-2 text-xs"
+              onClick={selectLatest}
+            >
+              <X className="h-3.5 w-3.5" />
+              Najnovší
+            </Button>
+          ) : null}
+          <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                size="icon"
+                variant={historyDate ? "default" : "outline"}
+                className="h-9 w-9 shrink-0"
+                aria-label="História briefov – výber dátumu"
+                data-testid="button-ai-bot-history-calendar"
+                disabled={history.length === 0}
+              >
+                <CalendarIcon className="h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar
+                mode="single"
+                locale={sk}
+                selected={historyDate ?? undefined}
+                onSelect={pickHistoryDate}
+                disabled={(day) =>
+                  !briefDates.some((d) => isSameDay(d, day))
+                }
+                modifiers={{ hasBrief: briefDates }}
+                modifiersClassNames={{
+                  hasBrief: "font-semibold underline decoration-primary/60",
+                }}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
         </div>
-      )}
+      </div>
+
+      {historyDate ? (
+        <Card>
+          <CardContent className="space-y-2 p-3">
+            <p className="text-xs font-medium">
+              Briefy · {format(historyDate, "d. M. yyyy", { locale: sk })}
+            </p>
+            {briefsOnSelectedDay.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground">
+                Pre tento deň nie je žiadny brief.
+              </p>
+            ) : (
+              <div className="space-y-1.5">
+                {briefsOnSelectedDay.map((b) => {
+                  let timeLabel = "";
+                  try {
+                    timeLabel = format(parseISO(b.createdAt), "HH:mm", { locale: sk });
+                  } catch {
+                    /* ignore */
+                  }
+                  const active = selectedBriefId === b.id;
+                  return (
+                    <button
+                      key={b.id}
+                      type="button"
+                      onClick={() => setSelectedBriefId(b.id)}
+                      className={cn(
+                        "flex w-full items-center justify-between gap-2 rounded-lg border px-3 py-2 text-left transition-colors",
+                        active
+                          ? "border-primary bg-primary/5"
+                          : "hover:bg-muted/60",
+                      )}
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-medium">
+                          {briefPortfolioLabel(b)}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {SLOT_LABEL[b.slot]}
+                          {timeLabel ? ` · ${timeLabel}` : ""}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card className="overflow-hidden">
         <CardContent className="space-y-3 p-3 md:p-4">
@@ -608,8 +760,11 @@ export default function AiBot({ embedded = false }: { embedded?: boolean }) {
                       Watchlist
                     </Button>
                   </div>
-                  <p className="text-xs leading-relaxed md:text-sm">{item.thesis}</p>
-                  {item.whyNow ? (
+                  <p className="text-xs leading-relaxed md:text-sm">
+                    <span className="font-medium text-foreground/80">Téza: </span>
+                    {item.thesis}
+                  </p>
+                  {item.whyNow && item.whyNow !== item.thesis ? (
                     <p className="text-[11px] text-muted-foreground">
                       <span className="font-medium text-foreground/80">Prečo teraz:</span>{" "}
                       {item.whyNow}
@@ -646,51 +801,6 @@ export default function AiBot({ embedded = false }: { embedded?: boolean }) {
           </div>
         </section>
       ) : null}
-
-      {history.length > 0 && (
-        <section className="space-y-2">
-          <h2 className="flex items-center gap-1.5 px-0.5 text-sm font-semibold">
-            <CalendarClock className="h-4 w-4" />
-            História briefov
-          </h2>
-          <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <Button
-              size="sm"
-              variant={selectedBriefId == null ? "default" : "outline"}
-              className="h-8 shrink-0 text-xs"
-              onClick={() => setSelectedBriefId(null)}
-            >
-              Najnovší
-            </Button>
-            {history.map((b) => {
-              let dateLabel = b.createdAt.slice(0, 10);
-              try {
-                dateLabel = format(parseISO(b.createdAt), "d.M.", { locale: sk });
-              } catch {
-                /* ignore */
-              }
-              const ptf = briefPortfolioLabel(b);
-              return (
-                <Button
-                  key={b.id}
-                  size="sm"
-                  variant={selectedBriefId === b.id ? "default" : "outline"}
-                  className="h-auto min-h-8 shrink-0 flex-col items-start gap-0 px-2.5 py-1.5 text-left text-xs"
-                  onClick={() => setSelectedBriefId(b.id)}
-                  title={`${ptf} · ${SLOT_LABEL[b.slot]}`}
-                >
-                  <span>
-                    {dateLabel} · {SLOT_LABEL[b.slot]}
-                  </span>
-                  <span className="max-w-[9.5rem] truncate text-[10px] font-normal opacity-80">
-                    {ptf}
-                  </span>
-                </Button>
-              );
-            })}
-          </div>
-        </section>
-      )}
     </div>
   );
 }

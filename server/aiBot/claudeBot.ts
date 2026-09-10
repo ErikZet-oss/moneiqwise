@@ -204,17 +204,32 @@ function normalizeAnalysis(raw: any, sourcesUsed: string[]): AiBotAnalysisPayloa
     : [];
 
   const newOpportunities: AiBotOpportunity[] = Array.isArray(raw?.newOpportunities)
-    ? raw.newOpportunities.slice(0, 3).map((item: any) => ({
-        ticker: String(item?.ticker || "").toUpperCase(),
-        companyName: item?.companyName != null ? String(item.companyName) : null,
-        thesis: String(item?.thesis || item?.rationale || "").trim() || "Bez tézy.",
-        horizon: asHorizon(item?.horizon),
-        risks: item?.risks != null ? String(item.risks) : null,
-        whyNow: item?.whyNow != null ? String(item.whyNow) : null,
-        conviction: asConviction(item?.conviction),
-        newsDrivers: asStringList(item?.newsDrivers, 4),
-      }))
+    ? raw.newOpportunities
+        .slice(0, 3)
+        .map((item: any) => {
+          const whyNow = item?.whyNow != null ? String(item.whyNow).trim() : "";
+          const newsDrivers = asStringList(item?.newsDrivers, 4);
+          let thesis = String(item?.thesis || item?.rationale || "").trim();
+          if (!thesis || /^bez tézy\.?$/i.test(thesis)) {
+            if (whyNow) thesis = whyNow;
+            else if (newsDrivers?.length)
+              thesis = `Investičná téza podľa noviniek: ${newsDrivers.join("; ")}.`;
+            else thesis = "";
+          }
+          return {
+            ticker: String(item?.ticker || "").toUpperCase(),
+            companyName: item?.companyName != null ? String(item.companyName) : null,
+            thesis,
+            horizon: asHorizon(item?.horizon),
+            risks: item?.risks != null ? String(item.risks) : null,
+            whyNow: whyNow || null,
+            conviction: asConviction(item?.conviction),
+            newsDrivers,
+          };
+        })
+        .filter((x: AiBotOpportunity) => x.ticker && x.thesis.length >= 40)
     : [];
+
 
   const marketNotes: AiBotMarketNote[] = Array.isArray(raw?.marketNotes)
     ? raw.marketNotes.slice(0, 8).map((item: any) => ({
@@ -387,13 +402,14 @@ function sanitizeContext(ctx: AiBotRunContext) {
 function buildPrompt(userPayload: unknown, compact: boolean): string {
   if (compact) {
     return `Return ONLY valid minified JSON. No markdown.
-Keys: summary,
+Keys IN THIS ORDER: summary,
 marketOutlook:{sentiment:risk_on|risk_off|mixed|uncertain,narrative,drivers[]},
 sectorTrends:[{sector,bias:bullish|bearish|neutral,why}],
 newsDigest:[{title,publisher,link,whyItMatters,relatedTickers[]}],
-portfolioAudit:[{ticker,companyName,action,weightPct,horizon,conviction,rationale,risks,invalidation,newsDrivers[]}],
 newOpportunities:[{ticker,companyName,thesis,horizon,risks,whyNow,conviction,newsDrivers[]}],
+portfolioAudit:[{ticker,companyName,action,weightPct,horizon,conviction,rationale,risks,invalidation,newsDrivers[]}],
 marketNotes:[{title,detail}].
+CRITICAL: each newOpportunity MUST have thesis = 2-4 Slovak sentences (catalyst, edge, risks). Never empty thesis. Never "Bez tézy".
 Cite headlines from recentNews. action=BUY|SELL|TRIM|HOLD.
 Context:
 ${JSON.stringify(userPayload)}`;
@@ -404,12 +420,16 @@ ${JSON.stringify(userPayload)}`;
 Musíš spraviť HĹBKOVÝ rozbor podľa aktuálnych noviniek v poli recentNews (Yahoo Finance titulky + krátke súhrny).
 Nestačí všeobecné frázovanie — viaž rozhodnutia na konkrétne titulky (Fed/inflácia, Trump/cla, geopolitika, sektory, firemné správy).
 
-Úlohy:
+Úlohy (poradie v JSON dodrž):
 1) marketOutlook: nálada trhu (risk_on|risk_off|mixed|uncertain), naratív 3–5 viet, drivers = kľúčové témy z noviniek.
 2) sectorTrends: 3–5 sektorov relevantných k portfóliu / novinkám, bias + prečo (podľa článkov).
 3) newsDigest: 4–6 najdôležitejších článkov z recentNews — skopíruj title/publisher/link ak sú, a napíš whyItMatters pre investora.
-4) Pre každú holding pozíciu: BUY|SELL|TRIM|HOLD + rationale (2–4 vety) s odkazom na novinky; newsDrivers = 1–3 krátke citácie/titulky.
-5) 1–2 newOpportunities mimo alreadyOwnedOrWatching; whyNow musí byť aktuálne (novinky).
+4) newOpportunities: 1–2 tipy mimo alreadyOwnedOrWatching.
+   - thesis je POVINNÁ: 3–5 viet po slovensky — čo je príbeh/edge, katalyzátor z noviniek, valuácia/setup, hlavné riziko.
+   - Zakázané: prázdna thesis, "Bez tézy", jednoslovné frázovanie.
+   - whyNow: 1–2 vety prečo práve teraz (aktuálne novinky).
+   - newsDrivers: 1–3 konkrétne titulky z recentNews.
+5) Pre každú holding pozíciu: BUY|SELL|TRIM|HOLD + rationale (2–4 vety) s odkazom na novinky; newsDrivers = 1–3 krátke citácie/titulky.
 6) marketNotes: krátke doplnkové poznámky.
 
 Pravidlá:
@@ -417,7 +437,7 @@ Pravidlá:
 - Neklaď titulky, ktoré nie sú v recentNews.
 - Ak recentNews je prázdne, povedz to v marketOutlook.narrative a buď opatrný.
 - horizon: swing|long, conviction 1–5.
-- JSON polia: summary, marketOutlook, sectorTrends, newsDigest, portfolioAudit, newOpportunities, marketNotes.
+- JSON polia v poradí: summary, marketOutlook, sectorTrends, newsDigest, newOpportunities, portfolioAudit, marketNotes.
 
 Kontext:
 ${JSON.stringify(userPayload)}`;
