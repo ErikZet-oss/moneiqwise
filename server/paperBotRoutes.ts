@@ -16,7 +16,7 @@ import {
   killPaperBot,
   tickPaperBot,
 } from "./paperBot/engine";
-import { DEFAULT_EXITS, DEFAULT_RISK, PIPELINE_STAGES, STRATEGY_META, CANDLE_TF_META, type PaperCandleTf, type PaperStrategyId } from "./paperBot/types";
+import { DEFAULT_EXITS, DEFAULT_RISK, PIPELINE_STAGES, PIPELINE_STAGE_META, STRATEGY_META, CANDLE_TF_META, type PaperCandleTf, type PaperStrategyId } from "./paperBot/types";
 import { runPaperBotSchedulerTick } from "./paperBot/scheduler";
 import { computePaperBotStats } from "./paperBot/stats";
 import { runPaperBacktest } from "./paperBot/backtest";
@@ -74,6 +74,7 @@ export function registerPaperBotRoutes(app: Express, isAuthenticated: any) {
       defaultExits: DEFAULT_EXITS,
       defaultCustomStrategy: DEFAULT_CUSTOM_STRATEGY,
       pipelineStages: PIPELINE_STAGES,
+      pipelineStageMeta: PIPELINE_STAGE_META,
       smtpConfigured: isSmtpConfigured(),
       session: getUsSession(),
       tickMs: getPaperBotTickMs(),

@@ -98,6 +98,13 @@ function mapBot(row: any): PaperBot {
 
 function mapPosition(row: any): PaperPosition {
   const entry = num(row.entry_price);
+  let openDetail: Record<string, unknown> | null = null;
+  if (row.open_detail_json != null) {
+    openDetail =
+      typeof row.open_detail_json === "string"
+        ? (JSON.parse(row.open_detail_json) as Record<string, unknown>)
+        : (row.open_detail_json as Record<string, unknown>);
+  }
   return {
     id: String(row.id),
     botId: String(row.bot_id),
@@ -110,6 +117,8 @@ function mapPosition(row: any): PaperPosition {
     unrealizedPnl: null,
     openedAt: new Date(row.opened_at).toISOString(),
     strategyId: row.strategy_id as PaperStrategyId,
+    openReason: row.open_reason != null ? String(row.open_reason) : null,
+    openDetail,
   };
 }
 
@@ -216,6 +225,18 @@ export function ensurePaperBotTables(): Promise<void> {
       await db.execute(sql`
         CREATE INDEX IF NOT EXISTS paper_trades_bot_closed_idx
           ON paper_trades (bot_id, closed_at DESC);
+      `);
+      await db.execute(sql`
+        ALTER TABLE paper_trades
+          ADD COLUMN IF NOT EXISTS detail_json JSONB
+      `);
+      await db.execute(sql`
+        ALTER TABLE paper_positions
+          ADD COLUMN IF NOT EXISTS open_reason TEXT
+      `);
+      await db.execute(sql`
+        ALTER TABLE paper_positions
+          ADD COLUMN IF NOT EXISTS open_detail_json JSONB
       `);
       await db.execute(sql`
         CREATE TABLE IF NOT EXISTS paper_bot_logs (
@@ -457,14 +478,21 @@ export async function insertPosition(input: {
   qty: number;
   entryPrice: number;
   strategyId: PaperStrategyId;
+  openReason?: string | null;
+  openDetail?: Record<string, unknown> | null;
 }): Promise<PaperPosition> {
   await ensurePaperBotTables();
+  const openReason = input.openReason?.trim() || null;
+  const detailJson =
+    input.openDetail != null ? JSON.stringify(input.openDetail) : null;
   const result = await db.execute(sql`
     INSERT INTO paper_positions (
-      bot_id, user_id, symbol, qty, entry_price, peak_price, strategy_id
+      bot_id, user_id, symbol, qty, entry_price, peak_price, strategy_id,
+      open_reason, open_detail_json
     ) VALUES (
       ${input.botId}, ${input.userId}, ${input.symbol},
-      ${input.qty}, ${input.entryPrice}, ${input.entryPrice}, ${input.strategyId}
+      ${input.qty}, ${input.entryPrice}, ${input.entryPrice}, ${input.strategyId},
+      ${openReason}, ${detailJson}::jsonb
     )
     RETURNING *
   `);
@@ -507,20 +535,35 @@ export async function insertTrade(input: {
   reason: string;
   strategyId: PaperStrategyId;
   openedAt?: string | null;
+  detail?: Record<string, unknown> | null;
 }): Promise<PaperTrade> {
   await ensurePaperBotTables();
   const openedAt = input.openedAt ? new Date(input.openedAt) : null;
+  const detailJson =
+    input.detail != null ? JSON.stringify(input.detail) : null;
   const result = await db.execute(sql`
     INSERT INTO paper_trades (
-      bot_id, user_id, symbol, side, qty, price, pnl, reason, strategy_id, opened_at
+      bot_id, user_id, symbol, side, qty, price, pnl, reason, strategy_id, opened_at,
+      detail_json
     ) VALUES (
       ${input.botId}, ${input.userId}, ${input.symbol}, ${input.side},
       ${input.qty}, ${input.price}, ${input.pnl}, ${input.reason},
-      ${input.strategyId}, ${openedAt}
+      ${input.strategyId}, ${openedAt}, ${detailJson}::jsonb
     )
     RETURNING *
   `);
   const row = asRows(result)[0] as any;
+  return mapTrade(row);
+}
+
+function mapTrade(row: any): PaperTrade {
+  let detail: Record<string, unknown> | null = null;
+  if (row.detail_json != null) {
+    detail =
+      typeof row.detail_json === "string"
+        ? (JSON.parse(row.detail_json) as Record<string, unknown>)
+        : (row.detail_json as Record<string, unknown>);
+  }
   return {
     id: String(row.id),
     botId: String(row.bot_id),
@@ -534,6 +577,7 @@ export async function insertTrade(input: {
     strategyId: row.strategy_id as PaperStrategyId,
     openedAt: row.opened_at ? new Date(row.opened_at).toISOString() : null,
     closedAt: new Date(row.closed_at).toISOString(),
+    detail,
   };
 }
 
@@ -549,20 +593,7 @@ export async function listTrades(
     ORDER BY closed_at DESC
     LIMIT ${limit}
   `);
-  return asRows(result).map((row: any) => ({
-    id: String(row.id),
-    botId: String(row.bot_id),
-    userId: String(row.user_id),
-    symbol: String(row.symbol),
-    side: row.side as "BUY" | "SELL",
-    qty: num(row.qty),
-    price: num(row.price),
-    pnl: row.pnl == null ? null : num(row.pnl),
-    reason: String(row.reason),
-    strategyId: row.strategy_id as PaperStrategyId,
-    openedAt: row.opened_at ? new Date(row.opened_at).toISOString() : null,
-    closedAt: new Date(row.closed_at).toISOString(),
-  }));
+  return asRows(result).map((row: any) => mapTrade(row));
 }
 
 export async function insertPaperLog(input: {

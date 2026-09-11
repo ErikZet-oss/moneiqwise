@@ -65,6 +65,9 @@ export type PaperPosition = {
   unrealizedPnl: number | null;
   openedAt: string;
   strategyId: PaperStrategyId;
+  /** Human-readable why this position was opened (strategy + AI). */
+  openReason: string | null;
+  openDetail: Record<string, unknown> | null;
 };
 
 export type PaperTrade = {
@@ -80,6 +83,8 @@ export type PaperTrade = {
   strategyId: PaperStrategyId;
   openedAt: string | null;
   closedAt: string;
+  /** Structured decision trail (quant / AI / exit). */
+  detail: Record<string, unknown> | null;
 };
 
 export type PaperLogEventType =
@@ -149,6 +154,42 @@ export const PIPELINE_STAGES = [
   "RISK",
   "EXEC",
 ] as const;
+
+export const PIPELINE_STAGE_META: Record<
+  (typeof PIPELINE_STAGES)[number],
+  { label: string; description: string }
+> = {
+  INGEST: {
+    label: "Načítanie dát",
+    description:
+      "Stiahne OHLCV z Yahoo podľa timeframe bota (1d/1h/15m) a počas LIVE/EXTENDED doplní čerstvý 1m mark pre MTM ceny.",
+  },
+  DEDUP: {
+    label: "Príprava tickerov",
+    description:
+      "Zoskupí a pripraví universe tickerov na vyhodnotenie — odfiltruje neplatné / bez dát, pripraví mapu cien pred signálmi.",
+  },
+  SIGNAL: {
+    label: "Kvant stratégia",
+    description:
+      "Spočíta indikátory (EMA, RSI, MACD, …) a podľa zvolenej stratégie (alebo custom editora) dá BUY / SELL / HOLD + skóre. Exity (ATR/TP/SL) majú prioritu pred strategickým SELL.",
+  },
+  AI: {
+    label: "Claude nudge",
+    description:
+      "Ak je AI influence > 0, Claude zhodnotí správy + technický snapshot (RSI/EMA/MACD). AI trade sama nevytvára — len upraví skóre alebo môže zablokovať slabý BUY pri silnom bearish.",
+  },
+  RISK: {
+    label: "Risk limity",
+    description:
+      "Kontrola denného loss limitu, max drawdownu, max počtu pozícií a veľkosti pozície (% equity). Pri prekročení sa nákup zablokuje (ostane v logu ako blocked).",
+  },
+  EXEC: {
+    label: "Paper exekúcia",
+    description:
+      "Otvorí alebo zatvorí paper pozíciu v internom ledgeri (nie broker). Zapíše obchod, dôvod, aktualizuje cash/equity a voliteľne pošle e-mail.",
+  },
+};
 
 export const STRATEGY_META: Record<
   PaperStrategyId,

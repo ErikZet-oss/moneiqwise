@@ -30,6 +30,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -123,6 +133,8 @@ type PaperPosition = {
   markPrice: number | null;
   unrealizedPnl: number | null;
   openedAt: string;
+  openReason?: string | null;
+  openDetail?: Record<string, unknown> | null;
 };
 
 type PaperTrade = {
@@ -134,6 +146,43 @@ type PaperTrade = {
   pnl: number | null;
   reason: string;
   closedAt: string;
+  detail?: Record<string, unknown> | null;
+};
+
+type PipelineStageMeta = Record<
+  string,
+  { label: string; description: string }
+>;
+
+const DEFAULT_PIPELINE_META: PipelineStageMeta = {
+  INGEST: {
+    label: "Načítanie dát",
+    description:
+      "Stiahne OHLCV z Yahoo podľa timeframe a počas LIVE doplní 1m mark.",
+  },
+  DEDUP: {
+    label: "Príprava tickerov",
+    description: "Pripraví universe tickerov a mapu cien pred signálmi.",
+  },
+  SIGNAL: {
+    label: "Kvant stratégia",
+    description:
+      "Indikátory + stratégia → BUY/SELL/HOLD. Exity (ATR/TP/SL) majú prioritu.",
+  },
+  AI: {
+    label: "Claude nudge",
+    description:
+      "Claude upraví skóre podľa správ a techniky; trade sama nevytvára.",
+  },
+  RISK: {
+    label: "Risk limity",
+    description:
+      "Daily loss, drawdown, max pozície a veľkosť pozície — inak blocked.",
+  },
+  EXEC: {
+    label: "Paper exekúcia",
+    description: "Otvorí/zatvorí paper pozíciu v ledgeri a zapíše dôvod.",
+  },
 };
 
 type PaperLog = {
@@ -297,6 +346,136 @@ function FieldLabel({
       <Label className="leading-none">{children}</Label>
       <HelpTip title={tipTitle}>{tip}</HelpTip>
     </div>
+  );
+}
+
+function DecisionTrail({
+  reason,
+  detail,
+}: {
+  reason?: string | null;
+  detail?: Record<string, unknown> | null;
+}) {
+  const ai = detail?.ai as
+    | { bias?: string; confidence?: number; reason?: string }
+    | undefined;
+  const quantScore =
+    typeof detail?.quantScore === "number" ? detail.quantScore : null;
+  const finalScore =
+    typeof detail?.finalScore === "number" ? detail.finalScore : null;
+  const strategyReason =
+    typeof detail?.strategyReason === "string"
+      ? detail.strategyReason
+      : null;
+  const exitRule =
+    typeof detail?.exitRule === "string" ? detail.exitRule : null;
+  const openedBecause =
+    typeof detail?.openedBecause === "string" ? detail.openedBecause : null;
+
+  return (
+    <div className="space-y-1 rounded-md bg-muted/40 px-2 py-1.5 text-[11px] leading-snug">
+      <div>
+        <span className="font-medium text-foreground">Prečo: </span>
+        <span className="text-muted-foreground">{reason || "—"}</span>
+      </div>
+      {exitRule ? (
+        <div>
+          <span className="font-medium text-foreground">Exit rule: </span>
+          <span className="text-muted-foreground">{exitRule}</span>
+        </div>
+      ) : null}
+      {strategyReason && strategyReason !== reason ? (
+        <div>
+          <span className="font-medium text-foreground">Stratégia: </span>
+          <span className="text-muted-foreground">{strategyReason}</span>
+        </div>
+      ) : null}
+      {quantScore != null || finalScore != null ? (
+        <div>
+          <span className="font-medium text-foreground">Skóre: </span>
+          <span className="text-muted-foreground">
+            quant {quantScore != null ? Math.round(quantScore) : "—"}
+            {finalScore != null ? ` → final ${Math.round(finalScore)}` : ""}
+            {detail?.aiApplied === true
+              ? " (AI aplikovaná)"
+              : detail?.aiApplied === false
+                ? " (AI neaplikovaná)"
+                : ""}
+          </span>
+        </div>
+      ) : null}
+      {ai ? (
+        <div>
+          <span className="font-medium text-foreground">AI: </span>
+          <span className="text-muted-foreground">
+            {ai.bias ?? "neutral"}
+            {ai.confidence != null ? ` ${ai.confidence}%` : ""}
+            {ai.reason ? ` — ${ai.reason}` : ""}
+          </span>
+        </div>
+      ) : null}
+      {openedBecause ? (
+        <div>
+          <span className="font-medium text-foreground">Otvorené kvôli: </span>
+          <span className="text-muted-foreground">{openedBecause}</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PipelineStageChip({
+  stage,
+  active,
+  meta,
+}: {
+  stage: string;
+  active: boolean;
+  meta: { label: string; description: string };
+}) {
+  const chip = (
+    <button
+      type="button"
+      className={cn(
+        "rounded px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide touch-manipulation",
+        active
+          ? "bg-primary text-primary-foreground"
+          : "bg-muted text-muted-foreground hover:bg-muted/80",
+      )}
+    >
+      {stage}
+    </button>
+  );
+
+  const body = (
+    <>
+      <p className="font-semibold text-sm leading-snug">{meta.label}</p>
+      <p className="mt-1 text-xs leading-relaxed text-popover-foreground">
+        {meta.description}
+      </p>
+    </>
+  );
+
+  return (
+    <Popover modal={false}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>{chip}</PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-[260px] text-xs" side="bottom">
+          <p className="font-medium">{meta.label}</p>
+          <p className="mt-0.5 text-muted-foreground">{meta.description}</p>
+        </TooltipContent>
+      </Tooltip>
+      <PopoverContent
+        align="start"
+        side="bottom"
+        sideOffset={8}
+        className="z-[100] w-72 max-w-[calc(100vw-2rem)] p-3"
+      >
+        {body}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -721,6 +900,7 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
     strategies: Array<{ id: PaperStrategyId; label: string; description: string }>;
     candleTfs?: Array<{ id: PaperCandleTf; label: string; description: string }>;
     pipelineStages?: string[];
+    pipelineStageMeta?: PipelineStageMeta;
     smtpConfigured?: boolean;
     session?: string;
     tickMs?: number;
@@ -888,6 +1068,8 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
       "RISK",
       "EXEC",
     ];
+  const pipelineMeta =
+    strategiesPayload?.pipelineStageMeta ?? DEFAULT_PIPELINE_META;
 
   return (
     <div className={cn("space-y-3", !embedded && "mx-auto max-w-3xl pb-8")}>
@@ -1389,8 +1571,14 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
         <div className="space-y-3">
           <div className="rounded-lg border px-3 py-2">
             <div className="mb-1.5 flex flex-wrap items-baseline justify-between gap-1">
-              <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              <div className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 Signal Chain
+                <HelpTip title="Signal Chain">
+                  <p>
+                    Každý tick prejde týmito krokmi. Klikni alebo hover na stupeň
+                    pre vysvetlenie. Zvýraznený je posledný dokončený krok.
+                  </p>
+                </HelpTip>
               </div>
               {(strategiesPayload?.session || strategiesPayload?.tickMs) && (
                 <div className="text-[10px] text-muted-foreground">
@@ -1412,18 +1600,17 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
                   detail.bot.lastPipelineStage === stage ||
                   detail.bot.lastPipelineStage?.toUpperCase() ===
                     stage.toUpperCase();
+                const meta = pipelineMeta[stage] ?? {
+                  label: stage,
+                  description: "Krok rozhodovacieho reťazca paper bota.",
+                };
                 return (
-                  <span
+                  <PipelineStageChip
                     key={stage}
-                    className={cn(
-                      "rounded px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide",
-                      active
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground",
-                    )}
-                  >
-                    {stage}
-                  </span>
+                    stage={stage}
+                    active={active}
+                    meta={meta}
+                  />
                 );
               })}
             </div>
@@ -1689,26 +1876,39 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
               ) : (
                 (detail.positions ?? []).map((p) => (
                   <Card key={p.id}>
-                    <CardContent className="flex items-center justify-between gap-2 py-3">
-                      <div>
-                        <div className="font-medium">{p.symbol}</div>
-                        <div className="text-[11px] text-muted-foreground">
-                          qty {p.qty} · entry {p.entryPrice.toFixed(2)} · mark{" "}
-                          {(p.markPrice ?? p.entryPrice).toFixed(2)} · peak{" "}
-                          {(p.peakPrice ?? p.entryPrice).toFixed(2)}
+                    <CardContent className="space-y-2 py-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <div className="font-medium">{p.symbol}</div>
+                          <div className="text-[11px] text-muted-foreground">
+                            qty {p.qty} · entry {p.entryPrice.toFixed(2)} · mark{" "}
+                            {(p.markPrice ?? p.entryPrice).toFixed(2)} · peak{" "}
+                            {(p.peakPrice ?? p.entryPrice).toFixed(2)}
+                          </div>
+                        </div>
+                        <div
+                          className={cn(
+                            "text-sm font-semibold",
+                            (p.unrealizedPnl ?? 0) >= 0
+                              ? "text-emerald-600"
+                              : "text-red-600",
+                          )}
+                        >
+                          {(p.unrealizedPnl ?? 0) >= 0 ? "+" : ""}
+                          {(p.unrealizedPnl ?? 0).toFixed(2)}
                         </div>
                       </div>
-                      <div
-                        className={cn(
-                          "text-sm font-semibold",
-                          (p.unrealizedPnl ?? 0) >= 0
-                            ? "text-emerald-600"
-                            : "text-red-600",
-                        )}
-                      >
-                        {(p.unrealizedPnl ?? 0) >= 0 ? "+" : ""}
-                        {(p.unrealizedPnl ?? 0).toFixed(2)}
-                      </div>
+                      {p.openReason || p.openDetail ? (
+                        <DecisionTrail
+                          reason={p.openReason}
+                          detail={p.openDetail}
+                        />
+                      ) : (
+                        <p className="text-[10px] text-muted-foreground">
+                          Dôvod otvorenia nie je uložený (staršia pozícia pred
+                          update). Nové obchody ho budú mať.
+                        </p>
+                      )}
                     </CardContent>
                   </Card>
                 ))
@@ -1723,7 +1923,7 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
               ) : (
                 (detail.trades ?? []).map((t) => (
                   <Card key={t.id}>
-                    <CardContent className="space-y-1 py-3">
+                    <CardContent className="space-y-2 py-3">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
                           <Badge
@@ -1748,7 +1948,7 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
                           ? ` · PnL ${t.pnl >= 0 ? "+" : ""}${t.pnl.toFixed(2)}`
                           : ""}
                       </div>
-                      <div className="text-[11px]">{t.reason}</div>
+                      <DecisionTrail reason={t.reason} detail={t.detail} />
                     </CardContent>
                   </Card>
                 ))

@@ -359,16 +359,16 @@ export default function FaqPage() {
               <h3 className="text-sm font-semibold mb-2">Čo vidíš v UI?</h3>
               <ul className="list-disc pl-5 space-y-1.5">
                 <li>
-                  <strong>Signal Chain</strong> — vizuálny pipeline INGEST→…→EXEC s posledným
-                  aktívnym krokom
+                  <strong>Signal Chain</strong> — vizuálny pipeline INGEST→…→EXEC; klik / hover na
+                  stupeň ukáže vysvetlenie. Zvýraznený je posledný aktívny krok.
                 </li>
                 <li>
                   <strong>Výkon</strong> — return %, realizovaný P&amp;L, win rate, avg win/loss,
                   open/close/blocked, equity krivka
                 </li>
                 <li>
-                  <strong>Otvorené / Obchody / Log</strong> — pozície, história fills, kompletný
-                  audit
+                  <strong>Otvorené / Obchody / Log</strong> — pozície a história fills s dôvodom
+                  (stratégia, skóre, AI bias/confidence), kompletný audit
                 </li>
                 <li>
                   <strong>Kill Switch</strong> — zatvorí pozície a zastaví bota; Pauza len zastaví

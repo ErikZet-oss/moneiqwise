@@ -17,6 +17,7 @@ import {
   fetchPaperBotAiVerdicts,
   type AiMarketSnapshot,
   type AiSymbolVerdict,
+  type NudgedDecision,
 } from "./aiLayer";
 import {
   evaluateCustomStrategy,
@@ -45,6 +46,58 @@ import {
   updatePositionPeak,
 } from "./store";
 import type { PaperBot, PaperPosition } from "./types";
+
+function buildTradeDetail(input: {
+  kind: "open" | "close";
+  signal?: NudgedDecision | SignalDecision | null;
+  verdict?: AiSymbolVerdict | null;
+  exitRule?: string | null;
+}): Record<string, unknown> {
+  const { kind, signal, verdict, exitRule } = input;
+  const detail: Record<string, unknown> = { kind };
+  if (exitRule) detail.exitRule = exitRule;
+  if (signal) {
+    detail.action = signal.action;
+    detail.strategyReason = signal.reason;
+    detail.indicators = "indicators" in signal ? signal.indicators : null;
+    if ("quantScore" in signal) {
+      detail.quantScore = signal.quantScore;
+      detail.aiScore = signal.aiScore;
+      detail.finalScore = signal.finalScore;
+      detail.aiApplied = signal.aiApplied;
+      detail.aiBlocked = signal.aiBlocked;
+    }
+  }
+  if (verdict) {
+    detail.ai = {
+      bias: verdict.bias,
+      confidence: verdict.confidence,
+      reason: verdict.reason,
+    };
+  }
+  return detail;
+}
+
+function formatTradeReason(input: {
+  base: string;
+  signal?: NudgedDecision | null;
+  verdict?: AiSymbolVerdict | null;
+}): string {
+  const parts = [input.base];
+  if (input.signal && "quantScore" in input.signal) {
+    parts.push(
+      `quant ${Math.round(input.signal.quantScore)} → final ${Math.round(input.signal.finalScore)}`,
+    );
+  }
+  if (input.verdict) {
+    parts.push(
+      `AI ${input.verdict.bias} ${input.verdict.confidence}%: ${input.verdict.reason || "—"}`,
+    );
+  } else if (input.signal?.aiApplied === false) {
+    parts.push("AI neaplikovaná (nízka confidence / influence 0)");
+  }
+  return parts.filter(Boolean).join(" · ");
+}
 
 /** Prevent overlapping ticks for the same bot (scheduler + Tick teraz / start). */
 const tickingBots = new Set<string>();
@@ -159,9 +212,10 @@ async function openLong(input: {
   price: number;
   equity: number;
   reason: string;
-  signal: SignalDecision;
+  signal: NudgedDecision;
+  verdict?: AiSymbolVerdict | null;
 }): Promise<{ cash: number; opened: boolean }> {
-  const { bot, symbol, price, equity, reason, signal } = input;
+  const { bot, symbol, price, equity, signal, verdict } = input;
   if (!(price > 0) || !(bot.cash > 0)) return { cash: bot.cash, opened: false };
 
   const budget = Math.min(
@@ -185,6 +239,17 @@ async function openLong(input: {
   const cost = roundMoney(qty * price);
   if (cost > bot.cash) return { cash: bot.cash, opened: false };
 
+  const reason = formatTradeReason({
+    base: input.reason,
+    signal,
+    verdict: verdict ?? null,
+  });
+  const detail = buildTradeDetail({
+    kind: "open",
+    signal,
+    verdict: verdict ?? null,
+  });
+
   const newCash = roundMoney(bot.cash - cost);
   await insertPosition({
     botId: bot.id,
@@ -193,6 +258,8 @@ async function openLong(input: {
     qty,
     entryPrice: price,
     strategyId: bot.strategyId,
+    openReason: reason,
+    openDetail: detail,
   });
   await insertTrade({
     botId: bot.id,
@@ -204,6 +271,7 @@ async function openLong(input: {
     pnl: null,
     reason,
     strategyId: bot.strategyId,
+    detail,
   });
   // Persist cash immediately so a concurrent tick cannot overwrite it.
   await updatePaperBotLedger(bot.id, { cash: newCash });
@@ -213,7 +281,7 @@ async function openLong(input: {
     eventType: "open",
     symbol,
     message: `OPEN LONG ${symbol} qty=${qty} @ ${price}`,
-    detail: { qty, price, cost, reason, signal },
+    detail: { qty, price, cost, reason, signal, ai: verdict ?? null },
   });
   void notifyPaperBotEvent({
     enabled: bot.notifyOnTrade,
@@ -230,12 +298,29 @@ async function closeLong(input: {
   position: PaperPosition;
   price: number;
   reason: string;
-  signal?: SignalDecision;
+  signal?: SignalDecision | NudgedDecision;
+  verdict?: AiSymbolVerdict | null;
+  exitRule?: string | null;
 }): Promise<{ cash: number }> {
-  const { bot, position, price, reason, signal } = input;
+  const { bot, position, price, signal, verdict, exitRule } = input;
   const proceeds = roundMoney(position.qty * price);
   const pnl = roundMoney((price - position.entryPrice) * position.qty);
   const newCash = roundMoney(bot.cash + proceeds);
+
+  const reason = formatTradeReason({
+    base: input.reason,
+    signal: signal && "quantScore" in signal ? signal : null,
+    verdict: verdict ?? null,
+  });
+  const detail = buildTradeDetail({
+    kind: "close",
+    signal: signal ?? null,
+    verdict: verdict ?? null,
+    exitRule: exitRule ?? null,
+  });
+  if (position.openReason) {
+    detail.openedBecause = position.openReason;
+  }
 
   await deletePosition(position.id);
   await insertTrade({
@@ -249,6 +334,7 @@ async function closeLong(input: {
     reason,
     strategyId: bot.strategyId,
     openedAt: position.openedAt,
+    detail,
   });
   await updatePaperBotLedger(bot.id, { cash: newCash });
   await insertPaperLog({
@@ -257,7 +343,15 @@ async function closeLong(input: {
     eventType: "close",
     symbol: position.symbol,
     message: `CLOSE ${position.symbol} qty=${position.qty} @ ${price} PnL=${pnl}`,
-    detail: { qty: position.qty, price, pnl, reason, signal: signal ?? null },
+    detail: {
+      qty: position.qty,
+      price,
+      pnl,
+      reason,
+      signal: signal ?? null,
+      ai: verdict ?? null,
+      exitRule: exitRule ?? null,
+    },
   });
   void notifyPaperBotEvent({
     enabled: bot.notifyOnTrade,
@@ -467,6 +561,8 @@ async function tickPaperBotInner(
         position: pos,
         price,
         reason: exitHit.reason,
+        exitRule: exitHit.reason,
+        verdict: aiVerdicts.get(pos.symbol) ?? null,
       });
       working = { ...working, cash: res.cash };
       closes += 1;
@@ -496,6 +592,7 @@ async function tickPaperBotInner(
         price,
         reason: signal.reason,
         signal,
+        verdict: aiVerdicts.get(pos.symbol) ?? null,
       });
       working = { ...working, cash: res.cash };
       closes += 1;
@@ -586,6 +683,7 @@ async function tickPaperBotInner(
       equity,
       reason: nudged.reason,
       signal: nudged,
+      verdict: aiVerdicts.get(symbol) ?? null,
     });
     working = { ...working, cash: res.cash };
     if (res.opened) {
