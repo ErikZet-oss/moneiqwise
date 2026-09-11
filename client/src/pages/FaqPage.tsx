@@ -371,8 +371,16 @@ export default function FaqPage() {
                   (stratégia, skóre, AI bias/confidence), kompletný audit
                 </li>
                 <li>
-                  <strong>Kill Switch</strong> — zatvorí pozície a zastaví bota; Pauza len zastaví
-                  tickovanie
+                  <strong>Upraviť</strong> — zmena stratégie, tickerov, TF, risk, exitov a AI u
+                  existujúceho bota (kapitál sa nemení; zabitý bot sa nedá editovať)
+                </li>
+                <li>
+                  <strong>AI vs. realita</strong> (Výkon) — win rate / avg PnL obchodov so
+                  započítanou AI vs. bez nej + podľa AI bias pri vstupe
+                </li>
+                <li>
+                  AI verdicty sa <strong>cachujú ~10 min</strong> (menej volaní Claude, lacnejšie);
+                  v logu uvidíš „AI cache hit“
                 </li>
                 <li>
                   <strong>Backtest</strong> — výsledok paper simulácie na histórii pred live paper

@@ -417,6 +417,132 @@ export async function updatePaperBotStatus(
   return bot;
 }
 
+export async function updatePaperBotSettings(
+  botId: string,
+  userId: string,
+  input: {
+    name?: string;
+    strategyId?: PaperStrategyId;
+    customStrategy?: unknown | null;
+    symbols?: string[];
+    candleTf?: PaperCandleTf | string;
+    risk?: Partial<PaperBotRiskSettings>;
+    exits?: Partial<PaperBotExitSettings>;
+    aiInfluencePct?: number;
+    aiMinConfidence?: number;
+    notifyEmail?: string | null;
+    notifyOnTrade?: boolean;
+  },
+): Promise<PaperBot | null> {
+  await ensurePaperBotTables();
+  const existing = await getPaperBot(botId, userId);
+  if (!existing) return null;
+  if (existing.status === "killed") {
+    throw new Error("PAPER_BOT_KILLED");
+  }
+
+  const name = (input.name ?? existing.name).trim() || existing.name;
+  const strategyId = input.strategyId ?? existing.strategyId;
+  const candleTfRaw = String(input.candleTf ?? existing.candleTf).toLowerCase();
+  const candleTf: PaperCandleTf =
+    candleTfRaw === "15m" || candleTfRaw === "1h" ? candleTfRaw : "1d";
+  const symbols = (
+    input.symbols ?? existing.symbols
+  )
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean);
+  if (symbols.length === 0) throw new Error("PAPER_BOT_NO_SYMBOLS");
+
+  const risk = { ...existing.risk, ...(input.risk || {}) };
+  const exits = { ...existing.exits, ...(input.exits || {}) };
+  const aiInfluencePct = Math.min(
+    100,
+    Math.max(
+      0,
+      num(
+        input.aiInfluencePct != null
+          ? input.aiInfluencePct
+          : existing.aiInfluencePct,
+        20,
+      ),
+    ),
+  );
+  const aiMinConfidence = Math.min(
+    100,
+    Math.max(
+      0,
+      num(
+        input.aiMinConfidence != null
+          ? input.aiMinConfidence
+          : existing.aiMinConfidence,
+        60,
+      ),
+    ),
+  );
+  const notifyEmail =
+    input.notifyEmail !== undefined
+      ? input.notifyEmail?.trim() || null
+      : existing.notifyEmail;
+  const notifyOnTrade =
+    input.notifyOnTrade !== undefined
+      ? !!input.notifyOnTrade && !!notifyEmail
+      : existing.notifyOnTrade && !!notifyEmail;
+
+  let customStrategy = existing.customStrategy;
+  if (strategyId === "custom") {
+    if (input.customStrategy !== undefined) {
+      customStrategy = input.customStrategy;
+    }
+  } else if (input.strategyId && input.strategyId !== "custom") {
+    customStrategy = null;
+  }
+
+  const riskJson = JSON.stringify(risk);
+  const exitJson = JSON.stringify(exits);
+  const symbolsJson = JSON.stringify(symbols);
+  const strategyJson =
+    customStrategy != null ? JSON.stringify(customStrategy) : null;
+
+  const result = await db.execute(sql`
+    UPDATE paper_bots SET
+      name = ${name},
+      strategy_id = ${strategyId},
+      strategy_json = ${strategyJson}::jsonb,
+      symbols_json = ${symbolsJson}::jsonb,
+      candle_tf = ${candleTf},
+      risk_json = ${riskJson}::jsonb,
+      exit_json = ${exitJson}::jsonb,
+      ai_influence_pct = ${aiInfluencePct},
+      ai_min_confidence = ${aiMinConfidence},
+      notify_email = ${notifyEmail},
+      notify_on_trade = ${notifyOnTrade},
+      updated_at = NOW()
+    WHERE id = ${botId} AND user_id = ${userId}
+    RETURNING *
+  `);
+  const row = asRows(result)[0];
+  if (!row) return null;
+  const bot = mapBot(row);
+  await insertPaperLog({
+    botId,
+    userId,
+    eventType: "status",
+    message: `Nastavenia aktualizované (${strategyId}, TF ${candleTf})`,
+    detail: {
+      name,
+      strategyId,
+      candleTf,
+      symbols,
+      risk,
+      exits,
+      aiInfluencePct,
+      aiMinConfidence,
+      notifyOnTrade,
+    },
+  });
+  return bot;
+}
+
 export async function updatePaperBotLedger(
   botId: string,
   patch: {

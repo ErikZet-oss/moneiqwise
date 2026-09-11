@@ -116,6 +116,29 @@ export type AiMarketSnapshot = {
   macdHist: number | null;
 };
 
+/** In-memory AI verdict cache (per process). Default 10 min. */
+const AI_CACHE_TTL_MS = Math.max(
+  60_000,
+  Number(process.env.PAPER_BOT_AI_CACHE_MS) || 10 * 60 * 1000,
+);
+
+type VerdictCacheEntry = {
+  at: number;
+  verdicts: Map<string, AiSymbolVerdict>;
+  newsCount: number;
+  model: string;
+};
+
+const verdictCache = new Map<string, VerdictCacheEntry>();
+
+function cacheKey(symbols: string[]): string {
+  return symbols
+    .map((s) => s.toUpperCase())
+    .filter(Boolean)
+    .sort()
+    .join(",");
+}
+
 async function requestVerdictJson(
   client: Anthropic,
   prompt: string,
@@ -151,6 +174,8 @@ export async function fetchPaperBotAiVerdicts(input: {
   model: string | null;
   error: string | null;
   newsCount: number;
+  cached?: boolean;
+  cacheTtlSec?: number;
 }> {
   const symbols = input.symbols
     .map((s) => s.toUpperCase())
@@ -163,6 +188,19 @@ export async function fetchPaperBotAiVerdicts(input: {
     newsCount: 0,
   };
   if (symbols.length === 0) return empty;
+
+  const key = cacheKey(symbols);
+  const hit = verdictCache.get(key);
+  if (hit && Date.now() - hit.at < AI_CACHE_TTL_MS) {
+    return {
+      verdicts: new Map(hit.verdicts),
+      model: hit.model,
+      error: null,
+      newsCount: hit.newsCount,
+      cached: true,
+      cacheTtlSec: Math.round(AI_CACHE_TTL_MS / 1000),
+    };
+  }
 
   const client = getAnthropicClient();
   if (!client) {
@@ -248,11 +286,26 @@ Pravidlá:
     }
 
     const map = parseVerdicts(parsed, symbols);
+    verdictCache.set(key, {
+      at: Date.now(),
+      verdicts: map,
+      newsCount: news.length,
+      model: MODEL,
+    });
+    // Bound cache size
+    if (verdictCache.size > 40) {
+      const oldest = Array.from(verdictCache.entries()).sort(
+        (a, b) => a[1].at - b[1].at,
+      )[0];
+      if (oldest) verdictCache.delete(oldest[0]);
+    }
     return {
       verdicts: map,
       model: MODEL,
       error: null,
       newsCount: news.length,
+      cached: false,
+      cacheTtlSec: Math.round(AI_CACHE_TTL_MS / 1000),
     };
   } catch (err) {
     console.warn("[paper-bot] AI layer failed:", formatAnthropicError(err));

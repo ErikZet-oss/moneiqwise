@@ -311,6 +311,13 @@ async function closeLong(input: {
   if (position.openReason) {
     detail.openedBecause = position.openReason;
   }
+  if (position.openDetail) {
+    detail.entryAi = position.openDetail.ai ?? null;
+    detail.entryAiApplied = position.openDetail.aiApplied ?? null;
+    detail.entryQuantScore = position.openDetail.quantScore ?? null;
+    detail.entryFinalScore = position.openDetail.finalScore ?? null;
+    detail.entryStrategyReason = position.openDetail.strategyReason ?? null;
+  }
 
   await deletePosition(position.id);
   await insertTrade({
@@ -494,10 +501,14 @@ async function tickPaperBotInner(
       eventType: "ai",
       message: ai.error
         ? `AI vrstva zlyhala — fallback na quant (${ai.error})`
-        : `AI verdicts pre ${ai.verdicts.size} tickerov (news=${ai.newsCount})`,
+        : ai.cached
+          ? `AI cache hit — ${ai.verdicts.size} tickerov (TTL ${ai.cacheTtlSec ?? 600}s, news=${ai.newsCount})`
+          : `AI verdicts pre ${ai.verdicts.size} tickerov (news=${ai.newsCount})`,
       detail: {
         model: ai.model,
         error: ai.error,
+        cached: !!ai.cached,
+        cacheTtlSec: ai.cacheTtlSec ?? null,
         verdicts: Array.from(ai.verdicts.values()),
       },
     });

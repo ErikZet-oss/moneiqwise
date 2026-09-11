@@ -6,6 +6,7 @@ import {
   Mail,
   OctagonX,
   Pause,
+  Pencil,
   Play,
   Plus,
   RefreshCw,
@@ -207,6 +208,42 @@ type PaperStats = {
   openEvents: number;
   closeEvents: number;
   aiEvents: number;
+  aiReality?: {
+    sampleSize: number;
+    withAiApplied: {
+      trades: number;
+      wins: number;
+      winRatePct: number;
+      avgPnl: number | null;
+    };
+    withoutAi: {
+      trades: number;
+      wins: number;
+      winRatePct: number;
+      avgPnl: number | null;
+    };
+    byEntryBias: {
+      bullish: {
+        trades: number;
+        wins: number;
+        winRatePct: number;
+        avgPnl: number | null;
+      };
+      bearish: {
+        trades: number;
+        wins: number;
+        winRatePct: number;
+        avgPnl: number | null;
+      };
+      neutral: {
+        trades: number;
+        wins: number;
+        winRatePct: number;
+        avgPnl: number | null;
+      };
+    };
+    note: string;
+  };
 };
 
 type EquityPoint = { ts: string; equity: number; cash: number };
@@ -875,6 +912,7 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [name, setName] = useState("Môj Paper Bot");
   const [startingCash, setStartingCash] = useState("10000");
@@ -976,6 +1014,53 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
     ...(strategyId === "custom" ? { customStrategy } : {}),
   });
 
+  const loadFormFromBot = (bot: PaperBot) => {
+    setName(bot.name);
+    setStartingCash(String(bot.startingCash));
+    setSymbols((bot.symbols ?? []).join(", "));
+    setStrategyId(bot.strategyId);
+    setCandleTf((bot.candleTf as PaperCandleTf) || "1d");
+    setMaxOpen(String(bot.risk?.maxOpenPositions ?? 5));
+    setDailyLoss(String(bot.risk?.dailyLossLimitPct ?? 2));
+    setMaxDd(String(bot.risk?.maxDrawdownPct ?? 15));
+    setMaxPosPct(String(bot.risk?.maxPositionPct ?? 20));
+    setTrailAtr(String(bot.exits?.trailingAtrMult ?? 3.5));
+    setTakeProfit(String(bot.exits?.takeProfitPct ?? 12));
+    setHardStop(String(bot.exits?.hardStopPct ?? 8));
+    setAiInfluence(String(bot.aiInfluencePct ?? 20));
+    setAiMinConf(String(bot.aiMinConfidence ?? 60));
+    setNotifyOnTrade(!!bot.notifyOnTrade);
+    setNotifyEmail(bot.notifyEmail || "");
+    if (bot.strategyId === "custom" && bot.customStrategy) {
+      setCustomStrategy(
+        structuredClone(bot.customStrategy as CustomStrategyDef),
+      );
+    } else if (strategiesPayload?.defaultCustomStrategy) {
+      setCustomStrategy(
+        structuredClone(strategiesPayload.defaultCustomStrategy),
+      );
+    }
+    setBacktestResult(null);
+  };
+
+  const openCreateForm = () => {
+    setEditingId(null);
+    setShowCreate(true);
+    setBacktestResult(null);
+  };
+
+  const openEditForm = (bot: PaperBot) => {
+    loadFormFromBot(bot);
+    setEditingId(bot.id);
+    setShowCreate(true);
+  };
+
+  const closeForm = () => {
+    setShowCreate(false);
+    setEditingId(null);
+    setBacktestResult(null);
+  };
+
   const createMut = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/paper-bots", formPayload());
@@ -983,14 +1068,35 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
     },
     onSuccess: (data) => {
       toast({ title: "Paper bot vytvorený" });
-      setShowCreate(false);
-      setBacktestResult(null);
+      closeForm();
       setSelectedId(data.bot.id);
       invalidate();
     },
     onError: (err: Error) => {
       toast({
         title: "Vytvorenie zlyhalo",
+        description: err.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const editMut = useMutation({
+    mutationFn: async () => {
+      if (!editingId) throw new Error("Chýba ID bota");
+      const payload = formPayload();
+      const { startingCash: _sc, ...rest } = payload;
+      const res = await apiRequest("PATCH", `/api/paper-bots/${editingId}`, rest);
+      return res.json() as Promise<{ bot: PaperBot }>;
+    },
+    onSuccess: () => {
+      toast({ title: "Nastavenia uložené" });
+      closeForm();
+      invalidate();
+    },
+    onError: (err: Error) => {
+      toast({
+        title: "Uloženie zlyhalo",
         description: err.message,
         variant: "destructive",
       });
@@ -1101,7 +1207,7 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
               className={cn("h-3.5 w-3.5", detailFetching && "animate-spin")}
             />
           </Button>
-          <Button size="sm" onClick={() => setShowCreate((v) => !v)}>
+          <Button size="sm" onClick={() => openCreateForm()}>
             <Plus className="mr-1 h-3.5 w-3.5" />
             Nový bot
           </Button>
@@ -1111,6 +1217,9 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
       {showCreate ? (
         <Card>
           <CardContent className="space-y-3 pt-4">
+            <div className="text-sm font-medium">
+              {editingId ? "Upraviť paper bota" : "Nový paper bot"}
+            </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <FieldLabel
@@ -1126,8 +1235,8 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
                   tipTitle="Kapitál (EUR)"
                   tip={
                     <p>
-                      Fiktívny počiatočný kapitál paper účtu. Nie sú to reálne peniaze — bot s nimi
-                      obchoduje v simulácii.
+                      Fiktívny počiatočný kapitál paper účtu. Pri úprave existujúceho bota sa
+                      kapitál nemení — meníš len stratégiu / risk / AI.
                     </p>
                   }
                 >
@@ -1136,6 +1245,7 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
                 <Input
                   inputMode="decimal"
                   value={startingCash}
+                  disabled={!!editingId}
                   onChange={(e) => setStartingCash(e.target.value)}
                 />
               </div>
@@ -1491,7 +1601,7 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
             ) : null}
 
             <div className="flex justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setShowCreate(false)}>
+              <Button variant="ghost" size="sm" onClick={() => closeForm()}>
                 Zrušiť
               </Button>
               <Button
@@ -1509,15 +1619,21 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
               </Button>
               <Button
                 size="sm"
-                disabled={createMut.isPending}
-                onClick={() => createMut.mutate()}
+                disabled={
+                  editingId ? editMut.isPending : createMut.isPending
+                }
+                onClick={() =>
+                  editingId ? editMut.mutate() : createMut.mutate()
+                }
               >
-                {createMut.isPending ? (
+                {(editingId ? editMut.isPending : createMut.isPending) ? (
                   <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                ) : editingId ? (
+                  <Pencil className="mr-1 h-3.5 w-3.5" />
                 ) : (
                   <Wallet className="mr-1 h-3.5 w-3.5" />
                 )}
-                Vytvoriť
+                {editingId ? "Uložiť" : "Vytvoriť"}
               </Button>
             </div>
           </CardContent>
@@ -1682,6 +1798,16 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
                     >
                       <Pause className="mr-1 h-3.5 w-3.5" />
                       Pauza
+                    </Button>
+                  ) : null}
+                  {detail.bot.status !== "killed" ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openEditForm(detail.bot)}
+                    >
+                      <Pencil className="mr-1 h-3.5 w-3.5" />
+                      Upraviť
                     </Button>
                   ) : null}
                   {detail.bot.status !== "killed" ? (
@@ -1851,6 +1977,68 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
                     <div className="text-sm font-semibold">
                       {detail.stats.aiEvents}
                     </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {detail.stats?.aiReality ? (
+                <div className="space-y-2 rounded-md border p-3">
+                  <div className="flex flex-wrap items-center gap-1">
+                    <div className="text-xs font-medium">AI vs. realita</div>
+                    <HelpTip title="AI vs. realita">
+                      <p>
+                        Porovnáva uzavreté obchody podľa toho, či pri vstupe bola AI
+                        započítaná do skóre, a podľa AI bias pri otvorení. Nie je to
+                        predpoveď % úspešnosti jedného trade — štatistika po faktoch.
+                      </p>
+                    </HelpTip>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    {detail.stats.aiReality.note}
+                  </p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="rounded-md bg-muted/40 px-2 py-1.5 text-[11px]">
+                      <div className="font-medium">S AI (aplikovaná)</div>
+                      <div className="text-muted-foreground">
+                        {detail.stats.aiReality.withAiApplied.trades} obchodov ·
+                        win {detail.stats.aiReality.withAiApplied.winRatePct}% ·
+                        avg PnL{" "}
+                        {detail.stats.aiReality.withAiApplied.avgPnl != null
+                          ? detail.stats.aiReality.withAiApplied.avgPnl.toFixed(2)
+                          : "—"}
+                      </div>
+                    </div>
+                    <div className="rounded-md bg-muted/40 px-2 py-1.5 text-[11px]">
+                      <div className="font-medium">Bez AI / nepoužitá</div>
+                      <div className="text-muted-foreground">
+                        {detail.stats.aiReality.withoutAi.trades} obchodov · win{" "}
+                        {detail.stats.aiReality.withoutAi.winRatePct}% · avg PnL{" "}
+                        {detail.stats.aiReality.withoutAi.avgPnl != null
+                          ? detail.stats.aiReality.withoutAi.avgPnl.toFixed(2)
+                          : "—"}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {(
+                      [
+                        ["bullish", detail.stats.aiReality.byEntryBias.bullish],
+                        ["bearish", detail.stats.aiReality.byEntryBias.bearish],
+                        ["neutral", detail.stats.aiReality.byEntryBias.neutral],
+                      ] as const
+                    ).map(([label, bucket]) => (
+                      <div
+                        key={label}
+                        className="rounded-md bg-muted/30 px-2 py-1.5 text-[11px]"
+                      >
+                        <div className="font-medium capitalize">
+                          Vstup AI {label}
+                        </div>
+                        <div className="text-muted-foreground">
+                          n={bucket.trades} · win {bucket.winRatePct}%
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               ) : null}

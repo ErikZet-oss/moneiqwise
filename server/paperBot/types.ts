@@ -131,6 +131,42 @@ export type PaperBotStats = {
   openEvents: number;
   closeEvents: number;
   aiEvents: number;
+  aiReality?: {
+    sampleSize: number;
+    withAiApplied: {
+      trades: number;
+      wins: number;
+      winRatePct: number;
+      avgPnl: number | null;
+    };
+    withoutAi: {
+      trades: number;
+      wins: number;
+      winRatePct: number;
+      avgPnl: number | null;
+    };
+    byEntryBias: {
+      bullish: {
+        trades: number;
+        wins: number;
+        winRatePct: number;
+        avgPnl: number | null;
+      };
+      bearish: {
+        trades: number;
+        wins: number;
+        winRatePct: number;
+        avgPnl: number | null;
+      };
+      neutral: {
+        trades: number;
+        wins: number;
+        winRatePct: number;
+        avgPnl: number | null;
+      };
+    };
+    note: string;
+  };
 };
 
 export const DEFAULT_RISK: PaperBotRiskSettings = {

@@ -9,6 +9,7 @@ import {
   listPaperLogs,
   listPositions,
   listTrades,
+  updatePaperBotSettings,
   updatePaperBotStatus,
 } from "./paperBot/store";
 import {
@@ -303,6 +304,121 @@ export function registerPaperBotRoutes(app: Express, isAuthenticated: any) {
       } catch (error) {
         console.error("paper-bots get:", error);
         res.status(500).json({ message: "Nepodarilo sa načítať bota." });
+      }
+    },
+  );
+
+  app.patch(
+    "/api/paper-bots/:id",
+    isAuthenticated,
+    async (req: AuthReq, res) => {
+      try {
+        const userId = requireUserId(req, res);
+        if (!userId) return;
+        const botId = String(req.params.id);
+        const symbols = req.body?.symbols
+          ? parseSymbols(req.body.symbols)
+          : undefined;
+        const strategyId = req.body?.strategyId
+          ? (String(req.body.strategyId) as PaperStrategyId)
+          : undefined;
+        if (strategyId && !(strategyId in STRATEGY_META)) {
+          return res.status(400).json({ message: "Neznáma stratégia." });
+        }
+        const customStrategy =
+          strategyId === "custom" || req.body?.customStrategy
+            ? parseCustomStrategy(req.body?.customStrategy) ||
+              (strategyId === "custom" ? DEFAULT_CUSTOM_STRATEGY : null)
+            : undefined;
+        const risk =
+          req.body?.dailyLossLimitPct != null ||
+          req.body?.maxDrawdownPct != null ||
+          req.body?.maxOpenPositions != null ||
+          req.body?.maxPositionPct != null
+            ? {
+                dailyLossLimitPct:
+                  req.body?.dailyLossLimitPct != null
+                    ? Number(req.body.dailyLossLimitPct)
+                    : undefined,
+                maxDrawdownPct:
+                  req.body?.maxDrawdownPct != null
+                    ? Number(req.body.maxDrawdownPct)
+                    : undefined,
+                maxOpenPositions:
+                  req.body?.maxOpenPositions != null
+                    ? Number(req.body.maxOpenPositions)
+                    : undefined,
+                maxPositionPct:
+                  req.body?.maxPositionPct != null
+                    ? Number(req.body.maxPositionPct)
+                    : undefined,
+              }
+            : undefined;
+        const exits =
+          req.body?.trailingAtrMult != null ||
+          req.body?.takeProfitPct != null ||
+          req.body?.hardStopPct != null
+            ? {
+                trailingAtrMult:
+                  req.body?.trailingAtrMult != null
+                    ? Number(req.body.trailingAtrMult)
+                    : undefined,
+                takeProfitPct:
+                  req.body?.takeProfitPct != null
+                    ? Number(req.body.takeProfitPct)
+                    : undefined,
+                hardStopPct:
+                  req.body?.hardStopPct != null
+                    ? Number(req.body.hardStopPct)
+                    : undefined,
+              }
+            : undefined;
+
+        let notifyEmail: string | null | undefined = undefined;
+        if (typeof req.body?.notifyEmail === "string") {
+          notifyEmail = req.body.notifyEmail.trim() || null;
+        }
+
+        const bot = await updatePaperBotSettings(botId, userId, {
+          name:
+            typeof req.body?.name === "string" ? req.body.name : undefined,
+          strategyId,
+          customStrategy:
+            customStrategy === undefined ? undefined : customStrategy,
+          symbols,
+          candleTf: req.body?.candleTf
+            ? normalizeCandleTf(req.body.candleTf)
+            : undefined,
+          risk,
+          exits,
+          aiInfluencePct:
+            req.body?.aiInfluencePct != null
+              ? Number(req.body.aiInfluencePct)
+              : undefined,
+          aiMinConfidence:
+            req.body?.aiMinConfidence != null
+              ? Number(req.body.aiMinConfidence)
+              : undefined,
+          notifyEmail,
+          notifyOnTrade:
+            req.body?.notifyOnTrade != null
+              ? !!req.body.notifyOnTrade
+              : undefined,
+        });
+        if (!bot) return res.status(404).json({ message: "Bot nenájdený." });
+        res.json({ bot });
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        if (msg === "PAPER_BOT_KILLED") {
+          return res
+            .status(400)
+            .json({ message: "Zabitý bot sa nedá upravovať." });
+        }
+        if (msg === "PAPER_BOT_NO_SYMBOLS") {
+          return res.status(400).json({ message: "Zadaj aspoň jeden ticker." });
+        }
+        console.error("paper-bots patch:", error);
+        res.status(500).json({ message: "Nepodarilo sa uložiť nastavenia." });
       }
     },
   );
