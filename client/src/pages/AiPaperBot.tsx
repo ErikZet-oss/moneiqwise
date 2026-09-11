@@ -371,36 +371,29 @@ function DecisionTrail({
     typeof detail?.exitRule === "string" ? detail.exitRule : null;
   const openedBecause =
     typeof detail?.openedBecause === "string" ? detail.openedBecause : null;
+  const aiApplied = detail?.aiApplied === true;
+  const aiSkipped = detail?.aiApplied === false && !!ai;
+
+  const mainReason =
+    exitRule ||
+    strategyReason ||
+    reason ||
+    "—";
 
   return (
     <div className="space-y-1 rounded-md bg-muted/40 px-2 py-1.5 text-[11px] leading-snug">
       <div>
-        <span className="font-medium text-foreground">Prečo: </span>
-        <span className="text-muted-foreground">{reason || "—"}</span>
+        <span className="font-medium text-foreground">
+          {exitRule ? "Zatvorené: " : "Otvorené: "}
+        </span>
+        <span className="text-muted-foreground">{mainReason}</span>
       </div>
-      {exitRule ? (
-        <div>
-          <span className="font-medium text-foreground">Exit rule: </span>
-          <span className="text-muted-foreground">{exitRule}</span>
-        </div>
-      ) : null}
-      {strategyReason && strategyReason !== reason ? (
-        <div>
-          <span className="font-medium text-foreground">Stratégia: </span>
-          <span className="text-muted-foreground">{strategyReason}</span>
-        </div>
-      ) : null}
       {quantScore != null || finalScore != null ? (
         <div>
           <span className="font-medium text-foreground">Skóre: </span>
           <span className="text-muted-foreground">
             quant {quantScore != null ? Math.round(quantScore) : "—"}
             {finalScore != null ? ` → final ${Math.round(finalScore)}` : ""}
-            {detail?.aiApplied === true
-              ? " (AI aplikovaná)"
-              : detail?.aiApplied === false
-                ? " (AI neaplikovaná)"
-                : ""}
           </span>
         </div>
       ) : null}
@@ -411,12 +404,22 @@ function DecisionTrail({
             {ai.bias ?? "neutral"}
             {ai.confidence != null ? ` ${ai.confidence}%` : ""}
             {ai.reason ? ` — ${ai.reason}` : ""}
+            {aiApplied
+              ? " · započítaná do skóre"
+              : aiSkipped
+                ? " · nepoužitá (pod min. confidence)"
+                : ""}
           </span>
+        </div>
+      ) : detail?.aiApplied === false ? (
+        <div>
+          <span className="font-medium text-foreground">AI: </span>
+          <span className="text-muted-foreground">bez verdictu / vypnutá</span>
         </div>
       ) : null}
       {openedBecause ? (
         <div>
-          <span className="font-medium text-foreground">Otvorené kvôli: </span>
+          <span className="font-medium text-foreground">Pôvodný vstup: </span>
           <span className="text-muted-foreground">{openedBecause}</span>
         </div>
       ) : null}

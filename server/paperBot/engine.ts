@@ -83,20 +83,10 @@ function formatTradeReason(input: {
   signal?: NudgedDecision | null;
   verdict?: AiSymbolVerdict | null;
 }): string {
-  const parts = [input.base];
-  if (input.signal && "quantScore" in input.signal) {
-    parts.push(
-      `quant ${Math.round(input.signal.quantScore)} → final ${Math.round(input.signal.finalScore)}`,
-    );
-  }
-  if (input.verdict) {
-    parts.push(
-      `AI ${input.verdict.bias} ${input.verdict.confidence}%: ${input.verdict.reason || "—"}`,
-    );
-  } else if (input.signal?.aiApplied === false) {
-    parts.push("AI neaplikovaná (nízka confidence / influence 0)");
-  }
-  return parts.filter(Boolean).join(" · ");
+  // Keep stored reason short; structured fields live in detail_json / UI trail.
+  void input.signal;
+  void input.verdict;
+  return input.base;
 }
 
 /** Prevent overlapping ticks for the same bot (scheduler + Tick teraz / start). */
