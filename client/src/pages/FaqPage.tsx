@@ -388,6 +388,10 @@ export default function FaqPage() {
               <ul className="list-disc pl-5 space-y-1.5">
                 <li>Len paper (interný ledger), nie Alpaca/Binance ani reálne peniaze</li>
                 <li>Len long smer; short zatiaľ nie</li>
+                <li>
+                  Return % = (equity − počiatočný kapitál) / kapitál; zahŕňa aj nerealizovaný P&amp;L
+                  z otvorených pozícií. Realizovaný P&amp;L je len zo zatvorených obchodov.
+                </li>
                 <li>Backtest bez Claude AI nudge (čistá matematika + exit rules)</li>
                 <li>E-mail vyžaduje SMTP env (<code>SMTP_HOST</code>, <code>SMTP_USER</code>, …)</li>
                 <li>

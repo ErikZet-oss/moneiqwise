@@ -39,11 +39,26 @@ import {
   insertPosition,
   insertTrade,
   listPositions,
+  listTrades,
   updatePaperBotLedger,
   updatePaperBotStatus,
   updatePositionPeak,
 } from "./store";
 import type { PaperBot, PaperPosition } from "./types";
+
+/** Prevent overlapping ticks for the same bot (scheduler + Tick teraz / start). */
+const tickingBots = new Set<string>();
+
+async function cashFromTrades(bot: PaperBot): Promise<number> {
+  const trades = await listTrades(bot.id, bot.userId, 5000);
+  let cash = bot.startingCash;
+  for (const t of trades) {
+    const notional = roundMoney(t.qty * t.price);
+    if (t.side === "BUY") cash = roundMoney(cash - notional);
+    else cash = roundMoney(cash + notional);
+  }
+  return cash;
+}
 
 function evaluateStrategy(
   bot: PaperBot,
@@ -190,6 +205,8 @@ async function openLong(input: {
     reason,
     strategyId: bot.strategyId,
   });
+  // Persist cash immediately so a concurrent tick cannot overwrite it.
+  await updatePaperBotLedger(bot.id, { cash: newCash });
   await insertPaperLog({
     botId: bot.id,
     userId: bot.userId,
@@ -233,6 +250,7 @@ async function closeLong(input: {
     strategyId: bot.strategyId,
     openedAt: position.openedAt,
   });
+  await updatePaperBotLedger(bot.id, { cash: newCash });
   await insertPaperLog({
     botId: bot.id,
     userId: bot.userId,
@@ -265,6 +283,21 @@ export async function tickPaperBot(
   botId: string,
   userId: string,
 ): Promise<TickResult | null> {
+  if (tickingBots.has(botId)) {
+    return null;
+  }
+  tickingBots.add(botId);
+  try {
+    return await tickPaperBotInner(botId, userId);
+  } finally {
+    tickingBots.delete(botId);
+  }
+}
+
+async function tickPaperBotInner(
+  botId: string,
+  userId: string,
+): Promise<TickResult | null> {
   const resolved = await getPaperBot(botId, userId);
   if (!resolved) return null;
 
@@ -281,6 +314,20 @@ export async function tickPaperBot(
   }
 
   let working: PaperBot = { ...resolved };
+  // Self-heal cash if a concurrent tick overwrote the ledger (phantom equity).
+  const reconciledCash = await cashFromTrades(working);
+  if (Math.abs(reconciledCash - working.cash) > 0.02) {
+    await insertPaperLog({
+      botId: working.id,
+      userId: working.userId,
+      eventType: "status",
+      message: `Oprava hotovosti ${working.cash} → ${reconciledCash} (podľa obchodov)`,
+      detail: { before: working.cash, after: reconciledCash },
+    });
+    await updatePaperBotLedger(working.id, { cash: reconciledCash });
+    working = { ...working, cash: reconciledCash };
+  }
+
   let opens = 0;
   let closes = 0;
   let blocked = 0;
