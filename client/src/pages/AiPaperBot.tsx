@@ -16,6 +16,15 @@ import {
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { sk } from "date-fns/locale";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip as RTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -552,34 +561,154 @@ function newCondition(): StrategyCondition {
   };
 }
 
-function EquitySparkline({ points }: { points: number[] }) {
+function EquityAreaChart({
+  points,
+  currency = "EUR",
+}: {
+  points: Array<{ ts: string; t: string; equity: number; cash: number }>;
+  currency?: string;
+}) {
   if (points.length < 2) return null;
-  const w = 320;
-  const h = 120;
-  const min = Math.min(...points);
-  const max = Math.max(...points);
-  const span = max - min || 1;
-  const coords = points
-    .map((v, i) => {
-      const x = (i / (points.length - 1)) * (w - 8) + 4;
-      const y = h - 8 - ((v - min) / span) * (h - 16);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
+
+  const equities = points.map((p) => p.equity);
+  const min = Math.min(...equities);
+  const max = Math.max(...equities);
+  const first = equities[0]!;
+  const last = equities[equities.length - 1]!;
+  const delta = last - first;
+  const deltaPct = first > 0 ? (delta / first) * 100 : 0;
+  const pad = Math.max((max - min) * 0.08, Math.abs(last) * 0.002, 1);
+  const yMin = Math.floor((min - pad) * 100) / 100;
+  const yMax = Math.ceil((max + pad) * 100) / 100;
+  const up = delta >= 0;
+  const stroke = up ? "hsl(142 71% 35%)" : "hsl(0 72% 45%)";
+  const gradId = "paperEquityFill";
+
+  const fmtAxisMoney = (v: number) => {
+    if (Math.abs(v) >= 1000) {
+      return `${(v / 1000).toLocaleString("sk-SK", {
+        maximumFractionDigits: 1,
+      })}k`;
+    }
+    return v.toLocaleString("sk-SK", {
+      maximumFractionDigits: 0,
+    });
+  };
+
   return (
-    <svg
-      viewBox={`0 0 ${w} ${h}`}
-      className="h-40 w-full text-primary"
-      role="img"
-      aria-label="Equity krivka"
-    >
-      <polyline
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        points={coords}
-      />
-    </svg>
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+            Aktuálna equity
+          </div>
+          <div className="text-lg font-semibold tabular-nums">
+            {money(last, currency)}
+          </div>
+          <div
+            className={cn(
+              "text-xs font-medium tabular-nums",
+              up
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-red-600 dark:text-red-400",
+            )}
+          >
+            {delta >= 0 ? "+" : ""}
+            {money(delta, currency)} ({deltaPct >= 0 ? "+" : ""}
+            {deltaPct.toFixed(2)} %)
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+          <div>
+            <span className="text-[10px] uppercase">Min</span>
+            <div className="font-medium tabular-nums text-foreground">
+              {money(min, currency)}
+            </div>
+          </div>
+          <div>
+            <span className="text-[10px] uppercase">Max</span>
+            <div className="font-medium tabular-nums text-foreground">
+              {money(max, currency)}
+            </div>
+          </div>
+          <div>
+            <span className="text-[10px] uppercase">Body</span>
+            <div className="font-medium tabular-nums text-foreground">
+              {points.length}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="h-56 w-full min-w-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart
+            data={points}
+            margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+          >
+            <defs>
+              <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={stroke} stopOpacity={0.28} />
+                <stop offset="100%" stopColor={stroke} stopOpacity={0.02} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid
+              strokeDasharray="3 3"
+              vertical={false}
+              className="stroke-border/60"
+            />
+            <XAxis
+              dataKey="t"
+              axisLine={false}
+              tickLine={false}
+              minTickGap={28}
+              interval="preserveStartEnd"
+              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+            />
+            <YAxis
+              domain={[yMin, yMax]}
+              axisLine={false}
+              tickLine={false}
+              width={52}
+              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+              tickFormatter={fmtAxisMoney}
+            />
+            <RTooltip
+              cursor={{ stroke: "hsl(var(--border))", strokeWidth: 1 }}
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null;
+                const row = payload[0]?.payload as {
+                  t?: string;
+                  equity?: number;
+                  cash?: number;
+                };
+                return (
+                  <div className="rounded-md border bg-popover px-2.5 py-1.5 text-xs shadow-md">
+                    <div className="text-muted-foreground">{row.t}</div>
+                    <div className="font-semibold tabular-nums">
+                      Equity {money(row.equity, currency)}
+                    </div>
+                    <div className="text-muted-foreground tabular-nums">
+                      Hotovosť {money(row.cash, currency)}
+                    </div>
+                  </div>
+                );
+              }}
+            />
+            <Area
+              type="monotone"
+              dataKey="equity"
+              stroke={stroke}
+              strokeWidth={2}
+              fill={`url(#${gradId})`}
+              isAnimationActive={false}
+              dot={false}
+              activeDot={{ r: 3, strokeWidth: 0 }}
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
   );
 }
 
@@ -1162,10 +1291,20 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
   }, [detail?.bot.strategyId, strategiesPayload]);
 
   const chartData = useMemo(() => {
-    return (detail?.equityCurve ?? []).map((p) => ({
-      t: fmtTime(p.ts),
-      equity: Math.round(p.equity * 100) / 100,
-    }));
+    return (detail?.equityCurve ?? []).map((p) => {
+      let axis = p.ts;
+      try {
+        axis = format(parseISO(p.ts), "d.M. HH:mm", { locale: sk });
+      } catch {
+        /* keep raw */
+      }
+      return {
+        ts: p.ts,
+        t: axis,
+        equity: Math.round(p.equity * 100) / 100,
+        cash: Math.round((p.cash ?? 0) * 100) / 100,
+      };
+    });
   }, [detail?.equityCurve]);
 
   const pipelineStages =
@@ -2045,15 +2184,21 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
 
               <Card>
                 <CardContent className="pt-4">
-                  <div className="mb-2 text-xs font-medium text-muted-foreground">
-                    Equity v čase
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-1">
+                    <div className="text-xs font-medium">Equity v čase</div>
+                    <div className="text-[10px] text-muted-foreground">
+                      hover = čas · equity · hotovosť
+                    </div>
                   </div>
                   {chartData.length < 2 ? (
                     <p className="py-8 text-center text-sm text-muted-foreground">
                       Po niekoľkých tickoch sa tu zobrazí equity krivka.
                     </p>
                   ) : (
-                    <EquitySparkline points={chartData.map((p) => p.equity)} />
+                    <EquityAreaChart
+                      points={chartData}
+                      currency={detail.bot.currency}
+                    />
                   )}
                 </CardContent>
               </Card>
