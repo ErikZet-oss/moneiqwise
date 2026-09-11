@@ -371,6 +371,10 @@ export default function FaqPage() {
                   (stratégia, skóre, AI bias/confidence), kompletný audit
                 </li>
                 <li>
+                  <strong>Kill Switch</strong> — zatvorí pozície a zastaví bota; Pauza len zastaví
+                  tickovanie
+                </li>
+                <li>
                   <strong>Upraviť</strong> — zmena stratégie, tickerov, TF, risk, exitov a AI u
                   existujúceho bota (kapitál sa nemení; zabitý bot sa nedá editovať)
                 </li>
