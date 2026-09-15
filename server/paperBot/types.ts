@@ -30,6 +30,13 @@ export type PaperBotExitSettings = {
    * Straty (≤0 %) sa po min hold môžu zatvoriť signálom.
    */
   minProfitPctForStrategySell: number;
+  /**
+   * Trailing sa aktivuje až keď peak ≥ entry × (1 + toto%/100).
+   * 0 = staré správanie (stačí peak > entry).
+   */
+  minProfitPctForTrail: number;
+  /** Ak true, trailing nikdy nezatvorí pod entry (len zamyká zisk). */
+  trailOnlyInProfit: boolean;
   /** Polovica bid-ask spreadu v % — BUY drahšie / SELL lacnejšie o túto hodnotu. */
   halfSpreadPct: number;
   /** Fee v % z notional na každý fill (BUY aj SELL). */
@@ -187,12 +194,15 @@ export const DEFAULT_RISK: PaperBotRiskSettings = {
   maxPositionPct: 20,
 };
 
+/** Defaults for NEW bots. Missing keys on older bots stay legacy via mapExits. */
 export const DEFAULT_EXITS: PaperBotExitSettings = {
   trailingAtrMult: 3.5,
   takeProfitPct: 12,
   hardStopPct: 8,
   minHoldBars: 4,
   minProfitPctForStrategySell: 1.5,
+  minProfitPctForTrail: 2.5,
+  trailOnlyInProfit: true,
   halfSpreadPct: 0.05,
   feePct: 0.05,
 };
@@ -323,12 +333,12 @@ export const STRATEGY_META: Record<
   dual_momentum: {
     label: "Dual Momentum",
     description:
-      "Long: close > SMA200 a SMA50 > SMA200. Exit: close < SMA200 + exit rules.",
+      "Long: close > SMA200 a SMA50 > SMA200. Exit: close ≤ SMA200−0.4 % alebo SMA50 pod SMA200 + exit rules.",
   },
   macd_trend: {
     label: "MACD Trend",
     description:
-      "Long: MACD hist>0, MACD>signal, close>EMA200. Exit: hist<0 a MACD<signal, alebo close<EMA200 + exit rules.",
+      "Long: MACD hist>0, MACD>signal, close>EMA200. Exit: bearish cross (hist<0 a MACD<signal) 2 bary po sebe, alebo close<EMA200−0.3 % + exit rules.",
   },
   bollinger_reversion: {
     label: "Bollinger Reversion",

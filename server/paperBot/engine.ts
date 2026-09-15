@@ -563,6 +563,8 @@ async function tickPaperBotInner(
       trailingAtrMult: working.exits.trailingAtrMult,
       takeProfitPct: working.exits.takeProfitPct,
       hardStopPct: working.exits.hardStopPct,
+      minProfitPctForTrail: working.exits.minProfitPctForTrail,
+      trailOnlyInProfit: working.exits.trailOnlyInProfit,
     });
 
     if (exitHit.hit) {

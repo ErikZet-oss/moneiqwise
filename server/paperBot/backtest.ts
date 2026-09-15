@@ -136,6 +136,8 @@ export async function runPaperBacktest(input: {
         trailingAtrMult: input.exits.trailingAtrMult,
         takeProfitPct: input.exits.takeProfitPct,
         hardStopPct: input.exits.hardStopPct,
+        minProfitPctForTrail: input.exits.minProfitPctForTrail,
+        trailOnlyInProfit: input.exits.trailOnlyInProfit,
       });
       let sellReason: string | null = hit.hit ? hit.reason : null;
       if (!sellReason && i >= warmup) {

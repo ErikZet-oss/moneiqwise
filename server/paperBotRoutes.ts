@@ -72,6 +72,7 @@ function parseExitsBody(
     "hardStopPct",
     "minHoldBars",
     "minProfitPctForStrategySell",
+    "minProfitPctForTrail",
     "halfSpreadPct",
     "feePct",
   ] as const;
@@ -87,6 +88,16 @@ function parseExitsBody(
     } else if (mode === "full") {
       (out as any)[k] = DEFAULT_EXITS[k];
     }
+  }
+  if (body?.trailOnlyInProfit != null) {
+    (out as any).trailOnlyInProfit =
+      body.trailOnlyInProfit === true ||
+      body.trailOnlyInProfit === "true" ||
+      body.trailOnlyInProfit === 1 ||
+      body.trailOnlyInProfit === "1";
+    any = true;
+  } else if (mode === "full") {
+    (out as any).trailOnlyInProfit = DEFAULT_EXITS.trailOnlyInProfit;
   }
   if (mode === "partial") return any ? out : undefined;
   return { ...DEFAULT_EXITS, ...out };

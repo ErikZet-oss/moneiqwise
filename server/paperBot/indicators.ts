@@ -273,11 +273,15 @@ export function evaluateDualMomentum(closes: number[]): SignalDecision {
       indicators,
     };
   }
-  if (close < sma200) {
+  // Avoid whipsaw: need meaningful break or SMA50 loss of trend
+  if (sma50 < sma200 || close < sma200 * 0.996) {
     return {
       action: "SELL",
       score: 68,
-      reason: "Close pod SMA200",
+      reason:
+        sma50 < sma200
+          ? "SMA50 pod SMA200"
+          : "Close výrazne pod SMA200 (−0.4 %)",
       indicators,
     };
   }
@@ -292,6 +296,8 @@ export function evaluateDualMomentum(closes: number[]): SignalDecision {
 export function evaluateMacdTrend(closes: number[]): SignalDecision {
   const close = closes[closes.length - 1] ?? null;
   const m = macd(closes);
+  const mPrev =
+    closes.length > 40 ? macd(closes.slice(0, -1)) : null;
   const ema200 = ema(closes, 200);
   const indicators = {
     close,
@@ -316,14 +322,17 @@ export function evaluateMacdTrend(closes: number[]): SignalDecision {
       indicators,
     };
   }
-  if ((m.hist < 0 && m.macd < m.signal) || close < ema200) {
+  const bearishNow = m.hist < 0 && m.macd < m.signal;
+  const bearishPrev =
+    !!mPrev && mPrev.hist < 0 && mPrev.macd < mPrev.signal;
+  if ((bearishNow && bearishPrev) || close < ema200 * 0.997) {
     return {
       action: "SELL",
       score: 65,
       reason:
-        close < ema200
-          ? "Close pod EMA200"
-          : "MACD hist záporný a MACD pod signal",
+        close < ema200 * 0.997
+          ? "Close výrazne pod EMA200 (−0.3 %)"
+          : "MACD bearish cross (2 bary)",
       indicators,
     };
   }
@@ -396,6 +405,8 @@ export function evaluateExitRules(input: {
   trailingAtrMult: number;
   takeProfitPct: number;
   hardStopPct: number;
+  minProfitPctForTrail?: number;
+  trailOnlyInProfit?: boolean;
 }): ExitHit {
   const {
     entryPrice,
@@ -405,12 +416,15 @@ export function evaluateExitRules(input: {
     trailingAtrMult,
     takeProfitPct,
     hardStopPct,
+    minProfitPctForTrail = 0,
+    trailOnlyInProfit = false,
   } = input;
   const detail: Record<string, number | null> = {
     entryPrice,
     peakPrice,
     markPrice,
     atr: atrVal,
+    minProfitPctForTrail,
   };
 
   if (hardStopPct > 0) {
@@ -437,13 +451,24 @@ export function evaluateExitRules(input: {
     }
   }
 
-  if (trailingAtrMult > 0 && atrVal != null && atrVal > 0) {
+  if (trailingAtrMult > 0 && atrVal != null && atrVal > 0 && entryPrice > 0) {
+    const armPct = Math.max(0, minProfitPctForTrail || 0);
+    const armLevel = entryPrice * (1 + armPct / 100);
+    const armed = peakPrice >= armLevel && peakPrice > entryPrice;
+    detail.trailArm = armLevel;
     const trail = peakPrice - trailingAtrMult * atrVal;
     detail.trailStop = trail;
-    if (markPrice <= trail && peakPrice > entryPrice) {
+    if (armed && markPrice <= trail) {
+      if (trailOnlyInProfit && markPrice < entryPrice) {
+        // Do not convert a winner-peak into a realized loss via trail.
+        return { hit: false, reason: "", detail };
+      }
       return {
         hit: true,
-        reason: `Trailing stop ${trailingAtrMult}×ATR`,
+        reason:
+          armPct > 0
+            ? `Trailing stop ${trailingAtrMult}×ATR (arm +${armPct}%)`
+            : `Trailing stop ${trailingAtrMult}×ATR`,
         detail,
       };
     }

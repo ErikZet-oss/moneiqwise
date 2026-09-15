@@ -291,8 +291,9 @@ export default function FaqPage() {
                 </li>
                 <li>
                   Exity: trailing ATR, take profit %, hard stop %,{" "}
-                  <strong>min hold (bary)</strong>, <strong>min zisk % pred strategy SELL</strong>,
-                  plus paper <strong>half-spread % + fee %</strong> na fill
+                  <strong>min hold (bary)</strong>, <strong>min zisk % pred strategy SELL</strong>,{" "}
+                  <strong>trail arm %</strong>, voliteľne <strong>trail len v pluse</strong>, plus
+                  paper <strong>half-spread % + fee %</strong> na fill
                 </li>
                 <li>
                   AI: influence % (typicky 20) a minimálna confidence; Claude dostane správy +
@@ -346,9 +347,9 @@ export default function FaqPage() {
               </ol>
               <p className="mt-2">
                 Exity: najprv hard stop / take profit / trailing ATR, potom strategický SELL
-                (až po min hold a — v pluse — až po min zisk %). Paper fill nie je mid zadarmo:
-                BUY/SELL zahŕňa half-spread + fee (default ~0.10 % na stranu), aby drobné „plusy“
-                neklamali oproti live.
+                (až po min hold a — v pluse — až po min zisk %). Trailing u nových botov sa
+                aktivuje až po „trail arm %“ a voliteľne nikdy nezatvorí pod entry. Paper fill
+                zahŕňa half-spread + fee (default ~0.10 % na stranu).
               </p>
               <p className="mt-2 text-muted-foreground text-xs">
                 Stratégie majú prísnejšie SELL (MACD: hist+signal; EMA: nie hneď pod SMA50; MA:

@@ -56,6 +56,15 @@ function mapRisk(raw: unknown): PaperBotRiskSettings {
 
 function mapExits(raw: unknown): PaperBotExitSettings {
   const r = parseJson<Partial<PaperBotExitSettings>>(raw, {});
+  // Legacy bots without new keys keep old trail behaviour (0 / false).
+  const hasTrailArm = Object.prototype.hasOwnProperty.call(
+    r,
+    "minProfitPctForTrail",
+  );
+  const hasTrailOnly = Object.prototype.hasOwnProperty.call(
+    r,
+    "trailOnlyInProfit",
+  );
   return {
     trailingAtrMult: num(r.trailingAtrMult, DEFAULT_EXITS.trailingAtrMult),
     takeProfitPct: num(r.takeProfitPct, DEFAULT_EXITS.takeProfitPct),
@@ -68,6 +77,12 @@ function mapExits(raw: unknown): PaperBotExitSettings {
       r.minProfitPctForStrategySell,
       DEFAULT_EXITS.minProfitPctForStrategySell,
     ),
+    minProfitPctForTrail: hasTrailArm
+      ? Math.max(0, num(r.minProfitPctForTrail, 0))
+      : 0,
+    trailOnlyInProfit: hasTrailOnly
+      ? r.trailOnlyInProfit === true
+      : false,
     halfSpreadPct: Math.max(0, num(r.halfSpreadPct, DEFAULT_EXITS.halfSpreadPct)),
     feePct: Math.max(0, num(r.feePct, DEFAULT_EXITS.feePct)),
   };

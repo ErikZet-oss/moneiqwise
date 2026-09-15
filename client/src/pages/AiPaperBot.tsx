@@ -123,6 +123,8 @@ type PaperBot = {
     hardStopPct: number;
     minHoldBars?: number;
     minProfitPctForStrategySell?: number;
+    minProfitPctForTrail?: number;
+    trailOnlyInProfit?: boolean;
     halfSpreadPct?: number;
     feePct?: number;
   };
@@ -1061,6 +1063,8 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
   const [hardStop, setHardStop] = useState("8");
   const [minHoldBars, setMinHoldBars] = useState("4");
   const [minProfitSell, setMinProfitSell] = useState("1.5");
+  const [minProfitTrail, setMinProfitTrail] = useState("2.5");
+  const [trailOnlyInProfit, setTrailOnlyInProfit] = useState(true);
   const [halfSpread, setHalfSpread] = useState("0.05");
   const [feePct, setFeePct] = useState("0.05");
   const [aiInfluence, setAiInfluence] = useState("20");
@@ -1146,6 +1150,8 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
     hardStopPct: Number(hardStop),
     minHoldBars: Number(minHoldBars),
     minProfitPctForStrategySell: Number(minProfitSell),
+    minProfitPctForTrail: Number(minProfitTrail),
+    trailOnlyInProfit,
     halfSpreadPct: Number(halfSpread),
     feePct: Number(feePct),
     aiInfluencePct: Number(aiInfluence),
@@ -1170,6 +1176,8 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
     setHardStop(String(bot.exits?.hardStopPct ?? 8));
     setMinHoldBars(String(bot.exits?.minHoldBars ?? 4));
     setMinProfitSell(String(bot.exits?.minProfitPctForStrategySell ?? 1.5));
+    setMinProfitTrail(String(bot.exits?.minProfitPctForTrail ?? 0));
+    setTrailOnlyInProfit(!!bot.exits?.trailOnlyInProfit);
     setHalfSpread(String(bot.exits?.halfSpreadPct ?? 0.05));
     setFeePct(String(bot.exits?.feePct ?? 0.05));
     setAiInfluence(String(bot.aiInfluencePct ?? 20));
@@ -1686,6 +1694,23 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
               </div>
               <div className="space-y-1.5">
                 <FieldLabel
+                  tipTitle="Trail arm %"
+                  tip={
+                    <p>
+                      Trailing sa zapne až keď peak dosiahne aspoň +toto % od entry. 0 = staré
+                      správanie (stačí akýkoľvek peak nad entry). Default pre nové boty 2.5 %.
+                    </p>
+                  }
+                >
+                  Trail arm %
+                </FieldLabel>
+                <Input
+                  value={minProfitTrail}
+                  onChange={(e) => setMinProfitTrail(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <FieldLabel
                   tipTitle="Half-spread %"
                   tip={
                     <p>
@@ -1718,6 +1743,23 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
                   value={feePct}
                   onChange={(e) => setFeePct(e.target.value)}
                 />
+              </div>
+              <div className="space-y-1.5 md:col-span-2">
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={trailOnlyInProfit}
+                    onChange={(e) => setTrailOnlyInProfit(e.target.checked)}
+                  />
+                  <span>
+                    <span className="font-medium">Trail len v pluse</span>
+                    <span className="block text-xs text-muted-foreground">
+                      Trailing nikdy nezatvorí pod nákupnou cenou — zamyká zisk, stratu rieši hard
+                      stop. Odporúčané pre nové boty.
+                    </span>
+                  </span>
+                </label>
               </div>
               <div className="space-y-1.5">
                 <FieldLabel
@@ -2112,7 +2154,9 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
                 {detail.bot.exits?.takeProfitPct ?? 12}% / SL{" "}
                 {detail.bot.exits?.hardStopPct ?? 8}% · hold{" "}
                 {detail.bot.exits?.minHoldBars ?? 4}b · min+{" "}
-                {detail.bot.exits?.minProfitPctForStrategySell ?? 1.5}% · cost{" "}
+                {detail.bot.exits?.minProfitPctForStrategySell ?? 1.5}% · trailArm{" "}
+                {detail.bot.exits?.minProfitPctForTrail ?? 0}%
+                {detail.bot.exits?.trailOnlyInProfit ? " · trail≥entry" : ""} · cost{" "}
                 {(
                   (detail.bot.exits?.halfSpreadPct ?? 0.05) +
                   (detail.bot.exits?.feePct ?? 0.05)
