@@ -145,16 +145,24 @@ export function evaluateEmaRsiTrend(closes: number[]): SignalDecision {
     };
   }
 
-  if (rsi14 > 75 || ema50 < ema200 || close < sma50) {
+  if (rsi14 > 75 || ema50 < ema200) {
     return {
       action: "SELL",
       score: Math.min(100, rsi14 > 75 ? rsi14 : 60),
       reason:
         rsi14 > 75
           ? "RSI overbought (>75)"
-          : ema50 < ema200
-            ? "EMA50 pod EMA200"
-            : "Close pod SMA50",
+          : "EMA50 pod EMA200",
+      indicators,
+    };
+  }
+
+  // Soft exit: only meaningfully below SMA50 + weak RSI (avoid pullback noise)
+  if (close < sma50 * 0.985 && rsi14 < 50) {
+    return {
+      action: "SELL",
+      score: 58,
+      reason: "Close výrazne pod SMA50 (−1.5 %) pri RSI < 50",
       indicators,
     };
   }
@@ -182,26 +190,28 @@ export function evaluateMaCrossover(closes: number[]): SignalDecision {
     };
   }
 
-  if (sma20 > sma50) {
+  // Require ~0.15% separation to reduce flip-flop around the cross
+  const sep = 0.0015;
+  if (sma20 > sma50 * (1 + sep)) {
     return {
       action: "BUY",
       score: 70,
-      reason: "SMA20 nad SMA50",
+      reason: "SMA20 nad SMA50 (odstup ≥0.15 %)",
       indicators,
     };
   }
-  if (sma20 < sma50) {
+  if (sma20 < sma50 * (1 - sep)) {
     return {
       action: "SELL",
       score: 70,
-      reason: "SMA20 pod SMA50",
+      reason: "SMA20 pod SMA50 (odstup ≥0.15 %)",
       indicators,
     };
   }
   return {
     action: "HOLD",
     score: 40,
-    reason: "SMA20 ≈ SMA50",
+    reason: "SMA20 ≈ SMA50 (v dead zone)",
     indicators,
   };
 }
@@ -226,7 +236,7 @@ export function evaluateRsiMeanReversion(closes: number[]): SignalDecision {
       indicators,
     };
   }
-  if (rsi14 > 55) {
+  if (rsi14 > 65) {
     return {
       action: "SELL",
       score: Math.min(100, rsi14),
@@ -306,11 +316,14 @@ export function evaluateMacdTrend(closes: number[]): SignalDecision {
       indicators,
     };
   }
-  if (m.hist < 0 || close < ema200) {
+  if ((m.hist < 0 && m.macd < m.signal) || close < ema200) {
     return {
       action: "SELL",
       score: 65,
-      reason: m.hist < 0 ? "MACD hist záporný" : "Close pod EMA200",
+      reason:
+        close < ema200
+          ? "Close pod EMA200"
+          : "MACD hist záporný a MACD pod signal",
       indicators,
     };
   }
@@ -349,14 +362,14 @@ export function evaluateBollingerReversion(closes: number[]): SignalDecision {
       indicators,
     };
   }
-  if (close >= bb.mid || rsi14 > 55) {
+  if ((close >= bb.mid && rsi14 > 60) || rsi14 > 65) {
     return {
       action: "SELL",
       score: 62,
       reason:
-        close >= bb.mid
-          ? "Close späť k BB mid"
-          : `RSI rebound (${rsi14.toFixed(1)})`,
+        rsi14 > 65
+          ? `RSI rebound (${rsi14.toFixed(1)})`
+          : "Close späť k BB mid pri RSI > 60",
       indicators,
     };
   }

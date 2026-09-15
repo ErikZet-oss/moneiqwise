@@ -22,6 +22,7 @@ import type {
   PaperCandleTf,
   PaperStrategyId,
 } from "./types";
+import { allowStrategySell, applyPaperFillPrice } from "./types";
 
 export type BacktestTrade = {
   symbol: string;
@@ -138,23 +139,33 @@ export async function runPaperBacktest(input: {
       });
       let sellReason: string | null = hit.hit ? hit.reason : null;
       if (!sellReason && i >= warmup) {
-        const sig = evaluate(
-          input.strategyId,
-          sliceC,
-          sliceH,
-          sliceL,
-          sliceV,
-          input.customStrategy ?? null,
-        );
-        if (sig.action === "SELL") sellReason = sig.reason;
+        const barsHeld = i - pos.openBar;
+        const gate = allowStrategySell({
+          entryPrice: pos.entry,
+          markPrice: price,
+          barsHeld,
+          exits: input.exits,
+        });
+        if (gate.allow) {
+          const sig = evaluate(
+            input.strategyId,
+            sliceC,
+            sliceH,
+            sliceL,
+            sliceV,
+            input.customStrategy ?? null,
+          );
+          if (sig.action === "SELL") sellReason = sig.reason;
+        }
       }
       if (sellReason) {
-        const pnl = (price - pos.entry) * pos.qty;
-        cash += pos.qty * price;
+        const fill = applyPaperFillPrice(price, "SELL", input.exits);
+        const pnl = (fill - pos.entry) * pos.qty;
+        cash += pos.qty * fill;
         trades.push({
           symbol: sym,
           side: "SELL",
-          price,
+          price: fill,
           qty: pos.qty,
           pnl,
           reason: sellReason,
@@ -191,7 +202,8 @@ export async function runPaperBacktest(input: {
           input.customStrategy ?? null,
         );
         if (sig.action !== "BUY") continue;
-        const price = s.closes[i]!;
+        const mark = s.closes[i]!;
+        const price = applyPaperFillPrice(mark, "BUY", input.exits);
         const budget = Math.min(cash, equity * (input.maxPositionPct / 100));
         if (budget < 1 || !(price > 0)) continue;
         const qty = budget / price;
@@ -231,7 +243,8 @@ export async function runPaperBacktest(input: {
   const lastI = maxLen - 1;
   for (const [sym, pos] of Array.from(positions.entries())) {
     const s = series.get(sym);
-    const price = s && lastI < s.closes.length ? s.closes[lastI]! : pos.entry;
+    const mark = s && lastI < s.closes.length ? s.closes[lastI]! : pos.entry;
+    const price = applyPaperFillPrice(mark, "SELL", input.exits);
     const pnl = (price - pos.entry) * pos.qty;
     cash += pos.qty * price;
     trades.push({

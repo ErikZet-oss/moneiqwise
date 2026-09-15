@@ -290,7 +290,9 @@ export default function FaqPage() {
                   na jednu pozíciu
                 </li>
                 <li>
-                  Exity: trailing stop (násobok ATR), take profit %, hard stop %
+                  Exity: trailing ATR, take profit %, hard stop %,{" "}
+                  <strong>min hold (bary)</strong>, <strong>min zisk % pred strategy SELL</strong>,
+                  plus paper <strong>half-spread % + fee %</strong> na fill
                 </li>
                 <li>
                   AI: influence % (typicky 20) a minimálna confidence; Claude dostane správy +
@@ -343,10 +345,16 @@ export default function FaqPage() {
                 </li>
               </ol>
               <p className="mt-2">
-                Exity: najprv hard stop / take profit / trailing ATR, potom strategický SELL.
-                Všetko ide do logu (<code>tick</code>, <code>pipeline</code>, <code>signal</code>,{" "}
-                <code>ai</code>, <code>open</code>, <code>close</code>, <code>blocked</code>,{" "}
-                <code>kill</code>).
+                Exity: najprv hard stop / take profit / trailing ATR, potom strategický SELL
+                (až po min hold a — v pluse — až po min zisk %). Paper fill nie je mid zadarmo:
+                BUY/SELL zahŕňa half-spread + fee (default ~0.10 % na stranu), aby drobné „plusy“
+                neklamali oproti live.
+              </p>
+              <p className="mt-2 text-muted-foreground text-xs">
+                Stratégie majú prísnejšie SELL (MACD: hist+signal; EMA: nie hneď pod SMA50; MA:
+                dead zone; RSI/BB vyššie rebound prahy). Všetko ide do logu (
+                <code>tick</code>, <code>pipeline</code>, <code>signal</code>, <code>ai</code>,{" "}
+                <code>open</code>, <code>close</code>, <code>blocked</code>, <code>kill</code>).
               </p>
               <p className="mt-2 text-muted-foreground text-xs">
                 Ak server (hosting) nebeží, boty netickujú. Lokálne vypnutý PC = žiadny nonstop beh.
@@ -399,6 +407,10 @@ export default function FaqPage() {
               <h3 className="text-sm font-semibold mb-2">Dôležité limity dnešnej verzie</h3>
               <ul className="list-disc pl-5 space-y-1.5">
                 <li>Len paper (interný ledger), nie Alpaca/Binance ani reálne peniaze</li>
+                <li>
+                  Paper fill modeluje half-spread + fee; MTM mark ostáva mid — nerealizovaný P&amp;L
+                  môže vyzerať lepšie ako po skutočnom close
+                </li>
                 <li>Len long smer; short zatiaľ nie</li>
                 <li>
                   Return % = (equity − počiatočný kapitál) / kapitál; zahŕňa aj nerealizovaný P&amp;L

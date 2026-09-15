@@ -60,6 +60,16 @@ function mapExits(raw: unknown): PaperBotExitSettings {
     trailingAtrMult: num(r.trailingAtrMult, DEFAULT_EXITS.trailingAtrMult),
     takeProfitPct: num(r.takeProfitPct, DEFAULT_EXITS.takeProfitPct),
     hardStopPct: num(r.hardStopPct, DEFAULT_EXITS.hardStopPct),
+    minHoldBars: Math.max(
+      0,
+      Math.floor(num(r.minHoldBars, DEFAULT_EXITS.minHoldBars)),
+    ),
+    minProfitPctForStrategySell: num(
+      r.minProfitPctForStrategySell,
+      DEFAULT_EXITS.minProfitPctForStrategySell,
+    ),
+    halfSpreadPct: Math.max(0, num(r.halfSpreadPct, DEFAULT_EXITS.halfSpreadPct)),
+    feePct: Math.max(0, num(r.feePct, DEFAULT_EXITS.feePct)),
   };
 }
 

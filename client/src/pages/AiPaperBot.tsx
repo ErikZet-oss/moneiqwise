@@ -121,6 +121,10 @@ type PaperBot = {
     trailingAtrMult: number;
     takeProfitPct: number;
     hardStopPct: number;
+    minHoldBars?: number;
+    minProfitPctForStrategySell?: number;
+    halfSpreadPct?: number;
+    feePct?: number;
   };
   aiInfluencePct: number;
   aiMinConfidence: number;
@@ -1055,6 +1059,10 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
   const [trailAtr, setTrailAtr] = useState("3.5");
   const [takeProfit, setTakeProfit] = useState("12");
   const [hardStop, setHardStop] = useState("8");
+  const [minHoldBars, setMinHoldBars] = useState("4");
+  const [minProfitSell, setMinProfitSell] = useState("1.5");
+  const [halfSpread, setHalfSpread] = useState("0.05");
+  const [feePct, setFeePct] = useState("0.05");
   const [aiInfluence, setAiInfluence] = useState("20");
   const [aiMinConf, setAiMinConf] = useState("60");
   const [notifyOnTrade, setNotifyOnTrade] = useState(false);
@@ -1136,6 +1144,10 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
     trailingAtrMult: Number(trailAtr),
     takeProfitPct: Number(takeProfit),
     hardStopPct: Number(hardStop),
+    minHoldBars: Number(minHoldBars),
+    minProfitPctForStrategySell: Number(minProfitSell),
+    halfSpreadPct: Number(halfSpread),
+    feePct: Number(feePct),
     aiInfluencePct: Number(aiInfluence),
     aiMinConfidence: Number(aiMinConf),
     notifyOnTrade,
@@ -1156,6 +1168,10 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
     setTrailAtr(String(bot.exits?.trailingAtrMult ?? 3.5));
     setTakeProfit(String(bot.exits?.takeProfitPct ?? 12));
     setHardStop(String(bot.exits?.hardStopPct ?? 8));
+    setMinHoldBars(String(bot.exits?.minHoldBars ?? 4));
+    setMinProfitSell(String(bot.exits?.minProfitPctForStrategySell ?? 1.5));
+    setHalfSpread(String(bot.exits?.halfSpreadPct ?? 0.05));
+    setFeePct(String(bot.exits?.feePct ?? 0.05));
     setAiInfluence(String(bot.aiInfluencePct ?? 20));
     setAiMinConf(String(bot.aiMinConfidence ?? 60));
     setNotifyOnTrade(!!bot.notifyOnTrade);
@@ -1634,6 +1650,77 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
               </div>
               <div className="space-y-1.5">
                 <FieldLabel
+                  tipTitle="Min hold (bary)"
+                  tip={
+                    <p>
+                      Minimálny počet barov timeframe (1d/1h/15m) pred strategickým SELL. Hard
+                      stop / take profit / trailing stále platia. 0 = vypnuté. Default 4 — menej
+                      skorých výstupov po drobnom pohybe.
+                    </p>
+                  }
+                >
+                  Min hold (bary)
+                </FieldLabel>
+                <Input
+                  value={minHoldBars}
+                  onChange={(e) => setMinHoldBars(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <FieldLabel
+                  tipTitle="Min zisk % (SELL)"
+                  tip={
+                    <p>
+                      Strategický SELL v pluse sa ignoruje, kým unrealized zisk nedosiahne tento %.
+                      Straty (≤0 %) sa po min hold môžu zatvoriť signálom. 0 = vypnuté. Default
+                      1.5 %.
+                    </p>
+                  }
+                >
+                  Min zisk % (SELL)
+                </FieldLabel>
+                <Input
+                  value={minProfitSell}
+                  onChange={(e) => setMinProfitSell(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <FieldLabel
+                  tipTitle="Half-spread %"
+                  tip={
+                    <p>
+                      Polovica bid-ask spreadu. BUY fill = mark × (1 + half-spread + fee), SELL
+                      fill = mark × (1 − …). Default 0.05 % (5 bps) na stranu — paper nie je
+                      „zadarmo“.
+                    </p>
+                  }
+                >
+                  Half-spread %
+                </FieldLabel>
+                <Input
+                  value={halfSpread}
+                  onChange={(e) => setHalfSpread(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <FieldLabel
+                  tipTitle="Fee %"
+                  tip={
+                    <p>
+                      Poplatok v % z notional na každý fill (nákup aj predaj). Default 0.05 %.
+                      Spolu so spreadom ~0.2 % round-trip — malé „paper plusy“ často zmiznú.
+                    </p>
+                  }
+                >
+                  Fee %
+                </FieldLabel>
+                <Input
+                  value={feePct}
+                  onChange={(e) => setFeePct(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <FieldLabel
                   tipTitle="AI influence %"
                   tip={
                     <p>
@@ -2023,7 +2110,14 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
                 {detail.bot.risk?.maxPositionPct ?? 20}% · exits ATR×
                 {detail.bot.exits?.trailingAtrMult ?? 3.5} / TP{" "}
                 {detail.bot.exits?.takeProfitPct ?? 12}% / SL{" "}
-                {detail.bot.exits?.hardStopPct ?? 8}%
+                {detail.bot.exits?.hardStopPct ?? 8}% · hold{" "}
+                {detail.bot.exits?.minHoldBars ?? 4}b · min+{" "}
+                {detail.bot.exits?.minProfitPctForStrategySell ?? 1.5}% · cost{" "}
+                {(
+                  (detail.bot.exits?.halfSpreadPct ?? 0.05) +
+                  (detail.bot.exits?.feePct ?? 0.05)
+                ).toFixed(2)}
+                %/side
               </p>
             </CardContent>
           </Card>

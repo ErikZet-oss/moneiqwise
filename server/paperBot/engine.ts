@@ -46,6 +46,11 @@ import {
   updatePositionPeak,
 } from "./store";
 import type { PaperBot, PaperPosition } from "./types";
+import {
+  allowStrategySell,
+  applyPaperFillPrice,
+  barsHeldSince,
+} from "./types";
 
 function buildTradeDetail(input: {
   kind: "open" | "close";
@@ -205,7 +210,9 @@ async function openLong(input: {
   signal: NudgedDecision;
   verdict?: AiSymbolVerdict | null;
 }): Promise<{ cash: number; opened: boolean }> {
-  const { bot, symbol, price, equity, signal, verdict } = input;
+  const { bot, symbol, equity, signal, verdict } = input;
+  const mark = input.price;
+  const price = applyPaperFillPrice(mark, "BUY", bot.exits);
   if (!(price > 0) || !(bot.cash > 0)) return { cash: bot.cash, opened: false };
 
   const budget = Math.min(
@@ -239,6 +246,10 @@ async function openLong(input: {
     signal,
     verdict: verdict ?? null,
   });
+  detail.markPrice = mark;
+  detail.fillPrice = price;
+  detail.halfSpreadPct = bot.exits.halfSpreadPct;
+  detail.feePct = bot.exits.feePct;
 
   const newCash = roundMoney(bot.cash - cost);
   await insertPosition({
@@ -270,8 +281,8 @@ async function openLong(input: {
     userId: bot.userId,
     eventType: "open",
     symbol,
-    message: `OPEN LONG ${symbol} qty=${qty} @ ${price}`,
-    detail: { qty, price, cost, reason, signal, ai: verdict ?? null },
+    message: `OPEN LONG ${symbol} qty=${qty} @ ${price} (mark ${mark})`,
+    detail: { qty, price, mark, cost, reason, signal, ai: verdict ?? null },
   });
   void notifyPaperBotEvent({
     enabled: bot.notifyOnTrade,
@@ -292,7 +303,9 @@ async function closeLong(input: {
   verdict?: AiSymbolVerdict | null;
   exitRule?: string | null;
 }): Promise<{ cash: number }> {
-  const { bot, position, price, signal, verdict, exitRule } = input;
+  const { bot, position, signal, verdict, exitRule } = input;
+  const mark = input.price;
+  const price = applyPaperFillPrice(mark, "SELL", bot.exits);
   const proceeds = roundMoney(position.qty * price);
   const pnl = roundMoney((price - position.entryPrice) * position.qty);
   const newCash = roundMoney(bot.cash + proceeds);
@@ -308,6 +321,10 @@ async function closeLong(input: {
     verdict: verdict ?? null,
     exitRule: exitRule ?? null,
   });
+  detail.markPrice = mark;
+  detail.fillPrice = price;
+  detail.halfSpreadPct = bot.exits.halfSpreadPct;
+  detail.feePct = bot.exits.feePct;
   if (position.openReason) {
     detail.openedBecause = position.openReason;
   }
@@ -339,10 +356,11 @@ async function closeLong(input: {
     userId: bot.userId,
     eventType: "close",
     symbol: position.symbol,
-    message: `CLOSE ${position.symbol} qty=${position.qty} @ ${price} PnL=${pnl}`,
+    message: `CLOSE ${position.symbol} qty=${position.qty} @ ${price} (mark ${mark}) PnL=${pnl}`,
     detail: {
       qty: position.qty,
       price,
+      mark,
       pnl,
       reason,
       signal: signal ?? null,
@@ -586,6 +604,30 @@ async function tickPaperBotInner(
       detail: signal,
     });
     if (signal.action === "SELL") {
+      const held = barsHeldSince(pos.openedAt, working.candleTf);
+      const gate = allowStrategySell({
+        entryPrice: pos.entryPrice,
+        markPrice: price,
+        barsHeld: held,
+        exits: working.exits,
+      });
+      if (!gate.allow) {
+        await insertPaperLog({
+          botId: working.id,
+          userId: working.userId,
+          eventType: "blocked",
+          symbol: pos.symbol,
+          message: gate.blockReason || "Strategy SELL odložený",
+          detail: {
+            signal,
+            barsHeld: held,
+            minHoldBars: working.exits.minHoldBars,
+            minProfitPctForStrategySell:
+              working.exits.minProfitPctForStrategySell,
+          },
+        });
+        continue;
+      }
       await logPipeline(working, "EXEC", `Close ${pos.symbol}: ${signal.reason}`);
       const res = await closeLong({
         bot: working,

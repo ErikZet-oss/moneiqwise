@@ -18,11 +18,22 @@ export type PaperBotRiskSettings = {
   maxPositionPct: number;
 };
 
-/** Exit rules — 0 = vypnuté. */
+/** Exit rules — 0 = vypnuté (okrem minHold / cost, kde 0 = bez filtra / bez nákladov). */
 export type PaperBotExitSettings = {
   trailingAtrMult: number;
   takeProfitPct: number;
   hardStopPct: number;
+  /** Min. počet barov candleTf pred strategickým SELL (hard/TP/trail stále platia). */
+  minHoldBars: number;
+  /**
+   * Strategický SELL v pluse sa ignoruje, kým unrealized % < tento prah.
+   * Straty (≤0 %) sa po min hold môžu zatvoriť signálom.
+   */
+  minProfitPctForStrategySell: number;
+  /** Polovica bid-ask spreadu v % — BUY drahšie / SELL lacnejšie o túto hodnotu. */
+  halfSpreadPct: number;
+  /** Fee v % z notional na každý fill (BUY aj SELL). */
+  feePct: number;
 };
 
 export type PaperBot = {
@@ -180,7 +191,71 @@ export const DEFAULT_EXITS: PaperBotExitSettings = {
   trailingAtrMult: 3.5,
   takeProfitPct: 12,
   hardStopPct: 8,
+  minHoldBars: 4,
+  minProfitPctForStrategySell: 1.5,
+  halfSpreadPct: 0.05,
+  feePct: 0.05,
 };
+
+/** Adverse paper fill: BUY nad mid, SELL pod mid (spread/2 + fee). */
+export function applyPaperFillPrice(
+  mark: number,
+  side: "BUY" | "SELL",
+  exits: Pick<PaperBotExitSettings, "halfSpreadPct" | "feePct">,
+): number {
+  if (!(mark > 0)) return mark;
+  const slip =
+    (Math.max(0, exits.halfSpreadPct || 0) + Math.max(0, exits.feePct || 0)) /
+    100;
+  if (!(slip > 0)) return mark;
+  return side === "BUY" ? mark * (1 + slip) : mark * (1 - slip);
+}
+
+/** Odhad barov od otvorenia podľa candleTf (kalendárny čas). */
+export function barsHeldSince(
+  openedAt: string,
+  candleTf: PaperCandleTf,
+  nowMs = Date.now(),
+): number {
+  const opened = new Date(openedAt).getTime();
+  if (!Number.isFinite(opened)) return 0;
+  const elapsed = Math.max(0, nowMs - opened);
+  const barMs =
+    candleTf === "1d"
+      ? 24 * 60 * 60 * 1000
+      : candleTf === "1h"
+        ? 60 * 60 * 1000
+        : 15 * 60 * 1000;
+  return Math.floor(elapsed / barMs);
+}
+
+/** Filtre pred strategickým SELL (exit rules mimo). */
+export function allowStrategySell(input: {
+  entryPrice: number;
+  markPrice: number;
+  barsHeld: number;
+  exits: PaperBotExitSettings;
+}): { allow: boolean; blockReason: string | null } {
+  const { entryPrice, markPrice, barsHeld, exits } = input;
+  const minHold = Math.max(0, Math.floor(exits.minHoldBars || 0));
+  if (minHold > 0 && barsHeld < minHold) {
+    return {
+      allow: false,
+      blockReason: `Min hold ${barsHeld}/${minHold} barov — strategy SELL odložený`,
+    };
+  }
+  const minProfit = Math.max(0, exits.minProfitPctForStrategySell || 0);
+  if (minProfit > 0 && entryPrice > 0) {
+    const pnlPct = ((markPrice - entryPrice) / entryPrice) * 100;
+    if (pnlPct > 0 && pnlPct < minProfit) {
+      return {
+        allow: false,
+        blockReason: `Malý zisk ${pnlPct.toFixed(2)}% < min ${minProfit}% pre strategy SELL`,
+      };
+    }
+  }
+  return { allow: true, blockReason: null };
+}
 
 export const PIPELINE_STAGES = [
   "INGEST",
@@ -208,7 +283,7 @@ export const PIPELINE_STAGE_META: Record<
   SIGNAL: {
     label: "Kvant stratégia",
     description:
-      "Spočíta indikátory (EMA, RSI, MACD, …) a podľa zvolenej stratégie (alebo custom editora) dá BUY / SELL / HOLD + skóre. Exity (ATR/TP/SL) majú prioritu pred strategickým SELL.",
+      "Spočíta indikátory (EMA, RSI, MACD, …) a podľa zvolenej stratégie (alebo custom editora) dá BUY / SELL / HOLD + skóre. Exity (ATR/TP/SL) majú prioritu pred strategickým SELL; strategy SELL môže byť odložený (min hold / min zisk).",
   },
   AI: {
     label: "Claude nudge",
@@ -223,7 +298,7 @@ export const PIPELINE_STAGE_META: Record<
   EXEC: {
     label: "Paper exekúcia",
     description:
-      "Otvorí alebo zatvorí paper pozíciu v internom ledgeri (nie broker). Zapíše obchod, dôvod, aktualizuje cash/equity a voliteľne pošle e-mail.",
+      "Otvorí alebo zatvorí paper pozíciu v internom ledgeri (nie broker). Fill zahŕňa half-spread + fee (realistickejšie PnL). Strategický SELL rešpektuje min hold / min zisk. Zapíše obchod, dôvod, cash/equity a voliteľne e-mail.",
   },
 };
 
@@ -234,15 +309,16 @@ export const STRATEGY_META: Record<
   ema_rsi_trend: {
     label: "EMA + RSI Trend",
     description:
-      "Long: EMA50 > EMA200, close > SMA50, RSI 45–75. Exit: RSI > 75 alebo strata trendu + exit rules.",
+      "Long: EMA50 > EMA200, close > SMA50, RSI 45–75. Exit: RSI > 75, EMA50 < EMA200, alebo close výrazne pod SMA50 (−1.5 %) pri RSI < 50 + exit rules.",
   },
   ma_crossover: {
     label: "MA Crossover",
-    description: "Long: SMA20 > SMA50. Exit: SMA20 < SMA50 + exit rules.",
+    description:
+      "Long: SMA20 > SMA50 s odstupom ≥0.15 %. Exit: SMA20 pod SMA50 s odstupom ≥0.15 % + exit rules (menej whipsaw).",
   },
   rsi_mean_reversion: {
     label: "RSI Mean Reversion",
-    description: "Long: RSI < 30 (prepredané). Exit: RSI > 55 alebo exit rules.",
+    description: "Long: RSI < 30 (prepredané). Exit: RSI > 65 alebo exit rules.",
   },
   dual_momentum: {
     label: "Dual Momentum",
@@ -252,12 +328,12 @@ export const STRATEGY_META: Record<
   macd_trend: {
     label: "MACD Trend",
     description:
-      "Long: MACD hist>0, MACD>signal, close>EMA200. Exit: hist<0 alebo close<EMA200 + exit rules.",
+      "Long: MACD hist>0, MACD>signal, close>EMA200. Exit: hist<0 a MACD<signal, alebo close<EMA200 + exit rules.",
   },
   bollinger_reversion: {
     label: "Bollinger Reversion",
     description:
-      "Long: close ≤ BB lower a RSI<35. Exit: close ≥ BB mid alebo RSI>55 + exit rules.",
+      "Long: close ≤ BB lower a RSI<35. Exit: (close ≥ BB mid a RSI>60) alebo RSI>65 + exit rules.",
   },
   custom: {
     label: "Vlastná (editor)",

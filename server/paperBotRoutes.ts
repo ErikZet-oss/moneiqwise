@@ -56,6 +56,42 @@ function parseSymbols(raw: unknown): string[] {
   return [];
 }
 
+/** Parse exit settings from request body; missing keys fall back to DEFAULT_EXITS. */
+function parseExitsBody(body: any, mode: "full"): typeof DEFAULT_EXITS;
+function parseExitsBody(
+  body: any,
+  mode: "partial",
+): Partial<typeof DEFAULT_EXITS> | undefined;
+function parseExitsBody(
+  body: any,
+  mode: "full" | "partial" = "full",
+): Partial<typeof DEFAULT_EXITS> | typeof DEFAULT_EXITS | undefined {
+  const keys = [
+    "trailingAtrMult",
+    "takeProfitPct",
+    "hardStopPct",
+    "minHoldBars",
+    "minProfitPctForStrategySell",
+    "halfSpreadPct",
+    "feePct",
+  ] as const;
+  const out: Partial<typeof DEFAULT_EXITS> = {};
+  let any = false;
+  for (const k of keys) {
+    if (body?.[k] != null && body[k] !== "") {
+      const n = Number(body[k]);
+      if (Number.isFinite(n)) {
+        (out as any)[k] = k === "minHoldBars" ? Math.max(0, Math.floor(n)) : n;
+        any = true;
+      }
+    } else if (mode === "full") {
+      (out as any)[k] = DEFAULT_EXITS[k];
+    }
+  }
+  if (mode === "partial") return any ? out : undefined;
+  return { ...DEFAULT_EXITS, ...out };
+}
+
 export function registerPaperBotRoutes(app: Express, isAuthenticated: any) {
   void ensurePaperBotTables().catch((err) =>
     console.error("[paper-bot] ensure tables failed:", err),
@@ -148,17 +184,7 @@ export function registerPaperBotRoutes(app: Express, isAuthenticated: any) {
           req.body?.maxPositionPct ?? DEFAULT_RISK.maxPositionPct,
         ),
       };
-      const exits = {
-        trailingAtrMult: Number(
-          req.body?.trailingAtrMult ?? DEFAULT_EXITS.trailingAtrMult,
-        ),
-        takeProfitPct: Number(
-          req.body?.takeProfitPct ?? DEFAULT_EXITS.takeProfitPct,
-        ),
-        hardStopPct: Number(
-          req.body?.hardStopPct ?? DEFAULT_EXITS.hardStopPct,
-        ),
-      };
+      const exits = parseExitsBody(req.body, "full");
       const aiInfluencePct = Number(req.body?.aiInfluencePct ?? 20);
       const aiMinConfidence = Number(req.body?.aiMinConfidence ?? 60);
       let notifyEmail =
@@ -239,17 +265,7 @@ export function registerPaperBotRoutes(app: Express, isAuthenticated: any) {
           maxOpenPositions: Number(
             req.body?.maxOpenPositions ?? DEFAULT_RISK.maxOpenPositions,
           ),
-          exits: {
-            trailingAtrMult: Number(
-              req.body?.trailingAtrMult ?? DEFAULT_EXITS.trailingAtrMult,
-            ),
-            takeProfitPct: Number(
-              req.body?.takeProfitPct ?? DEFAULT_EXITS.takeProfitPct,
-            ),
-            hardStopPct: Number(
-              req.body?.hardStopPct ?? DEFAULT_EXITS.hardStopPct,
-            ),
-          },
+          exits: parseExitsBody(req.body, "full"),
           lookbackBars: Number(req.body?.lookbackBars ?? 180),
           candleTf: normalizeCandleTf(req.body?.candleTf),
         });
@@ -354,25 +370,7 @@ export function registerPaperBotRoutes(app: Express, isAuthenticated: any) {
                     : undefined,
               }
             : undefined;
-        const exits =
-          req.body?.trailingAtrMult != null ||
-          req.body?.takeProfitPct != null ||
-          req.body?.hardStopPct != null
-            ? {
-                trailingAtrMult:
-                  req.body?.trailingAtrMult != null
-                    ? Number(req.body.trailingAtrMult)
-                    : undefined,
-                takeProfitPct:
-                  req.body?.takeProfitPct != null
-                    ? Number(req.body.takeProfitPct)
-                    : undefined,
-                hardStopPct:
-                  req.body?.hardStopPct != null
-                    ? Number(req.body.hardStopPct)
-                    : undefined,
-              }
-            : undefined;
+        const exits = parseExitsBody(req.body, "partial");
 
         let notifyEmail: string | null | undefined = undefined;
         if (typeof req.body?.notifyEmail === "string") {
