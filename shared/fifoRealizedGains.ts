@@ -1,6 +1,13 @@
 import type { Transaction } from "./schema";
 import { transactionLotKey } from "./lotKey";
-import type { RealizedGainsComputedSummary, RealizedTickerRow } from "./realizedGainsTypes";
+import type { RealizedGainsComputedSummary } from "./realizedGainsTypes";
+import {
+  emptyRealizedTickerAgg,
+  fifoLotCostPerShareLocal,
+  finalizeRealizedTickerAgg,
+  sellInstrumentPricePerShare,
+  type RealizedTickerAgg,
+} from "./realizedPricePerShare";
 import { hasAuthoritativeStoredRealizedGain, shouldPreferCloseTradeGain } from "./sellCloseTradeFallback";
 import { inferTradeCurrency, type TradeCurrency } from "./transactionEur";
 import { eurPerUnitOfTradeCurrency, resolveBuySellLineEur } from "./transactionEur";
@@ -51,6 +58,10 @@ export function computeFifoRealizedGainsFromTransactions(
   gainEurBySellId: Map<string, number>;
   /** FIFO náklad v EUR pri predaji (pred override close-trade ziskom). */
   costEurBySellId: Map<string, number>;
+  /** Súčet (ks × nákupná cena/ks v mene inštrumentu) pre každý SELL. */
+  buyWeightedLocalBySellId: Map<string, number>;
+  /** Predajná cena/ks v mene inštrumentu pre každý SELL. */
+  sellPriceLocalBySellId: Map<string, number>;
   /** Suma EUR z close-trade párovania zarátaná do summary (pre odpočet od hrubého close-trade). */
   mergedCloseTradePairedEur: number;
 } {
@@ -81,7 +92,7 @@ export function computeFifoRealizedGainsFromTransactions(
   let realizedYTD = 0;
   let realizedThisMonth = 0;
   let realizedToday = 0;
-  const byTicker: Record<string, RealizedTickerRow> = {};
+  const byTicker: Record<string, RealizedTickerAgg> = {};
   let transactionCount = 0;
 
   const lots: Record<string, OpenFifoLot[]> = {};
@@ -91,6 +102,8 @@ export function computeFifoRealizedGainsFromTransactions(
   const closeTradePairedSellIds = new Set<string>();
   const gainEurBySellId = new Map<string, number>();
   const costEurBySellId = new Map<string, number>();
+  const buyWeightedLocalBySellId = new Map<string, number>();
+  const sellPriceLocalBySellId = new Map<string, number>();
   let mergedCloseTradePairedEur = 0;
 
   const getKey = (txn: Transaction) => transactionLotKey(txn);
@@ -137,16 +150,22 @@ export function computeFifoRealizedGainsFromTransactions(
       const queue = lots[key] ?? [];
       let toSell = shSell;
       let costRemoved = 0;
+      let buyLocalWeighted = 0;
       for (const lot of queue) {
         if (toSell <= 0) break;
         if (lot.remainingShares <= 0) continue;
         const take = Math.min(toSell, lot.remainingShares);
         costRemoved += take * lot.costPerShareEur;
+        buyLocalWeighted += take * fifoLotCostPerShareLocal(lot);
         lot.remainingShares -= take;
         toSell -= take;
       }
 
       costEurBySellId.set(txn.id, costRemoved);
+      buyWeightedLocalBySellId.set(txn.id, buyLocalWeighted);
+      const sellFb = eurPerUnitByTxnId.get(txn.id) ?? null;
+      const sellLocalPx = sellInstrumentPricePerShare(txn, sellFb);
+      sellPriceLocalBySellId.set(txn.id, sellLocalPx);
 
       let gain = proceedsEur - costRemoved;
       const closeFb = closeTradeFallbackBySellId?.get(txn.id);
@@ -187,26 +206,22 @@ export function computeFifoRealizedGainsFromTransactions(
         .trim()
         .toUpperCase();
       if (!byTicker[aggTicker]) {
-        byTicker[aggTicker] = {
-          ticker: aggTicker,
-          companyName: txn.companyName || aggTicker,
-          totalGain: 0,
-          totalCost: 0,
-          totalSold: 0,
-          transactions: 0,
-        };
+        byTicker[aggTicker] = emptyRealizedTickerAgg(aggTicker, txn.companyName || aggTicker);
       }
       byTicker[aggTicker].totalGain += gain;
       byTicker[aggTicker].totalCost += costRemoved;
       byTicker[aggTicker].totalSold += Math.abs(proceedsEur);
       byTicker[aggTicker].transactions += 1;
+      byTicker[aggTicker].totalSharesSold += shSell;
+      byTicker[aggTicker].weightedBuyLocal += buyLocalWeighted;
+      byTicker[aggTicker].weightedSellLocal += sellLocalPx * shSell;
       gainEurBySellId.set(txn.id, gain);
     }
   }
 
-  const tickerSummary = Object.values(byTicker).sort(
-    (a, b) => b.totalGain - a.totalGain,
-  );
+  const tickerSummary = Object.values(byTicker)
+    .map(finalizeRealizedTickerAgg)
+    .sort((a, b) => b.totalGain - a.totalGain);
 
   return {
     summary: {
@@ -224,6 +239,8 @@ export function computeFifoRealizedGainsFromTransactions(
     closeTradePairedSellIds,
     gainEurBySellId,
     costEurBySellId,
+    buyWeightedLocalBySellId,
+    sellPriceLocalBySellId,
     mergedCloseTradePairedEur,
   };
 }

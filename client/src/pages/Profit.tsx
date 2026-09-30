@@ -88,6 +88,14 @@ function realizedSaleReturnPct(totalGain: number, totalCost: number): number | n
   return (totalGain / totalCost) * 100;
 }
 
+function formatPricePerShareDisplay(
+  price: number,
+  formatCurrency: (n: number) => string,
+): string {
+  if (!Number.isFinite(price) || price <= 0) return "—";
+  return formatCurrency(price);
+}
+
 interface RealizedGainSummary {
   totalRealized: number;
   closeTradeNetEur?: number;
@@ -102,6 +110,9 @@ interface RealizedGainSummary {
     totalCost: number;
     totalSold: number;
     transactions: number;
+    avgBuyPricePerShare?: number;
+    avgSellPricePerShare?: number;
+    priceCurrency?: string;
   }[];
   transactionCount: number;
 }
@@ -651,8 +662,11 @@ export default function Profit() {
                             </span>
                           </div>
                           <div className="text-[9px] text-muted-foreground tabular-nums leading-tight">
-                            {item.transactions}× predaj · Nákup {formatCurrency(totalCost)} · Predaj{" "}
-                            {formatCurrency(item.totalSold)}
+                            {item.transactions}× predaj · Nákup{" "}
+                            {formatPricePerShareDisplay(item.avgBuyPricePerShare ?? 0, formatCurrency)}{" "}
+                            / ks · Predaj{" "}
+                            {formatPricePerShareDisplay(item.avgSellPricePerShare ?? 0, formatCurrency)}{" "}
+                            / ks
                           </div>
                         </div>
                         <div className="shrink-0 flex flex-col items-end gap-0.5">
@@ -685,8 +699,8 @@ export default function Profit() {
                         <TableHead>Ticker</TableHead>
                         <TableHead>Spoločnosť</TableHead>
                         <TableHead className="text-right">Predajov</TableHead>
-                        <TableHead className="text-right">Nákup</TableHead>
-                        <TableHead className="text-right">Predané za</TableHead>
+                        <TableHead className="text-right">Nákup cena/ks</TableHead>
+                        <TableHead className="text-right">Predaj cena/ks</TableHead>
                         <TableHead className="text-right">Zhodnotenie</TableHead>
                         <TableHead className="text-right">Zisk/Strata</TableHead>
                       </TableRow>
@@ -709,10 +723,10 @@ export default function Profit() {
                           </TableCell>
                           <TableCell className="text-right tabular-nums">{item.transactions}</TableCell>
                           <TableCell className="text-right tabular-nums">
-                            {formatCurrency(totalCost)}
+                            {formatPricePerShareDisplay(item.avgBuyPricePerShare ?? 0, formatCurrency)}
                           </TableCell>
                           <TableCell className="text-right tabular-nums">
-                            {formatCurrency(item.totalSold)}
+                            {formatPricePerShareDisplay(item.avgSellPricePerShare ?? 0, formatCurrency)}
                           </TableCell>
                           <TableCell
                             className={`text-right tabular-nums font-medium ${

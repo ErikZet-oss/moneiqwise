@@ -3,6 +3,12 @@ import { computeFifoRealizedGainsFromTransactions } from "@shared/fifoRealizedGa
 import type { RealizedGainsComputedSummary, RealizedTickerRow } from "@shared/realizedGainsTypes";
 import { buildCloseTradeFallbackPairing, hasAuthoritativeStoredRealizedGain, shouldPreferCloseTradeGain } from "@shared/sellCloseTradeFallback";
 import {
+  emptyRealizedTickerAgg,
+  finalizeRealizedTickerAgg,
+  sellInstrumentPricePerShare,
+  type RealizedTickerAgg,
+} from "@shared/realizedPricePerShare";
+import {
   eurPerUnitFromTxn,
   grossAndCommission,
   resolveBuySellLineEur,
@@ -106,6 +112,8 @@ function aggregateResolvedSellGains(
   eurPerUnitByTxnId: Map<string, number | null>,
   now: Date,
   costEurBySellId: Map<string, number>,
+  buyWeightedLocalBySellId: Map<string, number>,
+  sellPriceLocalBySellId: Map<string, number>,
 ): RealizedGainsComputeResult {
   const startOfYear = new Date(now.getFullYear(), 0, 1);
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -117,7 +125,7 @@ function aggregateResolvedSellGains(
   let realizedToday = 0;
   let transactionCount = 0;
   let mergedPairedCloseTradeEur = 0;
-  const byTicker: Record<string, RealizedTickerRow> = {};
+  const byTicker: Record<string, RealizedTickerAgg> = {};
 
   const sorted = [...resolved].sort((a, b) => {
     const ta = new Date(a.sell.transactionDate as unknown as string).getTime();
@@ -149,29 +157,43 @@ function aggregateResolvedSellGains(
           ? Math.abs(lineLocal * epu)
           : Math.abs(lineLocal);
 
-    const tk = String(txn.ticker ?? "")
-      .trim()
-      .toUpperCase();
+    const sh = Math.abs(parseFloat(String(txn.shares ?? "0")));
+    if (!(sh > 0)) continue;
+
     const fifoCost = costEurBySellId.get(txn.id);
     const costEur =
       fifoCost != null && Number.isFinite(fifoCost) && fifoCost >= 0
         ? fifoCost
         : Math.max(0, soldEur - gainEur);
 
+    let buyWeighted = buyWeightedLocalBySellId.get(txn.id);
+    if (buyWeighted == null || !Number.isFinite(buyWeighted) || buyWeighted <= 0) {
+      if (epu != null && epu > 1e-12 && costEur > 0) {
+        buyWeighted = costEur / epu;
+      } else {
+        buyWeighted = 0;
+      }
+    }
+
+    let sellLocalPx = sellPriceLocalBySellId.get(txn.id);
+    if (sellLocalPx == null || !Number.isFinite(sellLocalPx) || sellLocalPx <= 0) {
+      sellLocalPx = sellInstrumentPricePerShare(txn, fb ?? epu);
+    }
+
+    const tk = String(txn.ticker ?? "")
+      .trim()
+      .toUpperCase();
+
     if (!byTicker[tk]) {
-      byTicker[tk] = {
-        ticker: tk,
-        companyName: txn.companyName || tk,
-        totalGain: 0,
-        totalCost: 0,
-        totalSold: 0,
-        transactions: 0,
-      };
+      byTicker[tk] = emptyRealizedTickerAgg(tk, txn.companyName || tk);
     }
     byTicker[tk].totalGain += gainEur;
     byTicker[tk].totalCost += costEur;
     byTicker[tk].totalSold += soldEur;
     byTicker[tk].transactions += 1;
+    byTicker[tk].totalSharesSold += sh;
+    byTicker[tk].weightedBuyLocal += buyWeighted;
+    byTicker[tk].weightedSellLocal += sellLocalPx * sh;
   }
 
   return {
@@ -180,7 +202,9 @@ function aggregateResolvedSellGains(
       realizedYTD,
       realizedThisMonth,
       realizedToday,
-      byTicker: Object.values(byTicker).sort((a, b) => b.totalGain - a.totalGain),
+      byTicker: Object.values(byTicker)
+        .map(finalizeRealizedTickerAgg)
+        .sort((a, b) => b.totalGain - a.totalGain),
       transactionCount,
     },
     mergedPairedCloseTradeEur,
@@ -219,7 +243,14 @@ function computeRealizedGainsCore(
     if (row) resolved.push(row);
   }
 
-  return aggregateResolvedSellGains(resolved, eurPerUnitByTxnId, now, fifo.costEurBySellId);
+  return aggregateResolvedSellGains(
+    resolved,
+    eurPerUnitByTxnId,
+    now,
+    fifo.costEurBySellId,
+    fifo.buyWeightedLocalBySellId,
+    fifo.sellPriceLocalBySellId,
+  );
 }
 
 /**

@@ -6,6 +6,13 @@ export interface RealizedTickerRow {
   totalCost: number;
   totalSold: number;
   transactions: number;
+  /** Súčet predaných kusov (pre vážený priemer cien). */
+  totalSharesSold: number;
+  /** Vážený priemer nákupnej ceny/ks v `priceCurrency`. */
+  avgBuyPricePerShare: number;
+  /** Vážený priemer predajnej ceny/ks v `priceCurrency`. */
+  avgSellPricePerShare: number;
+  priceCurrency: string;
 }
 
 export interface RealizedGainsComputedSummary {
