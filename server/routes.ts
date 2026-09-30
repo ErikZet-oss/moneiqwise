@@ -5003,12 +5003,18 @@ export async function registerRoutes(
       const portfolioId = req.query.portfolio as string | undefined;
       const userTransactions = await storage.getTransactionsByUser(userId, portfolioId);
       const portfolios = await storage.getPortfoliosByUser(userId);
-      const brokerByPortfolioId = new Map(
-        portfolios.map((p) => [p.id, p.brokerCode ?? null] as const),
+      const portfolioMetaById = new Map(
+        portfolios.map(
+          (p) =>
+            [
+              p.id,
+              { name: p.name, brokerCode: p.brokerCode ?? null },
+            ] as const,
+        ),
       );
 
       const { summary: computed, mergedPairedCloseTradeEur } =
-        await computeRealizedGainsFromTransactionsAsync(userTransactions, new Date(), brokerByPortfolioId);
+        await computeRealizedGainsFromTransactionsAsync(userTransactions, new Date(), portfolioMetaById);
       const closeTradeGross = sumCloseTradeCashFlowEurFromRows(userTransactions);
       /** Close trade riadky mínus EUR už zarátané pri predajoch (párovanie ako v Histórii). */
       const closeTradeNetEur = closeTradeGross - mergedPairedCloseTradeEur;

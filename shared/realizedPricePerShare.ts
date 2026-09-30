@@ -159,22 +159,31 @@ export function finalizeRealizedTickerAgg(row: RealizedTickerAgg): RealizedTicke
     avgBuyPricePerShare: sh > 1e-12 ? row.weightedBuyLocal / sh : 0,
     avgSellPricePerShare: sh > 1e-12 ? row.weightedSellLocal / sh : 0,
     priceCurrency: row.priceCurrency,
-    byBroker: [],
+    byPortfolio: [],
   };
 }
 
-export function finalizeRealizedTickerAggWithBrokers(
+export type RealizedPortfolioMeta = { name: string; brokerCode: string | null };
+
+const UNKNOWN_PORTFOLIO_ID = "__unknown__";
+
+export function finalizeRealizedTickerAggWithPortfolios(
   row: RealizedTickerAgg,
-  byBroker: Record<string, RealizedTickerAgg>,
-  brokerLabelFn: (key: string) => string,
+  byPortfolio: Record<string, RealizedTickerAgg>,
+  metaByPortfolioId: Map<string, RealizedPortfolioMeta>,
 ): RealizedTickerRow {
   const base = finalizeRealizedTickerAgg(row);
-  const brokers = Object.entries(byBroker)
-    .map(([brokerKey, agg]) => {
+  const portfolios = Object.entries(byPortfolio)
+    .map(([portfolioId, agg]) => {
       const fin = finalizeRealizedTickerAgg(agg);
+      const meta = metaByPortfolioId.get(portfolioId);
+      const portfolioName =
+        meta?.name ??
+        (portfolioId === UNKNOWN_PORTFOLIO_ID || !portfolioId ? "Neznáme portfólio" : portfolioId);
       return {
-        brokerKey,
-        brokerLabel: brokerLabelFn(brokerKey),
+        portfolioId,
+        portfolioName,
+        brokerCode: meta?.brokerCode ?? null,
         totalGain: fin.totalGain,
         totalCost: fin.totalCost,
         totalSold: fin.totalSold,
@@ -186,5 +195,7 @@ export function finalizeRealizedTickerAggWithBrokers(
       };
     })
     .sort((a, b) => b.totalGain - a.totalGain);
-  return { ...base, byBroker: brokers };
+  return { ...base, byPortfolio: portfolios };
 }
+
+export { UNKNOWN_PORTFOLIO_ID };

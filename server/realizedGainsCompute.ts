@@ -1,12 +1,12 @@
 import type { Transaction } from "@shared/schema";
 import { computeFifoRealizedGainsFromTransactions } from "@shared/fifoRealizedGains";
 import type { RealizedGainsComputedSummary, RealizedTickerRow } from "@shared/realizedGainsTypes";
-import { brokerDisplayName, inferBrokerKeyFromTransaction } from "@shared/inferBrokerFromTransaction";
-import type { BrokerCode } from "@shared/schema";
 import { buildCloseTradeFallbackPairing, hasAuthoritativeStoredRealizedGain, shouldPreferCloseTradeGain } from "@shared/sellCloseTradeFallback";
 import {
   emptyRealizedTickerAgg,
-  finalizeRealizedTickerAggWithBrokers,
+  finalizeRealizedTickerAggWithPortfolios,
+  UNKNOWN_PORTFOLIO_ID,
+  type RealizedPortfolioMeta,
   historyLinePricePerShare,
   sellInstrumentPricePerShare,
   type RealizedTickerAgg,
@@ -185,7 +185,7 @@ function aggregateResolvedSellGains(
   costEurBySellId: Map<string, number>,
   buyWeightedLocalBySellId: Map<string, number>,
   sellPriceLocalBySellId: Map<string, number>,
-  brokerByPortfolioId: Map<string, string | null | undefined>,
+  portfolioMetaById: Map<string, RealizedPortfolioMeta>,
 ): RealizedGainsComputeResult {
   const startOfYear = new Date(now.getFullYear(), 0, 1);
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -198,7 +198,7 @@ function aggregateResolvedSellGains(
   let transactionCount = 0;
   let mergedPairedCloseTradeEur = 0;
   const byTicker: Record<string, RealizedTickerAgg> = {};
-  const byTickerBroker: Record<string, Record<string, RealizedTickerAgg>> = {};
+  const byTickerPortfolio: Record<string, Record<string, RealizedTickerAgg>> = {};
 
   const sorted = [...resolved].sort((a, b) => {
     const ta = new Date(a.sell.transactionDate as unknown as string).getTime();
@@ -238,16 +238,16 @@ function aggregateResolvedSellGains(
     }
     applySellToAgg(byTicker[tk], gainEur, metrics);
 
-    const portfolioId = txn.portfolioId ?? "";
-    const brokerKey = inferBrokerKeyFromTransaction(
-      txn,
-      brokerByPortfolioId.get(portfolioId),
-    );
-    if (!byTickerBroker[tk]) byTickerBroker[tk] = {};
-    if (!byTickerBroker[tk][brokerKey]) {
-      byTickerBroker[tk][brokerKey] = emptyRealizedTickerAgg(tk, txn.companyName || tk, getTickerCurrency(tk));
+    const portfolioKey = String(txn.portfolioId ?? "").trim() || UNKNOWN_PORTFOLIO_ID;
+    if (!byTickerPortfolio[tk]) byTickerPortfolio[tk] = {};
+    if (!byTickerPortfolio[tk][portfolioKey]) {
+      byTickerPortfolio[tk][portfolioKey] = emptyRealizedTickerAgg(
+        tk,
+        txn.companyName || tk,
+        getTickerCurrency(tk),
+      );
     }
-    applySellToAgg(byTickerBroker[tk][brokerKey], gainEur, metrics);
+    applySellToAgg(byTickerPortfolio[tk][portfolioKey], gainEur, metrics);
   }
 
   return {
@@ -258,10 +258,10 @@ function aggregateResolvedSellGains(
       realizedToday,
       byTicker: Object.keys(byTicker)
         .map((tk) =>
-          finalizeRealizedTickerAggWithBrokers(
+          finalizeRealizedTickerAggWithPortfolios(
             byTicker[tk],
-            byTickerBroker[tk] ?? {},
-            (key) => brokerDisplayName(key as BrokerCode),
+            byTickerPortfolio[tk] ?? {},
+            portfolioMetaById,
           ),
         )
         .sort((a, b) => b.totalGain - a.totalGain),
@@ -275,7 +275,7 @@ function computeRealizedGainsCore(
   userTransactions: Transaction[],
   eurPerUnitByTxnId: Map<string, number | null>,
   now: Date,
-  brokerByPortfolioId: Map<string, string | null | undefined>,
+  portfolioMetaById: Map<string, RealizedPortfolioMeta>,
 ): RealizedGainsComputeResult {
   const { bySellId: fallbackBySellId } = buildCloseTradeFallbackPairing(userTransactions);
   const sells = userTransactions.filter(
@@ -311,7 +311,7 @@ function computeRealizedGainsCore(
     fifo.costEurBySellId,
     fifo.buyWeightedLocalBySellId,
     fifo.sellPriceLocalBySellId,
-    brokerByPortfolioId,
+    portfolioMetaById,
   );
 }
 
@@ -322,10 +322,10 @@ function computeRealizedGainsCore(
 export async function computeRealizedGainsFromTransactionsAsync(
   userTransactions: Transaction[],
   now = new Date(),
-  brokerByPortfolioId: Map<string, string | null | undefined> = new Map(),
+  portfolioMetaById: Map<string, RealizedPortfolioMeta> = new Map(),
 ): Promise<RealizedGainsComputeResult> {
   const m = await buildEurPerUnitByTxnIdForTransactions(userTransactions);
-  return computeRealizedGainsCore(userTransactions, m, now, brokerByPortfolioId);
+  return computeRealizedGainsCore(userTransactions, m, now, portfolioMetaById);
 }
 
 /**
@@ -334,9 +334,9 @@ export async function computeRealizedGainsFromTransactionsAsync(
 export function computeRealizedGainsFromTransactions(
   userTransactions: Transaction[],
   now = new Date(),
-  brokerByPortfolioId: Map<string, string | null | undefined> = new Map(),
+  portfolioMetaById: Map<string, RealizedPortfolioMeta> = new Map(),
 ): RealizedGainsComputedSummary {
   const m = new Map<string, number | null>();
   for (const t of userTransactions) m.set(t.id, null);
-  return computeRealizedGainsCore(userTransactions, m, now, brokerByPortfolioId).summary;
+  return computeRealizedGainsCore(userTransactions, m, now, portfolioMetaById).summary;
 }

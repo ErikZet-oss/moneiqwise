@@ -1,6 +1,7 @@
-export interface RealizedBrokerRow {
-  brokerKey: string;
-  brokerLabel: string;
+export interface RealizedPortfolioRow {
+  portfolioId: string;
+  portfolioName: string;
+  brokerCode: string | null;
   totalGain: number;
   totalCost: number;
   totalSold: number;
@@ -26,8 +27,8 @@ export interface RealizedTickerRow {
   /** Vážený priemer predajnej ceny/ks v `priceCurrency`. */
   avgSellPricePerShare: number;
   priceCurrency: string;
-  /** Rozpad predajov podľa brokera (portfólio / import). */
-  byBroker: RealizedBrokerRow[];
+  /** Rozpad predajov podľa portfólia (účtu). */
+  byPortfolio: RealizedPortfolioRow[];
 }
 
 export interface RealizedGainsComputedSummary {

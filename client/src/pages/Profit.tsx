@@ -118,9 +118,10 @@ function formatInstrumentPricePerShareDisplay(
   return `${formatted} ${ccy}`;
 }
 
-interface RealizedBrokerBreakdown {
-  brokerKey: string;
-  brokerLabel: string;
+interface RealizedPortfolioBreakdown {
+  portfolioId: string;
+  portfolioName: string;
+  brokerCode: string | null;
   totalGain: number;
   totalCost: number;
   totalSold: number;
@@ -149,7 +150,7 @@ interface RealizedGainSummary {
     avgBuyPricePerShare?: number;
     avgSellPricePerShare?: number;
     priceCurrency?: string;
-    byBroker?: RealizedBrokerBreakdown[];
+    byPortfolio?: RealizedPortfolioBreakdown[];
   }[];
   transactionCount: number;
 }
@@ -353,7 +354,7 @@ export default function Profit() {
   });
 
   const { data: realizedGains } = useQuery<RealizedGainSummary>({
-    queryKey: ["/api/realized-gains", portfolioParam, "v4-by-broker"],
+    queryKey: ["/api/realized-gains", portfolioParam, "v5-by-portfolio"],
     queryFn: async () => {
       const res = await fetch(`/api/realized-gains?portfolio=${encodeURIComponent(portfolioParam)}`, {
         credentials: "include",
@@ -687,20 +688,20 @@ export default function Profit() {
                       const totalCost =
                         item.totalCost ?? Math.max(0, item.totalSold - item.totalGain);
                       const returnPct = realizedSaleReturnPct(item.totalGain, totalCost);
-                      const brokers = item.byBroker ?? [];
-                      const hasBrokers = brokers.length > 0;
+                      const accounts = item.byPortfolio ?? [];
+                      const hasAccounts = accounts.length > 0;
                       const expanded = expandedRealizedTickers.has(item.ticker);
                       const sharesSold = item.totalSharesSold ?? 0;
                       return (
                       <div key={item.ticker} className="border-b border-border/60 last:border-b-0">
                       <button
                         type="button"
-                        className={`flex w-full items-center gap-2 py-1.5 text-left ${hasBrokers ? "cursor-pointer" : "cursor-default"}`}
+                        className={`flex w-full items-center gap-2 py-1.5 text-left ${hasAccounts ? "cursor-pointer" : "cursor-default"}`}
                         data-testid={`row-realized-${item.ticker}`}
-                        onClick={hasBrokers ? () => toggleRealizedTickerExpand(item.ticker) : undefined}
-                        disabled={!hasBrokers}
+                        onClick={hasAccounts ? () => toggleRealizedTickerExpand(item.ticker) : undefined}
+                        disabled={!hasAccounts}
                       >
-                        {hasBrokers ? (
+                        {hasAccounts ? (
                           expanded ? (
                             <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                           ) : (
@@ -763,46 +764,51 @@ export default function Profit() {
                         </div>
                       </button>
                       {expanded &&
-                        brokers.map((b) => {
-                          const bCost = b.totalCost ?? Math.max(0, b.totalSold - b.totalGain);
-                          const bReturn = realizedSaleReturnPct(b.totalGain, bCost);
+                        accounts.map((acc) => {
+                          const bCost = acc.totalCost ?? Math.max(0, acc.totalSold - acc.totalGain);
+                          const bReturn = realizedSaleReturnPct(acc.totalGain, bCost);
                           return (
                             <div
-                              key={`${item.ticker}-${b.brokerKey}`}
+                              key={`${item.ticker}-${acc.portfolioId}`}
                               className="ml-6 mr-0 mb-1.5 flex items-start gap-2 rounded-md bg-muted/30 px-2 py-1.5"
-                              data-testid={`row-realized-${item.ticker}-broker-${b.brokerKey}`}
+                              data-testid={`row-realized-${item.ticker}-portfolio-${acc.portfolioId}`}
                             >
-                              <BrokerLogo brokerCode={b.brokerKey as BrokerCode} size="xs" showName />
-                              <div className="min-w-0 flex-1 text-[9px] text-muted-foreground tabular-nums leading-snug">
-                                {b.transactions}× · {formatShareQuantity(b.totalSharesSold)} ks · Nákup{" "}
-                                {formatInstrumentPricePerShareDisplay(
-                                  realizedRowBuyPricePerShare(b),
-                                  item.ticker,
-                                  b.priceCurrency ?? item.priceCurrency,
-                                  hideAmounts,
-                                )}{" "}
-                                / ks · Predaj{" "}
-                                {formatInstrumentPricePerShareDisplay(
-                                  realizedRowSellPricePerShare(b),
-                                  item.ticker,
-                                  b.priceCurrency ?? item.priceCurrency,
-                                  hideAmounts,
-                                )}{" "}
-                                / ks
-                                {bReturn != null && (
-                                  <span className={bReturn >= 0 ? " text-green-600" : " text-red-500"}>
-                                    {" "}
-                                    · {formatPercent(bReturn)}
-                                  </span>
-                                )}
+                              <BrokerLogo brokerCode={acc.brokerCode as BrokerCode} size="xs" />
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-[10px] font-medium leading-tight">
+                                  {acc.portfolioName}
+                                </div>
+                                <div className="text-[9px] text-muted-foreground tabular-nums leading-snug">
+                                  {acc.transactions}× predaj · {formatShareQuantity(acc.totalSharesSold)} ks · Nákup{" "}
+                                  {formatInstrumentPricePerShareDisplay(
+                                    realizedRowBuyPricePerShare(acc),
+                                    item.ticker,
+                                    acc.priceCurrency ?? item.priceCurrency,
+                                    hideAmounts,
+                                  )}{" "}
+                                  / ks · Predaj{" "}
+                                  {formatInstrumentPricePerShareDisplay(
+                                    realizedRowSellPricePerShare(acc),
+                                    item.ticker,
+                                    acc.priceCurrency ?? item.priceCurrency,
+                                    hideAmounts,
+                                  )}{" "}
+                                  / ks
+                                  {bReturn != null && (
+                                    <span className={bReturn >= 0 ? " text-green-600" : " text-red-500"}>
+                                      {" "}
+                                      · {formatPercent(bReturn)}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                               <div
                                 className={`shrink-0 text-[10px] font-semibold tabular-nums ${
-                                  b.totalGain >= 0 ? "text-green-500" : "text-red-500"
+                                  acc.totalGain >= 0 ? "text-green-500" : "text-red-500"
                                 }`}
                               >
-                                {b.totalGain >= 0 ? "+" : ""}
-                                {formatCurrency(b.totalGain)}
+                                {acc.totalGain >= 0 ? "+" : ""}
+                                {formatCurrency(acc.totalGain)}
                               </div>
                             </div>
                           );
@@ -830,20 +836,20 @@ export default function Profit() {
                         const totalCost =
                           item.totalCost ?? Math.max(0, item.totalSold - item.totalGain);
                         const returnPct = realizedSaleReturnPct(item.totalGain, totalCost);
-                        const brokers = item.byBroker ?? [];
-                        const hasBrokers = brokers.length > 0;
+                        const accounts = item.byPortfolio ?? [];
+                        const hasAccounts = accounts.length > 0;
                         const expanded = expandedRealizedTickers.has(item.ticker);
                         const sharesSold = item.totalSharesSold ?? 0;
                         return (
                         <Fragment key={item.ticker}>
                         <TableRow
                           data-testid={`row-realized-${item.ticker}-table`}
-                          className={hasBrokers ? "cursor-pointer hover:bg-muted/40" : undefined}
-                          onClick={hasBrokers ? () => toggleRealizedTickerExpand(item.ticker) : undefined}
+                          className={hasAccounts ? "cursor-pointer hover:bg-muted/40" : undefined}
+                          onClick={hasAccounts ? () => toggleRealizedTickerExpand(item.ticker) : undefined}
                         >
                           <TableCell>
                             <div className="flex items-center gap-1.5">
-                              {hasBrokers ? (
+                              {hasAccounts ? (
                                 expanded ? (
                                   <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                                 ) : (
@@ -900,39 +906,41 @@ export default function Profit() {
                           </TableCell>
                         </TableRow>
                         {expanded &&
-                          brokers.map((b) => {
-                            const bCost = b.totalCost ?? Math.max(0, b.totalSold - b.totalGain);
-                            const bReturn = realizedSaleReturnPct(b.totalGain, bCost);
+                          accounts.map((acc) => {
+                            const bCost = acc.totalCost ?? Math.max(0, acc.totalSold - acc.totalGain);
+                            const bReturn = realizedSaleReturnPct(acc.totalGain, bCost);
                             return (
                               <TableRow
-                                key={`${item.ticker}-${b.brokerKey}`}
+                                key={`${item.ticker}-${acc.portfolioId}`}
                                 className="bg-muted/25 hover:bg-muted/35"
-                                data-testid={`row-realized-${item.ticker}-broker-${b.brokerKey}-table`}
+                                data-testid={`row-realized-${item.ticker}-portfolio-${acc.portfolioId}-table`}
                               >
                                 <TableCell>
-                                  <div className="flex items-center gap-2 pl-5">
-                                    <BrokerLogo brokerCode={b.brokerKey as BrokerCode} size="xs" />
-                                    <span className="text-muted-foreground">{b.brokerLabel}</span>
+                                  <div className="flex items-center gap-2 pl-5 min-w-0">
+                                    <BrokerLogo brokerCode={acc.brokerCode as BrokerCode} size="xs" />
+                                    <span className="truncate font-medium text-foreground" title={acc.portfolioName}>
+                                      {acc.portfolioName}
+                                    </span>
                                   </div>
                                 </TableCell>
                                 <TableCell />
-                                <TableCell className="text-right tabular-nums">{b.transactions}</TableCell>
+                                <TableCell className="text-right tabular-nums">{acc.transactions}</TableCell>
                                 <TableCell className="text-right tabular-nums">
-                                  {formatShareQuantity(b.totalSharesSold)}
+                                  {formatShareQuantity(acc.totalSharesSold)}
                                 </TableCell>
                                 <TableCell className="text-right tabular-nums">
                                   {formatInstrumentPricePerShareDisplay(
-                                    realizedRowBuyPricePerShare(b),
+                                    realizedRowBuyPricePerShare(acc),
                                     item.ticker,
-                                    b.priceCurrency ?? item.priceCurrency,
+                                    acc.priceCurrency ?? item.priceCurrency,
                                     hideAmounts,
                                   )}
                                 </TableCell>
                                 <TableCell className="text-right tabular-nums">
                                   {formatInstrumentPricePerShareDisplay(
-                                    realizedRowSellPricePerShare(b),
+                                    realizedRowSellPricePerShare(acc),
                                     item.ticker,
-                                    b.priceCurrency ?? item.priceCurrency,
+                                    acc.priceCurrency ?? item.priceCurrency,
                                     hideAmounts,
                                   )}
                                 </TableCell>
@@ -949,11 +957,11 @@ export default function Profit() {
                                 </TableCell>
                                 <TableCell
                                   className={`text-right font-semibold tabular-nums ${
-                                    b.totalGain >= 0 ? "text-green-500" : "text-red-500"
+                                    acc.totalGain >= 0 ? "text-green-500" : "text-red-500"
                                   }`}
                                 >
-                                  {b.totalGain >= 0 ? "+" : ""}
-                                  {formatCurrency(b.totalGain)}
+                                  {acc.totalGain >= 0 ? "+" : ""}
+                                  {formatCurrency(acc.totalGain)}
                                 </TableCell>
                               </TableRow>
                             );
