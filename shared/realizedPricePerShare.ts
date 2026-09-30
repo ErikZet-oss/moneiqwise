@@ -159,5 +159,32 @@ export function finalizeRealizedTickerAgg(row: RealizedTickerAgg): RealizedTicke
     avgBuyPricePerShare: sh > 1e-12 ? row.weightedBuyLocal / sh : 0,
     avgSellPricePerShare: sh > 1e-12 ? row.weightedSellLocal / sh : 0,
     priceCurrency: row.priceCurrency,
+    byBroker: [],
   };
+}
+
+export function finalizeRealizedTickerAggWithBrokers(
+  row: RealizedTickerAgg,
+  byBroker: Record<string, RealizedTickerAgg>,
+  brokerLabelFn: (key: string) => string,
+): RealizedTickerRow {
+  const base = finalizeRealizedTickerAgg(row);
+  const brokers = Object.entries(byBroker)
+    .map(([brokerKey, agg]) => {
+      const fin = finalizeRealizedTickerAgg(agg);
+      return {
+        brokerKey,
+        brokerLabel: brokerLabelFn(brokerKey),
+        totalGain: fin.totalGain,
+        totalCost: fin.totalCost,
+        totalSold: fin.totalSold,
+        transactions: fin.transactions,
+        totalSharesSold: fin.totalSharesSold,
+        avgBuyPricePerShare: fin.avgBuyPricePerShare,
+        avgSellPricePerShare: fin.avgSellPricePerShare,
+        priceCurrency: fin.priceCurrency,
+      };
+    })
+    .sort((a, b) => b.totalGain - a.totalGain);
+  return { ...base, byBroker: brokers };
 }

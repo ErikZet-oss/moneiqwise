@@ -1,10 +1,12 @@
 import type { Transaction } from "@shared/schema";
 import { computeFifoRealizedGainsFromTransactions } from "@shared/fifoRealizedGains";
 import type { RealizedGainsComputedSummary, RealizedTickerRow } from "@shared/realizedGainsTypes";
+import { brokerDisplayName, inferBrokerKeyFromTransaction } from "@shared/inferBrokerFromTransaction";
+import type { BrokerCode } from "@shared/schema";
 import { buildCloseTradeFallbackPairing, hasAuthoritativeStoredRealizedGain, shouldPreferCloseTradeGain } from "@shared/sellCloseTradeFallback";
 import {
   emptyRealizedTickerAgg,
-  finalizeRealizedTickerAgg,
+  finalizeRealizedTickerAggWithBrokers,
   historyLinePricePerShare,
   sellInstrumentPricePerShare,
   type RealizedTickerAgg,
@@ -109,6 +111,73 @@ function resolveSellGainEur(
   return { sell, gainEur, usedCloseTrade };
 }
 
+type SellMetrics = {
+  sh: number;
+  costEur: number;
+  soldEur: number;
+  buyWeighted: number;
+  sellLocalPx: number;
+};
+
+function metricsForSell(
+  txn: Transaction,
+  gainEur: number,
+  eurPerUnitByTxnId: Map<string, number | null>,
+  costEurBySellId: Map<string, number>,
+  buyWeightedLocalBySellId: Map<string, number>,
+  sellPriceLocalBySellId: Map<string, number>,
+): SellMetrics | null {
+  const sh = Math.abs(parseFloat(String(txn.shares ?? "0")));
+  if (!(sh > 0)) return null;
+
+  const fb = eurPerUnitByTxnId.get(txn.id) ?? null;
+  const proceedsEur = resolveBuySellLineEur(txn, fb);
+  const { gross, commission } = grossAndCommission(txn);
+  const lineLocal = gross - commission;
+  const epu = eurPerUnitFromTxn(txn, fb);
+  const soldEur =
+    Number.isFinite(proceedsEur) && Math.abs(proceedsEur) >= 1e-9
+      ? Math.abs(proceedsEur)
+      : epu != null && Number.isFinite(lineLocal)
+        ? Math.abs(lineLocal * epu)
+        : Math.abs(lineLocal);
+
+  const fifoCost = costEurBySellId.get(txn.id);
+  const costEur =
+    fifoCost != null && Number.isFinite(fifoCost) && fifoCost >= 0
+      ? fifoCost
+      : Math.max(0, soldEur - gainEur);
+
+  let buyWeighted = buyWeightedLocalBySellId.get(txn.id);
+  if (buyWeighted == null || !Number.isFinite(buyWeighted) || buyWeighted <= 0) {
+    if (epu != null && epu > 1e-12 && costEur > 0) {
+      buyWeighted = costEur / epu;
+    } else {
+      buyWeighted = 0;
+    }
+  }
+
+  let sellLocalPx = sellPriceLocalBySellId.get(txn.id);
+  if (sellLocalPx == null || !Number.isFinite(sellLocalPx) || sellLocalPx <= 0) {
+    sellLocalPx = sellInstrumentPricePerShare(txn, epu ?? fb, soldEur);
+  }
+  if (sellLocalPx == null || !Number.isFinite(sellLocalPx) || sellLocalPx <= 0) {
+    sellLocalPx = historyLinePricePerShare(txn, { lineEur: soldEur, eurPerUnit: epu ?? fb });
+  }
+
+  return { sh, costEur, soldEur, buyWeighted, sellLocalPx };
+}
+
+function applySellToAgg(agg: RealizedTickerAgg, gainEur: number, m: SellMetrics): void {
+  agg.totalGain += gainEur;
+  agg.totalCost += m.costEur;
+  agg.totalSold += m.soldEur;
+  agg.transactions += 1;
+  agg.totalSharesSold += m.sh;
+  agg.weightedBuyLocal += m.buyWeighted;
+  agg.weightedSellLocal += m.sellLocalPx * m.sh;
+}
+
 function aggregateResolvedSellGains(
   resolved: ResolvedSellGain[],
   eurPerUnitByTxnId: Map<string, number | null>,
@@ -116,6 +185,7 @@ function aggregateResolvedSellGains(
   costEurBySellId: Map<string, number>,
   buyWeightedLocalBySellId: Map<string, number>,
   sellPriceLocalBySellId: Map<string, number>,
+  brokerByPortfolioId: Map<string, string | null | undefined>,
 ): RealizedGainsComputeResult {
   const startOfYear = new Date(now.getFullYear(), 0, 1);
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -128,6 +198,7 @@ function aggregateResolvedSellGains(
   let transactionCount = 0;
   let mergedPairedCloseTradeEur = 0;
   const byTicker: Record<string, RealizedTickerAgg> = {};
+  const byTickerBroker: Record<string, Record<string, RealizedTickerAgg>> = {};
 
   const sorted = [...resolved].sort((a, b) => {
     const ta = new Date(a.sell.transactionDate as unknown as string).getTime();
@@ -148,42 +219,15 @@ function aggregateResolvedSellGains(
     if (txnDate >= todayStart) realizedToday += gainEur;
 
     const fb = eurPerUnitByTxnId.get(txn.id) ?? null;
-    const proceedsEur = resolveBuySellLineEur(txn, fb);
-    const { gross, commission } = grossAndCommission(txn);
-    const lineLocal = gross - commission;
-    const epu = eurPerUnitFromTxn(txn, fb);
-    const soldEur =
-      Number.isFinite(proceedsEur) && Math.abs(proceedsEur) >= 1e-9
-        ? Math.abs(proceedsEur)
-        : epu != null && Number.isFinite(lineLocal)
-          ? Math.abs(lineLocal * epu)
-          : Math.abs(lineLocal);
-
-    const sh = Math.abs(parseFloat(String(txn.shares ?? "0")));
-    if (!(sh > 0)) continue;
-
-    const fifoCost = costEurBySellId.get(txn.id);
-    const costEur =
-      fifoCost != null && Number.isFinite(fifoCost) && fifoCost >= 0
-        ? fifoCost
-        : Math.max(0, soldEur - gainEur);
-
-    let buyWeighted = buyWeightedLocalBySellId.get(txn.id);
-    if (buyWeighted == null || !Number.isFinite(buyWeighted) || buyWeighted <= 0) {
-      if (epu != null && epu > 1e-12 && costEur > 0) {
-        buyWeighted = costEur / epu;
-      } else {
-        buyWeighted = 0;
-      }
-    }
-
-    let sellLocalPx = sellPriceLocalBySellId.get(txn.id);
-    if (sellLocalPx == null || !Number.isFinite(sellLocalPx) || sellLocalPx <= 0) {
-      sellLocalPx = sellInstrumentPricePerShare(txn, epu ?? fb, soldEur);
-    }
-    if (sellLocalPx == null || !Number.isFinite(sellLocalPx) || sellLocalPx <= 0) {
-      sellLocalPx = historyLinePricePerShare(txn, { lineEur: soldEur, eurPerUnit: epu ?? fb });
-    }
+    const metrics = metricsForSell(
+      txn,
+      gainEur,
+      eurPerUnitByTxnId,
+      costEurBySellId,
+      buyWeightedLocalBySellId,
+      sellPriceLocalBySellId,
+    );
+    if (!metrics) continue;
 
     const tk = String(txn.ticker ?? "")
       .trim()
@@ -192,13 +236,18 @@ function aggregateResolvedSellGains(
     if (!byTicker[tk]) {
       byTicker[tk] = emptyRealizedTickerAgg(tk, txn.companyName || tk, getTickerCurrency(tk));
     }
-    byTicker[tk].totalGain += gainEur;
-    byTicker[tk].totalCost += costEur;
-    byTicker[tk].totalSold += soldEur;
-    byTicker[tk].transactions += 1;
-    byTicker[tk].totalSharesSold += sh;
-    byTicker[tk].weightedBuyLocal += buyWeighted;
-    byTicker[tk].weightedSellLocal += sellLocalPx * sh;
+    applySellToAgg(byTicker[tk], gainEur, metrics);
+
+    const portfolioId = txn.portfolioId ?? "";
+    const brokerKey = inferBrokerKeyFromTransaction(
+      txn,
+      brokerByPortfolioId.get(portfolioId),
+    );
+    if (!byTickerBroker[tk]) byTickerBroker[tk] = {};
+    if (!byTickerBroker[tk][brokerKey]) {
+      byTickerBroker[tk][brokerKey] = emptyRealizedTickerAgg(tk, txn.companyName || tk, getTickerCurrency(tk));
+    }
+    applySellToAgg(byTickerBroker[tk][brokerKey], gainEur, metrics);
   }
 
   return {
@@ -207,8 +256,14 @@ function aggregateResolvedSellGains(
       realizedYTD,
       realizedThisMonth,
       realizedToday,
-      byTicker: Object.values(byTicker)
-        .map(finalizeRealizedTickerAgg)
+      byTicker: Object.keys(byTicker)
+        .map((tk) =>
+          finalizeRealizedTickerAggWithBrokers(
+            byTicker[tk],
+            byTickerBroker[tk] ?? {},
+            (key) => brokerDisplayName(key as BrokerCode),
+          ),
+        )
         .sort((a, b) => b.totalGain - a.totalGain),
       transactionCount,
     },
@@ -220,6 +275,7 @@ function computeRealizedGainsCore(
   userTransactions: Transaction[],
   eurPerUnitByTxnId: Map<string, number | null>,
   now: Date,
+  brokerByPortfolioId: Map<string, string | null | undefined>,
 ): RealizedGainsComputeResult {
   const { bySellId: fallbackBySellId } = buildCloseTradeFallbackPairing(userTransactions);
   const sells = userTransactions.filter(
@@ -255,6 +311,7 @@ function computeRealizedGainsCore(
     fifo.costEurBySellId,
     fifo.buyWeightedLocalBySellId,
     fifo.sellPriceLocalBySellId,
+    brokerByPortfolioId,
   );
 }
 
@@ -265,9 +322,10 @@ function computeRealizedGainsCore(
 export async function computeRealizedGainsFromTransactionsAsync(
   userTransactions: Transaction[],
   now = new Date(),
+  brokerByPortfolioId: Map<string, string | null | undefined> = new Map(),
 ): Promise<RealizedGainsComputeResult> {
   const m = await buildEurPerUnitByTxnIdForTransactions(userTransactions);
-  return computeRealizedGainsCore(userTransactions, m, now);
+  return computeRealizedGainsCore(userTransactions, m, now, brokerByPortfolioId);
 }
 
 /**
@@ -276,8 +334,9 @@ export async function computeRealizedGainsFromTransactionsAsync(
 export function computeRealizedGainsFromTransactions(
   userTransactions: Transaction[],
   now = new Date(),
+  brokerByPortfolioId: Map<string, string | null | undefined> = new Map(),
 ): RealizedGainsComputedSummary {
   const m = new Map<string, number | null>();
   for (const t of userTransactions) m.set(t.id, null);
-  return computeRealizedGainsCore(userTransactions, m, now).summary;
+  return computeRealizedGainsCore(userTransactions, m, now, brokerByPortfolioId).summary;
 }

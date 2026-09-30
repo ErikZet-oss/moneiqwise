@@ -5002,9 +5002,13 @@ export async function registerRoutes(
       const userId = req.user.claims.sub;
       const portfolioId = req.query.portfolio as string | undefined;
       const userTransactions = await storage.getTransactionsByUser(userId, portfolioId);
+      const portfolios = await storage.getPortfoliosByUser(userId);
+      const brokerByPortfolioId = new Map(
+        portfolios.map((p) => [p.id, p.brokerCode ?? null] as const),
+      );
 
       const { summary: computed, mergedPairedCloseTradeEur } =
-        await computeRealizedGainsFromTransactionsAsync(userTransactions);
+        await computeRealizedGainsFromTransactionsAsync(userTransactions, new Date(), brokerByPortfolioId);
       const closeTradeGross = sumCloseTradeCashFlowEurFromRows(userTransactions);
       /** Close trade riadky mínus EUR už zarátané pri predajoch (párovanie ako v Histórii). */
       const closeTradeNetEur = closeTradeGross - mergedPairedCloseTradeEur;
