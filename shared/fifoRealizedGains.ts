@@ -221,7 +221,7 @@ export function computeFifoRealizedGainsFromTransactions(
         byTicker[aggTicker] = emptyRealizedTickerAgg(
           aggTicker,
           txn.companyName || aggTicker,
-          inferTradeCurrency(txn),
+          getTickerCurrency(aggTicker),
         );
       }
       byTicker[aggTicker].totalGain += gain;

@@ -12,9 +12,9 @@ import {
 import {
   eurPerUnitFromTxn,
   grossAndCommission,
-  inferTradeCurrency,
   resolveBuySellLineEur,
 } from "@shared/transactionEur";
+import { getTickerCurrency } from "@shared/tickerCurrency";
 import { buildEurPerUnitByTxnIdForTransactions } from "./eurAtTransactionDate";
 
 export type { RealizedGainsComputedSummary, RealizedTickerRow };
@@ -188,10 +188,9 @@ function aggregateResolvedSellGains(
     const tk = String(txn.ticker ?? "")
       .trim()
       .toUpperCase();
-    const tradeCcy = inferTradeCurrency(txn);
 
     if (!byTicker[tk]) {
-      byTicker[tk] = emptyRealizedTickerAgg(tk, txn.companyName || tk, tradeCcy);
+      byTicker[tk] = emptyRealizedTickerAgg(tk, txn.companyName || tk, getTickerCurrency(tk));
     }
     byTicker[tk].totalGain += gainEur;
     byTicker[tk].totalCost += costEur;

@@ -19,6 +19,7 @@ import { CompanyLogo } from "@/components/CompanyLogo";
 import { HelpTip } from "@/components/HelpTip";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { Transaction } from "@shared/schema";
+import { getTickerCurrency, type QuoteCurrency } from "@shared/tickerCurrency";
 
 type PerformanceMethod = "simple" | "twr";
 
@@ -88,42 +89,30 @@ function realizedSaleReturnPct(totalGain: number, totalCost: number): number | n
   return (totalGain / totalCost) * 100;
 }
 
-function realizedRowBuyPricePerShare(item: {
-  avgBuyPricePerShare?: number;
-  totalCost: number;
-  totalSharesSold?: number;
-}): number {
-  if (item.avgBuyPricePerShare != null && item.avgBuyPricePerShare > 1e-12) {
-    return item.avgBuyPricePerShare;
-  }
-  const sh = item.totalSharesSold ?? 0;
-  if (sh > 1e-12 && item.totalCost > 1e-12) {
-    return item.totalCost / sh;
-  }
-  return 0;
+function realizedRowBuyPricePerShare(item: { avgBuyPricePerShare?: number }): number {
+  const px = item.avgBuyPricePerShare;
+  return px != null && px > 1e-12 ? px : 0;
 }
 
-function realizedRowSellPricePerShare(item: {
-  avgSellPricePerShare?: number;
-  totalSold: number;
-  totalSharesSold?: number;
-}): number {
-  if (item.avgSellPricePerShare != null && item.avgSellPricePerShare > 1e-12) {
-    return item.avgSellPricePerShare;
-  }
-  const sh = item.totalSharesSold ?? 0;
-  if (sh > 1e-12 && item.totalSold > 1e-12) {
-    return item.totalSold / sh;
-  }
-  return 0;
+function realizedRowSellPricePerShare(item: { avgSellPricePerShare?: number }): number {
+  const px = item.avgSellPricePerShare;
+  return px != null && px > 1e-12 ? px : 0;
 }
 
-function formatPricePerShareDisplay(
+function formatInstrumentPricePerShareDisplay(
   price: number,
-  formatCurrency: (n: number) => string,
+  ticker: string,
+  priceCurrency: string | undefined,
+  hideAmounts: boolean,
 ): string {
+  if (hideAmounts) return "••••••";
   if (!Number.isFinite(price) || price <= 0) return "—";
-  return formatCurrency(price);
+  const ccy = (priceCurrency?.trim().toUpperCase() || getTickerCurrency(ticker)) as QuoteCurrency;
+  const formatted = new Intl.NumberFormat("sk-SK", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(price);
+  return `${formatted} ${ccy}`;
 }
 
 interface RealizedGainSummary {
@@ -337,7 +326,7 @@ export default function Profit() {
   });
 
   const { data: realizedGains } = useQuery<RealizedGainSummary>({
-    queryKey: ["/api/realized-gains", portfolioParam, "v2-line-px"],
+    queryKey: ["/api/realized-gains", portfolioParam, "v3-instrument-usd"],
     queryFn: async () => {
       const res = await fetch(`/api/realized-gains?portfolio=${encodeURIComponent(portfolioParam)}`, {
         credentials: "include",
@@ -694,14 +683,18 @@ export default function Profit() {
                           </div>
                           <div className="text-[9px] text-muted-foreground tabular-nums leading-tight">
                             {item.transactions}× predaj · Nákup{" "}
-                            {formatPricePerShareDisplay(
+                            {formatInstrumentPricePerShareDisplay(
                               realizedRowBuyPricePerShare(item),
-                              formatCurrency,
+                              item.ticker,
+                              item.priceCurrency,
+                              hideAmounts,
                             )}{" "}
                             / ks · Predaj{" "}
-                            {formatPricePerShareDisplay(
+                            {formatInstrumentPricePerShareDisplay(
                               realizedRowSellPricePerShare(item),
-                              formatCurrency,
+                              item.ticker,
+                              item.priceCurrency,
+                              hideAmounts,
                             )}{" "}
                             / ks
                           </div>
@@ -760,15 +753,19 @@ export default function Profit() {
                           </TableCell>
                           <TableCell className="text-right tabular-nums">{item.transactions}</TableCell>
                           <TableCell className="text-right tabular-nums">
-                            {formatPricePerShareDisplay(
+                            {formatInstrumentPricePerShareDisplay(
                               realizedRowBuyPricePerShare(item),
-                              formatCurrency,
+                              item.ticker,
+                              item.priceCurrency,
+                              hideAmounts,
                             )}
                           </TableCell>
                           <TableCell className="text-right tabular-nums">
-                            {formatPricePerShareDisplay(
+                            {formatInstrumentPricePerShareDisplay(
                               realizedRowSellPricePerShare(item),
-                              formatCurrency,
+                              item.ticker,
+                              item.priceCurrency,
+                              hideAmounts,
                             )}
                           </TableCell>
                           <TableCell

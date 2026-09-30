@@ -3,7 +3,7 @@ import type { OpenFifoLot } from "./fifoRealizedGains";
 import { resolveInstrumentPricePerShare } from "./instrumentPrice";
 import type { RealizedTickerRow } from "./realizedGainsTypes";
 import { getTickerCurrency, type QuoteCurrency } from "./tickerCurrency";
-import { grossAndCommission } from "./transactionEur";
+import { grossAndCommission, inferTradeCurrency } from "./transactionEur";
 
 /** Cena/ks ako stĺpec v Histórii (pricePerShare → riadok → base → instrument). */
 export function historyLinePricePerShare(
@@ -25,8 +25,15 @@ export function historyLinePricePerShare(
   const instrumentPx = resolveInstrumentPricePerShare(txn);
   if (instrumentPx > 0) return instrumentPx;
 
+  const quoteCcy = getTickerCurrency(txn.ticker);
+  const accountCcy = inferTradeCurrency(txn);
+  const leg = txn.currency?.trim().toUpperCase();
+  const accountLine =
+    leg === "EUR" || leg === "USD" || leg === "GBP" || leg === "CZK" || leg === "PLN" || leg === "HKD"
+      ? leg
+      : accountCcy;
   const px = parseFloat(String(txn.pricePerShare ?? "0"));
-  if (Number.isFinite(px) && Math.abs(px) > 1e-12) {
+  if (quoteCcy === accountLine && Number.isFinite(px) && Math.abs(px) > 1e-12) {
     return Math.abs(px);
   }
 
@@ -39,22 +46,29 @@ export function historyLinePricePerShare(
     .toUpperCase();
   const lineLocal =
     kind === "BUY" ? gross + commission : kind === "SELL" ? gross - commission : gross;
-  if (Math.abs(lineLocal) > 1e-12) {
+  if (Math.abs(lineLocal) > 1e-12 && quoteCcy === accountLine) {
     return Math.abs(lineLocal / sh);
   }
 
   const base = parseFloat(String(txn.baseCurrencyAmount ?? "NaN"));
-  if (Number.isFinite(base) && Math.abs(base) > 1e-12) {
+  if (
+    Number.isFinite(base) &&
+    Math.abs(base) > 1e-12 &&
+    quoteCcy === accountLine &&
+    accountLine === "EUR"
+  ) {
     return Math.abs(base) / sh;
   }
 
   const lineEur = opts?.lineEur;
   if (lineEur != null && Number.isFinite(lineEur) && Math.abs(lineEur) > 1e-12) {
     const epu = opts.eurPerUnit;
-    if (epu != null && epu > 1e-12) {
+    if (epu != null && epu > 1e-12 && quoteCcy !== "EUR") {
       return Math.abs(lineEur) / epu / sh;
     }
-    return Math.abs(lineEur) / sh;
+    if (quoteCcy === accountLine && accountLine === "EUR") {
+      return Math.abs(lineEur) / sh;
+    }
   }
 
   return 0;

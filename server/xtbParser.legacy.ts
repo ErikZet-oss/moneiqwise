@@ -390,8 +390,13 @@ function buildForexForXtBLine(
     base = lineSign * lineAmountAbs;
   } else if (useAccountAmountForEurWallet && accountCurrency === "EUR" && orig !== "EUR") {
     base = lineSign * lineAmountAbs;
-    ex = 1;
-    outOrig = "EUR";
+    outOrig = orig;
+    if (fx.exRateCol >= 0) {
+      const rateCell = parseAmount(row[fx.exRateCol]);
+      if (Number.isFinite(rateCell) && rateCell > 0) {
+        ex = rateCell;
+      }
+    }
   } else {
     if (ex !== 1) {
       base = lineSign * (lineAmountAbs * ex);
