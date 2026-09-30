@@ -62,7 +62,7 @@ export function historyLinePricePerShare(
 
   const lineEur = opts?.lineEur;
   if (lineEur != null && Number.isFinite(lineEur) && Math.abs(lineEur) > 1e-12) {
-    const epu = opts.eurPerUnit;
+    const epu = opts?.eurPerUnit;
     if (epu != null && epu > 1e-12 && quoteCcy !== "EUR") {
       return Math.abs(lineEur) / epu / sh;
     }
