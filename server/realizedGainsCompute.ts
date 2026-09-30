@@ -105,6 +105,7 @@ function aggregateResolvedSellGains(
   resolved: ResolvedSellGain[],
   eurPerUnitByTxnId: Map<string, number | null>,
   now: Date,
+  costEurBySellId: Map<string, number>,
 ): RealizedGainsComputeResult {
   const startOfYear = new Date(now.getFullYear(), 0, 1);
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -151,16 +152,24 @@ function aggregateResolvedSellGains(
     const tk = String(txn.ticker ?? "")
       .trim()
       .toUpperCase();
+    const fifoCost = costEurBySellId.get(txn.id);
+    const costEur =
+      fifoCost != null && Number.isFinite(fifoCost) && fifoCost >= 0
+        ? fifoCost
+        : Math.max(0, soldEur - gainEur);
+
     if (!byTicker[tk]) {
       byTicker[tk] = {
         ticker: tk,
         companyName: txn.companyName || tk,
         totalGain: 0,
+        totalCost: 0,
         totalSold: 0,
         transactions: 0,
       };
     }
     byTicker[tk].totalGain += gainEur;
+    byTicker[tk].totalCost += costEur;
     byTicker[tk].totalSold += soldEur;
     byTicker[tk].transactions += 1;
   }
@@ -210,7 +219,7 @@ function computeRealizedGainsCore(
     if (row) resolved.push(row);
   }
 
-  return aggregateResolvedSellGains(resolved, eurPerUnitByTxnId, now);
+  return aggregateResolvedSellGains(resolved, eurPerUnitByTxnId, now, fifo.costEurBySellId);
 }
 
 /**

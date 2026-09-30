@@ -49,6 +49,8 @@ export function computeFifoRealizedGainsFromTransactions(
   closeTradePairedSellIds: Set<string>;
   /** Realizovaný zisk v EUR po jednotlivých SELL (vrátane close-trade fallback). */
   gainEurBySellId: Map<string, number>;
+  /** FIFO náklad v EUR pri predaji (pred override close-trade ziskom). */
+  costEurBySellId: Map<string, number>;
   /** Suma EUR z close-trade párovania zarátaná do summary (pre odpočet od hrubého close-trade). */
   mergedCloseTradePairedEur: number;
 } {
@@ -88,6 +90,7 @@ export function computeFifoRealizedGainsFromTransactions(
   const fifoProcessedSellIds = new Set<string>();
   const closeTradePairedSellIds = new Set<string>();
   const gainEurBySellId = new Map<string, number>();
+  const costEurBySellId = new Map<string, number>();
   let mergedCloseTradePairedEur = 0;
 
   const getKey = (txn: Transaction) => transactionLotKey(txn);
@@ -143,6 +146,8 @@ export function computeFifoRealizedGainsFromTransactions(
         toSell -= take;
       }
 
+      costEurBySellId.set(txn.id, costRemoved);
+
       let gain = proceedsEur - costRemoved;
       const closeFb = closeTradeFallbackBySellId?.get(txn.id);
       if (
@@ -186,11 +191,13 @@ export function computeFifoRealizedGainsFromTransactions(
           ticker: aggTicker,
           companyName: txn.companyName || aggTicker,
           totalGain: 0,
+          totalCost: 0,
           totalSold: 0,
           transactions: 0,
         };
       }
       byTicker[aggTicker].totalGain += gain;
+      byTicker[aggTicker].totalCost += costRemoved;
       byTicker[aggTicker].totalSold += Math.abs(proceedsEur);
       byTicker[aggTicker].transactions += 1;
       gainEurBySellId.set(txn.id, gain);
@@ -216,6 +223,7 @@ export function computeFifoRealizedGainsFromTransactions(
     fifoProcessedSellIds,
     closeTradePairedSellIds,
     gainEurBySellId,
+    costEurBySellId,
     mergedCloseTradePairedEur,
   };
 }

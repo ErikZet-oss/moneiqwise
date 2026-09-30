@@ -2,6 +2,8 @@ export interface RealizedTickerRow {
   ticker: string;
   companyName: string;
   totalGain: number;
+  /** FIFO náklad predaných kusov v EUR (základ pre zhodnotenie). */
+  totalCost: number;
   totalSold: number;
   transactions: number;
 }

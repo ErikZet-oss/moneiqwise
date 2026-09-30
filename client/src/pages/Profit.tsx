@@ -83,6 +83,11 @@ function yearsBetweenIso(startIso: string, endIso: string): number | null {
   return (endMs - startMs) / (365.25 * 24 * 60 * 60 * 1000);
 }
 
+function realizedSaleReturnPct(totalGain: number, totalCost: number): number | null {
+  if (!Number.isFinite(totalCost) || totalCost < 1e-9) return null;
+  return (totalGain / totalCost) * 100;
+}
+
 interface RealizedGainSummary {
   totalRealized: number;
   closeTradeNetEur?: number;
@@ -94,6 +99,7 @@ interface RealizedGainSummary {
     ticker: string;
     companyName: string;
     totalGain: number;
+    totalCost: number;
     totalSold: number;
     transactions: number;
   }[];
@@ -619,7 +625,11 @@ export default function Profit() {
                     Podľa tickerov
                   </h4>
                   <div className="space-y-0 md:hidden" data-testid="list-realized-by-ticker-mobile">
-                    {realizedGains.byTicker.map((item) => (
+                    {realizedGains.byTicker.map((item) => {
+                      const totalCost =
+                        item.totalCost ?? Math.max(0, item.totalSold - item.totalGain);
+                      const returnPct = realizedSaleReturnPct(item.totalGain, totalCost);
+                      return (
                       <div
                         key={item.ticker}
                         className="flex items-center gap-2 border-b border-border/60 py-1.5 last:border-b-0"
@@ -641,32 +651,52 @@ export default function Profit() {
                             </span>
                           </div>
                           <div className="text-[9px] text-muted-foreground tabular-nums leading-tight">
-                            {item.transactions}× predaj · {formatCurrency(item.totalSold)}
+                            {item.transactions}× predaj · Nákup {formatCurrency(totalCost)} · Predaj{" "}
+                            {formatCurrency(item.totalSold)}
                           </div>
                         </div>
-                        <div
-                          className={`shrink-0 text-right text-xs font-semibold tabular-nums leading-tight ${
-                            item.totalGain >= 0 ? "text-green-500" : "text-red-500"
-                          }`}
-                        >
-                          {item.totalGain >= 0 ? "+" : ""}
-                          {formatCurrency(item.totalGain)}
+                        <div className="shrink-0 flex flex-col items-end gap-0.5">
+                          {returnPct != null && (
+                            <div
+                              className={`text-[10px] font-medium tabular-nums leading-tight ${
+                                returnPct >= 0 ? "text-green-600" : "text-red-500"
+                              }`}
+                            >
+                              {formatPercent(returnPct)}
+                            </div>
+                          )}
+                          <div
+                            className={`text-xs font-semibold tabular-nums leading-tight ${
+                              item.totalGain >= 0 ? "text-green-500" : "text-red-500"
+                            }`}
+                          >
+                            {item.totalGain >= 0 ? "+" : ""}
+                            {formatCurrency(item.totalGain)}
+                          </div>
                         </div>
                       </div>
-                    ))}
+                    );
+                    })}
                   </div>
-                  <Table className="hidden min-w-0 text-xs md:table">
+                  <div className="hidden min-w-0 overflow-x-auto md:block">
+                  <Table className="min-w-[720px] text-xs">
                     <TableHeader className="[&_th]:h-8 [&_th]:px-2 [&_th]:py-1.5">
                       <TableRow>
                         <TableHead>Ticker</TableHead>
                         <TableHead>Spoločnosť</TableHead>
                         <TableHead className="text-right">Predajov</TableHead>
+                        <TableHead className="text-right">Nákup</TableHead>
                         <TableHead className="text-right">Predané za</TableHead>
+                        <TableHead className="text-right">Zhodnotenie</TableHead>
                         <TableHead className="text-right">Zisk/Strata</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody className="[&_td]:px-2 [&_td]:py-1.5">
-                      {realizedGains.byTicker.map((item) => (
+                      {realizedGains.byTicker.map((item) => {
+                        const totalCost =
+                          item.totalCost ?? Math.max(0, item.totalSold - item.totalGain);
+                        const returnPct = realizedSaleReturnPct(item.totalGain, totalCost);
+                        return (
                         <TableRow key={item.ticker} data-testid={`row-realized-${item.ticker}-table`}>
                           <TableCell>
                             <div className="flex items-center gap-2">
@@ -679,7 +709,21 @@ export default function Profit() {
                           </TableCell>
                           <TableCell className="text-right tabular-nums">{item.transactions}</TableCell>
                           <TableCell className="text-right tabular-nums">
+                            {formatCurrency(totalCost)}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
                             {formatCurrency(item.totalSold)}
+                          </TableCell>
+                          <TableCell
+                            className={`text-right tabular-nums font-medium ${
+                              returnPct == null
+                                ? "text-muted-foreground"
+                                : returnPct >= 0
+                                  ? "text-green-600"
+                                  : "text-red-500"
+                            }`}
+                          >
+                            {returnPct == null ? "—" : formatPercent(returnPct)}
                           </TableCell>
                           <TableCell
                             className={`text-right font-semibold tabular-nums ${
@@ -690,9 +734,11 @@ export default function Profit() {
                             {formatCurrency(item.totalGain)}
                           </TableCell>
                         </TableRow>
-                      ))}
+                      );
+                      })}
                     </TableBody>
                   </Table>
+                  </div>
                 </div>
               )}
             </div>
