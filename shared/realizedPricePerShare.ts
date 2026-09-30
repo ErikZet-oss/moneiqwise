@@ -3,13 +3,73 @@ import type { OpenFifoLot } from "./fifoRealizedGains";
 import { resolveInstrumentPricePerShare } from "./instrumentPrice";
 import type { RealizedTickerRow } from "./realizedGainsTypes";
 import { getTickerCurrency, type QuoteCurrency } from "./tickerCurrency";
+import { grossAndCommission } from "./transactionEur";
+
+/** Cena/ks ako stĺpec v Histórii (pricePerShare → riadok → base → instrument). */
+export function historyLinePricePerShare(
+  txn: Pick<
+    Transaction,
+    | "type"
+    | "shares"
+    | "pricePerShare"
+    | "commission"
+    | "baseCurrencyAmount"
+    | "instrumentPricePerShare"
+    | "ticker"
+    | "originalCurrency"
+    | "currency"
+    | "exchangeRateAtTransaction"
+  >,
+  opts?: { lineEur?: number; eurPerUnit?: number | null },
+): number {
+  const instrumentPx = resolveInstrumentPricePerShare(txn);
+  if (instrumentPx > 0) return instrumentPx;
+
+  const px = parseFloat(String(txn.pricePerShare ?? "0"));
+  if (Number.isFinite(px) && Math.abs(px) > 1e-12) {
+    return Math.abs(px);
+  }
+
+  const sh = Math.abs(parseFloat(String(txn.shares ?? "0")));
+  if (!(sh > 1e-12)) return 0;
+
+  const { gross, commission } = grossAndCommission(txn);
+  const kind = String(txn.type ?? "")
+    .trim()
+    .toUpperCase();
+  const lineLocal =
+    kind === "BUY" ? gross + commission : kind === "SELL" ? gross - commission : gross;
+  if (Math.abs(lineLocal) > 1e-12) {
+    return Math.abs(lineLocal / sh);
+  }
+
+  const base = parseFloat(String(txn.baseCurrencyAmount ?? "NaN"));
+  if (Number.isFinite(base) && Math.abs(base) > 1e-12) {
+    return Math.abs(base) / sh;
+  }
+
+  const lineEur = opts?.lineEur;
+  if (lineEur != null && Number.isFinite(lineEur) && Math.abs(lineEur) > 1e-12) {
+    const epu = opts.eurPerUnit;
+    if (epu != null && epu > 1e-12) {
+      return Math.abs(lineEur) / epu / sh;
+    }
+    return Math.abs(lineEur) / sh;
+  }
+
+  return 0;
+}
 
 /** Nákupná cena/ks v mene inštrumentu (FIFO lot). */
 export function fifoLotCostPerShareLocal(lot: OpenFifoLot): number {
   if (lot.eurPerUnit > 1e-12) {
-    return lot.costPerShareEur / lot.eurPerUnit;
+    const fromFx = lot.costPerShareEur / lot.eurPerUnit;
+    if (Number.isFinite(fromFx) && fromFx > 1e-12) return fromFx;
   }
-  if (lot.priceLocal > 0) return lot.priceLocal;
+  if (lot.priceLocal > 1e-12) return lot.priceLocal;
+  if (lot.costPerShareEur > 1e-12 && lot.ccy === "EUR") {
+    return lot.costPerShareEur;
+  }
   return 0;
 }
 
@@ -17,27 +77,22 @@ export function fifoLotCostPerShareLocal(lot: OpenFifoLot): number {
 export function sellInstrumentPricePerShare(
   txn: Pick<
     Transaction,
+    | "type"
     | "instrumentPricePerShare"
     | "pricePerShare"
     | "shares"
+    | "commission"
+    | "baseCurrencyAmount"
     | "ticker"
     | "originalCurrency"
     | "currency"
     | "exchangeRateAtTransaction"
   >,
   eurPerUnit: number | null,
+  lineEur?: number,
 ): number {
-  const instrumentPx = resolveInstrumentPricePerShare(txn);
-  if (instrumentPx > 0) return instrumentPx;
-  const tradePx = parseFloat(String(txn.pricePerShare ?? "0"));
-  if (Number.isFinite(tradePx) && Math.abs(tradePx) > 0) {
-    return Math.abs(tradePx);
-  }
-  const sh = Math.abs(parseFloat(String(txn.shares ?? "0")));
-  if (sh > 1e-12 && eurPerUnit != null && eurPerUnit > 1e-12) {
-    const lineLocal = Math.abs(tradePx) * sh;
-    if (lineLocal > 1e-12) return lineLocal / sh;
-  }
+  const fromHistory = historyLinePricePerShare(txn, { lineEur, eurPerUnit });
+  if (fromHistory > 0) return fromHistory;
   return 0;
 }
 
@@ -58,7 +113,11 @@ export type RealizedTickerAgg = {
   weightedSellLocal: number;
 };
 
-export function emptyRealizedTickerAgg(ticker: string, companyName: string): RealizedTickerAgg {
+export function emptyRealizedTickerAgg(
+  ticker: string,
+  companyName: string,
+  priceCurrency?: QuoteCurrency,
+): RealizedTickerAgg {
   return {
     ticker,
     companyName,
@@ -67,7 +126,7 @@ export function emptyRealizedTickerAgg(ticker: string, companyName: string): Rea
     totalSold: 0,
     transactions: 0,
     totalSharesSold: 0,
-    priceCurrency: quoteCurrencyForTicker(ticker),
+    priceCurrency: priceCurrency ?? quoteCurrencyForTicker(ticker),
     weightedBuyLocal: 0,
     weightedSellLocal: 0,
   };

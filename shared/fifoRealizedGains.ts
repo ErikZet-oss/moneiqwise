@@ -10,7 +10,7 @@ import {
 } from "./realizedPricePerShare";
 import { hasAuthoritativeStoredRealizedGain, shouldPreferCloseTradeGain } from "./sellCloseTradeFallback";
 import { inferTradeCurrency, type TradeCurrency } from "./transactionEur";
-import { eurPerUnitOfTradeCurrency, resolveBuySellLineEur } from "./transactionEur";
+import { eurPerUnitFromTxn, eurPerUnitOfTradeCurrency, resolveBuySellLineEur } from "./transactionEur";
 import { resolveInstrumentPricePerShare } from "./instrumentPrice";
 import { getTickerCurrency } from "./tickerCurrency";
 
@@ -126,7 +126,7 @@ export function computeFifoRealizedGainsFromTransactions(
       const useInstrumentOpen =
         instrumentPx > 0 &&
         quoteCcy !== "EUR" &&
-        (quoteCcy === "USD" || quoteCcy === "GBP" || quoteCcy === "CZK" || quoteCcy === "PLN");
+        (quoteCcy === "USD" || quoteCcy === "GBP" || quoteCcy === "CZK" || quoteCcy === "PLN" || quoteCcy === "HKD");
       if (!lots[key]) lots[key] = [];
       lots[key].push({
         acquiredAt: txnIsoDate(txn),
@@ -162,9 +162,21 @@ export function computeFifoRealizedGainsFromTransactions(
       }
 
       costEurBySellId.set(txn.id, costRemoved);
+      if (buyLocalWeighted <= 0 && costRemoved > 0 && shSell > 0) {
+        const epuSell = eurPerUnitFromTxn(txn, fb);
+        if (epuSell != null && epuSell > 1e-12) {
+          buyLocalWeighted = costRemoved / epuSell;
+        } else {
+          buyLocalWeighted = costRemoved;
+        }
+      }
       buyWeightedLocalBySellId.set(txn.id, buyLocalWeighted);
-      const sellFb = eurPerUnitByTxnId.get(txn.id) ?? null;
-      const sellLocalPx = sellInstrumentPricePerShare(txn, sellFb);
+      const sellEpu = eurPerUnitFromTxn(txn, fb);
+      const sellLocalPx = sellInstrumentPricePerShare(
+        txn,
+        sellEpu,
+        Math.abs(proceedsEur),
+      );
       sellPriceLocalBySellId.set(txn.id, sellLocalPx);
 
       let gain = proceedsEur - costRemoved;
@@ -206,7 +218,11 @@ export function computeFifoRealizedGainsFromTransactions(
         .trim()
         .toUpperCase();
       if (!byTicker[aggTicker]) {
-        byTicker[aggTicker] = emptyRealizedTickerAgg(aggTicker, txn.companyName || aggTicker);
+        byTicker[aggTicker] = emptyRealizedTickerAgg(
+          aggTicker,
+          txn.companyName || aggTicker,
+          inferTradeCurrency(txn),
+        );
       }
       byTicker[aggTicker].totalGain += gain;
       byTicker[aggTicker].totalCost += costRemoved;

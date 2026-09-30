@@ -5,12 +5,14 @@ import { buildCloseTradeFallbackPairing, hasAuthoritativeStoredRealizedGain, sho
 import {
   emptyRealizedTickerAgg,
   finalizeRealizedTickerAgg,
+  historyLinePricePerShare,
   sellInstrumentPricePerShare,
   type RealizedTickerAgg,
 } from "@shared/realizedPricePerShare";
 import {
   eurPerUnitFromTxn,
   grossAndCommission,
+  inferTradeCurrency,
   resolveBuySellLineEur,
 } from "@shared/transactionEur";
 import { buildEurPerUnitByTxnIdForTransactions } from "./eurAtTransactionDate";
@@ -177,15 +179,19 @@ function aggregateResolvedSellGains(
 
     let sellLocalPx = sellPriceLocalBySellId.get(txn.id);
     if (sellLocalPx == null || !Number.isFinite(sellLocalPx) || sellLocalPx <= 0) {
-      sellLocalPx = sellInstrumentPricePerShare(txn, fb ?? epu);
+      sellLocalPx = sellInstrumentPricePerShare(txn, epu ?? fb, soldEur);
+    }
+    if (sellLocalPx == null || !Number.isFinite(sellLocalPx) || sellLocalPx <= 0) {
+      sellLocalPx = historyLinePricePerShare(txn, { lineEur: soldEur, eurPerUnit: epu ?? fb });
     }
 
     const tk = String(txn.ticker ?? "")
       .trim()
       .toUpperCase();
+    const tradeCcy = inferTradeCurrency(txn);
 
     if (!byTicker[tk]) {
-      byTicker[tk] = emptyRealizedTickerAgg(tk, txn.companyName || tk);
+      byTicker[tk] = emptyRealizedTickerAgg(tk, txn.companyName || tk, tradeCcy);
     }
     byTicker[tk].totalGain += gainEur;
     byTicker[tk].totalCost += costEur;

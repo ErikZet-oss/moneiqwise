@@ -88,6 +88,36 @@ function realizedSaleReturnPct(totalGain: number, totalCost: number): number | n
   return (totalGain / totalCost) * 100;
 }
 
+function realizedRowBuyPricePerShare(item: {
+  avgBuyPricePerShare?: number;
+  totalCost: number;
+  totalSharesSold?: number;
+}): number {
+  if (item.avgBuyPricePerShare != null && item.avgBuyPricePerShare > 1e-12) {
+    return item.avgBuyPricePerShare;
+  }
+  const sh = item.totalSharesSold ?? 0;
+  if (sh > 1e-12 && item.totalCost > 1e-12) {
+    return item.totalCost / sh;
+  }
+  return 0;
+}
+
+function realizedRowSellPricePerShare(item: {
+  avgSellPricePerShare?: number;
+  totalSold: number;
+  totalSharesSold?: number;
+}): number {
+  if (item.avgSellPricePerShare != null && item.avgSellPricePerShare > 1e-12) {
+    return item.avgSellPricePerShare;
+  }
+  const sh = item.totalSharesSold ?? 0;
+  if (sh > 1e-12 && item.totalSold > 1e-12) {
+    return item.totalSold / sh;
+  }
+  return 0;
+}
+
 function formatPricePerShareDisplay(
   price: number,
   formatCurrency: (n: number) => string,
@@ -110,6 +140,7 @@ interface RealizedGainSummary {
     totalCost: number;
     totalSold: number;
     transactions: number;
+    totalSharesSold?: number;
     avgBuyPricePerShare?: number;
     avgSellPricePerShare?: number;
     priceCurrency?: string;
@@ -306,7 +337,7 @@ export default function Profit() {
   });
 
   const { data: realizedGains } = useQuery<RealizedGainSummary>({
-    queryKey: ["/api/realized-gains", portfolioParam],
+    queryKey: ["/api/realized-gains", portfolioParam, "v2-line-px"],
     queryFn: async () => {
       const res = await fetch(`/api/realized-gains?portfolio=${encodeURIComponent(portfolioParam)}`, {
         credentials: "include",
@@ -663,9 +694,15 @@ export default function Profit() {
                           </div>
                           <div className="text-[9px] text-muted-foreground tabular-nums leading-tight">
                             {item.transactions}× predaj · Nákup{" "}
-                            {formatPricePerShareDisplay(item.avgBuyPricePerShare ?? 0, formatCurrency)}{" "}
+                            {formatPricePerShareDisplay(
+                              realizedRowBuyPricePerShare(item),
+                              formatCurrency,
+                            )}{" "}
                             / ks · Predaj{" "}
-                            {formatPricePerShareDisplay(item.avgSellPricePerShare ?? 0, formatCurrency)}{" "}
+                            {formatPricePerShareDisplay(
+                              realizedRowSellPricePerShare(item),
+                              formatCurrency,
+                            )}{" "}
                             / ks
                           </div>
                         </div>
@@ -723,10 +760,16 @@ export default function Profit() {
                           </TableCell>
                           <TableCell className="text-right tabular-nums">{item.transactions}</TableCell>
                           <TableCell className="text-right tabular-nums">
-                            {formatPricePerShareDisplay(item.avgBuyPricePerShare ?? 0, formatCurrency)}
+                            {formatPricePerShareDisplay(
+                              realizedRowBuyPricePerShare(item),
+                              formatCurrency,
+                            )}
                           </TableCell>
                           <TableCell className="text-right tabular-nums">
-                            {formatPricePerShareDisplay(item.avgSellPricePerShare ?? 0, formatCurrency)}
+                            {formatPricePerShareDisplay(
+                              realizedRowSellPricePerShare(item),
+                              formatCurrency,
+                            )}
                           </TableCell>
                           <TableCell
                             className={`text-right tabular-nums font-medium ${
