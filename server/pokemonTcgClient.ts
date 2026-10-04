@@ -1,5 +1,6 @@
 import type { PokemonCardHit } from "@shared/pokemonTcg";
-import { pokemonCardmarketProductId, pokemonEuLowCardId } from "@shared/pokemonTcg";
+import { pokemonCardmarketProductId, pokemonGradeFromTicker, pokemonTcgdexCardId } from "@shared/pokemonTcg";
+import { fetchCardmarketEnglishLow } from "./cardmarketApi";
 import { fetchSealedEuLow } from "./cardmarketSealed";
 
 const TCGDEX = "https://api.tcgdex.net/v2/en/cards";
@@ -183,22 +184,46 @@ function quoteFromLow(ticker: string, low: number, priceLanguage: "en" | "any"):
   };
 }
 
-/** Denný Cardmarket low v EUR pre raw kartu alebo sealed. Graded low cenník nemá. */
+function guideLow(card: TcgdexCard): number | null {
+  const guideRaw = card.pricing?.cardmarket?.low;
+  return typeof guideRaw === "number" && Number.isFinite(guideRaw) && guideRaw > 0 ? guideRaw : null;
+}
+
+async function loadTcgdexCard(cardId: string): Promise<TcgdexCard | null> {
+  const res = await fetch(`${TCGDEX}/${encodeURIComponent(cardId)}`, { signal: AbortSignal.timeout(12000) });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`TCGdex ${res.status}`);
+  return (await res.json()) as TcgdexCard;
+}
+
+/** Anglický Cardmarket low pre raw, graded aj sealed. Bez API tokenov je raw/sealed denný cenník. */
 export async function fetchPokemonEuLowQuote(ticker: string): Promise<PokemonEuLowQuote | null> {
   const sealedId = pokemonCardmarketProductId(ticker);
   if (sealedId) {
-    const low = await fetchSealedEuLow(sealedId);
-    return low == null ? null : quoteFromLow(ticker, low.price, low.priceLanguage);
+    const live = await fetchCardmarketEnglishLow(sealedId, { kind: "sealed" });
+    if (live.status === "ok") return live.low == null ? null : quoteFromLow(ticker, live.low, "en");
+    const guide = await fetchSealedEuLow(sealedId);
+    return guide == null ? null : quoteFromLow(ticker, guide.price, "any");
   }
-  const cardId = pokemonEuLowCardId(ticker);
+  const cardId = pokemonTcgdexCardId(ticker);
   if (!cardId) return null;
-  const res = await fetch(`${TCGDEX}/${encodeURIComponent(cardId)}`, { signal: AbortSignal.timeout(12000) });
-  if (res.status === 404) return null;
-  if (!res.ok) {
-    throw new Error(`TCGdex ${res.status}`);
+  const card = await loadTcgdexCard(cardId);
+  if (!card) return null;
+  const productId = card.pricing?.cardmarket?.idProduct;
+  const grade = pokemonGradeFromTicker(ticker);
+  if (grade) {
+    if (typeof productId !== "number") return null;
+    const live = await fetchCardmarketEnglishLow(String(productId), {
+      kind: "graded",
+      company: grade.company,
+      grade: grade.grade,
+    });
+    return live.status === "ok" && live.low != null ? quoteFromLow(ticker, live.low, "en") : null;
   }
-  const card = (await res.json()) as TcgdexCard;
-  const guideRaw = card.pricing?.cardmarket?.low;
-  const guide = typeof guideRaw === "number" && Number.isFinite(guideRaw) && guideRaw > 0 ? guideRaw : null;
+  if (typeof productId === "number") {
+    const live = await fetchCardmarketEnglishLow(String(productId), { kind: "raw" });
+    if (live.status === "ok") return live.low == null ? null : quoteFromLow(ticker, live.low, "en");
+  }
+  const guide = guideLow(card);
   return guide == null ? null : quoteFromLow(ticker, guide, "any");
 }

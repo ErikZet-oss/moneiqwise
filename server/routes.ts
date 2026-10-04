@@ -345,7 +345,7 @@ async function fetchPhysicalMetalQuote(ticker: string): Promise<any> {
 const CACHE_DIR = path.join(process.cwd(), ".cache");
 const CACHE_FILE = path.join(CACHE_DIR, "prices.json");
 /** Bump when quote shape/source changes — invalidates stale on-disk quote cache. */
-const QUOTE_CACHE_VERSION = 8;
+const QUOTE_CACHE_VERSION = 9;
 
 function isUsExtendedSessionNow(): boolean {
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -3868,8 +3868,10 @@ export async function registerRoutes(
         imageUrl: pokemonImage,
         priceNote: isPokemonTicker(displayTicker)
           ? !quote
-            ? "Pre graded slab a položky bez Cardmarket id nie je európsky low v cenníku — hodnota ostáva na nákupnej cene."
-            : "Cardmarket low v EUR, denný cenník cez všetky jazyky."
+            ? "Anglický Cardmarket low pre tento stupeň sa nenašiel — hodnota ostáva na nákupnej cene."
+            : quote.priceLanguage === "en"
+              ? "Cardmarket low, anglické ponuky"
+              : "Cardmarket low v EUR, denný cenník cez všetky jazyky. Anglické ponuky vyžadujú Cardmarket API tokeny."
           : null,
         costCurrency: inferHoldingCostCurrency(displayTicker, txRows),
         positions,

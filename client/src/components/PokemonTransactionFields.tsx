@@ -215,7 +215,7 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
                             {card.number ? ` · #${card.number}` : ""}
                           </span>
                           <span className="block text-xs tabular-nums">
-                            {formatLow(card)}
+                            {category === "GRADED_CARD" ? "Cena sa doplní podľa stupňa" : formatLow(card)}
                           </span>
                         </span>
                       </button>
@@ -241,7 +241,9 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
               <div className="min-w-0">
                 <p className="font-medium truncate">{selected.name}</p>
                 <p className="text-xs text-muted-foreground truncate">{selected.setName}</p>
-                <p className="text-xs tabular-nums">{formatLow(selected)}</p>
+                <p className="text-xs tabular-nums">
+                  {category === "GRADED_CARD" ? "Cena sa doplní podľa stupňa" : formatLow(selected)}
+                </p>
                 <button type="button" className="text-xs text-primary hover:underline" onClick={clearCard}>
                   Zadať iný názov ručne
                 </button>
@@ -325,7 +327,7 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
           </div>
           <p className="sm:col-span-3 text-xs text-muted-foreground">
             Rovnaká karta a rovnaký stupeň sa sčítajú ako kusy (FIFO). Certifikát ostáva pri konkrétnom nákupe.
-            Obrázok je sken karty. Denný európsky cenník nemá samostatný low pre PSA/BGS slab, preto graded ostáva na nákupnej cene.
+            Obrázok je sken raw karty. Trhová cena graded je najlacnejšia anglická ponuka s týmto stupňom na Cardmarkete.
           </p>
         </div>
       )}

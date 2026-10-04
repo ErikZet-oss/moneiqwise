@@ -4,9 +4,9 @@
  * ale žijú len v portfóliu s brokerom `pokemon`. Evidujú sa len nákupy a predaje,
  * bez vkladov, výberov a hotovostného účtu. Akciový systém sa ich netýka.
  *
- * Trhová cena raw kariet a sealed z katalógu = denný Cardmarket low v EUR (TCGdex / price guide).
- * Ten cenník je najlacnejšia ponuka cez všetky jazyky. Anglický filter a PSA/BGS low
- * verejný cenník nepublikuje. Graded a ručné sealed bez id ostávajú na nákupnej cene.
+ * Trhová cena je najlacnejšia anglická ponuka na Cardmarkete (API, idLanguage=1).
+ * Raw a sealed berú najlacnejší nepodpísaný kus. Graded berie najlacnejšiu ponuku
+ * s rovnakou spoločnosťou a stupňom v komentári. Denný cenník je len záloha pre raw a sealed.
  * Obrázok karty (aj graded) ide z TCGdex.
  */
 
@@ -87,6 +87,13 @@ const GRADE_TAIL = /:(PSA|BGS|CGC|ACE|SGC|TAG)\d{1,2}(\.5)?$/;
 
 export function isGradedPokemonTicker(ticker: string | null | undefined): boolean {
   return GRADE_TAIL.test((ticker ?? "").trim().toUpperCase());
+}
+
+/** `PTCG:sv03.5-006:PSA10` → `{ company: "PSA", grade: "10" }`. */
+export function pokemonGradeFromTicker(ticker: string | null | undefined): { company: string; grade: string } | null {
+  const match = /:(PSA|BGS|CGC|ACE|SGC|TAG)(\d{1,2}(?:\.5)?)$/.exec((ticker ?? "").trim().toUpperCase());
+  if (!match?.[1] || !match[2]) return null;
+  return { company: match[1], grade: match[2] };
 }
 
 /**
