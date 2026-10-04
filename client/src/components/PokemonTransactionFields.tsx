@@ -325,7 +325,7 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
           </div>
           <p className="sm:col-span-3 text-xs text-muted-foreground">
             Rovnaká karta a rovnaký stupeň sa sčítajú ako kusy (FIFO). Certifikát ostáva pri konkrétnom nákupe.
-            Trhová cena graded kariet nie je anglický Cardmarket low, preto sa drží nákupná cena.
+            Obrázok je sken karty. Denný európsky cenník nemá samostatný low pre PSA/BGS slab, preto graded ostáva na nákupnej cene.
           </p>
         </div>
       )}

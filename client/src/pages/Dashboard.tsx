@@ -95,8 +95,8 @@ function HoldingMark({ holding, size }: { holding: HoldingWithCostCurrency; size
   if (isPokemonGroupTicker(holding.ticker)) {
     return <BrokerLogo brokerCode="pokemon" size={size === "md" ? "sm" : "xs"} />;
   }
-  if (isSealedPokemonHolding(holding) && holding.tcgImageUrl) {
-    return <AssetThumb src={holding.tcgImageUrl} alt={holding.companyName || "Sealed"} size={size} />;
+  if (isPokemonTicker(holding.ticker) && holding.tcgImageUrl) {
+    return <AssetThumb src={holding.tcgImageUrl} alt={holding.companyName || "Pokémon"} size={size} />;
   }
   return (
     <CompanyLogo

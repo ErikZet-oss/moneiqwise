@@ -4,10 +4,10 @@
  * ale žijú len v portfóliu s brokerom `pokemon`. Evidujú sa len nákupy a predaje,
  * bez vkladov, výberov a hotovostného účtu. Akciový systém sa ich netýka.
  *
- * Trhová cena raw kariet a sealed z katalógu = najlacnejšia anglická ponuka na Cardmarkete (From, language=1).
- * Denný price guide mieša jazyky a je len záloha, keď sa anglická stránka nenačíta.
- * Graded a ručne zadané sealed bez id nemajú spoľahlivý EU low, takže hodnota
- * ostáva na nákupnej cene.
+ * Trhová cena raw kariet a sealed z katalógu = denný Cardmarket low v EUR (TCGdex / price guide).
+ * Ten cenník je najlacnejšia ponuka cez všetky jazyky. Anglický filter a PSA/BGS low
+ * verejný cenník nepublikuje. Graded a ručné sealed bez id ostávajú na nákupnej cene.
+ * Obrázok karty (aj graded) ide z TCGdex.
  */
 
 export const POKEMON_PORTFOLIO_BROKER = "pokemon" as const;
@@ -96,9 +96,16 @@ export function isGradedPokemonTicker(ticker: string | null | undefined): boolea
  */
 export function pokemonEuLowCardId(ticker: string | null | undefined): string | null {
   const u = (ticker ?? "").trim().toUpperCase();
-  if (!u.startsWith(POKEMON_TICKER_PREFIX) || u === POKEMON_GROUP_TICKER) return null;
   if (isGradedPokemonTicker(u)) return null;
-  const rest = u.slice(POKEMON_TICKER_PREFIX.length);
+  return pokemonTcgdexCardId(ticker);
+}
+
+/** TCGdex id karty, aj keď je ticker graded (`PTCG:sv03.5-006:PSA10`). */
+export function pokemonTcgdexCardId(ticker: string | null | undefined): string | null {
+  const u = (ticker ?? "").trim().toUpperCase();
+  if (!u.startsWith(POKEMON_TICKER_PREFIX) || u === POKEMON_GROUP_TICKER) return null;
+  if (pokemonCardmarketProductId(u)) return null;
+  const rest = u.slice(POKEMON_TICKER_PREFIX.length).replace(GRADE_TAIL, "");
   if (!rest.includes("-")) return null;
   return rest.toLowerCase();
 }

@@ -1,7 +1,6 @@
 import type { PokemonCardHit } from "@shared/pokemonTcg";
 import { pokemonCardmarketProductId, pokemonEuLowCardId } from "@shared/pokemonTcg";
 import { fetchSealedEuLow } from "./cardmarketSealed";
-import { fetchEnglishCardmarketLow, fetchEnglishCardmarketLows, resolveCardmarketLow } from "./cardmarketEnglishLow";
 
 const TCGDEX = "https://api.tcgdex.net/v2/en/cards";
 
@@ -28,7 +27,8 @@ type TcgdexCard = {
 function imageUrl(base: string | undefined): string | null {
   const v = (base ?? "").trim();
   if (!v.startsWith("https://")) return null;
-  return v.endsWith(".webp") || v.endsWith(".png") ? v : `${v}/low.webp`;
+  if (/\.(webp|png|jpe?g)$/i.test(v)) return v;
+  return `${v}/high.png`;
 }
 
 function asHit(card: TcgdexCard): PokemonCardHit | null {
@@ -81,14 +81,31 @@ export async function searchPokemonCards(query: string): Promise<PokemonCardHit[
     })
     .sort((a, b) => Number(Boolean(b.image)) - Number(Boolean(a.image)))
     .slice(0, 8);
-  const details = (await Promise.all(ranked.map((item) => fetchCard(item.id ?? "")))).filter(
+  return (await Promise.all(ranked.map((item) => fetchCard(item.id ?? "")))).filter(
     (hit): hit is PokemonCardHit => hit != null,
   );
-  const lows = await fetchEnglishCardmarketLows(details.map((hit) => hit.cardmarketId));
-  return details.map((hit) => ({
-    ...hit,
-    ...resolveCardmarketLow(hit.cardmarketId ? lows.get(hit.cardmarketId) : undefined, hit.euLowEur),
-  }));
+}
+
+const imageCache = new Map<string, string | null>();
+
+/** Obrázok karty z TCGdex. Funguje aj pre graded, lebo sken je ten istý. */
+export async function fetchTcgdexImage(cardId: string): Promise<string | null> {
+  const id = cardId.trim().toLowerCase();
+  if (!id) return null;
+  if (imageCache.has(id)) return imageCache.get(id) ?? null;
+  try {
+    const res = await fetch(`${TCGDEX}/${encodeURIComponent(id)}`, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) {
+      imageCache.set(id, null);
+      return null;
+    }
+    const card = (await res.json()) as TcgdexCard;
+    const url = imageUrl(card.image);
+    imageCache.set(id, url);
+    return url;
+  } catch {
+    return null;
+  }
 }
 
 export type PokemonEuLowQuote = {
@@ -127,7 +144,7 @@ function quoteFromLow(ticker: string, low: number, priceLanguage: "en" | "any"):
   };
 }
 
-/** Aktuálny Cardmarket low len z anglických ponúk, pre raw kartu alebo sealed. */
+/** Denný Cardmarket low v EUR pre raw kartu alebo sealed. Graded low cenník nemá. */
 export async function fetchPokemonEuLowQuote(ticker: string): Promise<PokemonEuLowQuote | null> {
   const sealedId = pokemonCardmarketProductId(ticker);
   if (sealedId) {
@@ -144,11 +161,5 @@ export async function fetchPokemonEuLowQuote(ticker: string): Promise<PokemonEuL
   const card = (await res.json()) as TcgdexCard;
   const guideRaw = card.pricing?.cardmarket?.low;
   const guide = typeof guideRaw === "number" && Number.isFinite(guideRaw) && guideRaw > 0 ? guideRaw : null;
-  const productId = card.pricing?.cardmarket?.idProduct;
-  if (typeof productId !== "number") return guide == null ? null : quoteFromLow(ticker, guide, "any");
-  const english = await fetchEnglishCardmarketLow(String(productId));
-  const resolved = resolveCardmarketLow(english, guide);
-  return resolved.euLowEur == null || resolved.lowLanguage == null
-    ? null
-    : quoteFromLow(ticker, resolved.euLowEur, resolved.lowLanguage);
+  return guide == null ? null : quoteFromLow(ticker, guide, "any");
 }

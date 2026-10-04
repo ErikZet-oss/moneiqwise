@@ -26,9 +26,9 @@ import {
   CASH_INTEREST_TICKER,
 } from "@shared/tickerCurrency";
 import { isPhysicalMetalTicker, isPhysicalSilverTicker } from "@shared/physicalMetal";
-import { buildPokemonPosition, isPokemonPortfolio, isPokemonTicker, isSealedPokemonHolding } from "@shared/pokemonTcg";
+import { buildPokemonPosition, isPokemonPortfolio, isPokemonTicker, isSealedPokemonHolding, pokemonTcgdexCardId } from "@shared/pokemonTcg";
 import { findSealedProductImage } from "./sealedProductImage";
-import { fetchPokemonEuLowQuote, searchPokemonCards } from "./pokemonTcgClient";
+import { fetchPokemonEuLowQuote, fetchTcgdexImage, searchPokemonCards } from "./pokemonTcgClient";
 import { searchSealedProducts } from "./cardmarketSealed";
 import {
   enrichHoldingsWithCostCurrency,
@@ -345,7 +345,7 @@ async function fetchPhysicalMetalQuote(ticker: string): Promise<any> {
 const CACHE_DIR = path.join(process.cwd(), ".cache");
 const CACHE_FILE = path.join(CACHE_DIR, "prices.json");
 /** Bump when quote shape/source changes — invalidates stale on-disk quote cache. */
-const QUOTE_CACHE_VERSION = 7;
+const QUOTE_CACHE_VERSION = 8;
 
 function isUsExtendedSessionNow(): boolean {
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -3586,7 +3586,10 @@ export async function registerRoutes(
         console.warn("Pokemon holdings ensure skipped:", error);
       }
       const userHoldings = await storage.getHoldingsByUser(userId, portfolioId);
-      const missingImages = userHoldings.filter((row) => isSealedPokemonHolding(row) && !row.tcgImageUrl);
+      const missingImages = userHoldings.filter((row) => {
+        if (row.tcgImageUrl) return false;
+        return isSealedPokemonHolding(row) || pokemonTcgdexCardId(row.ticker) != null;
+      });
       const imageQueue = [...missingImages];
       if (imageQueue.length > 0) {
         const fillImages = Promise.all(
@@ -3595,12 +3598,15 @@ export async function registerRoutes(
               const row = imageQueue.shift();
               if (!row) return;
               try {
-                const url = await findSealedProductImage(row.tcgProductName || row.companyName);
+                const cardId = pokemonTcgdexCardId(row.ticker);
+                const url = cardId
+                  ? await fetchTcgdexImage(cardId)
+                  : await findSealedProductImage(row.tcgProductName || row.companyName);
                 if (!url) continue;
                 row.tcgImageUrl = url;
                 await storage.setHoldingTcgImageUrl(userId, row.ticker, url);
               } catch (error) {
-                console.warn(`Sealed image skipped for ${row.ticker}:`, error);
+                console.warn(`Pokemon image skipped for ${row.ticker}:`, error);
               }
             }
           }),
@@ -3855,10 +3861,8 @@ export async function registerRoutes(
         imageUrl: pokemonImage,
         priceNote: isPokemonTicker(displayTicker)
           ? !quote
-            ? "Pre túto položku nie je anglický Cardmarket low — zobrazená hodnota ostáva na nákupnej cene."
-            : quote.priceLanguage === "en"
-              ? "Cardmarket low, anglické ponuky"
-              : "Cardmarket low cez všetky jazyky — anglické ponuky sa nepodarilo načítať."
+            ? "Pre graded slab a položky bez Cardmarket id nie je európsky low v cenníku — hodnota ostáva na nákupnej cene."
+            : "Cardmarket low v EUR, denný cenník cez všetky jazyky."
           : null,
         costCurrency: inferHoldingCostCurrency(displayTicker, txRows),
         positions,

@@ -1,5 +1,4 @@
 import type { PokemonCardHit } from "@shared/pokemonTcg";
-import { fetchEnglishCardmarketLow, fetchEnglishCardmarketLows, resolveCardmarketLow } from "./cardmarketEnglishLow";
 import { findSealedProductImage } from "./sealedProductImage";
 
 const NONSINGLES_URL =
@@ -112,14 +111,10 @@ function getCatalog(): Promise<Catalog> {
   return catalogPromise;
 }
 
-/** Anglický low, a keď sa ponuky nenačítajú, denný cenník cez všetky jazyky. */
+/** Denný Cardmarket low v EUR. Cenník je najlacnejšia ponuka cez všetky jazyky. */
 export async function fetchSealedEuLow(
   productId: string,
 ): Promise<{ price: number; priceLanguage: "en" | "any" } | null> {
-  const english = await fetchEnglishCardmarketLow(productId);
-  if (english.status === "ok") {
-    return english.low == null ? null : { price: english.low, priceLanguage: "en" };
-  }
   const id = Number(productId);
   if (!Number.isInteger(id)) return null;
   const guide = (await getCatalog()).guideLows.get(id);
@@ -154,19 +149,18 @@ export async function searchSealedProducts(query: string): Promise<PokemonCardHi
     .sort((a, b) => b.score - a.score || a.product.name.localeCompare(b.product.name))
     .slice(0, 12);
 
-  const lows = await fetchEnglishCardmarketLows(ranked.map(({ product }) => String(product.idProduct)));
   const images = await Promise.all(ranked.map(({ product }) => findSealedProductImage(product.name)));
   return ranked.map(({ product }, index) => {
     const id = String(product.idProduct);
-    const price = resolveCardmarketLow(lows.get(id), catalog.guideLows.get(product.idProduct) ?? null);
+    const guide = catalog.guideLows.get(product.idProduct) ?? null;
     return {
       externalId: `cm${id}`,
       name: product.name,
       setName: product.category,
       number: "",
       imageUrl: images[index],
-      euLowEur: price.euLowEur,
-      lowLanguage: price.lowLanguage,
+      euLowEur: guide,
+      lowLanguage: guide != null ? "any" : null,
       cardmarketUrl: `https://www.cardmarket.com/en/Pokemon/Products?idProduct=${id}&language=1`,
       cardmarketId: id,
     };
