@@ -521,6 +521,13 @@ export default function AssetDetail() {
             Späť na prehľad
           </Button>
           <div className="flex items-start gap-3">
+            {data.imageUrl && isPokemonTicker(data.ticker) ? (
+              <img
+                src={data.imageUrl}
+                alt={data.companyName}
+                className="h-16 w-16 shrink-0 rounded-md object-contain bg-muted"
+              />
+            ) : (
             <CompanyLogo
               ticker={data.ticker}
               companyName={data.companyName}
@@ -528,6 +535,7 @@ export default function AssetDetail() {
               size="lg"
               className="shrink-0"
             />
+            )}
             <div className="min-w-0">
               <h1 className="text-lg font-semibold truncate" data-testid="asset-detail-title">
                 {data.companyName}

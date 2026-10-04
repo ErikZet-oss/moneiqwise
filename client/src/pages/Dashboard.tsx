@@ -49,6 +49,7 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio, type Portfolio } from "@/hooks/usePortfolio";
 import { useChartSettings, type MobileAssetsSortBy, type MobileAssetsView } from "@/hooks/useChartSettings";
 import { CompanyLogo } from "@/components/CompanyLogo";
+import { AssetThumb } from "@/components/AssetThumb";
 import { BrokerLogo } from "@/components/BrokerLogo";
 import { MobilePortfolioChart } from "@/components/MobilePortfolioChart";
 import { DesktopPortfolioChart } from "@/components/DesktopPortfolioChart";
@@ -57,6 +58,7 @@ import { isPhysicalSilverTicker } from "@shared/physicalMetal";
 import {
   isPokemonGroupTicker,
   isPokemonTicker,
+  isSealedPokemonHolding,
   POKEMON_GROUP_TICKER,
   pokemonCategoryLabel,
 } from "@shared/pokemonTcg";
@@ -86,6 +88,20 @@ function mobileSimpleAssetBadgeLabel(holding: HoldingWithCostCurrency): string {
 function mobileSimpleAssetDisplayName(holding: HoldingWithCostCurrency): string {
   if (holding.ticker.toUpperCase() === CASH_INTEREST_TICKER) return CASH_INTEREST_DISPLAY_NAME;
   return (holding.companyName || holding.ticker).trim() || holding.ticker;
+}
+
+function HoldingMark({ holding, size }: { holding: HoldingWithCostCurrency; size: "sm" | "md" }) {
+  if (isSealedPokemonHolding(holding) && holding.tcgImageUrl) {
+    return <AssetThumb src={holding.tcgImageUrl} alt={holding.companyName || "Sealed"} size={size} />;
+  }
+  return (
+    <CompanyLogo
+      ticker={holding.ticker}
+      companyName={holding.companyName}
+      imageUrl={holding.tcgImageUrl}
+      size={size === "md" ? "md" : "xs"}
+    />
+  );
 }
 
 function assetTickerLabel(holding: HoldingWithCostCurrency): string {
@@ -541,8 +557,15 @@ function collapsePokemonInAllPortfolios(
   quotes: Record<string, StockQuote> | undefined;
 } {
   if (!isAllPortfolios) return { rows: sorted, children: [], quotes };
-  const children = sorted.filter((holding) => isPokemonTicker(holding.ticker) && !isPokemonGroupTicker(holding.ticker));
-  const rest = sorted.filter((holding) => !isPokemonTicker(holding.ticker));
+  const children = sorted.filter(
+    (holding) =>
+      isPokemonTicker(holding.ticker) &&
+      !isPokemonGroupTicker(holding.ticker) &&
+      !isSealedPokemonHolding(holding),
+  );
+  const rest = sorted.filter(
+    (holding) => !isPokemonTicker(holding.ticker) || isSealedPokemonHolding(holding),
+  );
   if (children.length === 0) return { rows: rest, children: [], quotes };
   const group = buildPokemonGroupHolding(children, quotes);
   const merged = { ...(quotes ?? {}), [POKEMON_GROUP_TICKER]: group.quote };
@@ -3180,12 +3203,7 @@ export default function Dashboard() {
                             ) : (
                               <span className="w-3" aria-hidden />
                             )}
-                            <CompanyLogo
-                              ticker={holding.ticker}
-                              companyName={holding.companyName}
-                              imageUrl={holding.tcgImageUrl}
-                              size="xs"
-                            />
+                            <HoldingMark holding={holding} size="sm" />
                           </div>
                           <div className="min-w-0 flex-1 flex flex-col gap-0.5 pr-1">
                             <div className="flex items-center gap-1.5 min-w-0">
@@ -3242,7 +3260,7 @@ export default function Dashboard() {
                               ) : (
                                 <span className="w-3 shrink-0" aria-hidden />
                               )}
-                              <CompanyLogo ticker={holding.ticker} companyName={holding.companyName} imageUrl={holding.tcgImageUrl} size="xs" />
+                              <HoldingMark holding={holding} size="sm" />
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5">
                                   <button
@@ -3254,13 +3272,15 @@ export default function Dashboard() {
                                       openAssetDetail();
                                     }}
                                   >
-                                    {assetTickerLabel(holding)}
+                                    {isSealedPokemonHolding(holding) ? holding.companyName : assetTickerLabel(holding)}
                                   </button>
                                   <span className="text-[9px] text-muted-foreground">
                                     {formatShareQuantity(shares)} ks
                                   </span>
                                 </div>
-                                <p className="text-[9px] text-muted-foreground truncate">{holding.companyName}</p>
+                                {isSealedPokemonHolding(holding) ? null : (
+                                  <p className="text-[9px] text-muted-foreground truncate">{holding.companyName}</p>
+                                )}
                               </div>
                             </div>
                             <div className="text-right pl-2">
@@ -3474,8 +3494,8 @@ export default function Dashboard() {
                                   aria-hidden
                                 />
                               ) : null}
-                              <CompanyLogo ticker={holding.ticker} companyName={holding.companyName} imageUrl={holding.tcgImageUrl} size="md" />
-                              {isPokemonTicker(holding.ticker) ? (
+                              <HoldingMark holding={holding} size="md" />
+                              {isSealedPokemonHolding(holding) ? null : isPokemonTicker(holding.ticker) ? (
                                 <span className="font-medium" data-testid={`link-ticker-${holding.ticker}`}>
                                   {assetTickerLabel(holding)}
                                 </span>

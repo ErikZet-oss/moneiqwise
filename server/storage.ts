@@ -175,6 +175,7 @@ export interface IStorage {
     portfolioId: string | null,
     meta: PokemonHoldingMeta,
   ): Promise<void>;
+  setHoldingTcgImageUrl(userId: string, ticker: string, imageUrl: string): Promise<void>;
   deleteHolding(userId: string, ticker: string, portfolioId?: string | null): Promise<void>;
   getUserAssetMetadataMap(
     userId: string,
@@ -1319,6 +1320,13 @@ export class DatabaseStorage implements IStorage {
         updatedAt: new Date(),
       })
       .where(and(eq(holdings.userId, userId), eq(holdings.ticker, ticker), portfolioCond));
+  }
+
+  async setHoldingTcgImageUrl(userId: string, ticker: string, imageUrl: string): Promise<void> {
+    await db
+      .update(holdings)
+      .set({ tcgImageUrl: imageUrl, updatedAt: new Date() })
+      .where(and(eq(holdings.userId, userId), eq(holdings.ticker, ticker)));
   }
 
   async deleteHolding(userId: string, ticker: string, portfolioId?: string | null): Promise<void> {

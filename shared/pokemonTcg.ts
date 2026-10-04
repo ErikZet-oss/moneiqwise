@@ -94,6 +94,13 @@ export function pokemonEuLowCardId(ticker: string | null | undefined): string | 
   return rest.toLowerCase();
 }
 
+export function isSealedPokemonHolding(holding: {
+  ticker?: string | null;
+  tcgCategory?: string | null;
+}): boolean {
+  return holding.tcgCategory === "SEALED_PRODUCT" || pokemonCardmarketProductId(holding.ticker) != null;
+}
+
 /** Cardmarket idProduct zo sealed tickera `PTCG:CM895551`. */
 export function pokemonCardmarketProductId(ticker: string | null | undefined): string | null {
   const match = /^PTCG:CM(\d{1,12})$/.exec((ticker ?? "").trim().toUpperCase());

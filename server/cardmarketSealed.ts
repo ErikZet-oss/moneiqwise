@@ -1,5 +1,6 @@
 import type { PokemonCardHit } from "@shared/pokemonTcg";
 import { fetchEnglishCardmarketLow, fetchEnglishCardmarketLows, resolveCardmarketLow } from "./cardmarketEnglishLow";
+import { findSealedProductImage } from "./sealedProductImage";
 
 const NONSINGLES_URL =
   "https://downloads.s3.cardmarket.com/productCatalog/productList/products_nonsingles_6.json";
@@ -154,7 +155,8 @@ export async function searchSealedProducts(query: string): Promise<PokemonCardHi
     .slice(0, 12);
 
   const lows = await fetchEnglishCardmarketLows(ranked.map(({ product }) => String(product.idProduct)));
-  return ranked.map(({ product }) => {
+  const images = await Promise.all(ranked.map(({ product }) => findSealedProductImage(product.name)));
+  return ranked.map(({ product }, index) => {
     const id = String(product.idProduct);
     const price = resolveCardmarketLow(lows.get(id), catalog.guideLows.get(product.idProduct) ?? null);
     return {
@@ -162,7 +164,7 @@ export async function searchSealedProducts(query: string): Promise<PokemonCardHi
       name: product.name,
       setName: product.category,
       number: "",
-      imageUrl: null,
+      imageUrl: images[index],
       euLowEur: price.euLowEur,
       lowLanguage: price.lowLanguage,
       cardmarketUrl: `https://www.cardmarket.com/en/Pokemon/Products?idProduct=${id}&language=1`,
