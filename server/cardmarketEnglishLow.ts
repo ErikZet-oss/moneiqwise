@@ -1,12 +1,12 @@
 /**
- * Cardmarket low len z anglických ponúk (idLanguage = 1).
- * Denný price guide je minimum cez všetky jazyky, to sem nepatrí.
+ * Cardmarket low len z anglických ponúk (language=1, pole From).
+ * Denný price guide je minimum cez všetky jazyky a použije sa len keď sa anglická stránka nenačíta.
  */
 
-const ARTICLES_URL = "https://apiv2.cardmarket.com/ws/v2.0/output.json/articles";
+import { fetchEnglishFromProductPage } from "./cardmarketProductPage";
+
 const SUCCESS_TTL_MS = 6 * 60 * 60 * 1000;
 const FAILURE_TTL_MS = 15 * 60 * 1000;
-const ENGLISH_LANGUAGE_ID = 1;
 
 export type EnglishLowResult = { status: "ok"; low: number | null } | { status: "unavailable" };
 
@@ -18,45 +18,8 @@ type CacheEntry = {
 const cache = new Map<string, CacheEntry>();
 let unavailableLoggedAt = 0;
 
-type Article = {
-  price?: number | string;
-  isSigned?: boolean;
-  isAltered?: boolean;
-  language?: { idLanguage?: number | string };
-};
-
-function articleList(body: unknown): Article[] {
-  if (!body || typeof body !== "object") return [];
-  const raw = (body as { article?: unknown }).article;
-  if (Array.isArray(raw)) return raw.filter((row): row is Article => !!row && typeof row === "object");
-  if (raw && typeof raw === "object") return [raw as Article];
-  return [];
-}
-
-function englishPrice(article: Article): number | null {
-  if (article.isSigned === true || article.isAltered === true) return null;
-  const languageId = article.language?.idLanguage;
-  if (languageId != null && Number(languageId) !== ENGLISH_LANGUAGE_ID) return null;
-  const price = typeof article.price === "number" ? article.price : Number(article.price);
-  if (!Number.isFinite(price) || price <= 0) return null;
-  return price;
-}
-
 async function requestEnglishLow(productId: string): Promise<number | null> {
-  const url = `${ARTICLES_URL}/${productId}?idLanguage=${ENGLISH_LANGUAGE_ID}&start=0&maxResults=100`;
-  const res = await fetch(url, {
-    headers: { Accept: "application/json" },
-    signal: AbortSignal.timeout(20_000),
-  });
-  if (res.status === 204 || res.status === 404) return null;
-  if (!res.ok) {
-    throw new Error(`Cardmarket articles ${res.status}`);
-  }
-  const prices = articleList(await res.json())
-    .map(englishPrice)
-    .filter((price): price is number => price != null);
-  if (prices.length === 0) return null;
-  return Math.min(...prices);
+  return fetchEnglishFromProductPage(productId);
 }
 
 /** Najlacnejšia anglická ponuka v EUR. `unavailable` znamená, že sa zoznam ponúk nenačítal. */
@@ -97,10 +60,10 @@ export function resolveCardmarketLow(
 export async function fetchEnglishCardmarketLows(
   productIds: Array<string | null | undefined>,
 ): Promise<Map<string, EnglishLowResult>> {
-  const ids = [...new Set(productIds.map((id) => (id ?? "").trim()).filter((id) => /^\d{1,12}$/.test(id)))];
+  const ids = Array.from(new Set(productIds.map((id) => (id ?? "").trim()).filter((id) => /^\d{1,12}$/.test(id))));
   const out = new Map<string, EnglishLowResult>();
   const queue = [...ids];
-  const workers = Array.from({ length: Math.min(4, queue.length) }, async () => {
+  const workers = Array.from({ length: Math.min(1, queue.length) }, async () => {
     while (queue.length > 0) {
       const id = queue.shift();
       if (!id) return;

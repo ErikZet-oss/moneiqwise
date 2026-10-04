@@ -4,8 +4,8 @@
  * ale žijú len v portfóliu s brokerom `pokemon`. Evidujú sa len nákupy a predaje,
  * bez vkladov, výberov a hotovostného účtu. Akciový systém sa ich netýka.
  *
- * Trhová cena raw kariet a sealed z katalógu = najlacnejšia anglická ponuka na Cardmarkete.
- * Denný price guide mieša jazyky, preto sa nepoužíva.
+ * Trhová cena raw kariet a sealed z katalógu = najlacnejšia anglická ponuka na Cardmarkete (From, language=1).
+ * Denný price guide mieša jazyky a je len záloha, keď sa anglická stránka nenačíta.
  * Graded a ručne zadané sealed bez id nemajú spoľahlivý EU low, takže hodnota
  * ostáva na nákupnej cene.
  */
