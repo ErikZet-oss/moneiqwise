@@ -5,6 +5,7 @@ import { Building2 } from "lucide-react";
 interface CompanyLogoProps {
   ticker: string;
   companyName?: string;
+  imageUrl?: string | null;
   size?: "xs" | "sm" | "md" | "lg";
   className?: string;
 }
@@ -180,7 +181,7 @@ const tickerToDomain: Record<string, string> = {
   "OSCR": "hioscar.com",
 };
 
-export function CompanyLogo({ ticker, companyName, size = "md", className = "" }: CompanyLogoProps) {
+export function CompanyLogo({ ticker, companyName, imageUrl, size = "md", className = "" }: CompanyLogoProps) {
   const [logoIndex, setLogoIndex] = useState(0);
   
   const sizeClasses = {
@@ -199,6 +200,20 @@ export function CompanyLogo({ ticker, companyName, size = "md", className = "" }
 
   const fullTicker = ticker.toUpperCase();
   const cleanTicker = fullTicker.split(".")[0];
+
+  if (fullTicker.startsWith("PTCG:")) {
+    return (
+      <Avatar className={`${sizeClasses[size]} ${className}`} data-testid={`logo-${ticker}`}>
+        {imageUrl ? <AvatarImage src={imageUrl} alt={companyName || "Pokémon"} /> : null}
+        <AvatarFallback
+          className="text-[10px] font-bold text-white"
+          style={{ background: "linear-gradient(180deg, #ee1515 0 48%, #f8fafc 48% 100%)", color: "#111827" }}
+        >
+          PK
+        </AvatarFallback>
+      </Avatar>
+    );
+  }
 
   if (fullTicker.startsWith("PM:")) {
     return (

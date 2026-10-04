@@ -54,6 +54,12 @@ import { MobilePortfolioChart } from "@/components/MobilePortfolioChart";
 import { DesktopPortfolioChart } from "@/components/DesktopPortfolioChart";
 import type { HoldingWithCostCurrency } from "@shared/holdingCostCurrency";
 import { isPhysicalSilverTicker } from "@shared/physicalMetal";
+import {
+  isPokemonGroupTicker,
+  isPokemonTicker,
+  POKEMON_GROUP_TICKER,
+  pokemonCategoryLabel,
+} from "@shared/pokemonTcg";
 import { CASH_INTEREST_DISPLAY_NAME, CASH_INTEREST_TICKER } from "@shared/tickerCurrency";
 import {
   getExtendedSessionLabel,
@@ -70,6 +76,8 @@ function mobileSimpleAssetBadgeLabel(holding: HoldingWithCostCurrency): string {
   const t = holding.ticker.toUpperCase();
   if (t === CASH_INTEREST_TICKER) return "Hotovosť";
   if (isPhysicalSilverTicker(t)) return "Striebro";
+  if (isPokemonGroupTicker(t)) return "Pokémon";
+  if (isPokemonTicker(t)) return pokemonCategoryLabel(holding.tcgCategory);
   const name = (holding.companyName || "").toLowerCase();
   if (/\betf\b/.test(name) || /\betc\b/.test(name) || /\betf\b/.test(t)) return "ETF";
   return "Akcie";
@@ -78,6 +86,15 @@ function mobileSimpleAssetBadgeLabel(holding: HoldingWithCostCurrency): string {
 function mobileSimpleAssetDisplayName(holding: HoldingWithCostCurrency): string {
   if (holding.ticker.toUpperCase() === CASH_INTEREST_TICKER) return CASH_INTEREST_DISPLAY_NAME;
   return (holding.companyName || holding.ticker).trim() || holding.ticker;
+}
+
+function assetTickerLabel(holding: HoldingWithCostCurrency): string {
+  if (isPokemonGroupTicker(holding.ticker)) return "Pokémon";
+  if (!isPokemonTicker(holding.ticker)) return holding.ticker;
+  if (holding.tcgCategory === "GRADED_CARD" && holding.tcgGradeCompany) {
+    return `${holding.tcgGradeCompany} ${holding.tcgGradeValue ?? ""}`.trim();
+  }
+  return pokemonCategoryLabel(holding.tcgCategory);
 }
 
 type MobileOpenFifoLot = {
@@ -93,6 +110,7 @@ type MobileOpenFifoLot = {
 
 function canExpandMobileHoldingLots(holding: HoldingWithCostCurrency): boolean {
   const t = holding.ticker.toUpperCase();
+  if (isPokemonGroupTicker(t)) return false;
   if (t === "CASH" || t === CASH_INTEREST_TICKER) return false;
   const shares = parseFloat(holding.shares);
   return Number.isFinite(shares) && shares > 0;
@@ -441,6 +459,124 @@ function sortHoldingsArray(
   });
 }
 
+function buildPokemonGroupHolding(
+  children: HoldingWithCostCurrency[],
+  quotes: Record<string, StockQuote> | undefined,
+): { holding: HoldingWithCostCurrency; quote: StockQuote } {
+  let shares = 0;
+  let invested = 0;
+  let pnl = 0;
+  let marketEur = 0;
+  for (const holding of children) {
+    const qty = parseFloat(holding.shares);
+    if (!Number.isFinite(qty) || qty <= 0) continue;
+    shares += qty;
+    const cost = parseFloat(holding.totalInvested);
+    if (Number.isFinite(cost)) invested += cost;
+    pnl +=
+      holding.pnlInvestedEur != null && Number.isFinite(holding.pnlInvestedEur)
+        ? holding.pnlInvestedEur
+        : Number.isFinite(cost)
+          ? cost
+          : 0;
+    const quote = quotes?.[holding.ticker];
+    const avg = parseFloat(holding.averageCost);
+    const priceEur = quote && Number.isFinite(quote.price) ? quote.price : Number.isFinite(avg) ? avg : 0;
+    marketEur += qty * priceEur;
+  }
+  const avgCost = shares > 0 ? invested / shares : 0;
+  const unit = shares > 0 ? marketEur / shares : 0;
+  return {
+    holding: {
+      id: "pokemon-group",
+      userId: children[0]?.userId ?? "",
+      portfolioId: null,
+      ticker: POKEMON_GROUP_TICKER,
+      companyName: `Pokémon TCG (${children.length})`,
+      shares: String(shares),
+      averageCost: String(avgCost),
+      totalInvested: String(invested),
+      updatedAt: new Date(),
+      tcgCategory: null,
+      tcgProductName: "Pokémon TCG",
+      tcgSetName: null,
+      tcgGradeCompany: null,
+      tcgGradeValue: null,
+      tcgImageUrl: null,
+      tcgCardmarketId: null,
+      tcgExternalId: null,
+      costCurrency: "EUR",
+      pnlInvestedEur: pnl,
+      openAvgPriceLocal: avgCost,
+      openPriceCurrency: "EUR",
+    },
+    quote: {
+      ticker: POKEMON_GROUP_TICKER,
+      price: unit,
+      change: 0,
+      changePercent: 0,
+      marketState: "CLOSED",
+      isMarketOpen: false,
+      preMarketPrice: null,
+      preMarketChange: null,
+      preMarketChangePercent: null,
+    },
+  };
+}
+
+function collapsePokemonInAllPortfolios(
+  sorted: HoldingWithCostCurrency[],
+  quotes: Record<string, StockQuote> | undefined,
+  isAllPortfolios: boolean,
+  sortField: SortField,
+  sortDirection: SortDirection,
+  convertPrice: (amount: number, sourceCurrency: PortfolioQuoteCurrency) => number,
+  convertAverageCostPrice: (amount: number, sourceCurrency: PortfolioQuoteCurrency) => number,
+  getTickerCurrencyFn: (ticker: string) => PortfolioQuoteCurrency,
+  resolveCostCurrency: (holding: Pick<HoldingWithCostCurrency, "ticker" | "costCurrency">) => PortfolioQuoteCurrency,
+  investedForDisplay: (holding: Pick<HoldingWithCostCurrency, "totalInvested" | "pnlInvestedEur" | "ticker" | "costCurrency">) => number,
+): {
+  rows: HoldingWithCostCurrency[];
+  children: HoldingWithCostCurrency[];
+  quotes: Record<string, StockQuote> | undefined;
+} {
+  if (!isAllPortfolios) return { rows: sorted, children: [], quotes };
+  const children = sorted.filter((holding) => isPokemonTicker(holding.ticker) && !isPokemonGroupTicker(holding.ticker));
+  const rest = sorted.filter((holding) => !isPokemonTicker(holding.ticker));
+  if (children.length === 0) return { rows: rest, children: [], quotes };
+  const group = buildPokemonGroupHolding(children, quotes);
+  const merged = { ...(quotes ?? {}), [POKEMON_GROUP_TICKER]: group.quote };
+  const rows = sortHoldingsArray(
+    [group.holding, ...rest],
+    merged,
+    sortField,
+    sortDirection,
+    convertPrice,
+    convertAverageCostPrice,
+    getTickerCurrencyFn,
+    resolveCostCurrency,
+    investedForDisplay,
+  );
+  const orderedChildren = [...children].sort((a, b) =>
+    (a.companyName || "").localeCompare(b.companyName || "", "sk"),
+  );
+  return { rows, children: orderedChildren, quotes: merged };
+}
+
+function flattenPokemonGroup(
+  rows: HoldingWithCostCurrency[],
+  children: HoldingWithCostCurrency[],
+  open: boolean,
+): HoldingWithCostCurrency[] {
+  if (!open || children.length === 0) return rows;
+  const out: HoldingWithCostCurrency[] = [];
+  for (const row of rows) {
+    out.push(row);
+    if (isPokemonGroupTicker(row.ticker)) out.push(...children);
+  }
+  return out;
+}
+
 interface NewsArticle {
   ticker: string;
   title: string;
@@ -638,6 +774,7 @@ export default function Dashboard() {
   const [mobileAssetsSortDialogOpen, setMobileAssetsSortDialogOpen] = useState(false);
   const [mobileAssetsViewPopoverOpen, setMobileAssetsViewPopoverOpen] = useState(false);
   const [expandedMobileHoldingId, setExpandedMobileHoldingId] = useState<string | null>(null);
+  const [pokemonGroupOpen, setPokemonGroupOpen] = useState(false);
   const [draftMobileSortBy, setDraftMobileSortBy] = useState<MobileAssetsSortBy>("name");
   const [draftMobileSortOrder, setDraftMobileSortOrder] = useState<SortDirection>("asc");
   const maskAmount = (amount: string) => hideAmounts ? "••••••" : amount;
@@ -1670,6 +1807,79 @@ export default function Dashboard() {
       ),
     [holdings, quotes, mobileSortField, mobileAssetsSortOrder, convertPrice, convertAverageCostPrice, getTickerCurrency, resolveHoldingCostCurrency, pnlInvestedForDisplay],
   );
+
+  const collapsedDesktop = useMemo(
+    () =>
+      collapsePokemonInAllPortfolios(
+        sortedHoldingsDesktop,
+        quotes,
+        isAllPortfolios,
+        sortField,
+        sortDirection,
+        convertPrice,
+        convertAverageCostPrice,
+        getTickerCurrency,
+        resolveHoldingCostCurrency,
+        pnlInvestedForDisplay,
+      ),
+    [
+      sortedHoldingsDesktop,
+      quotes,
+      isAllPortfolios,
+      sortField,
+      sortDirection,
+      convertPrice,
+      convertAverageCostPrice,
+      getTickerCurrency,
+      resolveHoldingCostCurrency,
+      pnlInvestedForDisplay,
+    ],
+  );
+
+  const collapsedMobile = useMemo(
+    () =>
+      collapsePokemonInAllPortfolios(
+        sortedHoldingsMobile,
+        quotes,
+        isAllPortfolios,
+        mobileSortField,
+        mobileAssetsSortOrder,
+        convertPrice,
+        convertAverageCostPrice,
+        getTickerCurrency,
+        resolveHoldingCostCurrency,
+        pnlInvestedForDisplay,
+      ),
+    [
+      sortedHoldingsMobile,
+      quotes,
+      isAllPortfolios,
+      mobileSortField,
+      mobileAssetsSortOrder,
+      convertPrice,
+      convertAverageCostPrice,
+      getTickerCurrency,
+      resolveHoldingCostCurrency,
+      pnlInvestedForDisplay,
+    ],
+  );
+
+  const flatHoldingsDesktop = useMemo(
+    () => flattenPokemonGroup(collapsedDesktop.rows, collapsedDesktop.children, pokemonGroupOpen),
+    [collapsedDesktop, pokemonGroupOpen],
+  );
+
+  const flatHoldingsMobile = useMemo(
+    () => flattenPokemonGroup(collapsedMobile.rows, collapsedMobile.children, pokemonGroupOpen),
+    [collapsedMobile, pokemonGroupOpen],
+  );
+
+  const pokemonChildIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const holding of collapsedDesktop.children) ids.add(holding.id);
+    for (const holding of collapsedMobile.children) ids.add(holding.id);
+    return ids;
+  }, [collapsedDesktop.children, collapsedMobile.children]);
 
   const formatPercent = (value: number) => {
     const sign = value >= 0 ? "+" : "";
@@ -2840,8 +3050,11 @@ export default function Dashboard() {
 
               {/* Mobile view - compact list */}
               <div className="md:hidden space-y-1">
-                {sortedHoldingsMobile.map((holding) => {
-                  const quote = quotes?.[holding.ticker];
+                {flatHoldingsMobile.map((holding) => {
+                  const quote = (collapsedMobile.quotes ?? quotes)?.[holding.ticker];
+                  const isPokemonGroup = isPokemonGroupTicker(holding.ticker);
+                  const isPokemonChild = pokemonChildIds.has(holding.id);
+                  const hideMarketSession = isPokemonTicker(holding.ticker);
                   const shares = parseFloat(holding.shares);
                   const quoteCurrency = getTickerCurrency(holding.ticker);
                   const costCurrency = resolveHoldingCostCurrency(holding);
@@ -2892,6 +3105,10 @@ export default function Dashboard() {
                   const isLotsExpanded = expandedMobileHoldingId === holding.id;
 
                   const openAssetDetail = () => {
+                    if (isPokemonGroup) {
+                      setPokemonGroupOpen((open) => !open);
+                      return;
+                    }
                     setLocation(`/asset/${encodeURIComponent(holding.ticker)}`);
                   };
 
@@ -2901,7 +3118,7 @@ export default function Dashboard() {
                   };
 
                   const simpleDailyPctEl =
-                    !quote
+                    hideMarketSession || !quote
                       ? null
                       : usSessionState === "LIVE" && Number.isFinite(quote.changePercent)
                         ? (
@@ -2931,13 +3148,23 @@ export default function Dashboard() {
                       key={holding.id}
                       role="button"
                       tabIndex={0}
-                      className="py-2 border-b last:border-b-0 cursor-pointer hover:bg-muted/40 rounded-md px-1 -mx-1 transition-colors"
+                      className={`py-2 border-b last:border-b-0 cursor-pointer hover:bg-muted/40 rounded-md px-1 -mx-1 transition-colors${isPokemonChild ? " ml-3 border-l-2 border-primary/30" : ""}`}
                       data-testid={`row-holding-${holding.ticker}`}
-                      aria-expanded={canExpandLots ? isLotsExpanded : undefined}
-                      onClick={toggleLotsExpand}
+                      aria-expanded={isPokemonGroup ? pokemonGroupOpen : canExpandLots ? isLotsExpanded : undefined}
+                      onClick={() => {
+                        if (isPokemonGroup) {
+                          setPokemonGroupOpen((open) => !open);
+                          return;
+                        }
+                        toggleLotsExpand();
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
+                          if (isPokemonGroup) {
+                            setPokemonGroupOpen((open) => !open);
+                            return;
+                          }
                           toggleLotsExpand();
                         }
                       }}
@@ -2945,9 +3172,9 @@ export default function Dashboard() {
                       {mobileAssetsView === "simple" ? (
                         <div className="flex gap-2 items-start">
                           <div className="shrink-0 pt-0.5 flex items-center gap-0.5">
-                            {canExpandLots ? (
+                            {canExpandLots || isPokemonGroup ? (
                               <ChevronDown
-                                className={`h-3 w-3 text-muted-foreground transition-transform ${isLotsExpanded ? "" : "-rotate-90"}`}
+                                className={`h-3 w-3 text-muted-foreground transition-transform ${(isPokemonGroup ? pokemonGroupOpen : isLotsExpanded) ? "" : "-rotate-90"}`}
                                 aria-hidden
                               />
                             ) : (
@@ -2956,6 +3183,7 @@ export default function Dashboard() {
                             <CompanyLogo
                               ticker={holding.ticker}
                               companyName={holding.companyName}
+                              imageUrl={holding.tcgImageUrl}
                               size="xs"
                             />
                           </div>
@@ -3006,15 +3234,15 @@ export default function Dashboard() {
                         <>
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2 min-w-0 flex-1">
-                              {canExpandLots ? (
+                              {canExpandLots || isPokemonGroup ? (
                                 <ChevronDown
-                                  className={`h-3 w-3 shrink-0 text-muted-foreground transition-transform ${isLotsExpanded ? "" : "-rotate-90"}`}
+                                  className={`h-3 w-3 shrink-0 text-muted-foreground transition-transform ${(isPokemonGroup ? pokemonGroupOpen : isLotsExpanded) ? "" : "-rotate-90"}`}
                                   aria-hidden
                                 />
                               ) : (
                                 <span className="w-3 shrink-0" aria-hidden />
                               )}
-                              <CompanyLogo ticker={holding.ticker} companyName={holding.companyName} size="xs" />
+                              <CompanyLogo ticker={holding.ticker} companyName={holding.companyName} imageUrl={holding.tcgImageUrl} size="xs" />
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5">
                                   <button
@@ -3026,7 +3254,7 @@ export default function Dashboard() {
                                       openAssetDetail();
                                     }}
                                   >
-                                    {holding.ticker}
+                                    {assetTickerLabel(holding)}
                                   </button>
                                   <span className="text-[9px] text-muted-foreground">
                                     {formatShareQuantity(shares)} ks
@@ -3052,7 +3280,7 @@ export default function Dashboard() {
                                 <span>
                                   Cena:{" "}
                                   <span className="text-foreground">{maskAmount(formatCurrency(currentPrice))}</span>
-                                  {usSessionState === "LIVE" && quote && (
+                                  {usSessionState === "LIVE" && quote && !hideMarketSession && (
                                     <span className={`ml-0.5 ${getChangeColor(quote.change)}`}>
                                       {formatPercent(quote.changePercent)}
                                     </span>
@@ -3178,8 +3406,11 @@ export default function Dashboard() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sortedHoldingsDesktop.map((holding) => {
-                      const quote = quotes?.[holding.ticker];
+                    {flatHoldingsDesktop.map((holding) => {
+                      const quote = (collapsedDesktop.quotes ?? quotes)?.[holding.ticker];
+                      const isPokemonGroup = isPokemonGroupTicker(holding.ticker);
+                      const isPokemonChild = pokemonChildIds.has(holding.id);
+                      const hideMarketSession = isPokemonTicker(holding.ticker);
                       const shares = parseFloat(holding.shares);
                       const quoteCurrency = getTickerCurrency(holding.ticker);
                       const costCurrency = resolveHoldingCostCurrency(holding);
@@ -3226,12 +3457,29 @@ export default function Dashboard() {
                         <TableRow
                           key={holding.id}
                           data-testid={`row-holding-${holding.ticker}`}
-                          className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => setLocation(`/asset/${encodeURIComponent(holding.ticker)}`)}
+                          className={`cursor-pointer hover:bg-muted/50${isPokemonChild ? " bg-muted/20" : ""}`}
+                          onClick={() => {
+                            if (isPokemonGroup) {
+                              setPokemonGroupOpen((open) => !open);
+                              return;
+                            }
+                            setLocation(`/asset/${encodeURIComponent(holding.ticker)}`);
+                          }}
                         >
                           <TableCell>
-                            <div className="flex items-center gap-3">
-                              <CompanyLogo ticker={holding.ticker} companyName={holding.companyName} size="md" />
+                            <div className={`flex items-center gap-3${isPokemonChild ? " pl-6" : ""}`}>
+                              {isPokemonGroup ? (
+                                <ChevronDown
+                                  className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${pokemonGroupOpen ? "" : "-rotate-90"}`}
+                                  aria-hidden
+                                />
+                              ) : null}
+                              <CompanyLogo ticker={holding.ticker} companyName={holding.companyName} imageUrl={holding.tcgImageUrl} size="md" />
+                              {isPokemonTicker(holding.ticker) ? (
+                                <span className="font-medium" data-testid={`link-ticker-${holding.ticker}`}>
+                                  {assetTickerLabel(holding)}
+                                </span>
+                              ) : (
                               <a 
                                 href={`https://finance.yahoo.com/quote/${holding.ticker}`}
                                 target="_blank"
@@ -3242,6 +3490,7 @@ export default function Dashboard() {
                               >
                                 {holding.ticker}
                               </a>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell className="text-muted-foreground">{holding.companyName}</TableCell>
@@ -3251,7 +3500,7 @@ export default function Dashboard() {
                             <div className="flex flex-col items-end">
                               <div className="flex items-center justify-end gap-1">
                                 {maskAmount(formatCurrency(currentPrice))}
-                                {usSessionState === "LIVE" && quote && (
+                                {usSessionState === "LIVE" && quote && !hideMarketSession && (
                                   <span className={`text-xs ${getChangeColor(quote.change)}`}>
                                     ({formatPercent(quote.changePercent)})
                                   </span>

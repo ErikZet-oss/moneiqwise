@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -29,6 +29,8 @@ import {
   PHYSICAL_SILVER_DISPLAY_NAME,
   PHYSICAL_SILVER_TICKER,
 } from "@shared/physicalMetal";
+import { isPokemonPortfolio } from "@shared/pokemonTcg";
+import { PokemonTransactionFields, type PokemonFormPosition } from "@/components/PokemonTransactionFields";
 import { getTickerCurrency } from "@shared/tickerCurrency";
 import { cn } from "@/lib/utils";
 
@@ -157,6 +159,9 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
 
   const activePortfolio = portfolios.find((p) => p.id === selectedPortfolioId);
   const isSilverMode = isSilverPortfolio(activePortfolio?.brokerCode);
+  const isPokemonMode = isPokemonPortfolio(activePortfolio?.brokerCode);
+  const [pokemonPosition, setPokemonPosition] = useState<PokemonFormPosition | null>(null);
+  const [pokemonFormKey, setPokemonFormKey] = useState(0);
 
   const debouncedSearch = useDebounce(inputValue, 300);
 
@@ -196,7 +201,7 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
       if (!res.ok) throw new Error("Failed to search stocks");
       return res.json();
     },
-    enabled: !isSilverMode && debouncedSearch.length >= 1,
+    enabled: !isSilverMode && !isPokemonMode && debouncedSearch.length >= 1,
   });
 
   const { data: silverSpotQuote } = useQuery<StockQuote>({
@@ -232,6 +237,29 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
     }
   }, [isSilverMode, selectedPortfolioId, form, transactionType]);
 
+  const onPokemonPosition = useCallback((position: PokemonFormPosition | null) => {
+    setPokemonPosition(position);
+    if (!position) {
+      form.setValue("ticker", "");
+      form.setValue("companyName", "");
+      return;
+    }
+    form.setValue("ticker", position.ticker);
+    form.setValue("companyName", position.companyName);
+    form.setValue("tradeCurrency", "EUR");
+  }, [form]);
+
+  useEffect(() => {
+    if (!isPokemonMode) return;
+    form.setValue("tradeCurrency", "EUR");
+    setSelectedStock(null);
+    setSelectedQuote(null);
+    if (transactionType === "DIVIDEND") {
+      setTransactionType("BUY");
+      form.setValue("type", "BUY");
+    }
+  }, [isPokemonMode, selectedPortfolioId, form, transactionType]);
+
   const mutation = useMutation({
     mutationFn: async (data: TransactionForm) => {
       if (data.type === "DEPOSIT" || data.type === "WITHDRAWAL") {
@@ -259,12 +287,12 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
         if (data.externalRefId?.trim()) body.transactionId = data.externalRefId.trim();
         return await apiRequest("POST", "/api/transactions", body);
       }
-      const ccy = normalizeTradeCurrency(data.tradeCurrency);
+      const ccy = isPokemonMode ? "EUR" : normalizeTradeCurrency(data.tradeCurrency);
       const note = (data.companyName || "").trim() || PHYSICAL_SILVER_DISPLAY_NAME;
       const body: Record<string, unknown> = {
         type: data.type,
-        ticker: isSilverMode ? PHYSICAL_SILVER_TICKER : data.ticker,
-        companyName: isSilverMode ? note : data.companyName,
+        ticker: isSilverMode ? PHYSICAL_SILVER_TICKER : isPokemonMode && pokemonPosition ? pokemonPosition.ticker : data.ticker,
+        companyName: isSilverMode ? note : isPokemonMode && pokemonPosition ? pokemonPosition.companyName : data.companyName,
         shares: data.shares,
         pricePerShare: data.pricePerShare,
         commission: data.commission,
@@ -273,6 +301,17 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
         currency: ccy,
         originalCurrency: ccy,
       };
+      if (isPokemonMode && pokemonPosition) {
+        body.tcgCategory = pokemonPosition.category;
+        body.tcgProductName = pokemonPosition.productName;
+        body.tcgSetName = pokemonPosition.setName;
+        body.tcgGradeCompany = pokemonPosition.gradeCompany;
+        body.tcgGradeValue = pokemonPosition.gradeValue;
+        body.tcgCertNumber = pokemonPosition.certNumber;
+        body.tcgImageUrl = pokemonPosition.imageUrl;
+        body.tcgCardmarketId = pokemonPosition.cardmarketId;
+        body.tcgExternalId = pokemonPosition.externalId;
+      }
       if (data.id?.trim()) body.id = data.id.trim();
       return await apiRequest("POST", "/api/transactions", body);
     },
@@ -317,6 +356,8 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
       setSelectedStock(null);
       setSelectedQuote(null);
       setInputValue("");
+      setPokemonPosition(null);
+      setPokemonFormKey((key) => key + 1);
       onSuccessSubmit?.();
     },
     onError: (error: Error) => {
@@ -367,6 +408,14 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
   };
 
   const onSubmit = (data: TransactionForm) => {
+    if (isPokemonMode && data.type !== "DEPOSIT" && data.type !== "WITHDRAWAL" && !pokemonPosition) {
+      toast({
+        title: "Chýba produkt",
+        description: "Vyberte kartu z katalógu alebo zadajte názov produktu.",
+        variant: "destructive",
+      });
+      return;
+    }
     mutation.mutate(data);
   };
 
@@ -408,6 +457,20 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
   };
 
   const getDescription = () => {
+    if (isPokemonMode) {
+      switch (transactionType) {
+        case "BUY":
+          return "Zaznamenajte nákup karty, graded slab alebo sealed produktu. Nákupná cena je v EUR.";
+        case "SELL":
+          return "Zaznamenajte predaj Pokémon položky. FIFO berie najstaršie nákupy danej karty a stupňa.";
+        case "DEPOSIT":
+          return "Vloženie peňazí na Pokémon účet.";
+        case "WITHDRAWAL":
+          return "Výber peňazí z Pokémon účtu.";
+        default:
+          return "Transakcia v portfóliu Pokémon TCG.";
+      }
+    }
     if (isSilverMode) {
       switch (transactionType) {
         case "BUY":
@@ -483,7 +546,26 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
       </CardHeader>
       <CardContent>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form
+            onSubmit={(event) => {
+              if (
+                isPokemonMode &&
+                transactionType !== "DEPOSIT" &&
+                transactionType !== "WITHDRAWAL" &&
+                !pokemonPosition
+              ) {
+                event.preventDefault();
+                toast({
+                  title: "Chýba produkt",
+                  description: "Vyberte kartu z katalógu alebo zadajte názov produktu.",
+                  variant: "destructive",
+                });
+                return;
+              }
+              void form.handleSubmit(onSubmit)(event);
+            }}
+            className="space-y-6"
+          >
             <div className="p-4 rounded-lg bg-muted">
               <Label className="text-base font-medium mb-3 block">Typ transakcie</Label>
               <div className="flex flex-wrap gap-2">
@@ -513,8 +595,7 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
                   <TrendingDown className="h-4 w-4" />
                   Predaj
                 </Button>
-                {!isSilverMode && (
-                <>
+                {!isSilverMode && !isPokemonMode && (
                 <Button
                   type="button"
                   variant={transactionType === "DIVIDEND" ? "default" : "outline"}
@@ -528,6 +609,9 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
                   <Coins className="h-4 w-4" />
                   Dividenda
                 </Button>
+                )}
+                {!isSilverMode && (
+                <>
                 <Button
                   type="button"
                   variant={transactionType === "DEPOSIT" ? "default" : "outline"}
@@ -579,7 +663,7 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
               </Select>
             </div>
 
-            {!isCashFlow && !isSilverMode && (
+            {!isCashFlow && !isSilverMode && !isPokemonMode && (
             <FormField
               control={form.control}
               name="tradeCurrency"
@@ -704,7 +788,11 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
               </div>
             )}
 
-            {!isCashFlow && !isSilverMode && (
+            {isPokemonMode && !isCashFlow && (
+              <PokemonTransactionFields key={pokemonFormKey} onPositionChange={onPokemonPosition} />
+            )}
+
+            {!isCashFlow && !isSilverMode && !isPokemonMode && (
             <FormField
               control={form.control}
               name="ticker"
@@ -924,6 +1012,8 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
                           ? `Celková suma dividendy (${tradeCcy})`
                           : isSilverMode
                             ? `Nákupná cena za 1 oz (${tradeCcy})`
+                            : isPokemonMode
+                              ? "Nákupná cena za kus (EUR)"
                             : `Cena za akciu (${tradeCcy})`}
                     </FormLabel>
                     <FormControl>

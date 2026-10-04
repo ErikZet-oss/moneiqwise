@@ -97,6 +97,30 @@ export async function ensureUserRegistrationStatusColumn(): Promise<void> {
   `);
 }
 
+/**
+ * Voliteľné stĺpce Pokémon TCG. Existujúce akciové riadky ostávajú NULL.
+ */
+export async function ensurePokemonTcgColumns(): Promise<void> {
+  const txColumns = [
+    "tcg_category varchar(20)",
+    "tcg_product_name text",
+    "tcg_set_name varchar(160)",
+    "tcg_grade_company varchar(10)",
+    "tcg_grade_value varchar(10)",
+    "tcg_cert_number varchar(32)",
+    "tcg_image_url text",
+    "tcg_cardmarket_id varchar(40)",
+    "tcg_external_id varchar(64)",
+  ];
+  for (const column of txColumns) {
+    await pool.query(`ALTER TABLE transactions ADD COLUMN IF NOT EXISTS ${column}`);
+  }
+  const holdingColumns = txColumns.filter((column) => !column.startsWith("tcg_cert_number"));
+  for (const column of holdingColumns) {
+    await pool.query(`ALTER TABLE holdings ADD COLUMN IF NOT EXISTS ${column}`);
+  }
+}
+
 /** Voliteľná mena len pre zobrazenie priemerných nákupných cien (EUR/USD). */
 export async function ensureUserSettingsAverageCostDisplayCurrencyColumn(): Promise<void> {
   await pool.query(`

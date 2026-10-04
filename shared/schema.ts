@@ -57,6 +57,7 @@ export const BROKER_CODES = [
   "tastyworks",
   "crypto",
   "silver",
+  "pokemon",
   "other"
 ] as const;
 
@@ -151,6 +152,19 @@ export const transactions = pgTable(
      * `pricePerShare` je suma z účtu v EUR; toto je otváracia cena ako v XTB pre výpočet P/L %.
      */
     instrumentPricePerShare: numeric("instrument_price_per_share", { precision: 18, scale: 4 }),
+    /**
+     * Pokémon TCG. Všetky stĺpce sú voliteľné — akciové a XTB riadky ich nechávajú prázdne.
+     * `externalId` ostáva pre import brokera; katalóg karty je v `tcgExternalId`.
+     */
+    tcgCategory: varchar("tcg_category", { length: 20 }),
+    tcgProductName: text("tcg_product_name"),
+    tcgSetName: varchar("tcg_set_name", { length: 160 }),
+    tcgGradeCompany: varchar("tcg_grade_company", { length: 10 }),
+    tcgGradeValue: varchar("tcg_grade_value", { length: 10 }),
+    tcgCertNumber: varchar("tcg_cert_number", { length: 32 }),
+    tcgImageUrl: text("tcg_image_url"),
+    tcgCardmarketId: varchar("tcg_cardmarket_id", { length: 40 }),
+    tcgExternalId: varchar("tcg_external_id", { length: 64 }),
     transactionDate: timestamp("transaction_date").notNull(),
     createdAt: timestamp("created_at").defaultNow(),
   },
@@ -185,6 +199,14 @@ export const holdings = pgTable(
     shares: numeric("shares", { precision: 18, scale: 8 }).notNull(),
     averageCost: numeric("average_cost", { precision: 18, scale: 4 }).notNull(),
     totalInvested: numeric("total_invested", { precision: 18, scale: 4 }).notNull(),
+    tcgCategory: varchar("tcg_category", { length: 20 }),
+    tcgProductName: text("tcg_product_name"),
+    tcgSetName: varchar("tcg_set_name", { length: 160 }),
+    tcgGradeCompany: varchar("tcg_grade_company", { length: 10 }),
+    tcgGradeValue: varchar("tcg_grade_value", { length: 10 }),
+    tcgImageUrl: text("tcg_image_url"),
+    tcgCardmarketId: varchar("tcg_cardmarket_id", { length: 40 }),
+    tcgExternalId: varchar("tcg_external_id", { length: 64 }),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
   (table) => [uniqueIndex("holdings_user_portfolio_ticker_idx").on(table.userId, table.portfolioId, table.ticker)]

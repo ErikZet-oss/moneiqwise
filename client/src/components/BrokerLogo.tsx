@@ -98,6 +98,12 @@ export const BROKER_CATALOG: Record<BrokerCode, BrokerInfo> = {
     color: "#94a3b8",
     textColor: "#1e293b",
   },
+  pokemon: {
+    name: "Pokémon TCG",
+    shortName: "PKM",
+    color: "#ee1515",
+    textColor: "#ffffff",
+  },
   other: {
     name: "Iný broker",
     shortName: "?",
@@ -138,6 +144,24 @@ function SilverCoinMark({ size, testId }: { size: LogoSize; testId?: string }) {
   );
 }
 
+function PokemonMark({ size, testId }: { size: LogoSize; testId?: string }) {
+  const boxClass = `${sizeClasses[size]} rounded-full flex items-center justify-center shrink-0`;
+  return (
+    <div
+      className={boxClass}
+      style={{ background: "linear-gradient(180deg, #ee1515 0 46%, #f8fafc 46% 54%, #f8fafc 54% 100%)" }}
+      title="Pokémon TCG"
+      data-testid={testId}
+      aria-hidden
+    >
+      <span
+        className="rounded-full border-2 border-slate-900 bg-white"
+        style={{ width: "42%", height: "42%", boxShadow: "inset 0 0 0 2px #ee1515" }}
+      />
+    </div>
+  );
+}
+
 function BrokerLogoMark({
   brokerCode,
   broker,
@@ -151,13 +175,17 @@ function BrokerLogoMark({
 }) {
   const [logoFailed, setLogoFailed] = useState(false);
   const domain = BROKER_LOGO_DOMAIN[brokerCode];
-  const showInitials = brokerCode === "other" || brokerCode === "silver" || !domain || logoFailed;
+  const showInitials = brokerCode === "other" || brokerCode === "silver" || brokerCode === "pokemon" || !domain || logoFailed;
 
   const shortLen = size === "xs" ? 2 : 3;
   const boxClass = `${sizeClasses[size]} rounded-md flex items-center justify-center font-bold shrink-0`;
 
   if (brokerCode === "silver") {
     return <SilverCoinMark size={size} testId={testId} />;
+  }
+
+  if (brokerCode === "pokemon") {
+    return <PokemonMark size={size} testId={testId} />;
   }
 
   if (showInitials) {

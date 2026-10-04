@@ -26,6 +26,8 @@ import {
   CASH_INTEREST_TICKER,
 } from "@shared/tickerCurrency";
 import { isPhysicalMetalTicker, isPhysicalSilverTicker } from "@shared/physicalMetal";
+import { buildPokemonPosition, isPokemonTicker } from "@shared/pokemonTcg";
+import { fetchPokemonEuLowQuote, searchPokemonCards } from "./pokemonTcgClient";
 import {
   enrichHoldingsWithCostCurrency,
   inferHoldingCostCurrency,
@@ -2001,16 +2003,18 @@ async function fetchStockQuote(ticker: string, skipCache = false): Promise<any> 
     // Backward compatibility: older cache entries may miss newer fields.
     // If any required field is missing, force fresh fetch to avoid stale/zero metrics.
     const isPhysical = isPhysicalMetalTicker(ticker);
+    const isPokemon = isPokemonTicker(ticker);
     const hasRequiredFields =
       cached.data &&
       Object.prototype.hasOwnProperty.call(cached.data, "preMarketPrice") &&
       Object.prototype.hasOwnProperty.call(cached.data, "annualDividendPerShare");
     const missingExtended =
       !isPhysical &&
+      !isPokemon &&
       cached.data?.preMarketPrice == null &&
       cached.data?.preMarketChangePercent == null;
     const staleExtended = missingExtended && Date.now() - cached.timestamp > 45 * 1000;
-    const staleChartExtended = !isPhysical && isStaleChartExtendedCache(cached.data);
+    const staleChartExtended = !isPhysical && !isPokemon && isStaleChartExtendedCache(cached.data);
     const staleOvernightPre = !isPhysical && isStaleOvernightInPreMarketCache(cached.data);
     if (hasRequiredFields && !staleExtended && !staleChartExtended && !staleOvernightPre) {
       return cached.data;
@@ -2026,6 +2030,23 @@ async function fetchStockQuote(ticker: string, skipCache = false): Promise<any> 
       return result;
     } catch (error) {
       console.warn(`Physical metal quote failed for ${ticker}:`, error);
+      if (cached) return cached.data;
+      throw error;
+    }
+  }
+
+  if (isPokemonTicker(ticker)) {
+    try {
+      const result = await fetchPokemonEuLowQuote(ticker);
+      if (!result) {
+        throw new Error(`Európsky low nie je dostupné pre ${ticker}`);
+      }
+      priceCache.set(ticker, { data: result, timestamp: Date.now() });
+      scheduleCacheSave();
+      console.log(`Pokemon EU low for ${ticker}: ${result.price} EUR`);
+      return result;
+    } catch (error) {
+      console.warn(`Pokemon EU low failed for ${ticker}:`, error);
       if (cached) return cached.data;
       throw error;
     }
@@ -2139,6 +2160,9 @@ async function fetchFinnhubCandles(ticker: string): Promise<Record<string, numbe
 
 // Fetch historical daily prices - Yahoo Finance first, then Alpha Vantage, then Finnhub
 async function fetchHistoricalPrices(ticker: string): Promise<Record<string, number>> {
+  // Karty nemajú Yahoo históriu. Prázdna história = hodnota v grafe ostane na náklade.
+  if (isPokemonTicker(ticker)) return {};
+
   // v2-10y: Yahoo history extended beyond 5y (needed for S&P Celkovo / early years).
   const cacheKey = `${ticker}:v2-${YAHOO_HISTORICAL_YEARS}y`;
   const cached = historicalCache.get(cacheKey);
@@ -3088,12 +3112,14 @@ export async function registerRoutes(
     ensureExchangeRatesTable,
     ensureUserRegistrationStatusColumn,
     ensureUserSettingsAverageCostDisplayCurrencyColumn,
+    ensurePokemonTcgColumns,
   } = await import("./schemaEnsure");
   await ensurePortfolioSortOrderColumn();
   await ensureTransactionImportColumns();
   await ensureExchangeRatesTable();
   await ensureUserRegistrationStatusColumn();
   await ensureUserSettingsAverageCostDisplayCurrencyColumn();
+  await ensurePokemonTcgColumns();
 
   // Setup auth middleware
   await setupAuth(app);
@@ -3579,7 +3605,7 @@ export async function registerRoutes(
         const sh = parseFloat(h.shares);
         if (!(sh > 1e-9)) continue;
         const t = h.ticker.toUpperCase();
-        if (t === "CASH" || t === CASH_FLOW_TICKER) continue;
+        if (t === "CASH" || t === CASH_FLOW_TICKER || isPokemonTicker(t)) continue;
         if (seen.has(t)) continue;
         seen.add(t);
         unique.push({ ticker: t, companyName: h.companyName || t });
@@ -3777,7 +3803,7 @@ export async function registerRoutes(
       }
 
       let nextEarnings: { date: string } | null = null;
-      if (upperTicker !== "CASH") {
+      if (upperTicker !== "CASH" && !isPokemonTicker(upperTicker)) {
         try {
           nextEarnings = await fetchNextEarningsDateForAsset(upperTicker);
         } catch {
@@ -3787,9 +3813,20 @@ export async function registerRoutes(
 
       const marketTransactions = txRows.filter((t) => t.type === "BUY" || t.type === "SELL");
 
+      const pokemonImage =
+        holdingRows.find((h) => h.tcgImageUrl)?.tcgImageUrl ??
+        txRows.find((t) => t.tcgImageUrl)?.tcgImageUrl ??
+        null;
+
       res.json({
         ticker: displayTicker,
         companyName,
+        imageUrl: pokemonImage,
+        priceNote: isPokemonTicker(displayTicker)
+          ? quote
+            ? "Európsky low (Cardmarket)"
+            : "Pre túto položku nie je európsky low v katalógu — zobrazená hodnota ostáva na nákupnej cene."
+          : null,
         costCurrency: inferHoldingCostCurrency(displayTicker, txRows),
         positions,
         portfolios: visiblePortfolios.map((p) => ({ id: p.id, name: p.name })),
@@ -4076,6 +4113,40 @@ export async function registerRoutes(
         return res.json(transaction);
       }
 
+      let pokemonPosition: Extract<ReturnType<typeof buildPokemonPosition>, { ok: true }> | null = null;
+      const tcgCategoryIn =
+        typeof transactionData.tcgCategory === "string" ? transactionData.tcgCategory.trim() : "";
+      if (tcgCategoryIn) {
+        const position = buildPokemonPosition({
+          category: tcgCategoryIn,
+          productName: typeof transactionData.tcgProductName === "string" ? transactionData.tcgProductName : "",
+          setName: typeof transactionData.tcgSetName === "string" ? transactionData.tcgSetName : null,
+          gradeCompany: typeof transactionData.tcgGradeCompany === "string" ? transactionData.tcgGradeCompany : null,
+          gradeValue: typeof transactionData.tcgGradeValue === "string" ? transactionData.tcgGradeValue : null,
+          certNumber: typeof transactionData.tcgCertNumber === "string" ? transactionData.tcgCertNumber : null,
+          imageUrl: typeof transactionData.tcgImageUrl === "string" ? transactionData.tcgImageUrl : null,
+          cardmarketId: typeof transactionData.tcgCardmarketId === "string" ? transactionData.tcgCardmarketId : null,
+          externalId: typeof transactionData.tcgExternalId === "string" ? transactionData.tcgExternalId : null,
+        });
+        if (!position.ok) {
+          return res.status(400).json({ message: position.message });
+        }
+        transactionData.ticker = position.ticker;
+        transactionData.companyName = position.companyName;
+        transactionData.currency = "EUR";
+        transactionData.originalCurrency = "EUR";
+        transactionData.tcgCategory = position.category;
+        transactionData.tcgProductName = position.productName;
+        transactionData.tcgSetName = position.setName;
+        transactionData.tcgGradeCompany = position.gradeCompany;
+        transactionData.tcgGradeValue = position.gradeValue;
+        transactionData.tcgCertNumber = position.certNumber;
+        transactionData.tcgImageUrl = position.imageUrl;
+        transactionData.tcgCardmarketId = position.cardmarketId;
+        transactionData.tcgExternalId = position.externalId;
+        pokemonPosition = position;
+      }
+
       // Validate the transaction data
       const parsed = insertTransactionSchema.safeParse(transactionData);
       if (!parsed.success) {
@@ -4086,6 +4157,19 @@ export async function registerRoutes(
       }
 
       const { type, ticker, companyName, shares: parsedShares, pricePerShare, commission } = parsed.data;
+      const rememberPokemonHolding = async () => {
+        if (!pokemonPosition || pokemonPosition.ticker !== ticker) return;
+        await storage.patchHoldingPokemonMeta(userId, ticker, portfolioId, {
+          tcgCategory: pokemonPosition.category,
+          tcgProductName: pokemonPosition.productName,
+          tcgSetName: pokemonPosition.setName,
+          tcgGradeCompany: pokemonPosition.gradeCompany,
+          tcgGradeValue: pokemonPosition.gradeValue,
+          tcgImageUrl: pokemonPosition.imageUrl,
+          tcgCardmarketId: pokemonPosition.cardmarketId,
+          tcgExternalId: pokemonPosition.externalId,
+        });
+      };
       const sharesNum = parseFloat(parsedShares);
       const priceNum = parseFloat(pricePerShare);
       const commissionNum = parseFloat(commission || "0");
@@ -4143,6 +4227,7 @@ export async function registerRoutes(
             newTotalInvested.toFixed(4),
             portfolioId
           );
+          await rememberPokemonHolding();
         } else {
           // Create new holding
           const avgCost = totalCost / sharesNum;
@@ -4155,6 +4240,7 @@ export async function registerRoutes(
             totalCost.toFixed(4),
             portfolioId
           );
+          await rememberPokemonHolding();
         }
       } else if (type === "SELL" && currentHolding) {
         const currentShares = parseFloat(currentHolding.shares);
@@ -4176,6 +4262,7 @@ export async function registerRoutes(
             newTotalInvested.toFixed(4),
             portfolioId
           );
+          await rememberPokemonHolding();
         }
       }
       // Note: DIVIDEND transactions don't affect holdings - they are just recorded for income tracking
@@ -4227,6 +4314,17 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error searching stocks:", error);
       res.status(500).json({ message: "Failed to search stocks" });
+    }
+  });
+
+  app.get("/api/pokemon/search", isAuthenticated, async (req: any, res) => {
+    try {
+      const q = typeof req.query.q === "string" ? req.query.q : "";
+      const results = await searchPokemonCards(q);
+      res.json(results);
+    } catch (error) {
+      console.error("Error searching Pokemon cards:", error);
+      res.status(500).json({ message: "Nepodarilo sa vyhľadať Pokémon karty." });
     }
   });
 

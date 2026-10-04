@@ -471,6 +471,9 @@ export default function Settings() {
                 if (code === "silver" && !newPortfolioName.trim()) {
                   setNewPortfolioName("Strieborné mince");
                 }
+                if (code === "pokemon" && !newPortfolioName.trim()) {
+                  setNewPortfolioName("Pokémon TCG");
+                }
               }}
             >
               <SelectTrigger className="h-8 w-full sm:w-[150px] text-xs" data-testid="select-new-portfolio-broker">

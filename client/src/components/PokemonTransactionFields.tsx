@@ -1,0 +1,324 @@
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import {
+  buildPokemonPosition,
+  POKEMON_GRADE_COMPANIES,
+  POKEMON_GRADE_VALUES,
+  type PokemonCardHit,
+  type PokemonPosition,
+  type PokemonTcgCategory,
+} from "@shared/pokemonTcg";
+
+export type PokemonFormPosition = Extract<PokemonPosition, { ok: true }> & {
+  euLowEur: number | null;
+};
+
+type Props = {
+  onPositionChange: (position: PokemonFormPosition | null) => void;
+};
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  return debouncedValue;
+}
+
+const CATEGORIES: { id: PokemonTcgCategory; label: string }[] = [
+  { id: "RAW_CARD", label: "Raw" },
+  { id: "GRADED_CARD", label: "Graded" },
+  { id: "SEALED_PRODUCT", label: "Sealed" },
+];
+
+export function PokemonTransactionFields({ onPositionChange }: Props) {
+  const [category, setCategory] = useState<PokemonTcgCategory>("RAW_CARD");
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<PokemonCardHit | null>(null);
+  const [manualName, setManualName] = useState("");
+  const [manualSet, setManualSet] = useState("");
+  const [manualImage, setManualImage] = useState("");
+  const [gradeCompany, setGradeCompany] = useState("PSA");
+  const [gradeValue, setGradeValue] = useState("10");
+  const [certNumber, setCertNumber] = useState("");
+  const debouncedQuery = useDebounce(query, 300);
+  const isSealed = category === "SEALED_PRODUCT";
+
+  const { data: cards, isLoading, isError } = useQuery<PokemonCardHit[]>({
+    queryKey: ["/api/pokemon/search", debouncedQuery],
+    queryFn: async () => {
+      const res = await fetch(`/api/pokemon/search?q=${encodeURIComponent(debouncedQuery)}`);
+      if (!res.ok) throw new Error("search failed");
+      return res.json();
+    },
+    enabled: !isSealed && debouncedQuery.trim().length >= 2,
+  });
+
+  useEffect(() => {
+    const productName = isSealed || !selected ? manualName : selected.name;
+    const setName = isSealed || !selected ? manualSet : selected.setName;
+    const imageUrl = isSealed || !selected ? manualImage : selected.imageUrl ?? "";
+    const externalId = !isSealed && selected ? selected.externalId : "";
+    const built = buildPokemonPosition({
+      category,
+      productName,
+      setName,
+      gradeCompany: category === "GRADED_CARD" ? gradeCompany : null,
+      gradeValue: category === "GRADED_CARD" ? gradeValue : null,
+      certNumber: category === "GRADED_CARD" ? certNumber : null,
+      imageUrl,
+      externalId,
+      cardmarketId: !isSealed && selected ? selected.cardmarketId : null,
+    });
+    if (!built.ok) {
+      onPositionChange(null);
+      return;
+    }
+    onPositionChange({
+      ...built,
+      euLowEur: !isSealed && selected ? selected.euLowEur : null,
+    });
+  }, [
+    category,
+    selected,
+    manualName,
+    manualSet,
+    manualImage,
+    gradeCompany,
+    gradeValue,
+    certNumber,
+    isSealed,
+    onPositionChange,
+  ]);
+
+  const pickCard = (card: PokemonCardHit) => {
+    setSelected(card);
+    setManualName(card.name);
+    setManualSet(card.setName);
+    setQuery("");
+    setOpen(false);
+  };
+
+  const clearCard = () => {
+    setSelected(null);
+  };
+
+  return (
+    <div className="space-y-4 p-4 rounded-lg border border-dashed bg-muted/40">
+      <div>
+        <p className="text-sm font-medium">Pokémon TCG</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          Nákupná cena je to, čo ste zaplatili v EUR. Aktuálna hodnota raw karty sa počíta z európskeho low
+          (Cardmarket). Graded a sealed bez katalógu ostávajú na nákupnej cene.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {CATEGORIES.map((item) => (
+          <Button
+            key={item.id}
+            type="button"
+            size="sm"
+            variant={category === item.id ? "default" : "outline"}
+            onClick={() => {
+              setCategory(item.id);
+              if (item.id === "SEALED_PRODUCT") setSelected(null);
+            }}
+            data-testid={`button-pokemon-category-${item.id}`}
+          >
+            {item.label}
+          </Button>
+        ))}
+      </div>
+
+      {!isSealed && (
+        <div className="space-y-2">
+          <Label>Karta z katalógu</Label>
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                role="combobox"
+                className="w-full justify-between"
+                data-testid="button-pokemon-search"
+              >
+                <span className="truncate">
+                  {selected ? `${selected.name} · ${selected.setName}` : "Vyhľadajte kartu..."}
+                </span>
+                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[min(420px,90vw)] p-0">
+              <div className="flex items-center border-b px-3">
+                <Input
+                  placeholder="Názov karty, napr. Charizard"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  className="border-0 focus-visible:ring-0 h-11"
+                  data-testid="input-pokemon-search"
+                  autoFocus
+                />
+              </div>
+              <ScrollArea className="max-h-[320px]">
+                {isLoading && (
+                  <div className="p-4 text-center">
+                    <Loader2 className="h-4 w-4 animate-spin mx-auto" />
+                  </div>
+                )}
+                {isError && (
+                  <p className="p-3 text-sm text-destructive">Katalóg sa nepodarilo načítať. Kartu môžete zadať ručne.</p>
+                )}
+                {!isLoading && cards && cards.length > 0 && (
+                  <div className="p-1">
+                    {cards.map((card) => (
+                      <button
+                        key={card.externalId}
+                        type="button"
+                        onClick={() => pickCard(card)}
+                        className="flex w-full items-center gap-2 px-2 py-1.5 rounded-sm text-left hover:bg-accent"
+                        data-testid={`option-pokemon-${card.externalId}`}
+                      >
+                        <Check className={cn("h-4 w-4", selected?.externalId === card.externalId ? "opacity-100" : "opacity-0")} />
+                        {card.imageUrl ? (
+                          <img src={card.imageUrl} alt="" className="h-12 w-9 object-contain rounded-sm bg-background" />
+                        ) : (
+                          <span className="h-12 w-9 rounded-sm bg-muted" />
+                        )}
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-medium truncate">{card.name}</span>
+                          <span className="block text-xs text-muted-foreground truncate">
+                            {card.setName}
+                            {card.number ? ` · #${card.number}` : ""}
+                          </span>
+                          <span className="block text-xs tabular-nums">
+                            {card.euLowEur != null ? `EU low ${card.euLowEur.toFixed(2)} €` : "EU low nie je v katalógu"}
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {!isLoading && debouncedQuery.trim().length >= 2 && cards && cards.length === 0 && (
+                  <p className="p-3 text-sm text-muted-foreground">Nič sa nenašlo. Skúste kratší názov alebo zadajte kartu ručne.</p>
+                )}
+                {debouncedQuery.trim().length < 2 && (
+                  <p className="p-3 text-sm text-muted-foreground">Zadajte aspoň 2 znaky.</p>
+                )}
+              </ScrollArea>
+            </PopoverContent>
+          </Popover>
+          {selected && (
+            <div className="flex items-center gap-3 text-sm">
+              {selected.imageUrl ? (
+                <img src={selected.imageUrl} alt="" className="h-16 w-12 object-contain rounded bg-background" />
+              ) : null}
+              <div className="min-w-0">
+                <p className="font-medium truncate">{selected.name}</p>
+                <p className="text-xs text-muted-foreground truncate">{selected.setName}</p>
+                <p className="text-xs tabular-nums">
+                  {selected.euLowEur != null
+                    ? `Európsky low: ${selected.euLowEur.toFixed(2)} €`
+                    : "Európsky low pre túto kartu chýba."}
+                </p>
+                <button type="button" className="text-xs text-primary hover:underline" onClick={clearCard}>
+                  Zadať iný názov ručne
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {(isSealed || !selected) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="space-y-2 sm:col-span-2">
+            <Label>{isSealed ? "Produkt (ETB, bundle, tin…)" : "Názov karty"}</Label>
+            <Input
+              value={manualName}
+              onChange={(e) => setManualName(e.target.value)}
+              placeholder={isSealed ? "napr. Prismatic Evolutions Elite Trainer Box" : "napr. Charizard ex"}
+              data-testid="input-pokemon-product-name"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Séria / set</Label>
+            <Input
+              value={manualSet}
+              onChange={(e) => setManualSet(e.target.value)}
+              placeholder="voliteľné"
+              data-testid="input-pokemon-set-name"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>URL obrázka</Label>
+            <Input
+              value={manualImage}
+              onChange={(e) => setManualImage(e.target.value)}
+              placeholder="https://…"
+              data-testid="input-pokemon-image-url"
+            />
+          </div>
+        </div>
+      )}
+
+      {category === "GRADED_CARD" && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="space-y-2">
+            <Label>Spoločnosť</Label>
+            <Select value={gradeCompany} onValueChange={setGradeCompany}>
+              <SelectTrigger data-testid="select-pokemon-grade-company">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {POKEMON_GRADE_COMPANIES.map((company) => (
+                  <SelectItem key={company} value={company}>
+                    {company}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Stupeň</Label>
+            <Select value={gradeValue} onValueChange={setGradeValue}>
+              <SelectTrigger data-testid="select-pokemon-grade-value">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {POKEMON_GRADE_VALUES.map((value) => (
+                  <SelectItem key={value} value={value}>
+                    {value}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Číslo certifikátu</Label>
+            <Input
+              value={certNumber}
+              onChange={(e) => setCertNumber(e.target.value)}
+              placeholder="voliteľné"
+              data-testid="input-pokemon-cert"
+            />
+          </div>
+          <p className="sm:col-span-3 text-xs text-muted-foreground">
+            Rovnaká karta a rovnaký stupeň sa sčítajú ako kusy (FIFO). Certifikát ostáva pri konkrétnom nákupe.
+            Trhová cena graded kariet nie je v európskom low feede, preto sa drží nákupná cena.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}

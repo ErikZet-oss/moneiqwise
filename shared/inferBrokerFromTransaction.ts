@@ -14,6 +14,7 @@ const BROKER_LABEL: Record<BrokerCode, string> = {
   tastyworks: "tastytrade",
   crypto: "Krypto burza",
   silver: "Striebro",
+  pokemon: "Pokémon TCG",
   other: "Iný / manuálne",
 };
 

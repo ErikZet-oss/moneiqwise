@@ -19,6 +19,7 @@ import { useChartSettings } from "@/hooks/useChartSettings";
 import { useToast } from "@/hooks/use-toast";
 import type { Holding } from "@shared/schema";
 import { CASH_INTEREST_DISPLAY_NAME, CASH_INTEREST_TICKER } from "@shared/tickerCurrency";
+import { isPokemonTicker, POKEMON_GROUP_TICKER } from "@shared/pokemonTcg";
 import { cn } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
@@ -92,6 +93,7 @@ function allocationAssetLabel(holding: Holding): { name: string; hint?: string }
 
   if (tickerUpper === "CASH") return { name: "Hotovosť" };
   if (tickerUpper === CASH_INTEREST_TICKER) return { name: CASH_INTEREST_DISPLAY_NAME };
+  if (isPokemonTicker(tickerUpper)) return { name: company || "Pokémon TCG" };
 
   const hint =
     company && company.toUpperCase() !== tickerUpper && !company.toUpperCase().includes(tickerUpper)
@@ -110,6 +112,7 @@ function aggregateTickerSlices(holdings: Holding[], valueByTickerKey: Map<string
   return Array.from(valueByTickerKey.entries())
     .map(([key, value]) => {
       if (key === "HOTOVOST") return { name: "Hotovosť", value };
+      if (key === POKEMON_GROUP_TICKER) return { name: "Pokémon TCG", value };
       const row = labels.get(key);
       return { name: row?.name ?? key, hint: row?.hint, value };
     })
@@ -342,18 +345,25 @@ export default function Allocation() {
         continue;
       }
 
-      if (!quote) continue;
+      const pokemon = isPokemonTicker(tickerKey);
+      if (!quote && !pokemon) continue;
       const tc = getTickerCurrency(h.ticker);
-      const rawVal = shares * quote.price;
+      const fallbackPrice = parseFloat(h.averageCost);
+      const price = quote?.price ?? (Number.isFinite(fallbackPrice) ? fallbackPrice : 0);
+      if (!(price > 0)) continue;
+      const rawVal = shares * price;
       const conv = convertPrice(rawVal, tc);
       sum += conv;
 
-      tickerValues.set(tickerKey, (tickerValues.get(tickerKey) ?? 0) + conv);
+      const valueKey = isAllPortfolios && pokemon ? POKEMON_GROUP_TICKER : tickerKey;
+      tickerValues.set(valueKey, (tickerValues.get(valueKey) ?? 0) + conv);
 
       const pr =
         profiles[tickerKey] ??
         profiles[h.ticker] ??
-        { sector: "Neznáme", country: "Neznáme", assetType: "AKCIA" as AssetType };
+        (pokemon
+          ? { sector: "Zberateľstvo", country: "Európa", assetType: "INE" as AssetType }
+          : { sector: "Neznáme", country: "Neznáme", assetType: "AKCIA" as AssetType });
       sectorRows.push({ name: pr.sector, value: conv });
       countryRows.push({ name: pr.country, value: conv });
       typeRows.push({ name: ASSET_TYPE_LABELS[pr.assetType] ?? "Iné", value: conv });
@@ -385,6 +395,7 @@ export default function Allocation() {
     cashValueConv,
     convertPrice,
     getTickerCurrency,
+    isAllPortfolios,
   ]);
 
   const renderTooltip = (props: {

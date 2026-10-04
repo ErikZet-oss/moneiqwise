@@ -1,4 +1,5 @@
 import { isPhysicalMetalTicker } from "./physicalMetal";
+import { isPokemonTicker } from "./pokemonTcg";
 
 /** Syntetický ticker z XTB importu (úrok z free cash). */
 export const CASH_INTEREST_TICKER = "CASH_INTEREST" as const;
@@ -21,6 +22,9 @@ export function getTickerCurrency(ticker: string): QuoteCurrency {
   }
   if (u.startsWith("PM:")) {
     return "USD";
+  }
+  if (isPokemonTicker(u)) {
+    return "EUR";
   }
   if (
     u.endsWith(".DE") ||

@@ -26,6 +26,7 @@ import {
   type WatchlistItem,
   type InsertWatchlistItem,
 } from "@shared/schema";
+import type { PokemonHoldingMeta } from "@shared/pokemonTcg";
 import type { AllExchangeRates } from "./convertAmountBetween";
 import { netLedgerCashEur } from "./netLedgerCashEur";
 import { db, pool } from "./db";
@@ -168,6 +169,12 @@ export interface IStorage {
   getHoldingsForTickerAcrossPortfolios(userId: string, ticker: string): Promise<Holding[]>;
   getTransactionsForTickerAcrossPortfolios(userId: string, ticker: string): Promise<Transaction[]>;
   upsertHolding(userId: string, ticker: string, companyName: string, shares: string, averageCost: string, totalInvested: string, portfolioId?: string | null): Promise<Holding>;
+  patchHoldingPokemonMeta(
+    userId: string,
+    ticker: string,
+    portfolioId: string | null,
+    meta: PokemonHoldingMeta,
+  ): Promise<void>;
   deleteHolding(userId: string, ticker: string, portfolioId?: string | null): Promise<void>;
   getUserAssetMetadataMap(
     userId: string,
@@ -1287,6 +1294,31 @@ export class DatabaseStorage implements IStorage {
       RETURNING *
     `);
     return result.rows[0] as Holding;
+  }
+
+  async patchHoldingPokemonMeta(
+    userId: string,
+    ticker: string,
+    portfolioId: string | null,
+    meta: PokemonHoldingMeta,
+  ): Promise<void> {
+    const portfolioCond = portfolioId
+      ? eq(holdings.portfolioId, portfolioId)
+      : isNull(holdings.portfolioId);
+    await db
+      .update(holdings)
+      .set({
+        tcgCategory: meta.tcgCategory,
+        tcgProductName: meta.tcgProductName,
+        tcgSetName: meta.tcgSetName,
+        tcgGradeCompany: meta.tcgGradeCompany,
+        tcgGradeValue: meta.tcgGradeValue,
+        tcgImageUrl: meta.tcgImageUrl,
+        tcgCardmarketId: meta.tcgCardmarketId,
+        tcgExternalId: meta.tcgExternalId,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(holdings.userId, userId), eq(holdings.ticker, ticker), portfolioCond));
   }
 
   async deleteHolding(userId: string, ticker: string, portfolioId?: string | null): Promise<void> {

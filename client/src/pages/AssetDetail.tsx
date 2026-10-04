@@ -30,6 +30,7 @@ import { HelpTip } from "@/components/HelpTip";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Switch } from "@/components/ui/switch";
 import type { BrokerCode, Currency, Transaction } from "@shared/schema";
+import { isPokemonTicker } from "@shared/pokemonTcg";
 import type { TradeCurrency } from "@shared/transactionEur";
 import type { QuoteCurrency } from "@shared/tickerCurrency";
 import { cn, formatShareQuantity } from "@/lib/utils";
@@ -116,6 +117,8 @@ type AssetDetailResponse = {
     change: number;
     changePercent: number;
   } | null;
+  imageUrl?: string | null;
+  priceNote?: string | null;
   prices: Record<string, number>;
   /** Najbližší očakávaný dátum výsledkov (Yahoo calendarEvents), YYYY-MM-DD. */
   nextEarnings: { date: string } | null;
@@ -518,12 +521,22 @@ export default function AssetDetail() {
             Späť na prehľad
           </Button>
           <div className="flex items-start gap-3">
-            <CompanyLogo ticker={data.ticker} companyName={data.companyName} size="lg" className="shrink-0" />
+            <CompanyLogo
+              ticker={data.ticker}
+              companyName={data.companyName}
+              imageUrl={data.imageUrl}
+              size="lg"
+              className="shrink-0"
+            />
             <div className="min-w-0">
               <h1 className="text-lg font-semibold truncate" data-testid="asset-detail-title">
                 {data.companyName}
               </h1>
               <div className="flex flex-wrap items-center gap-2 text-muted-foreground text-sm">
+                {isPokemonTicker(data.ticker) ? (
+                  <span>{data.priceNote || "Pokémon TCG"}</span>
+                ) : (
+                  <>
                 <span className="font-mono">{data.ticker}</span>
                 <a
                   href={`https://finance.yahoo.com/quote/${encodeURIComponent(data.ticker)}`}
@@ -534,6 +547,8 @@ export default function AssetDetail() {
                   Yahoo Finance
                   <ExternalLink className="h-3 w-3" />
                 </a>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -1434,7 +1449,12 @@ export default function AssetDetail() {
                         { locale: sk }
                       )}
                     </TableCell>
-                    <TableCell>{typeLabel(tx.type)}</TableCell>
+                    <TableCell>
+                      {typeLabel(tx.type)}
+                      {tx.tcgCertNumber ? (
+                        <div className="text-[10px] text-muted-foreground">Cert. {tx.tcgCertNumber}</div>
+                      ) : null}
+                    </TableCell>
                     <TableCell className="max-w-[140px] truncate">{pName}</TableCell>
                     <TableCell className="text-right font-mono text-sm">
                       {tx.type === "DIVIDEND" || tx.type === "TAX"
