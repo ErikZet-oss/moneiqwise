@@ -87,6 +87,7 @@ export async function searchPokemonCards(query: string): Promise<PokemonCardHit[
 }
 
 const imageCache = new Map<string, string | null>();
+const imageByNameCache = new Map<string, string | null>();
 
 /** Obrázok karty z TCGdex. Funguje aj pre graded, lebo sken je ten istý. */
 export async function fetchTcgdexImage(cardId: string): Promise<string | null> {
@@ -102,6 +103,44 @@ export async function fetchTcgdexImage(cardId: string): Promise<string | null> {
     const card = (await res.json()) as TcgdexCard;
     const url = imageUrl(card.image);
     imageCache.set(id, url);
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+/** Fotka raw karty podľa názvu, keď ticker nemá TCGdex id. */
+export async function fetchTcgdexImageByName(productName: string, setName?: string | null): Promise<string | null> {
+  const name = productName.split("·")[0]?.trim() ?? "";
+  if (name.length < 2) return null;
+  const set = (setName ?? "").trim().toLowerCase();
+  const key = `${name.toLowerCase()}|${set}`;
+  if (imageByNameCache.has(key)) return imageByNameCache.get(key) ?? null;
+  try {
+    const res = await fetch(`${TCGDEX}?name=${encodeURIComponent(name)}`, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const list = (await res.json()) as TcgdexListItem[];
+    if (!Array.isArray(list)) return null;
+    const wanted = name.toLowerCase();
+    const matches = list.filter((item) => (item.name ?? "").trim().toLowerCase() === wanted && item.id);
+    const pool = (matches.length > 0 ? matches : list.filter((item) => item.id)).slice(0, 4);
+    if (set) {
+      for (const item of pool) {
+        const cardRes = await fetch(`${TCGDEX}/${encodeURIComponent(item.id ?? "")}`, { signal: AbortSignal.timeout(8000) });
+        if (!cardRes.ok) continue;
+        const card = (await cardRes.json()) as TcgdexCard;
+        const cardSet = (card.set?.name ?? "").trim().toLowerCase();
+        if (cardSet && (cardSet === set || cardSet.includes(set) || set.includes(cardSet))) {
+          const url = imageUrl(card.image);
+          if (url) {
+            imageByNameCache.set(key, url);
+            return url;
+          }
+        }
+      }
+    }
+    const url = imageUrl(pool[0]?.image);
+    imageByNameCache.set(key, url);
     return url;
   } catch {
     return null;

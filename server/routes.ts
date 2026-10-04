@@ -26,9 +26,9 @@ import {
   CASH_INTEREST_TICKER,
 } from "@shared/tickerCurrency";
 import { isPhysicalMetalTicker, isPhysicalSilverTicker } from "@shared/physicalMetal";
-import { buildPokemonPosition, isPokemonPortfolio, isPokemonTicker, isSealedPokemonHolding, pokemonTcgdexCardId } from "@shared/pokemonTcg";
+import { buildPokemonPosition, isPokemonGroupTicker, isPokemonPortfolio, isPokemonTicker, isSealedPokemonHolding, pokemonTcgdexCardId } from "@shared/pokemonTcg";
 import { findSealedProductImage } from "./sealedProductImage";
-import { fetchPokemonEuLowQuote, fetchTcgdexImage, searchPokemonCards } from "./pokemonTcgClient";
+import { fetchPokemonEuLowQuote, fetchTcgdexImage, fetchTcgdexImageByName, searchPokemonCards } from "./pokemonTcgClient";
 import { searchSealedProducts } from "./cardmarketSealed";
 import {
   enrichHoldingsWithCostCurrency,
@@ -3587,8 +3587,8 @@ export async function registerRoutes(
       }
       const userHoldings = await storage.getHoldingsByUser(userId, portfolioId);
       const missingImages = userHoldings.filter((row) => {
-        if (row.tcgImageUrl) return false;
-        return isSealedPokemonHolding(row) || pokemonTcgdexCardId(row.ticker) != null;
+        if (row.tcgImageUrl || isPokemonGroupTicker(row.ticker)) return false;
+        return isPokemonTicker(row.ticker) || isSealedPokemonHolding(row);
       });
       const imageQueue = [...missingImages];
       if (imageQueue.length > 0) {
@@ -3598,10 +3598,20 @@ export async function registerRoutes(
               const row = imageQueue.shift();
               if (!row) return;
               try {
-                const cardId = pokemonTcgdexCardId(row.ticker);
-                const url = cardId
-                  ? await fetchTcgdexImage(cardId)
-                  : await findSealedProductImage(row.tcgProductName || row.companyName);
+                const cardId =
+                  pokemonTcgdexCardId(row.ticker) ||
+                  pokemonTcgdexCardId(row.tcgExternalId ? `PTCG:${row.tcgExternalId}` : null);
+                const productName = row.tcgProductName || row.companyName || "";
+                let url: string | null = null;
+                if (cardId && !isSealedPokemonHolding(row)) {
+                  url = await fetchTcgdexImage(cardId);
+                }
+                if (!url && isSealedPokemonHolding(row)) {
+                  url = await findSealedProductImage(productName);
+                }
+                if (!url && (row.tcgCategory === "GRADED_CARD" || row.tcgCategory === "RAW_CARD")) {
+                  url = await fetchTcgdexImageByName(productName, row.tcgSetName);
+                }
                 if (!url) continue;
                 row.tcgImageUrl = url;
                 await storage.setHoldingTcgImageUrl(userId, row.ticker, url);
@@ -3611,10 +3621,7 @@ export async function registerRoutes(
             }
           }),
         );
-        await Promise.race([
-          fillImages,
-          new Promise((resolve) => setTimeout(resolve, 2500)),
-        ]);
+        await fillImages;
       }
       const txns = await storage.getTransactionsByUser(userId, portfolioId ?? "all");
       const rates = await fetchAllExchangeRates();

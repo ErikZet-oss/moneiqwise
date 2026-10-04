@@ -914,6 +914,10 @@ export class DatabaseStorage implements IStorage {
           totalInvested: totalInvested.toString(),
           averageCost: avgCost.toString(),
           portfolioId: null, // Aggregated across portfolios
+          tcgImageUrl: existing.tcgImageUrl || holding.tcgImageUrl,
+          tcgExternalId: existing.tcgExternalId || holding.tcgExternalId,
+          tcgProductName: existing.tcgProductName || holding.tcgProductName,
+          tcgSetName: existing.tcgSetName || holding.tcgSetName,
         });
       } else {
         aggregatedMap.set(holding.ticker, { ...holding, portfolioId: null });
@@ -1467,7 +1471,7 @@ export class DatabaseStorage implements IStorage {
         tcgSetName: meta.tcgSetName,
         tcgGradeCompany: meta.tcgGradeCompany,
         tcgGradeValue: meta.tcgGradeValue,
-        tcgImageUrl: meta.tcgImageUrl,
+        ...(meta.tcgImageUrl ? { tcgImageUrl: meta.tcgImageUrl } : {}),
         tcgCardmarketId: meta.tcgCardmarketId,
         tcgExternalId: meta.tcgExternalId,
         updatedAt: new Date(),
@@ -1476,10 +1480,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async setHoldingTcgImageUrl(userId: string, ticker: string, imageUrl: string): Promise<void> {
+    const tickerKey = ticker.trim().toUpperCase();
     await db
       .update(holdings)
       .set({ tcgImageUrl: imageUrl, updatedAt: new Date() })
-      .where(and(eq(holdings.userId, userId), eq(holdings.ticker, ticker)));
+      .where(and(eq(holdings.userId, userId), sql`upper(${holdings.ticker}) = ${tickerKey}`));
+    await db
+      .update(transactions)
+      .set({ tcgImageUrl: imageUrl })
+      .where(and(eq(transactions.userId, userId), sql`upper(${transactions.ticker}) = ${tickerKey}`));
   }
 
   async deleteHolding(userId: string, ticker: string, portfolioId?: string | null): Promise<void> {
