@@ -216,7 +216,7 @@ export async function fetchPokemonEuLowQuote(ticker: string): Promise<PokemonEuL
     const live = await fetchRapidCardmarketPrice(sealedId, { kind: "sealed" }, name);
     if (live.status === "ok" && live.low != null) return quoteFromLow(ticker, live.low, "en", true);
     const guide = await fetchSealedEuLow(sealedId);
-    return guide == null ? null : quoteFromLow(ticker, guide.price, "any", live.status === "ok");
+    return guide == null ? null : quoteFromLow(ticker, guide.price, "any", false);
   }
   const cardId = pokemonTcgdexCardId(ticker);
   if (!cardId) return null;
@@ -238,7 +238,7 @@ export async function fetchPokemonEuLowQuote(ticker: string): Promise<PokemonEuL
   if (typeof productId === "number") {
     const live = await fetchRapidCardmarketPrice(String(productId), { kind: "raw" }, card.name, card.localId);
     if (live.status === "ok" && live.low != null) return quoteFromLow(ticker, live.low, "en", true);
-    return guide == null ? null : quoteFromLow(ticker, guide, "any", live.status === "ok");
+    return guide == null ? null : quoteFromLow(ticker, guide, "any", false);
   }
   return guide == null ? null : quoteFromLow(ticker, guide, "any", false);
 }
