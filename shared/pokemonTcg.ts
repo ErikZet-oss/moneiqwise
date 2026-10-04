@@ -4,8 +4,8 @@
  * ale žijú len v portfóliu s brokerom `pokemon`. Evidujú sa len nákupy a predaje,
  * bez vkladov, výberov a hotovostného účtu. Akciový systém sa ich netýka.
  *
- * Trhová cena je anglický Cardmarket Near Mint v EUR (TCGGO). Graded berie cenu
- * daného stupňa z Cardmarketu, nie raw low. Denný cenník je len záloha pre raw a sealed.
+ * Trhová cena raw karty je Cardmarket low v EUR cez PokéWallet.
+ * Sealed berie denný Cardmarket cenník. Graded sa tam neoceňuje a ostáva na nákupe.
  * Obrázok karty (aj graded) ide z TCGdex.
  */
 
