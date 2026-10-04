@@ -124,7 +124,7 @@ async function rapidGet(path: string): Promise<{ status: number; body: unknown }
         "x-rapidapi-key": rapidApiKey(),
         "x-rapidapi-host": HOST,
       },
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(8000),
     });
     if (res.status === 401 || res.status === 403) return "auth";
     const text = await res.text();
@@ -156,20 +156,46 @@ export function pickIdMatch(rows: Row[], productId: string, allowUnlabeled: bool
   return list.find((row) => cardmarketBlock(row) != null) ?? null;
 }
 
-async function readMatch(
+function internalId(row: Row): string | null {
+  const raw = row.id;
+  if (typeof raw === "number" && Number.isFinite(raw)) return String(Math.trunc(raw));
+  if (typeof raw === "string" && /^[\w.-]{1,80}$/.test(raw.trim())) return raw.trim();
+  return null;
+}
+
+function candidateRow(rows: Row[], productId: string, allowUnlabeled: boolean): Row | null {
+  return (
+    pickIdMatch(rows, productId, allowUnlabeled) ??
+    (() => {
+      const idMatches = rows.filter((row) => productIdOf(row) === productId);
+      const pool = idMatches.length > 0 ? idMatches : allowUnlabeled && rows.length > 0 && rows.length <= 8 ? rows : [];
+      const english = pool.filter(isEnglishRow);
+      return (english.length > 0 ? english : pool)[0] ?? null;
+    })()
+  );
+}
+
+async function readRows(
   path: string,
-  productId: string,
-): Promise<{ match: Row | null; failed: "auth" | "error" | null; notFound: boolean }> {
+): Promise<{ rows: Row[]; failed: "auth" | "error" | null; notFound: boolean; status: number }> {
   const result = await rapidGet(path);
-  if (result === "auth") return { match: null, failed: "auth", notFound: false };
+  if (result === "auth") return { rows: [], failed: "auth", notFound: false, status: 401 };
   if (result === "error" || result.status === 429 || result.status >= 500) {
-    return { match: null, failed: "error", notFound: false };
+    return { rows: [], failed: "error", notFound: false, status: result === "error" ? 0 : result.status };
   }
-  if (result.status === 404) return { match: null, failed: null, notFound: true };
-  if (result.status !== 200) return { match: null, failed: "error", notFound: false };
+  if (result.status === 404) return { rows: [], failed: null, notFound: true, status: 404 };
+  if (result.status !== 200) return { rows: [], failed: "error", notFound: false, status: result.status };
   const rows = rowsFrom(result.body);
-  const allowUnlabeled = path.includes("cardmarket_id=");
-  return { match: pickIdMatch(rows, productId, allowUnlabeled), failed: null, notFound: rows.length === 0 };
+  return { rows, failed: null, notFound: rows.length === 0, status: 200 };
+}
+
+/** Zoznam často nemá ceny. Detail `/cards/:id` ich má. */
+async function hydratePrices(row: Row, catalog: "cards" | "products"): Promise<Row> {
+  if (cardmarketBlock(row)) return row;
+  const id = internalId(row);
+  if (!id) return row;
+  const detail = await readRows(`/${catalog}/${encodeURIComponent(id)}`);
+  return detail.rows.find((item) => cardmarketBlock(item) != null) ?? detail.rows[0] ?? row;
 }
 
 async function loadEnglishRow(productId: string, catalog: "cards" | "products", productName?: string | null): Promise<Row | null> {
@@ -178,27 +204,34 @@ async function loadEnglishRow(productId: string, catalog: "cards" | "products", 
   if (cached && Date.now() - cached.at < cached.ttl) return cached.row;
 
   const name = (productName ?? "").replace(/\s+/g, " ").trim();
-  const paths = [`/${catalog}?cardmarket_id=${productId}&lang=en`];
-  if (catalog === "products") paths.push(`/cards?cardmarket_id=${productId}&lang=en`);
-  if (name.length >= 2) paths.push(`/${catalog}?search=${encodeURIComponent(name)}&lang=en`);
+  const paths = [`/${catalog}?cardmarket_id=${productId}`];
+  if (catalog === "products") paths.push(`/cards?cardmarket_id=${productId}`);
+  if (name.length >= 2) paths.push(`/${catalog}?search=${encodeURIComponent(name)}`);
 
   let lastError = false;
+  let lastStatus = 0;
   for (const path of paths) {
-    const read = await readMatch(path, productId);
+    const read = await readRows(path);
+    lastStatus = read.status;
     if (read.failed === "auth" && !authLogged) {
       authLogged = true;
       console.warn("Pokémon TCG API odmietlo kľúč. Skontroluj RAPIDAPI_KEY a predplatné Pokémon TCG API.");
     }
-    if (read.match) {
-      rowCache.set(cacheKey, { at: Date.now(), ttl: SUCCESS_TTL_MS, row: read.match });
-      return read.match;
-    }
-    if (read.failed) {
+    if (read.failed === "auth" || read.status === 429 || read.status >= 500 || read.status === 0) {
       lastError = true;
       break;
     }
+    if (read.failed) continue;
+    const row = candidateRow(read.rows, productId, path.includes("cardmarket_id="));
+    if (!row) continue;
+    const full = await hydratePrices(row, path.startsWith("/cards") ? "cards" : catalog);
+    if (cardmarketBlock(full)) {
+      rowCache.set(cacheKey, { at: Date.now(), ttl: SUCCESS_TTL_MS, row: full });
+      return full;
+    }
   }
 
+  console.warn(`Pokemon API ${catalog} ${productId}: bez ceny, posledný status ${lastStatus || "chyba"}`);
   rowCache.set(cacheKey, { at: Date.now(), ttl: lastError ? ERROR_TTL_MS : MISS_TTL_MS, row: null });
   return null;
 }
