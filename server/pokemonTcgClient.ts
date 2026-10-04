@@ -230,12 +230,13 @@ export async function fetchPokemonEuLowQuote(ticker: string): Promise<PokemonEuL
       String(productId),
       { kind: "graded", company: grade.company, grade: grade.grade },
       card.name,
+      card.localId,
     );
     return live.status === "ok" && live.low != null ? quoteFromLow(ticker, live.low, "en", true) : null;
   }
   const guide = guideLow(card);
   if (typeof productId === "number") {
-    const live = await fetchRapidCardmarketPrice(String(productId), { kind: "raw" }, card.name);
+    const live = await fetchRapidCardmarketPrice(String(productId), { kind: "raw" }, card.name, card.localId);
     if (live.status === "ok" && live.low != null) return quoteFromLow(ticker, live.low, "en", true);
     return guide == null ? null : quoteFromLow(ticker, guide, "any", live.status === "ok");
   }

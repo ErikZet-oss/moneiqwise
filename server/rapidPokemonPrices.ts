@@ -2,8 +2,10 @@
  * Cardmarket ceny v EUR cez Pokémon TCG API (RapidAPI).
  * https://www.pokemon-api.com/docs/
  *
- * Raw a sealed: lowest_near_mint anglickej verzie.
- * Graded: prices.cardmarket.graded. eBay v USD sa nepoužíva a raw cena sa na slab neberie.
+ * Karty: GET /cards?cardmarket_id= a GET /cards/{id}.
+ * Sealed: GET /episodes/search a potom GET /episodes/{id}/products.
+ * Raw a sealed: prices.cardmarket.lowest_near_mint (anglická verzia, EUR).
+ * Graded: prices.cardmarket.graded. eBay je USD a na cenu v EUR sa neberie.
  * Free plán má 100 požiadaviek denne, preto sa výsledok cachuje 12 hodín.
  */
 
@@ -45,7 +47,7 @@ function positive(value: unknown): number | null {
 function rowsFrom(body: unknown): Row[] {
   if (Array.isArray(body)) return body.filter(isRow);
   if (!isRow(body)) return [];
-  for (const key of ["data", "results", "cards", "products", "items"]) {
+  for (const key of ["data", "results", "cards", "products", "items", "episodes"]) {
     const value = body[key];
     if (Array.isArray(value)) return value.filter(isRow);
     if (isRow(value)) {
@@ -209,17 +211,95 @@ async function hydratePrices(row: Row, catalog: "cards" | "products"): Promise<R
   return detail.rows.find((item) => cardmarketBlock(item) != null) ?? detail.rows[0] ?? row;
 }
 
-async function loadEnglishRow(productId: string, catalog: "cards" | "products", productName?: string | null): Promise<Row | null> {
+function setSearchQuery(productName: string): string {
+  const type =
+    /\b(elite trainer boxes|elite trainer box|booster bundles|booster bundle|booster boxes|booster box|boosters|booster|tins|tin|collections|collection|displays|display|cases|case|blisters|blister|packs|pack|upc|etb)\b/i;
+  const index = productName.search(type);
+  const prefix = (index > 0 ? productName.slice(0, index) : productName).replace(/\s+/g, " ").trim();
+  const words = prefix.split(" ").filter(Boolean);
+  if (words.length > 2 && /^(ex|v|vmax|vstar|gx)$/i.test(words[words.length - 1] ?? "")) {
+    return words.slice(0, -2).join(" ");
+  }
+  return words.slice(0, 3).join(" ");
+}
+
+function rankEpisodes(rows: Row[], query: string): Row[] {
+  const wanted = query.toLowerCase();
+  return rows
+    .filter((row) => idString(row.id))
+    .sort((a, b) => {
+      const left = String(a.name ?? "").toLowerCase();
+      const right = String(b.name ?? "").toLowerCase();
+      const score = (name: string) => (name === wanted ? 2 : name.includes(wanted) || wanted.includes(name) ? 1 : 0);
+      return score(right) - score(left);
+    });
+}
+
+/** Sealed v tomto API nie je /products?cardmarket_id=, ale produkty konkrétnej expanzie. */
+async function loadSealedFromEpisode(
+  productId: string,
+  productName: string,
+): Promise<{ row: Row | null; status: number; path: string; failed: boolean }> {
+  const query = setSearchQuery(productName);
+  const searchPath = `/episodes/search?search=${encodeURIComponent(query)}`;
+  if (query.length < 2) return { row: null, status: 0, path: searchPath, failed: false };
+  const found = await readRows(searchPath);
+  if (found.failed) return { row: null, status: found.status, path: searchPath, failed: true };
+  const wanted = query.toLowerCase();
+  const episodes = rankEpisodes(found.rows, query).filter((row) => {
+    const name = String(row.name ?? "").toLowerCase();
+    return name === wanted || name.includes(wanted) || wanted.includes(name);
+  });
+  let last = { status: found.status, path: searchPath, failed: false };
+  for (const episode of episodes.slice(0, 2)) {
+    const episodeId = idString(episode.id);
+    if (!episodeId) continue;
+    const productsPath = `/episodes/${episodeId}/products?per_page=100`;
+    const products = await readRows(productsPath);
+    last = { status: products.status, path: productsPath, failed: products.failed != null };
+    if (products.failed === "auth" || products.status === 429 || products.status >= 500 || products.status === 0) {
+      return { row: null, status: products.status, path: productsPath, failed: true };
+    }
+    const match = products.rows.find((row) => productIdOf(row) === productId);
+    if (!match) continue;
+    const full = cardmarketBlock(match) ? match : await hydratePrices(match, "products");
+    if (cardmarketBlock(full)) return { row: full, status: 200, path: productsPath, failed: false };
+  }
+  return { row: null, status: last.status, path: last.path, failed: last.failed };
+}
+
+async function loadEnglishRow(
+  productId: string,
+  catalog: "cards" | "products",
+  productName?: string | null,
+  cardNumber?: string | null,
+): Promise<Row | null> {
   const cacheKey = `${catalog}:${productId}`;
   const cached = rowCache.get(cacheKey);
   if (cached && Date.now() - cached.at < cached.ttl) return cached.row;
 
   const name = (productName ?? "").replace(/\s+/g, " ").trim();
-  const paths = [`/${catalog}?cardmarket_id=${productId}`];
-  if (name.length >= 2) {
-    const query = encodeURIComponent(name);
-    if (catalog === "products") paths.push(`/products/search?search=${query}`);
-    paths.push(`/${catalog}?search=${query}`);
+  const number = (cardNumber ?? "").replace(/\s+/g, " ").trim();
+  if (catalog === "products") {
+    const sealed = await loadSealedFromEpisode(productId, name);
+    if (sealed.failed && !authLogged && sealed.status === 401) {
+      authLogged = true;
+      console.warn("Pokémon TCG API odmietlo kľúč. Skontroluj RAPIDAPI_KEY a predplatné Pokémon TCG API.");
+    }
+    if (sealed.row) {
+      rowCache.set(cacheKey, { at: Date.now(), ttl: SUCCESS_TTL_MS, row: sealed.row });
+      return sealed.row;
+    }
+    console.warn(
+      `Pokemon API products ${productId}: bez ceny, posledný status ${sealed.status || "chyba"} ${sealed.path}`,
+    );
+    rowCache.set(cacheKey, { at: Date.now(), ttl: sealed.failed ? ERROR_TTL_MS : MISS_TTL_MS, row: null });
+    return null;
+  }
+
+  const paths = [`/cards?cardmarket_id=${productId}`];
+  if (name.length >= 2 && number.length >= 1) {
+    paths.push(`/cards?name=${encodeURIComponent(name)}&card_number=${encodeURIComponent(number)}`);
   }
 
   let lastError = false;
@@ -257,6 +337,7 @@ export async function fetchRapidCardmarketPrice(
   productId: string,
   request: RapidPriceKind,
   productName?: string | null,
+  cardNumber?: string | null,
 ): Promise<RapidPriceResult> {
   const id = productId.trim();
   if (!/^\d{1,12}$/.test(id)) return { status: "unavailable" };
@@ -278,7 +359,7 @@ export async function fetchRapidCardmarketPrice(
     return { status: "ok", low: priceFromRow(cached.row, request) };
   }
 
-  const row = await loadEnglishRow(id, catalog, productName);
+  const row = await loadEnglishRow(id, catalog, productName, cardNumber);
   const after = rowCache.get(cacheKey);
   const result: RapidPriceResult = !row
     ? after && after.ttl === ERROR_TTL_MS
