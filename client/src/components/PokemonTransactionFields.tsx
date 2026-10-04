@@ -53,22 +53,23 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
   const [certNumber, setCertNumber] = useState("");
   const debouncedQuery = useDebounce(query, 300);
   const isSealed = category === "SEALED_PRODUCT";
+  const searchPath = isSealed ? "/api/pokemon/sealed/search" : "/api/pokemon/search";
 
   const { data: cards, isLoading, isError } = useQuery<PokemonCardHit[]>({
-    queryKey: ["/api/pokemon/search", debouncedQuery],
+    queryKey: [searchPath, debouncedQuery],
     queryFn: async () => {
-      const res = await fetch(`/api/pokemon/search?q=${encodeURIComponent(debouncedQuery)}`);
+      const res = await fetch(`${searchPath}?q=${encodeURIComponent(debouncedQuery)}`);
       if (!res.ok) throw new Error("search failed");
       return res.json();
     },
-    enabled: !isSealed && debouncedQuery.trim().length >= 2,
+    enabled: debouncedQuery.trim().length >= 2,
   });
 
   useEffect(() => {
-    const productName = isSealed || !selected ? manualName : selected.name;
-    const setName = isSealed || !selected ? manualSet : selected.setName;
-    const imageUrl = isSealed || !selected ? manualImage : selected.imageUrl ?? "";
-    const externalId = !isSealed && selected ? selected.externalId : "";
+    const productName = selected ? selected.name : manualName;
+    const setName = !selected ? manualSet : isSealed ? "" : selected.setName;
+    const imageUrl = selected ? selected.imageUrl ?? "" : manualImage;
+    const externalId = selected ? selected.externalId : "";
     const built = buildPokemonPosition({
       category,
       productName,
@@ -78,7 +79,7 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
       certNumber: category === "GRADED_CARD" ? certNumber : null,
       imageUrl,
       externalId,
-      cardmarketId: !isSealed && selected ? selected.cardmarketId : null,
+      cardmarketId: selected ? selected.cardmarketId : null,
     });
     if (!built.ok) {
       onPositionChange(null);
@@ -86,7 +87,7 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
     }
     onPositionChange({
       ...built,
-      euLowEur: !isSealed && selected ? selected.euLowEur : null,
+      euLowEur: selected ? selected.euLowEur : null,
     });
   }, [
     category,
@@ -118,8 +119,8 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
       <div>
         <p className="text-sm font-medium">Pokémon TCG</p>
         <p className="text-xs text-muted-foreground mt-1">
-          Nákupná cena je to, čo ste zaplatili v EUR. Aktuálna hodnota raw karty sa počíta z európskeho low
-          (Cardmarket). Graded a sealed bez katalógu ostávajú na nákupnej cene.
+          Nákupná cena je to, čo ste zaplatili v EUR. Aktuálna hodnota raw karty a sealed produktu z Cardmarketu
+          sa počíta z európskeho low. Graded a ručne zadané položky ostávajú na nákupnej cene.
         </p>
       </div>
 
@@ -131,8 +132,13 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
             size="sm"
             variant={category === item.id ? "default" : "outline"}
             onClick={() => {
+              if (item.id === category) return;
               setCategory(item.id);
-              if (item.id === "SEALED_PRODUCT") setSelected(null);
+              setSelected(null);
+              setQuery("");
+              setManualName("");
+              setManualSet("");
+              setManualImage("");
             }}
             data-testid={`button-pokemon-category-${item.id}`}
           >
@@ -141,9 +147,8 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
         ))}
       </div>
 
-      {!isSealed && (
-        <div className="space-y-2">
-          <Label>Karta z katalógu</Label>
+      <div className="space-y-2">
+          <Label>{isSealed ? "Sealed z Cardmarketu" : "Karta z katalógu"}</Label>
           <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
               <Button
@@ -154,7 +159,7 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
                 data-testid="button-pokemon-search"
               >
                 <span className="truncate">
-                  {selected ? `${selected.name} · ${selected.setName}` : "Vyhľadajte kartu..."}
+                  {selected ? `${selected.name} · ${selected.setName}` : isSealed ? "Vyhľadajte ETB, booster, tin…" : "Vyhľadajte kartu..."}
                 </span>
                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
               </Button>
@@ -162,7 +167,7 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
             <PopoverContent className="w-[min(420px,90vw)] p-0">
               <div className="flex items-center border-b px-3">
                 <Input
-                  placeholder="Názov karty, napr. Charizard"
+                  placeholder={isSealed ? "napr. 30th Celebration Elite Trainer Box" : "Názov karty, napr. Charizard"}
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   className="border-0 focus-visible:ring-0 h-11"
@@ -177,7 +182,9 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
                   </div>
                 )}
                 {isError && (
-                  <p className="p-3 text-sm text-destructive">Katalóg sa nepodarilo načítať. Kartu môžete zadať ručne.</p>
+                  <p className="p-3 text-sm text-destructive">
+                    Katalóg sa nepodarilo načítať. Položku môžete zadať ručne.
+                  </p>
                 )}
                 {!isLoading && cards && cards.length > 0 && (
                   <div className="p-1">
@@ -210,7 +217,9 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
                   </div>
                 )}
                 {!isLoading && debouncedQuery.trim().length >= 2 && cards && cards.length === 0 && (
-                  <p className="p-3 text-sm text-muted-foreground">Nič sa nenašlo. Skúste kratší názov alebo zadajte kartu ručne.</p>
+                  <p className="p-3 text-sm text-muted-foreground">
+                    Nič sa nenašlo. Skúste kratší názov alebo zadajte položku ručne.
+                  </p>
                 )}
                 {debouncedQuery.trim().length < 2 && (
                   <p className="p-3 text-sm text-muted-foreground">Zadajte aspoň 2 znaky.</p>
@@ -229,7 +238,7 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
                 <p className="text-xs tabular-nums">
                   {selected.euLowEur != null
                     ? `Európsky low: ${selected.euLowEur.toFixed(2)} €`
-                    : "Európsky low pre túto kartu chýba."}
+                    : "Európsky low pre túto položku chýba."}
                 </p>
                 <button type="button" className="text-xs text-primary hover:underline" onClick={clearCard}>
                   Zadať iný názov ručne
@@ -238,9 +247,8 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
             </div>
           )}
         </div>
-      )}
 
-      {(isSealed || !selected) && (
+      {!selected && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-2 sm:col-span-2">
             <Label>{isSealed ? "Produkt (ETB, bundle, tin…)" : "Názov karty"}</Label>

@@ -3,8 +3,9 @@
  * Karty a sealed produkty sú bežné holdingy (ticker + množstvo + FIFO),
  * ale žijú len v portfóliu s brokerom `pokemon`. Akciový systém sa ich netýka.
  *
- * Trhová cena raw kariet = Cardmarket low (európsky low) cez TCGdex.
- * Graded a sealed bez katalógového id nemajú spoľahlivý EU low, takže hodnota
+ * Trhová cena raw kariet = Cardmarket low cez TCGdex.
+ * Sealed z katalógu (ticker `PTCG:CM{idProduct}`) = Cardmarket low z denného cenníka.
+ * Graded a ručne zadané sealed bez id nemajú spoľahlivý EU low, takže hodnota
  * ostáva na nákupnej cene.
  */
 
@@ -80,6 +81,7 @@ export function isGradedPokemonTicker(ticker: string | null | undefined): boolea
 /**
  * Id karty v Pokémon TCG API pre európsky low.
  * Graded a ručné (bez pomlčky v id) nemajú raw Cardmarket low ako trhovú cenu.
+ * Sealed z katalógu ide cez `pokemonCardmarketProductId`, nie sem.
  */
 export function pokemonEuLowCardId(ticker: string | null | undefined): string | null {
   const u = (ticker ?? "").trim().toUpperCase();
@@ -88,6 +90,12 @@ export function pokemonEuLowCardId(ticker: string | null | undefined): string | 
   const rest = u.slice(POKEMON_TICKER_PREFIX.length);
   if (!rest.includes("-")) return null;
   return rest.toLowerCase();
+}
+
+/** Cardmarket idProduct zo sealed tickera `PTCG:CM895551`. */
+export function pokemonCardmarketProductId(ticker: string | null | undefined): string | null {
+  const match = /^PTCG:CM(\d{1,12})$/.exec((ticker ?? "").trim().toUpperCase());
+  return match?.[1] ?? null;
 }
 
 export function isPokemonTcgCategory(value: string | null | undefined): value is PokemonTcgCategory {

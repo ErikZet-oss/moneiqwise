@@ -1,5 +1,6 @@
 import type { PokemonCardHit } from "@shared/pokemonTcg";
-import { pokemonEuLowCardId } from "@shared/pokemonTcg";
+import { pokemonCardmarketProductId, pokemonEuLowCardId } from "@shared/pokemonTcg";
+import { fetchSealedEuLow } from "./cardmarketSealed";
 
 const TCGDEX = "https://api.tcgdex.net/v2/en/cards";
 
@@ -97,18 +98,7 @@ export type PokemonEuLowQuote = {
   annualDividendPerShare: 0;
 };
 
-/** Aktuálny európsky low (Cardmarket) pre raw kartu. Graded a sealed vracia null. */
-export async function fetchPokemonEuLowQuote(ticker: string): Promise<PokemonEuLowQuote | null> {
-  const cardId = pokemonEuLowCardId(ticker);
-  if (!cardId) return null;
-  const res = await fetch(`${TCGDEX}/${encodeURIComponent(cardId)}`, { signal: AbortSignal.timeout(12000) });
-  if (res.status === 404) return null;
-  if (!res.ok) {
-    throw new Error(`TCGdex ${res.status}`);
-  }
-  const card = (await res.json()) as TcgdexCard;
-  const low = card.pricing?.cardmarket?.low;
-  if (typeof low !== "number" || !Number.isFinite(low) || !(low > 0)) return null;
+function quoteFromLow(ticker: string, low: number): PokemonEuLowQuote {
   return {
     ticker: ticker.toUpperCase(),
     price: low,
@@ -124,4 +114,24 @@ export async function fetchPokemonEuLowQuote(ticker: string): Promise<PokemonEuL
     low52: low,
     annualDividendPerShare: 0,
   };
+}
+
+/** Aktuálny európsky low (Cardmarket) pre raw kartu alebo sealed z katalógu. */
+export async function fetchPokemonEuLowQuote(ticker: string): Promise<PokemonEuLowQuote | null> {
+  const sealedId = pokemonCardmarketProductId(ticker);
+  if (sealedId) {
+    const low = await fetchSealedEuLow(sealedId);
+    return low == null ? null : quoteFromLow(ticker, low);
+  }
+  const cardId = pokemonEuLowCardId(ticker);
+  if (!cardId) return null;
+  const res = await fetch(`${TCGDEX}/${encodeURIComponent(cardId)}`, { signal: AbortSignal.timeout(12000) });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new Error(`TCGdex ${res.status}`);
+  }
+  const card = (await res.json()) as TcgdexCard;
+  const low = card.pricing?.cardmarket?.low;
+  if (typeof low !== "number" || !Number.isFinite(low) || !(low > 0)) return null;
+  return quoteFromLow(ticker, low);
 }

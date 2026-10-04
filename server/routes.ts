@@ -28,6 +28,7 @@ import {
 import { isPhysicalMetalTicker, isPhysicalSilverTicker } from "@shared/physicalMetal";
 import { buildPokemonPosition, isPokemonTicker } from "@shared/pokemonTcg";
 import { fetchPokemonEuLowQuote, searchPokemonCards } from "./pokemonTcgClient";
+import { searchSealedProducts } from "./cardmarketSealed";
 import {
   enrichHoldingsWithCostCurrency,
   inferHoldingCostCurrency,
@@ -4325,6 +4326,17 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error searching Pokemon cards:", error);
       res.status(500).json({ message: "Nepodarilo sa vyhľadať Pokémon karty." });
+    }
+  });
+
+  app.get("/api/pokemon/sealed/search", isAuthenticated, async (req: any, res) => {
+    try {
+      const q = typeof req.query.q === "string" ? req.query.q : "";
+      const results = await searchSealedProducts(q);
+      res.json(results);
+    } catch (error) {
+      console.error("Error searching sealed Pokemon products:", error);
+      res.status(500).json({ message: "Nepodarilo sa vyhľadať sealed produkty na Cardmarkete." });
     }
   });
 
