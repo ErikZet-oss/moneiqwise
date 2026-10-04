@@ -26,7 +26,7 @@ import {
   CASH_INTEREST_TICKER,
 } from "@shared/tickerCurrency";
 import { isPhysicalMetalTicker, isPhysicalSilverTicker } from "@shared/physicalMetal";
-import { buildPokemonPosition, isPokemonGroupTicker, isPokemonPortfolio, isPokemonTicker, isSealedPokemonHolding, pokemonTcgdexCardId } from "@shared/pokemonTcg";
+import { buildPokemonPosition, isPokemonGroupTicker, isPokemonPortfolio, isPokemonTicker, isSealedPokemonHolding, pokemonGradeFromTicker, pokemonTcgdexCardId } from "@shared/pokemonTcg";
 import { findSealedProductImage } from "./sealedProductImage";
 import { fetchPokemonEuLowQuote, fetchTcgdexImage, fetchTcgdexImageByName, searchPokemonCards } from "./pokemonTcgClient";
 import { searchSealedProducts } from "./cardmarketSealed";
@@ -348,7 +348,7 @@ async function fetchPhysicalMetalQuote(ticker: string): Promise<any> {
 const CACHE_DIR = path.join(process.cwd(), ".cache");
 const CACHE_FILE = path.join(CACHE_DIR, "prices.json");
 /** Bump when quote shape/source changes — invalidates stale on-disk quote cache. */
-const QUOTE_CACHE_VERSION = 11;
+const QUOTE_CACHE_VERSION = 12;
 
 function isUsExtendedSessionNow(): boolean {
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -2004,11 +2004,11 @@ async function fetchStockQuote(ticker: string, skipCache = false): Promise<any> 
   // Check cache first (unless user explicitly refreshes quotes)
   const cached = priceCache.get(ticker);
   const quoteCacheTtl = getQuoteCacheTtlMs(cached?.data);
-  const pokemonNeedsPokewallet =
+  const pokemonNeedsRapid =
     isPokemonTicker(ticker) &&
-    Boolean(process.env.POKEWALLET_API_KEY?.trim()) &&
-    cached?.data?.pokewalletChecked !== true;
-  if (!skipCache && cached && !pokemonNeedsPokewallet && Date.now() - cached.timestamp < quoteCacheTtl) {
+    Boolean(process.env.RAPIDAPI_KEY?.trim()) &&
+    cached?.data?.rapidChecked !== true;
+  if (!skipCache && cached && !pokemonNeedsRapid && Date.now() - cached.timestamp < quoteCacheTtl) {
     // Backward compatibility: older cache entries may miss newer fields.
     // If any required field is missing, force fresh fetch to avoid stale/zero metrics.
     const isPhysical = isPhysicalMetalTicker(ticker);
@@ -3875,8 +3875,15 @@ export async function registerRoutes(
         imageUrl: pokemonImage,
         priceNote: isPokemonTicker(displayTicker)
           ? !quote
-            ? "Pre túto položku nie je Cardmarket low v EUR — hodnota ostáva na nákupnej cene."
-            : "Cardmarket low v EUR, denný cenník cez všetky jazyky."
+            ? "Cardmarket cena v EUR sa nenašla — hodnota ostáva na nákupnej cene."
+            : quote.priceLanguage === "en"
+              ? (() => {
+                  const grade = pokemonGradeFromTicker(displayTicker);
+                  return grade
+                    ? `Cardmarket, ${grade.company} ${grade.grade}`
+                    : "Cardmarket Near Mint, anglická verzia";
+                })()
+              : "Cardmarket low v EUR, denný cenník cez všetky jazyky."
           : null,
         costCurrency: inferHoldingCostCurrency(displayTicker, txRows),
         positions,
