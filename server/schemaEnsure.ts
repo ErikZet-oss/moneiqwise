@@ -30,14 +30,27 @@ export async function ensureTransactionImportColumns(): Promise<void> {
   }
 
   // Sentinel pre vklady/výbery: PORTFOLIO_CASH_FLOW = 20 znakov; staré DB mali často varchar(10).
+  // Pokémon tickery sú `PTCG:…` a graded ešte `:PSA10` — varchar(10) insert zhodí.
   try {
     await pool.query(`
       ALTER TABLE transactions
-      ALTER COLUMN ticker TYPE varchar(32)
+      ALTER COLUMN ticker TYPE varchar(64)
     `);
   } catch (err) {
     console.warn(
-      "schemaEnsure: could not widen transactions.ticker to varchar(32) (ok if already up to date):",
+      "schemaEnsure: could not widen transactions.ticker to varchar(64) (ok if already up to date):",
+      err,
+    );
+  }
+
+  try {
+    await pool.query(`
+      ALTER TABLE holdings
+      ALTER COLUMN ticker TYPE varchar(64)
+    `);
+  } catch (err) {
+    console.warn(
+      "schemaEnsure: could not widen holdings.ticker to varchar(64) (ok if already up to date):",
       err,
     );
   }

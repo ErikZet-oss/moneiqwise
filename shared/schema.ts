@@ -119,7 +119,7 @@ export const transactions = pgTable(
     portfolioId: varchar("portfolio_id").references(() => portfolios.id),
     type: varchar("type", { length: 12 }).notNull(),
     /** Yahoo / XTB; pre DEPOSIT/WITHDRAWAL použite {@link CASH_FLOW_TICKER}. */
-    ticker: varchar("ticker", { length: 32 }).notNull(),
+    ticker: varchar("ticker", { length: 64 }).notNull(),
     companyName: text("company_name").notNull(),
     shares: numeric("shares", { precision: 18, scale: 8 }).notNull(),
     pricePerShare: numeric("price_per_share", { precision: 18, scale: 4 }).notNull(),
@@ -194,7 +194,7 @@ export const holdings = pgTable(
     id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
     userId: varchar("user_id").notNull().references(() => users.id),
     portfolioId: varchar("portfolio_id").references(() => portfolios.id),
-    ticker: varchar("ticker", { length: 32 }).notNull(),
+    ticker: varchar("ticker", { length: 64 }).notNull(),
     companyName: text("company_name").notNull(),
     shares: numeric("shares", { precision: 18, scale: 8 }).notNull(),
     averageCost: numeric("average_cost", { precision: 18, scale: 4 }).notNull(),
