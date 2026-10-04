@@ -117,6 +117,8 @@ export interface IStorage {
   getHoldingsByUser(userId: string, portfolioId?: string | null): Promise<Holding[]>;
   /** PTCG holdingy a transakcie mimo Pokémon portfólia presunie do jediného Pokémon portfólia. */
   claimStrayPokemonHoldings(userId: string, portfolioId: string): Promise<void>;
+  /** Doplní chýbajúce Pokémon holdingy z nákupov, aby sa objavili v prehľade. */
+  ensurePokemonHoldings(userId: string): Promise<void>;
   upsertPortfolioSnapshot(row: {
     userId: string;
     scopeKey: string;
@@ -963,6 +965,102 @@ export class DatabaseStorage implements IStorage {
             AND p.broker_code = ${POKEMON_PORTFOLIO_BROKER}
         )
     `);
+  }
+
+  async ensurePokemonHoldings(userId: string): Promise<void> {
+    const mine = await this.getPortfoliosByUser(userId);
+    const pokemonOnes = mine.filter(
+      (portfolio) => portfolio.brokerCode === POKEMON_PORTFOLIO_BROKER && !portfolio.isHidden,
+    );
+    if (pokemonOnes.length === 1) {
+      await this.claimStrayPokemonHoldings(userId, pokemonOnes[0]!.id);
+    }
+
+    const txRows = await db
+      .select()
+      .from(transactions)
+      .where(and(eq(transactions.userId, userId), sql`upper(${transactions.ticker}) like 'PTCG:%'`));
+    if (txRows.length === 0) return;
+
+    const fallbackPortfolioId = pokemonOnes.length === 1 ? pokemonOnes[0]!.id : null;
+    const groups = new Map<string, Transaction[]>();
+    for (const tx of txRows) {
+      const ticker = tx.ticker.trim().toUpperCase();
+      if (!ticker.startsWith("PTCG:") || ticker === "PTCG:ALL") continue;
+      const portfolioId =
+        tx.portfolioId && pokemonOnes.some((portfolio) => portfolio.id === tx.portfolioId)
+          ? tx.portfolioId
+          : fallbackPortfolioId ?? tx.portfolioId;
+      if (!portfolioId) continue;
+      const key = `${portfolioId}\n${ticker}`;
+      const list = groups.get(key) ?? [];
+      list.push(tx);
+      groups.set(key, list);
+    }
+
+    for (const [key, list] of groups) {
+      const [portfolioId, ticker] = key.split("\n");
+      if (!portfolioId || !ticker) continue;
+      const trades = list
+        .filter((tx) => tx.type === "BUY" || tx.type === "SELL")
+        .sort(
+          (a, b) =>
+            new Date(a.transactionDate as unknown as string).getTime() -
+            new Date(b.transactionDate as unknown as string).getTime(),
+        );
+      let shares = 0;
+      let totalCostBasis = 0;
+      for (const txn of trades) {
+        const qty = parseFloat(String(txn.shares));
+        const price = parseFloat(String(txn.pricePerShare));
+        const commission = parseFloat(String(txn.commission || "0"));
+        if (!(qty > 0) || !Number.isFinite(price)) continue;
+        if (txn.type === "BUY") {
+          totalCostBasis += qty * price + (Number.isFinite(commission) ? commission : 0);
+          shares += qty;
+        } else {
+          const avgCost = shares > 0 ? totalCostBasis / shares : 0;
+          shares = Math.max(0, shares - qty);
+          totalCostBasis = Math.max(0, totalCostBasis - qty * avgCost);
+        }
+      }
+      const newest = [...list].sort(
+        (a, b) =>
+          new Date(b.transactionDate as unknown as string).getTime() -
+          new Date(a.transactionDate as unknown as string).getTime(),
+      )[0];
+      const companyName = (newest?.companyName || ticker).trim() || ticker;
+      try {
+        if (shares > 0.00000001) {
+          const avgCost = totalCostBasis / shares;
+          await this.upsertHolding(
+            userId,
+            ticker,
+            companyName,
+            shares.toFixed(8),
+            avgCost.toFixed(4),
+            totalCostBasis.toFixed(4),
+            portfolioId,
+          );
+          if (newest) {
+            await this.patchHoldingPokemonMeta(userId, ticker, portfolioId, {
+              tcgCategory: newest.tcgCategory,
+              tcgProductName: newest.tcgProductName,
+              tcgSetName: newest.tcgSetName,
+              tcgGradeCompany: newest.tcgGradeCompany,
+              tcgGradeValue: newest.tcgGradeValue,
+              tcgImageUrl: newest.tcgImageUrl,
+              tcgCardmarketId: newest.tcgCardmarketId,
+              tcgExternalId: newest.tcgExternalId,
+            });
+          }
+        } else {
+          await this.deleteHolding(userId, ticker, portfolioId);
+        }
+      } catch (error) {
+        console.warn(`Pokemon holding ensure skipped for ${ticker}:`, error);
+      }
+    }
   }
 
   async upsertPortfolioSnapshot(row: {

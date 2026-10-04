@@ -3580,12 +3580,10 @@ export async function registerRoutes(
     try {
       const userId = req.user.claims.sub;
       const portfolioId = req.query.portfolio as string | undefined;
-      if (portfolioId && portfolioId !== "all" && !portfolioId.includes(",")) {
-        try {
-          await storage.claimStrayPokemonHoldings(userId, portfolioId);
-        } catch (error) {
-          console.warn("Pokemon holdings claim skipped:", error);
-        }
+      try {
+        await storage.ensurePokemonHoldings(userId);
+      } catch (error) {
+        console.warn("Pokemon holdings ensure skipped:", error);
       }
       const userHoldings = await storage.getHoldingsByUser(userId, portfolioId);
       const missingImages = userHoldings.filter((row) => isSealedPokemonHolding(row) && !row.tcgImageUrl);

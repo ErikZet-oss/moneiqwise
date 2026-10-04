@@ -57,6 +57,7 @@ import type { HoldingWithCostCurrency } from "@shared/holdingCostCurrency";
 import { isPhysicalSilverTicker } from "@shared/physicalMetal";
 import {
   isPokemonGroupTicker,
+  isPokemonHolding,
   isPokemonTicker,
   isSealedPokemonHolding,
   POKEMON_GROUP_TICKER,
@@ -561,14 +562,14 @@ function collapsePokemonInAllPortfolios(
 } {
   if (!groupPokemon) return { rows: sorted, children: [], quotes };
   const children = sorted.filter(
-    (holding) => isPokemonTicker(holding.ticker) && !isPokemonGroupTicker(holding.ticker),
+    (holding) => isPokemonHolding(holding) && !isPokemonGroupTicker(holding.ticker),
   );
-  const rest = sorted.filter((holding) => !isPokemonTicker(holding.ticker));
+  const rest = sorted.filter((holding) => !isPokemonHolding(holding));
   if (children.length === 0) return { rows: rest, children: [], quotes };
   const group = buildPokemonGroupHolding(children, quotes);
   const merged = { ...(quotes ?? {}), [POKEMON_GROUP_TICKER]: group.quote };
-  const rows = sortHoldingsArray(
-    [group.holding, ...rest],
+  const sortedRows = sortHoldingsArray(
+    rest,
     merged,
     sortField,
     sortDirection,
@@ -578,6 +579,7 @@ function collapsePokemonInAllPortfolios(
     resolveCostCurrency,
     investedForDisplay,
   );
+  const rows = [group.holding, ...sortedRows];
   const orderedChildren = [...children].sort((a, b) =>
     (a.companyName || "").localeCompare(b.companyName || "", "sk"),
   );
@@ -859,8 +861,9 @@ export default function Dashboard() {
   
   const { data: holdings, isLoading: holdingsLoading } = useQuery<HoldingWithCostCurrency[]>({
     queryKey: ["/api/holdings", portfolioParam],
+    refetchOnMount: "always",
     queryFn: async () => {
-      const res = await fetch(`/api/holdings?portfolio=${portfolioParam}`);
+      const res = await fetch(`/api/holdings?portfolio=${portfolioParam}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch holdings");
       return res.json();
     },

@@ -71,6 +71,14 @@ export function isPokemonTicker(ticker: string | null | undefined): boolean {
   return (ticker ?? "").trim().toUpperCase().startsWith(POKEMON_TICKER_PREFIX);
 }
 
+/** Holding patrí do skupiny Pokémon TCG v prehľade všetkých portfólií. */
+export function isPokemonHolding(holding: {
+  ticker?: string | null;
+  tcgCategory?: string | null;
+}): boolean {
+  return isPokemonTicker(holding.ticker) || isPokemonTcgCategory(holding.tcgCategory);
+}
+
 export function isPokemonGroupTicker(ticker: string | null | undefined): boolean {
   return (ticker ?? "").trim().toUpperCase() === POKEMON_GROUP_TICKER;
 }
