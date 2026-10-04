@@ -26,7 +26,7 @@ import {
   type WatchlistItem,
   type InsertWatchlistItem,
 } from "@shared/schema";
-import type { PokemonHoldingMeta } from "@shared/pokemonTcg";
+import { POKEMON_PORTFOLIO_BROKER, type PokemonHoldingMeta } from "@shared/pokemonTcg";
 import type { AllExchangeRates } from "./convertAmountBetween";
 import { netLedgerCashEur } from "./netLedgerCashEur";
 import { db, pool } from "./db";
@@ -115,6 +115,8 @@ export interface IStorage {
   
   // Holdings operations
   getHoldingsByUser(userId: string, portfolioId?: string | null): Promise<Holding[]>;
+  /** PTCG holdingy a transakcie mimo Pokémon portfólia presunie do jediného Pokémon portfólia. */
+  claimStrayPokemonHoldings(userId: string, portfolioId: string): Promise<void>;
   upsertPortfolioSnapshot(row: {
     userId: string;
     scopeKey: string;
@@ -917,6 +919,50 @@ export class DatabaseStorage implements IStorage {
     }
     
     return Array.from(aggregatedMap.values());
+  }
+
+  async claimStrayPokemonHoldings(userId: string, portfolioId: string): Promise<void> {
+    const mine = await this.getPortfoliosByUser(userId);
+    const pokemonOnes = mine.filter(
+      (portfolio) => portfolio.brokerCode === POKEMON_PORTFOLIO_BROKER && !portfolio.isHidden,
+    );
+    if (pokemonOnes.length !== 1 || pokemonOnes[0]!.id !== portfolioId) return;
+
+    await db.execute(sql`
+      UPDATE holdings AS h
+      SET portfolio_id = ${portfolioId}, updated_at = NOW()
+      WHERE h.user_id = ${userId}
+        AND h.ticker LIKE 'PTCG:%'
+        AND h.ticker <> 'PTCG:ALL'
+        AND (h.portfolio_id IS NULL OR h.portfolio_id <> ${portfolioId})
+        AND NOT EXISTS (
+          SELECT 1 FROM portfolios p
+          WHERE p.id = h.portfolio_id
+            AND p.user_id = ${userId}
+            AND p.broker_code = ${POKEMON_PORTFOLIO_BROKER}
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM holdings existing
+          WHERE existing.user_id = h.user_id
+            AND existing.portfolio_id = ${portfolioId}
+            AND existing.ticker = h.ticker
+        )
+    `);
+
+    await db.execute(sql`
+      UPDATE transactions AS t
+      SET portfolio_id = ${portfolioId}
+      WHERE t.user_id = ${userId}
+        AND t.ticker LIKE 'PTCG:%'
+        AND t.ticker <> 'PTCG:ALL'
+        AND (t.portfolio_id IS NULL OR t.portfolio_id <> ${portfolioId})
+        AND NOT EXISTS (
+          SELECT 1 FROM portfolios p
+          WHERE p.id = t.portfolio_id
+            AND p.user_id = ${userId}
+            AND p.broker_code = ${POKEMON_PORTFOLIO_BROKER}
+        )
+    `);
   }
 
   async upsertPortfolioSnapshot(row: {

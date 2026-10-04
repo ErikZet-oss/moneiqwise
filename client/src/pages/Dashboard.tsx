@@ -57,6 +57,7 @@ import type { HoldingWithCostCurrency } from "@shared/holdingCostCurrency";
 import { isPhysicalSilverTicker } from "@shared/physicalMetal";
 import {
   isPokemonGroupTicker,
+  isPokemonPortfolio,
   isPokemonTicker,
   isSealedPokemonHolding,
   POKEMON_GROUP_TICKER,
@@ -543,7 +544,7 @@ function buildPokemonGroupHolding(
 function collapsePokemonInAllPortfolios(
   sorted: HoldingWithCostCurrency[],
   quotes: Record<string, StockQuote> | undefined,
-  isAllPortfolios: boolean,
+  groupPokemon: boolean,
   sortField: SortField,
   sortDirection: SortDirection,
   convertPrice: (amount: number, sourceCurrency: PortfolioQuoteCurrency) => number,
@@ -556,16 +557,11 @@ function collapsePokemonInAllPortfolios(
   children: HoldingWithCostCurrency[];
   quotes: Record<string, StockQuote> | undefined;
 } {
-  if (!isAllPortfolios) return { rows: sorted, children: [], quotes };
+  if (!groupPokemon) return { rows: sorted, children: [], quotes };
   const children = sorted.filter(
-    (holding) =>
-      isPokemonTicker(holding.ticker) &&
-      !isPokemonGroupTicker(holding.ticker) &&
-      !isSealedPokemonHolding(holding),
+    (holding) => isPokemonTicker(holding.ticker) && !isPokemonGroupTicker(holding.ticker),
   );
-  const rest = sorted.filter(
-    (holding) => !isPokemonTicker(holding.ticker) || isSealedPokemonHolding(holding),
-  );
+  const rest = sorted.filter((holding) => !isPokemonTicker(holding.ticker));
   if (children.length === 0) return { rows: rest, children: [], quotes };
   const group = buildPokemonGroupHolding(children, quotes);
   const merged = { ...(quotes ?? {}), [POKEMON_GROUP_TICKER]: group.quote };
@@ -797,13 +793,19 @@ export default function Dashboard() {
   const [mobileAssetsSortDialogOpen, setMobileAssetsSortDialogOpen] = useState(false);
   const [mobileAssetsViewPopoverOpen, setMobileAssetsViewPopoverOpen] = useState(false);
   const [expandedMobileHoldingId, setExpandedMobileHoldingId] = useState<string | null>(null);
-  const [pokemonGroupOpen, setPokemonGroupOpen] = useState(false);
+  const viewingPokemonPortfolio = isPokemonPortfolio(selectedPortfolio?.brokerCode);
+  const groupPokemonHoldings = isAllPortfolios || viewingPokemonPortfolio;
+  const [pokemonGroupOpen, setPokemonGroupOpen] = useState(viewingPokemonPortfolio);
   const [draftMobileSortBy, setDraftMobileSortBy] = useState<MobileAssetsSortBy>("name");
   const [draftMobileSortOrder, setDraftMobileSortOrder] = useState<SortDirection>("asc");
   const maskAmount = (amount: string) => hideAmounts ? "••••••" : amount;
   const premarketMoonClass = "text-amber-600 dark:text-amber-400";
 
   const portfolioParam = getQueryParam();
+
+  useEffect(() => {
+    setPokemonGroupOpen(viewingPokemonPortfolio);
+  }, [viewingPokemonPortfolio, selectedPortfolio?.id]);
 
   useEffect(() => {
     calendarPopupHandledRef.current = false;
@@ -1836,7 +1838,7 @@ export default function Dashboard() {
       collapsePokemonInAllPortfolios(
         sortedHoldingsDesktop,
         quotes,
-        isAllPortfolios,
+        groupPokemonHoldings,
         sortField,
         sortDirection,
         convertPrice,
@@ -1848,7 +1850,7 @@ export default function Dashboard() {
     [
       sortedHoldingsDesktop,
       quotes,
-      isAllPortfolios,
+      groupPokemonHoldings,
       sortField,
       sortDirection,
       convertPrice,
@@ -1864,7 +1866,7 @@ export default function Dashboard() {
       collapsePokemonInAllPortfolios(
         sortedHoldingsMobile,
         quotes,
-        isAllPortfolios,
+        groupPokemonHoldings,
         mobileSortField,
         mobileAssetsSortOrder,
         convertPrice,
@@ -1876,7 +1878,7 @@ export default function Dashboard() {
     [
       sortedHoldingsMobile,
       quotes,
-      isAllPortfolios,
+      groupPokemonHoldings,
       mobileSortField,
       mobileAssetsSortOrder,
       convertPrice,

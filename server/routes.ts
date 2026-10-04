@@ -3580,21 +3580,38 @@ export async function registerRoutes(
     try {
       const userId = req.user.claims.sub;
       const portfolioId = req.query.portfolio as string | undefined;
+      if (portfolioId && portfolioId !== "all" && !portfolioId.includes(",")) {
+        try {
+          await storage.claimStrayPokemonHoldings(userId, portfolioId);
+        } catch (error) {
+          console.warn("Pokemon holdings claim skipped:", error);
+        }
+      }
       const userHoldings = await storage.getHoldingsByUser(userId, portfolioId);
       const missingImages = userHoldings.filter((row) => isSealedPokemonHolding(row) && !row.tcgImageUrl);
       const imageQueue = [...missingImages];
-      await Promise.all(
-        Array.from({ length: Math.min(4, imageQueue.length) }, async () => {
-          while (imageQueue.length > 0) {
-            const row = imageQueue.shift();
-            if (!row) return;
-            const url = await findSealedProductImage(row.tcgProductName || row.companyName);
-            if (!url) continue;
-            row.tcgImageUrl = url;
-            await storage.setHoldingTcgImageUrl(userId, row.ticker, url);
-          }
-        }),
-      );
+      if (imageQueue.length > 0) {
+        const fillImages = Promise.all(
+          Array.from({ length: Math.min(4, imageQueue.length) }, async () => {
+            while (imageQueue.length > 0) {
+              const row = imageQueue.shift();
+              if (!row) return;
+              try {
+                const url = await findSealedProductImage(row.tcgProductName || row.companyName);
+                if (!url) continue;
+                row.tcgImageUrl = url;
+                await storage.setHoldingTcgImageUrl(userId, row.ticker, url);
+              } catch (error) {
+                console.warn(`Sealed image skipped for ${row.ticker}:`, error);
+              }
+            }
+          }),
+        );
+        await Promise.race([
+          fillImages,
+          new Promise((resolve) => setTimeout(resolve, 2500)),
+        ]);
+      }
       const txns = await storage.getTransactionsByUser(userId, portfolioId ?? "all");
       const rates = await fetchAllExchangeRates();
       const eurM = await buildEurPerUnitByTxnIdForTransactions(txns);

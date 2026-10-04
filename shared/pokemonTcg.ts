@@ -11,7 +11,7 @@
 
 export const POKEMON_PORTFOLIO_BROKER = "pokemon" as const;
 
-/** Syntetický riadok v prehľade „Všetky portfólia“ — nie je to ticker v databáze. */
+/** Syntetický riadok v prehľade aktív — nie je to ticker v databáze. Karty aj sealed sú vnútri. */
 export const POKEMON_GROUP_TICKER = "PTCG:ALL" as const;
 
 export const POKEMON_TICKER_PREFIX = "PTCG:" as const;
