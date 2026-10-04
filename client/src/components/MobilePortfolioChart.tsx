@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { BrokerLogo } from "@/components/BrokerLogo";
 import { ArrowRightLeft, Eye, EyeOff, HelpCircle, Loader2, Moon, RefreshCw } from "lucide-react";
 import type { Holding } from "@shared/schema";
+import { isPokemonPortfolio } from "@shared/pokemonTcg";
 import { getExtendedSessionLabel, getQuoteRefreshIntervalMs, getQuoteStaleTimeMs, getUsMarketSessionState, shouldShowExtendedQuote, shouldUseExtendedQuotes } from "@/lib/usMarketSession";
 
 interface StockQuote {
@@ -87,7 +88,8 @@ export function MobilePortfolioChart({
   }, []);
 
   const { currency, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
-  const { getQueryParam, selectedPortfolio, selectedPortfolioId } = usePortfolio();
+  const { getQueryParam, selectedPortfolio, selectedPortfolioId, isAllPortfolios } = usePortfolio();
+  const hideCash = !isAllPortfolios && isPokemonPortfolio(selectedPortfolio?.brokerCode);
   const { showChart, showTooltip, hideAmounts, toggleHideAmounts } = useChartSettings();
   
   const maskAmount = (amount: string) => hideAmounts ? "••••••" : amount;
@@ -451,12 +453,14 @@ export function MobilePortfolioChart({
         </span>
       </div>
 
+      {!hideCash && (
       <div className="flex items-center gap-2 mb-1">
         <span className="text-[10px] text-muted-foreground">Hotovosť:</span>
         <span className="text-xs font-medium text-foreground" data-testid="text-mobile-cash-balance">
           {maskAmount(formatCurrency(cashValue))}
         </span>
       </div>
+      )}
 
       {shouldUseExtendedQuotes(usSessionState) && (
         <div className="flex items-center gap-2 mb-2">

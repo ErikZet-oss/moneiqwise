@@ -26,7 +26,7 @@ import {
   CASH_INTEREST_TICKER,
 } from "@shared/tickerCurrency";
 import { isPhysicalMetalTicker, isPhysicalSilverTicker } from "@shared/physicalMetal";
-import { buildPokemonPosition, isPokemonTicker, isSealedPokemonHolding } from "@shared/pokemonTcg";
+import { buildPokemonPosition, isPokemonPortfolio, isPokemonTicker, isSealedPokemonHolding } from "@shared/pokemonTcg";
 import { findSealedProductImage } from "./sealedProductImage";
 import { fetchPokemonEuLowQuote, searchPokemonCards } from "./pokemonTcgClient";
 import { searchSealedProducts } from "./cardmarketSealed";
@@ -4065,6 +4065,14 @@ export async function registerRoutes(
       const portfolioId = req.body.portfolioId || defaultPortfolio.id;
 
       const bodyType = String(req.body.type || "").toUpperCase();
+      if (bodyType === "DEPOSIT" || bodyType === "WITHDRAWAL" || bodyType === "DIVIDEND") {
+        const targetPortfolio = await storage.getPortfolioById(portfolioId, userId);
+        if (isPokemonPortfolio(targetPortfolio?.brokerCode)) {
+          return res.status(400).json({
+            message: "Pokémon TCG eviduje len nákupy a predaje.",
+          });
+        }
+      }
       
       // For DIVIDEND, DEPOSIT, WITHDRAWAL: shares = "1" as placeholder
       const shares =
@@ -4913,6 +4921,17 @@ export async function registerRoutes(
 
       let newTicker = String(ticker || "").toUpperCase();
       const newPortfolioId = portfolioId || oldPortfolioId;
+      if (type === "DEPOSIT" || type === "WITHDRAWAL" || type === "DIVIDEND") {
+        const targetId = newPortfolioId || oldPortfolioId;
+        const targetPortfolio = targetId
+          ? await storage.getPortfolioById(targetId, userId)
+          : undefined;
+        if (isPokemonPortfolio(targetPortfolio?.brokerCode)) {
+          return res.status(400).json({
+            message: "Pokémon TCG eviduje len nákupy a predaje.",
+          });
+        }
+      }
 
       let sharesNum = parseFloat(String(sharesIn));
       let priceNum = parseFloat(String(priceIn));

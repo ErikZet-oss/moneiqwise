@@ -1,7 +1,8 @@
 /**
  * Pokémon TCG portfólio.
  * Karty a sealed produkty sú bežné holdingy (ticker + množstvo + FIFO),
- * ale žijú len v portfóliu s brokerom `pokemon`. Akciový systém sa ich netýka.
+ * ale žijú len v portfóliu s brokerom `pokemon`. Evidujú sa len nákupy a predaje,
+ * bez vkladov, výberov a hotovostného účtu. Akciový systém sa ich netýka.
  *
  * Trhová cena raw kariet a sealed z katalógu = najlacnejšia anglická ponuka na Cardmarkete.
  * Denný price guide mieša jazyky, preto sa nepoužíva.

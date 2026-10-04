@@ -254,7 +254,11 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
     form.setValue("tradeCurrency", "EUR");
     setSelectedStock(null);
     setSelectedQuote(null);
-    if (transactionType === "DIVIDEND") {
+    if (
+      transactionType === "DIVIDEND" ||
+      transactionType === "DEPOSIT" ||
+      transactionType === "WITHDRAWAL"
+    ) {
       setTransactionType("BUY");
       form.setValue("type", "BUY");
     }
@@ -408,7 +412,7 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
   };
 
   const onSubmit = (data: TransactionForm) => {
-    if (isPokemonMode && data.type !== "DEPOSIT" && data.type !== "WITHDRAWAL" && !pokemonPosition) {
+    if (isPokemonMode && !pokemonPosition) {
       toast({
         title: "Chýba produkt",
         description: "Vyberte kartu z katalógu alebo zadajte názov produktu.",
@@ -463,10 +467,6 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
           return "Zaznamenajte nákup karty, graded slab alebo sealed produktu. Nákupná cena je v EUR.";
         case "SELL":
           return "Zaznamenajte predaj Pokémon položky. FIFO berie najstaršie nákupy danej karty a stupňa.";
-        case "DEPOSIT":
-          return "Vloženie peňazí na Pokémon účet.";
-        case "WITHDRAWAL":
-          return "Výber peňazí z Pokémon účtu.";
         default:
           return "Transakcia v portfóliu Pokémon TCG.";
       }
@@ -548,12 +548,7 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
         <Form {...form}>
           <form
             onSubmit={(event) => {
-              if (
-                isPokemonMode &&
-                transactionType !== "DEPOSIT" &&
-                transactionType !== "WITHDRAWAL" &&
-                !pokemonPosition
-              ) {
+              if (isPokemonMode && !pokemonPosition) {
                 event.preventDefault();
                 toast({
                   title: "Chýba produkt",
@@ -610,7 +605,7 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
                   Dividenda
                 </Button>
                 )}
-                {!isSilverMode && (
+                {!isSilverMode && !isPokemonMode && (
                 <>
                 <Button
                   type="button"

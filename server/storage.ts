@@ -1075,8 +1075,13 @@ export class DatabaseStorage implements IStorage {
     }
     const allFlat = portfolioIds.flatMap((id) => byPid.get(id) ?? []);
     const eurM = await buildEurPerUnitByTxnIdForTransactions(allFlat);
+    const owned = await this.getPortfoliosByUser(userId);
+    const pokemonIds = new Set(
+      owned.filter((portfolio) => portfolio.brokerCode === POKEMON_PORTFOLIO_BROKER).map((portfolio) => portfolio.id),
+    );
     const cashPairs = await Promise.all(
       portfolioIds.map(async (id) => {
+        if (pokemonIds.has(id)) return [id, 0] as const;
         const list = byPid.get(id) ?? [];
         const cash = await netLedgerCashEur(list, rates, eurM);
         return [id, cash] as const;
@@ -1191,6 +1196,10 @@ export class DatabaseStorage implements IStorage {
     const eurM = await buildEurPerUnitByTxnIdForTransactions(allTxFlat);
     const now = new Date();
 
+    const owned = await this.getPortfoliosByUser(userId);
+    const pokemonIds = new Set(
+      owned.filter((portfolio) => portfolio.brokerCode === POKEMON_PORTFOLIO_BROKER).map((portfolio) => portfolio.id),
+    );
     const entries = await Promise.all(
       visibleIds.map(async (id) => {
         const list = txnsByPid.get(id) ?? [];
@@ -1219,7 +1228,7 @@ export class DatabaseStorage implements IStorage {
           trailing12mDividendNet += net;
         }
 
-        const cashEur = await netLedgerCashEur(list, rates, eurM);
+        const cashEur = pokemonIds.has(id) ? 0 : await netLedgerCashEur(list, rates, eurM);
 
         const portfolioHoldings = holdingsByPid.get(id) ?? [];
         const portfolioTxns = txnsByPid.get(id) ?? [];

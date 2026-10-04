@@ -28,6 +28,7 @@ import {
   getTickerCurrency,
 } from "@shared/tickerCurrency";
 import { AddTransactionForm } from "@/components/AddTransactionForm";
+import { isPokemonPortfolio } from "@shared/pokemonTcg";
 import { formatShareQuantity } from "@/lib/utils";
 import {
   buildCloseTradeFallbackPairing,
@@ -124,6 +125,7 @@ export default function History() {
   const { toast } = useToast();
   const { formatCurrency, convertPrice } = useCurrency();
   const { getQueryParam, portfolios, isAllPortfolios, selectedPortfolio } = usePortfolio();
+  const historyIsPokemon = !isAllPortfolios && isPokemonPortfolio(selectedPortfolio?.brokerCode);
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [tickerFilter, setTickerFilter] = useState<string>("all");
   const [idFilter, setIdFilter] = useState<string>("");
@@ -156,6 +158,15 @@ export default function History() {
   useEffect(() => {
     setTickerFilter("all");
   }, [portfolioParam]);
+
+  useEffect(() => {
+    if (
+      historyIsPokemon &&
+      (typeFilter === "DEPOSIT" || typeFilter === "WITHDRAWAL" || typeFilter === "DIVIDEND")
+    ) {
+      setTypeFilter("all");
+    }
+  }, [historyIsPokemon, typeFilter]);
 
   const { data: transactions, isLoading } = useQuery<Transaction[]>({
     queryKey: ["/api/transactions", portfolioParam],
@@ -841,9 +852,13 @@ export default function History() {
                   <SelectItem value="all">Všetky</SelectItem>
                   <SelectItem value="BUY">Nákupy</SelectItem>
                   <SelectItem value="SELL">Predaje</SelectItem>
-                  <SelectItem value="DIVIDEND">Dividendy</SelectItem>
-                  <SelectItem value="DEPOSIT">Vklady</SelectItem>
-                  <SelectItem value="WITHDRAWAL">Výbery</SelectItem>
+                  {!historyIsPokemon && (
+                    <>
+                      <SelectItem value="DIVIDEND">Dividendy</SelectItem>
+                      <SelectItem value="DEPOSIT">Vklady</SelectItem>
+                      <SelectItem value="WITHDRAWAL">Výbery</SelectItem>
+                    </>
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -1303,12 +1318,16 @@ export default function History() {
                     <span className={selectedSummary.realizedGain >= 0 ? "text-green-600" : "text-red-600"}>
                       Realizovaný: {selectedSummary.realizedGain >= 0 ? "+" : ""}{formatCurrency(selectedSummary.realizedGain)}
                     </span>
-                    <span className="text-blue-600">
-                      Dividendy: +{formatCurrency(selectedSummary.dividends)}
-                    </span>
-                    <span className={selectedSummary.cashFlow >= 0 ? "text-emerald-700" : "text-amber-800"}>
-                      Cash flow: {selectedSummary.cashFlow >= 0 ? "+" : ""}{formatCurrency(selectedSummary.cashFlow)}
-                    </span>
+                    {!historyIsPokemon && (
+                      <>
+                        <span className="text-blue-600">
+                          Dividendy: +{formatCurrency(selectedSummary.dividends)}
+                        </span>
+                        <span className={selectedSummary.cashFlow >= 0 ? "text-emerald-700" : "text-amber-800"}>
+                          Cash flow: {selectedSummary.cashFlow >= 0 ? "+" : ""}{formatCurrency(selectedSummary.cashFlow)}
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
@@ -1400,9 +1419,15 @@ export default function History() {
                   <SelectContent>
                     <SelectItem value="BUY">Nákup</SelectItem>
                     <SelectItem value="SELL">Predaj</SelectItem>
-                    <SelectItem value="DIVIDEND">Dividenda</SelectItem>
-                    <SelectItem value="DEPOSIT">Vklad</SelectItem>
-                    <SelectItem value="WITHDRAWAL">Výber</SelectItem>
+                    {!isPokemonPortfolio(
+                      portfolios.find((portfolio) => portfolio.id === editingTransaction?.portfolioId)?.brokerCode,
+                    ) && (
+                      <>
+                        <SelectItem value="DIVIDEND">Dividenda</SelectItem>
+                        <SelectItem value="DEPOSIT">Vklad</SelectItem>
+                        <SelectItem value="WITHDRAWAL">Výber</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
