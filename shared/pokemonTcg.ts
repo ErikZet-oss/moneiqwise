@@ -3,8 +3,8 @@
  * Karty a sealed produkty sú bežné holdingy (ticker + množstvo + FIFO),
  * ale žijú len v portfóliu s brokerom `pokemon`. Akciový systém sa ich netýka.
  *
- * Trhová cena raw kariet = Cardmarket low cez TCGdex.
- * Sealed z katalógu (ticker `PTCG:CM{idProduct}`) = Cardmarket low z denného cenníka.
+ * Trhová cena raw kariet a sealed z katalógu = najlacnejšia anglická ponuka na Cardmarkete.
+ * Denný price guide mieša jazyky, preto sa nepoužíva.
  * Graded a ručne zadané sealed bez id nemajú spoľahlivý EU low, takže hodnota
  * ostáva na nákupnej cene.
  */
@@ -56,6 +56,8 @@ export type PokemonCardHit = {
   number: string;
   imageUrl: string | null;
   euLowEur: number | null;
+  /** `en` = najlacnejšia anglická ponuka. `any` = denný cenník cez všetky jazyky. */
+  lowLanguage: "en" | "any" | null;
   cardmarketUrl: string | null;
   cardmarketId: string | null;
 };

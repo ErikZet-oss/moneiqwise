@@ -1,6 +1,7 @@
 import type { PokemonCardHit } from "@shared/pokemonTcg";
 import { pokemonCardmarketProductId, pokemonEuLowCardId } from "@shared/pokemonTcg";
 import { fetchSealedEuLow } from "./cardmarketSealed";
+import { fetchEnglishCardmarketLow, fetchEnglishCardmarketLows, resolveCardmarketLow } from "./cardmarketEnglishLow";
 
 const TCGDEX = "https://api.tcgdex.net/v2/en/cards";
 
@@ -34,18 +35,20 @@ function asHit(card: TcgdexCard): PokemonCardHit | null {
   const externalId = (card.id ?? "").trim().toLowerCase();
   const name = (card.name ?? "").trim();
   if (!externalId || !name) return null;
-  const low = card.pricing?.cardmarket?.low;
   const productId = card.pricing?.cardmarket?.idProduct;
+  const guideLow = card.pricing?.cardmarket?.low;
+  const guide = typeof guideLow === "number" && Number.isFinite(guideLow) && guideLow > 0 ? guideLow : null;
   return {
     externalId,
     name,
     setName: (card.set?.name ?? "").trim(),
     number: (card.localId ?? "").trim(),
     imageUrl: imageUrl(card.image),
-    euLowEur: typeof low === "number" && Number.isFinite(low) && low > 0 ? low : null,
+    euLowEur: guide,
+    lowLanguage: guide != null ? "any" : null,
     cardmarketUrl:
       typeof productId === "number"
-        ? `https://www.cardmarket.com/en/Pokemon/Products?idProduct=${productId}`
+        ? `https://www.cardmarket.com/en/Pokemon/Products?idProduct=${productId}&language=1`
         : null,
     cardmarketId: typeof productId === "number" ? String(productId) : null,
   };
@@ -78,8 +81,14 @@ export async function searchPokemonCards(query: string): Promise<PokemonCardHit[
     })
     .sort((a, b) => Number(Boolean(b.image)) - Number(Boolean(a.image)))
     .slice(0, 8);
-  const details = await Promise.all(ranked.map((item) => fetchCard(item.id ?? "")));
-  return details.filter((hit): hit is PokemonCardHit => hit != null);
+  const details = (await Promise.all(ranked.map((item) => fetchCard(item.id ?? "")))).filter(
+    (hit): hit is PokemonCardHit => hit != null,
+  );
+  const lows = await fetchEnglishCardmarketLows(details.map((hit) => hit.cardmarketId));
+  return details.map((hit) => ({
+    ...hit,
+    ...resolveCardmarketLow(hit.cardmarketId ? lows.get(hit.cardmarketId) : undefined, hit.euLowEur),
+  }));
 }
 
 export type PokemonEuLowQuote = {
@@ -96,9 +105,10 @@ export type PokemonEuLowQuote = {
   high52: number;
   low52: number;
   annualDividendPerShare: 0;
+  priceLanguage: "en" | "any";
 };
 
-function quoteFromLow(ticker: string, low: number): PokemonEuLowQuote {
+function quoteFromLow(ticker: string, low: number, priceLanguage: "en" | "any"): PokemonEuLowQuote {
   return {
     ticker: ticker.toUpperCase(),
     price: low,
@@ -113,15 +123,16 @@ function quoteFromLow(ticker: string, low: number): PokemonEuLowQuote {
     high52: low,
     low52: low,
     annualDividendPerShare: 0,
+    priceLanguage,
   };
 }
 
-/** Aktuálny európsky low (Cardmarket) pre raw kartu alebo sealed z katalógu. */
+/** Aktuálny Cardmarket low len z anglických ponúk, pre raw kartu alebo sealed. */
 export async function fetchPokemonEuLowQuote(ticker: string): Promise<PokemonEuLowQuote | null> {
   const sealedId = pokemonCardmarketProductId(ticker);
   if (sealedId) {
     const low = await fetchSealedEuLow(sealedId);
-    return low == null ? null : quoteFromLow(ticker, low);
+    return low == null ? null : quoteFromLow(ticker, low.price, low.priceLanguage);
   }
   const cardId = pokemonEuLowCardId(ticker);
   if (!cardId) return null;
@@ -131,7 +142,13 @@ export async function fetchPokemonEuLowQuote(ticker: string): Promise<PokemonEuL
     throw new Error(`TCGdex ${res.status}`);
   }
   const card = (await res.json()) as TcgdexCard;
-  const low = card.pricing?.cardmarket?.low;
-  if (typeof low !== "number" || !Number.isFinite(low) || !(low > 0)) return null;
-  return quoteFromLow(ticker, low);
+  const guideRaw = card.pricing?.cardmarket?.low;
+  const guide = typeof guideRaw === "number" && Number.isFinite(guideRaw) && guideRaw > 0 ? guideRaw : null;
+  const productId = card.pricing?.cardmarket?.idProduct;
+  if (typeof productId !== "number") return guide == null ? null : quoteFromLow(ticker, guide, "any");
+  const english = await fetchEnglishCardmarketLow(String(productId));
+  const resolved = resolveCardmarketLow(english, guide);
+  return resolved.euLowEur == null || resolved.lowLanguage == null
+    ? null
+    : quoteFromLow(ticker, resolved.euLowEur, resolved.lowLanguage);
 }

@@ -1,4 +1,5 @@
 import type { PokemonCardHit } from "@shared/pokemonTcg";
+import { fetchEnglishCardmarketLow, fetchEnglishCardmarketLows, resolveCardmarketLow } from "./cardmarketEnglishLow";
 
 const NONSINGLES_URL =
   "https://downloads.s3.cardmarket.com/productCatalog/productList/products_nonsingles_6.json";
@@ -13,7 +14,14 @@ type CatalogProduct = {
 
 type Catalog = {
   products: CatalogProduct[];
-  lows: Map<number, number>;
+  guideLows: Map<number, number>;
+};
+
+type PriceGuideFile = {
+  priceGuides?: Array<{
+    idProduct?: number;
+    low?: number | null;
+  }>;
 };
 
 type NonsinglesFile = {
@@ -21,13 +29,6 @@ type NonsinglesFile = {
     idProduct?: number;
     name?: string;
     categoryName?: string;
-  }>;
-};
-
-type PriceGuideFile = {
-  priceGuides?: Array<{
-    idProduct?: number;
-    low?: number | null;
   }>;
 };
 
@@ -44,6 +45,26 @@ function normalize(value: string): string {
 
 function categoryLabel(name: string): string {
   return name.replace(/^Pokémon\s+/i, "").replace(/^PCG\s+/i, "").trim();
+}
+
+const FOREIGN_PRINTS: Array<{ pattern: RegExp; tokens: string[] }> = [
+  { pattern: /\bjp\b|\bjapanese\b/, tokens: ["jp", "japanese"] },
+  { pattern: /\bchinese\b|\bchs\b|\bcht\b/, tokens: ["chinese", "chs", "cht"] },
+  { pattern: /\bkorean\b/, tokens: ["korean"] },
+  { pattern: /\bindonesian\b/, tokens: ["indonesian"] },
+  { pattern: /\bthai\b/, tokens: ["thai"] },
+  { pattern: /\bgerman\b|\bdeutsch\b/, tokens: ["german", "deutsch"] },
+  { pattern: /\bfrench\b/, tokens: ["french"] },
+  { pattern: /\bitalian\b/, tokens: ["italian"] },
+  { pattern: /\bspanish\b/, tokens: ["spanish"] },
+];
+
+function foreignPrintPenalty(name: string, tokens: string[]): number {
+  let penalty = 0;
+  for (const print of FOREIGN_PRINTS) {
+    if (print.pattern.test(name) && !print.tokens.some((token) => tokens.includes(token))) penalty += 80;
+  }
+  return penalty;
 }
 
 async function loadCatalog(): Promise<Catalog> {
@@ -68,14 +89,14 @@ async function loadCatalog(): Promise<Catalog> {
     });
     ids.add(idProduct);
   }
-  const lows = new Map<number, number>();
+  const guideLows = new Map<number, number>();
   for (const row of guideFile.priceGuides ?? []) {
     if (typeof row.idProduct !== "number" || !ids.has(row.idProduct)) continue;
     if (typeof row.low === "number" && Number.isFinite(row.low) && row.low > 0) {
-      lows.set(row.idProduct, row.low);
+      guideLows.set(row.idProduct, row.low);
     }
   }
-  return { products, lows };
+  return { products, guideLows };
 }
 
 function getCatalog(): Promise<Catalog> {
@@ -90,12 +111,18 @@ function getCatalog(): Promise<Catalog> {
   return catalogPromise;
 }
 
-/** Najlacnejšia aktuálna ponuka sealed produktu v EUR. */
-export async function fetchSealedEuLow(productId: string): Promise<number | null> {
+/** Anglický low, a keď sa ponuky nenačítajú, denný cenník cez všetky jazyky. */
+export async function fetchSealedEuLow(
+  productId: string,
+): Promise<{ price: number; priceLanguage: "en" | "any" } | null> {
+  const english = await fetchEnglishCardmarketLow(productId);
+  if (english.status === "ok") {
+    return english.low == null ? null : { price: english.low, priceLanguage: "en" };
+  }
   const id = Number(productId);
-  if (!Number.isInteger(id) || id <= 0) return null;
-  const catalog = await getCatalog();
-  return catalog.lows.get(id) ?? null;
+  if (!Number.isInteger(id)) return null;
+  const guide = (await getCatalog()).guideLows.get(id);
+  return guide == null ? null : { price: guide, priceLanguage: "any" };
 }
 
 /** Vyhľadanie sealed produktov v dennom Cardmarket katalógu. */
@@ -111,6 +138,7 @@ export async function searchSealedProducts(query: string): Promise<PokemonCardHi
     .map((product) => {
       const name = normalize(product.name);
       if (!tokens.every((token) => name.includes(token))) return null;
+      if (foreignPrintPenalty(name, tokens) > 0) return null;
       let score = 0;
       if (name === phrase) score += 100;
       else if (name.startsWith(phrase)) score += 40;
@@ -125,17 +153,19 @@ export async function searchSealedProducts(query: string): Promise<PokemonCardHi
     .sort((a, b) => b.score - a.score || a.product.name.localeCompare(b.product.name))
     .slice(0, 12);
 
+  const lows = await fetchEnglishCardmarketLows(ranked.map(({ product }) => String(product.idProduct)));
   return ranked.map(({ product }) => {
     const id = String(product.idProduct);
-    const low = catalog.lows.get(product.idProduct) ?? null;
+    const price = resolveCardmarketLow(lows.get(id), catalog.guideLows.get(product.idProduct) ?? null);
     return {
       externalId: `cm${id}`,
       name: product.name,
       setName: product.category,
       number: "",
       imageUrl: null,
-      euLowEur: low,
-      cardmarketUrl: `https://www.cardmarket.com/en/Pokemon/Products?idProduct=${id}`,
+      euLowEur: price.euLowEur,
+      lowLanguage: price.lowLanguage,
+      cardmarketUrl: `https://www.cardmarket.com/en/Pokemon/Products?idProduct=${id}&language=1`,
       cardmarketId: id,
     };
   });

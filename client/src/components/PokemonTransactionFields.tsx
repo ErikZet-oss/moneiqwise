@@ -25,6 +25,12 @@ type Props = {
   onPositionChange: (position: PokemonFormPosition | null) => void;
 };
 
+function formatLow(card: PokemonCardHit): string {
+  if (card.euLowEur == null) return "EN low nie je v ponukách";
+  const price = `${card.euLowEur.toFixed(2)} €`;
+  return card.lowLanguage === "en" ? `EN low ${price}` : `Low ${price} (všetky jazyky)`;
+}
+
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState(value);
   useEffect(() => {
@@ -119,8 +125,8 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
       <div>
         <p className="text-sm font-medium">Pokémon TCG</p>
         <p className="text-xs text-muted-foreground mt-1">
-          Nákupná cena je to, čo ste zaplatili v EUR. Aktuálna hodnota raw karty a sealed produktu z Cardmarketu
-          sa počíta z európskeho low. Graded a ručne zadané položky ostávajú na nákupnej cene.
+          Nákupná cena je to, čo ste zaplatili v EUR. Aktuálna hodnota raw karty a sealed produktu je Cardmarket
+          low len z anglických ponúk. Graded a ručne zadané položky ostávajú na nákupnej cene.
         </p>
       </div>
 
@@ -209,7 +215,7 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
                             {card.number ? ` · #${card.number}` : ""}
                           </span>
                           <span className="block text-xs tabular-nums">
-                            {card.euLowEur != null ? `EU low ${card.euLowEur.toFixed(2)} €` : "EU low nie je v katalógu"}
+                            {formatLow(card)}
                           </span>
                         </span>
                       </button>
@@ -235,11 +241,7 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
               <div className="min-w-0">
                 <p className="font-medium truncate">{selected.name}</p>
                 <p className="text-xs text-muted-foreground truncate">{selected.setName}</p>
-                <p className="text-xs tabular-nums">
-                  {selected.euLowEur != null
-                    ? `Európsky low: ${selected.euLowEur.toFixed(2)} €`
-                    : "Európsky low pre túto položku chýba."}
-                </p>
+                <p className="text-xs tabular-nums">{formatLow(selected)}</p>
                 <button type="button" className="text-xs text-primary hover:underline" onClick={clearCard}>
                   Zadať iný názov ručne
                 </button>
@@ -323,7 +325,7 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
           </div>
           <p className="sm:col-span-3 text-xs text-muted-foreground">
             Rovnaká karta a rovnaký stupeň sa sčítajú ako kusy (FIFO). Certifikát ostáva pri konkrétnom nákupe.
-            Trhová cena graded kariet nie je v európskom low feede, preto sa drží nákupná cena.
+            Trhová cena graded kariet nie je anglický Cardmarket low, preto sa drží nákupná cena.
           </p>
         </div>
       )}

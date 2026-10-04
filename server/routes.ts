@@ -3824,9 +3824,11 @@ export async function registerRoutes(
         companyName,
         imageUrl: pokemonImage,
         priceNote: isPokemonTicker(displayTicker)
-          ? quote
-            ? "Európsky low (Cardmarket)"
-            : "Pre túto položku nie je európsky low v katalógu — zobrazená hodnota ostáva na nákupnej cene."
+          ? !quote
+            ? "Pre túto položku nie je anglický Cardmarket low — zobrazená hodnota ostáva na nákupnej cene."
+            : quote.priceLanguage === "en"
+              ? "Cardmarket low, anglické ponuky"
+              : "Cardmarket low cez všetky jazyky — anglické ponuky sa nepodarilo načítať."
           : null,
         costCurrency: inferHoldingCostCurrency(displayTicker, txRows),
         positions,
