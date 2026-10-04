@@ -512,7 +512,7 @@ function buildPokemonGroupHolding(
       userId: children[0]?.userId ?? "",
       portfolioId: null,
       ticker: POKEMON_GROUP_TICKER,
-      companyName: children.length === 1 ? "Pokémon TCG" : `Pokémon TCG (${children.length})`,
+      companyName: `Pokémon TCG (${children.length})`,
       shares: String(shares),
       averageCost: String(avgCost),
       totalInvested: String(invested),
@@ -861,13 +861,30 @@ export default function Dashboard() {
   
   const { data: holdings, isLoading: holdingsLoading } = useQuery<HoldingWithCostCurrency[]>({
     queryKey: ["/api/holdings", portfolioParam],
+    staleTime: 0,
     refetchOnMount: "always",
     queryFn: async () => {
-      const res = await fetch(`/api/holdings?portfolio=${portfolioParam}`, { credentials: "include" });
+      const res = await fetch(`/api/holdings?portfolio=${encodeURIComponent(portfolioParam)}`, {
+        credentials: "include",
+        cache: "no-store",
+      });
       if (!res.ok) throw new Error("Failed to fetch holdings");
       return res.json();
     },
   });
+
+  const pokemonHoldingCount = holdings?.filter((holding) => isPokemonHolding(holding)).length ?? 0;
+  const previousPokemonCount = useRef<number | null>(null);
+  useEffect(() => {
+    if (!isAllPortfolios) {
+      previousPokemonCount.current = pokemonHoldingCount;
+      return;
+    }
+    if (previousPokemonCount.current != null && pokemonHoldingCount > previousPokemonCount.current) {
+      setPokemonGroupOpen(true);
+    }
+    previousPokemonCount.current = pokemonHoldingCount;
+  }, [isAllPortfolios, pokemonHoldingCount]);
 
   const {
     data: quotesData,

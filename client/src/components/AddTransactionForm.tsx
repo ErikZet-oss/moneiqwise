@@ -166,15 +166,16 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
   const debouncedSearch = useDebounce(inputValue, 300);
 
   useEffect(() => {
-    if (portfolios.length > 0 && !selectedPortfolioId) {
-      if (selectedPortfolio && !isAllPortfolios) {
-        setSelectedPortfolioId(selectedPortfolio.id);
-      } else {
-        const defaultPortfolio = portfolios.find((p) => p.isDefault) || portfolios[0];
-        setSelectedPortfolioId(defaultPortfolio.id);
-      }
+    if (portfolios.length === 0) return;
+    if (!isAllPortfolios && selectedPortfolio?.id) {
+      setSelectedPortfolioId(selectedPortfolio.id);
+      return;
     }
-  }, [portfolios, selectedPortfolio, isAllPortfolios, selectedPortfolioId]);
+    if (!selectedPortfolioId) {
+      const defaultPortfolio = portfolios.find((p) => p.isDefault) || portfolios[0];
+      setSelectedPortfolioId(defaultPortfolio.id);
+    }
+  }, [portfolios, selectedPortfolio?.id, isAllPortfolios, selectedPortfolioId]);
 
   const form = useForm<TransactionForm>({
     resolver: zodResolver(transactionSchema),
@@ -332,6 +333,7 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
         description: `Transakcia bola úspešne uložená.`,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/holdings"] });
+      void queryClient.refetchQueries({ queryKey: ["/api/holdings"], type: "all" });
       queryClient.invalidateQueries({ queryKey: ["/api/overview"] });
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dividends"] });

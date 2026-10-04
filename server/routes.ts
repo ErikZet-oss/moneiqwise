@@ -4060,7 +4060,24 @@ export async function registerRoutes(
 
       // Ensure user has a default portfolio
       const defaultPortfolio = await storage.ensureDefaultPortfolio(userId);
-      const portfolioId = req.body.portfolioId || defaultPortfolio.id;
+      let portfolioId = req.body.portfolioId || defaultPortfolio.id;
+      const incomingTcg =
+        typeof req.body?.tcgCategory === "string" ? req.body.tcgCategory.trim() : "";
+      if (incomingTcg) {
+        const targetPortfolio = await storage.getPortfolioById(portfolioId, userId);
+        if (!isPokemonPortfolio(targetPortfolio?.brokerCode)) {
+          const owned = await storage.getPortfoliosByUser(userId);
+          const pokemonPortfolio = owned.find(
+            (portfolio) => isPokemonPortfolio(portfolio.brokerCode) && !portfolio.isHidden,
+          );
+          if (!pokemonPortfolio) {
+            return res.status(400).json({
+              message: "Najprv vytvorte portfólio Pokémon TCG.",
+            });
+          }
+          portfolioId = pokemonPortfolio.id;
+        }
+      }
 
       const bodyType = String(req.body.type || "").toUpperCase();
       if (bodyType === "DEPOSIT" || bodyType === "WITHDRAWAL" || bodyType === "DIVIDEND") {
