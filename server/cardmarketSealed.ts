@@ -111,6 +111,14 @@ function getCatalog(): Promise<Catalog> {
   return catalogPromise;
 }
 
+/** Názov sealed produktu z Cardmarket katalógu. Slúži na vyhľadanie v Pokémon TCG API. */
+export async function sealedProductName(productId: string): Promise<string | null> {
+  const id = Number(productId);
+  if (!Number.isInteger(id)) return null;
+  const product = (await getCatalog()).products.find((row) => row.idProduct === id);
+  return product?.name ?? null;
+}
+
 /** Denný Cardmarket low v EUR. Cenník je najlacnejšia ponuka cez všetky jazyky. */
 export async function fetchSealedEuLow(
   productId: string,

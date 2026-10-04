@@ -57,11 +57,22 @@ function rowsFrom(body: unknown): Row[] {
   return [];
 }
 
-function productIdOf(row: Row): string | null {
-  const raw = row.cardmarket_id ?? row.cardmarketId ?? row.idProduct;
+function idString(raw: unknown): string | null {
   if (typeof raw === "number" && Number.isFinite(raw)) return String(Math.trunc(raw));
   if (typeof raw === "string" && /^\d+$/.test(raw.trim())) return raw.trim();
   return null;
+}
+
+function productIdOf(row: Row): string | null {
+  const nested = isRow(row.cardmarket) ? row.cardmarket : null;
+  return (
+    idString(row.cardmarket_id) ??
+    idString(row.cardmarketId) ??
+    idString(row.idProduct) ??
+    idString(nested?.id) ??
+    idString(nested?.idProduct) ??
+    idString(nested?.cardmarket_id)
+  );
 }
 
 function isEnglishRow(row: Row): boolean {
@@ -205,14 +216,19 @@ async function loadEnglishRow(productId: string, catalog: "cards" | "products", 
 
   const name = (productName ?? "").replace(/\s+/g, " ").trim();
   const paths = [`/${catalog}?cardmarket_id=${productId}`];
-  if (catalog === "products") paths.push(`/cards?cardmarket_id=${productId}`);
-  if (name.length >= 2) paths.push(`/${catalog}?search=${encodeURIComponent(name)}`);
+  if (name.length >= 2) {
+    const query = encodeURIComponent(name);
+    if (catalog === "products") paths.push(`/products/search?search=${query}`);
+    paths.push(`/${catalog}?search=${query}`);
+  }
 
   let lastError = false;
   let lastStatus = 0;
+  let lastPath = "";
   for (const path of paths) {
     const read = await readRows(path);
     lastStatus = read.status;
+    lastPath = path;
     if (read.failed === "auth" && !authLogged) {
       authLogged = true;
       console.warn("Pokémon TCG API odmietlo kľúč. Skontroluj RAPIDAPI_KEY a predplatné Pokémon TCG API.");
@@ -231,7 +247,7 @@ async function loadEnglishRow(productId: string, catalog: "cards" | "products", 
     }
   }
 
-  console.warn(`Pokemon API ${catalog} ${productId}: bez ceny, posledný status ${lastStatus || "chyba"}`);
+  console.warn(`Pokemon API ${catalog} ${productId}: bez ceny, posledný status ${lastStatus || "chyba"} ${lastPath}`);
   rowCache.set(cacheKey, { at: Date.now(), ttl: lastError ? ERROR_TTL_MS : MISS_TTL_MS, row: null });
   return null;
 }
