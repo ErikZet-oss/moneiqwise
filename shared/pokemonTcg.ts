@@ -4,9 +4,8 @@
  * ale žijú len v portfóliu s brokerom `pokemon`. Evidujú sa len nákupy a predaje,
  * bez vkladov, výberov a hotovostného účtu. Akciový systém sa ich netýka.
  *
- * Trhová cena je najlacnejšia anglická ponuka na Cardmarkete (API, idLanguage=1).
- * Raw a sealed berú najlacnejší nepodpísaný kus. Graded berie najlacnejšiu ponuku
- * s rovnakou spoločnosťou a stupňom v komentári. Denný cenník je len záloha pre raw a sealed.
+ * Trhová cena je anglický Cardmarket Near Mint v EUR (TCGGO). Graded berie cenu
+ * daného stupňa z Cardmarketu, nie raw low. Denný cenník je len záloha pre raw a sealed.
  * Obrázok karty (aj graded) ide z TCGdex.
  */
 
@@ -57,7 +56,7 @@ export type PokemonCardHit = {
   number: string;
   imageUrl: string | null;
   euLowEur: number | null;
-  /** `en` = najlacnejšia anglická ponuka. `any` = denný cenník cez všetky jazyky. */
+  /** `en` = anglický Near Mint. `any` = denný cenník cez všetky jazyky. */
   lowLanguage: "en" | "any" | null;
   cardmarketUrl: string | null;
   cardmarketId: string | null;

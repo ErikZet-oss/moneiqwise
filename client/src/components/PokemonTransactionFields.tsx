@@ -125,8 +125,8 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
       <div>
         <p className="text-sm font-medium">Pokémon TCG</p>
         <p className="text-xs text-muted-foreground mt-1">
-          Nákupná cena je to, čo ste zaplatili v EUR. Aktuálna hodnota raw karty a sealed produktu je Cardmarket
-          low len z anglických ponúk. Graded a ručne zadané položky ostávajú na nákupnej cene.
+          Nákupná cena je to, čo ste zaplatili v EUR. Hodnota v prehľade je Cardmarket v EUR: anglický Near Mint
+          pre raw a sealed, a cena daného stupňa pre graded.
         </p>
       </div>
 
@@ -327,7 +327,7 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
           </div>
           <p className="sm:col-span-3 text-xs text-muted-foreground">
             Rovnaká karta a rovnaký stupeň sa sčítajú ako kusy (FIFO). Certifikát ostáva pri konkrétnom nákupe.
-            Obrázok je sken raw karty. Trhová cena graded je najlacnejšia anglická ponuka s týmto stupňom na Cardmarkete.
+            Obrázok je sken raw karty. Trhová cena je Cardmarket cena tohto stupňa v EUR, nie cena raw karty.
           </p>
         </div>
       )}

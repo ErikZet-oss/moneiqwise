@@ -1,7 +1,7 @@
 import type { PokemonCardHit } from "@shared/pokemonTcg";
 import { pokemonCardmarketProductId, pokemonGradeFromTicker, pokemonTcgdexCardId } from "@shared/pokemonTcg";
-import { fetchCardmarketEnglishLow } from "./cardmarketApi";
 import { fetchSealedEuLow } from "./cardmarketSealed";
+import { fetchTcggoEnglishPrice } from "./tcggoPrices";
 
 const TCGDEX = "https://api.tcgdex.net/v2/en/cards";
 
@@ -163,9 +163,16 @@ export type PokemonEuLowQuote = {
   low52: number;
   annualDividendPerShare: 0;
   priceLanguage: "en" | "any";
+  /** True, keď sa TCGGO už pýtalo. Inak sa po doplnení RAPIDAPI_KEY cena dotiahne znova. */
+  tcggoChecked: boolean;
 };
 
-function quoteFromLow(ticker: string, low: number, priceLanguage: "en" | "any"): PokemonEuLowQuote {
+function quoteFromLow(
+  ticker: string,
+  low: number,
+  priceLanguage: "en" | "any",
+  tcggoChecked: boolean,
+): PokemonEuLowQuote {
   return {
     ticker: ticker.toUpperCase(),
     price: low,
@@ -181,6 +188,7 @@ function quoteFromLow(ticker: string, low: number, priceLanguage: "en" | "any"):
     low52: low,
     annualDividendPerShare: 0,
     priceLanguage,
+    tcggoChecked,
   };
 }
 
@@ -196,14 +204,14 @@ async function loadTcgdexCard(cardId: string): Promise<TcgdexCard | null> {
   return (await res.json()) as TcgdexCard;
 }
 
-/** Anglický Cardmarket low pre raw, graded aj sealed. Bez API tokenov je raw/sealed denný cenník. */
+/** Cardmarket cena v EUR. Anglický Near Mint ide cez TCGGO. Denný cenník je len záloha pre raw a sealed. */
 export async function fetchPokemonEuLowQuote(ticker: string): Promise<PokemonEuLowQuote | null> {
   const sealedId = pokemonCardmarketProductId(ticker);
   if (sealedId) {
-    const live = await fetchCardmarketEnglishLow(sealedId, { kind: "sealed" });
-    if (live.status === "ok") return live.low == null ? null : quoteFromLow(ticker, live.low, "en");
+    const live = await fetchTcggoEnglishPrice(sealedId, { kind: "sealed" });
+    if (live.status === "ok" && live.low != null) return quoteFromLow(ticker, live.low, "en", true);
     const guide = await fetchSealedEuLow(sealedId);
-    return guide == null ? null : quoteFromLow(ticker, guide.price, "any");
+    return guide == null ? null : quoteFromLow(ticker, guide.price, "any", live.status !== "unconfigured");
   }
   const cardId = pokemonTcgdexCardId(ticker);
   if (!cardId) return null;
@@ -213,17 +221,19 @@ export async function fetchPokemonEuLowQuote(ticker: string): Promise<PokemonEuL
   const grade = pokemonGradeFromTicker(ticker);
   if (grade) {
     if (typeof productId !== "number") return null;
-    const live = await fetchCardmarketEnglishLow(String(productId), {
-      kind: "graded",
-      company: grade.company,
-      grade: grade.grade,
-    });
-    return live.status === "ok" && live.low != null ? quoteFromLow(ticker, live.low, "en") : null;
+    const live = await fetchTcggoEnglishPrice(
+      String(productId),
+      { kind: "graded", company: grade.company, grade: grade.grade },
+      card.name,
+    );
+    return live.status === "ok" && live.low != null ? quoteFromLow(ticker, live.low, "en", true) : null;
   }
   if (typeof productId === "number") {
-    const live = await fetchCardmarketEnglishLow(String(productId), { kind: "raw" });
-    if (live.status === "ok") return live.low == null ? null : quoteFromLow(ticker, live.low, "en");
+    const live = await fetchTcggoEnglishPrice(String(productId), { kind: "raw" }, card.name);
+    if (live.status === "ok" && live.low != null) return quoteFromLow(ticker, live.low, "en", true);
+    const guide = guideLow(card);
+    return guide == null ? null : quoteFromLow(ticker, guide, "any", live.status !== "unconfigured");
   }
   const guide = guideLow(card);
-  return guide == null ? null : quoteFromLow(ticker, guide, "any");
+  return guide == null ? null : quoteFromLow(ticker, guide, "any", false);
 }

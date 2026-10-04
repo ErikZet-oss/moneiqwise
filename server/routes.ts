@@ -26,7 +26,7 @@ import {
   CASH_INTEREST_TICKER,
 } from "@shared/tickerCurrency";
 import { isPhysicalMetalTicker, isPhysicalSilverTicker } from "@shared/physicalMetal";
-import { buildPokemonPosition, isPokemonGroupTicker, isPokemonPortfolio, isPokemonTicker, isSealedPokemonHolding, pokemonTcgdexCardId } from "@shared/pokemonTcg";
+import { buildPokemonPosition, isPokemonGroupTicker, isPokemonPortfolio, isPokemonTicker, isSealedPokemonHolding, pokemonGradeFromTicker, pokemonTcgdexCardId } from "@shared/pokemonTcg";
 import { findSealedProductImage } from "./sealedProductImage";
 import { fetchPokemonEuLowQuote, fetchTcgdexImage, fetchTcgdexImageByName, searchPokemonCards } from "./pokemonTcgClient";
 import { searchSealedProducts } from "./cardmarketSealed";
@@ -112,6 +112,9 @@ const QUOTE_CACHE_TTL_LIVE_MS = 3 * 60 * 1000;
 const QUOTE_CACHE_TTL_EXTENDED_MS = 20 * 1000;
 
 function getQuoteCacheTtlMs(cachedData?: unknown): number {
+  if (cachedData && typeof cachedData === "object" && "priceLanguage" in cachedData) {
+    return 6 * 60 * 60 * 1000;
+  }
   if (isUsExtendedSessionNow()) return QUOTE_CACHE_TTL_EXTENDED_MS;
   if (cachedData && typeof cachedData === "object") {
     const ms = String((cachedData as Record<string, unknown>).marketState ?? "").toUpperCase();
@@ -345,7 +348,7 @@ async function fetchPhysicalMetalQuote(ticker: string): Promise<any> {
 const CACHE_DIR = path.join(process.cwd(), ".cache");
 const CACHE_FILE = path.join(CACHE_DIR, "prices.json");
 /** Bump when quote shape/source changes — invalidates stale on-disk quote cache. */
-const QUOTE_CACHE_VERSION = 9;
+const QUOTE_CACHE_VERSION = 10;
 
 function isUsExtendedSessionNow(): boolean {
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -2001,7 +2004,11 @@ async function fetchStockQuote(ticker: string, skipCache = false): Promise<any> 
   // Check cache first (unless user explicitly refreshes quotes)
   const cached = priceCache.get(ticker);
   const quoteCacheTtl = getQuoteCacheTtlMs(cached?.data);
-  if (!skipCache && cached && Date.now() - cached.timestamp < quoteCacheTtl) {
+  const pokemonNeedsTcggo =
+    isPokemonTicker(ticker) &&
+    Boolean(process.env.RAPIDAPI_KEY?.trim()) &&
+    cached?.data?.tcggoChecked !== true;
+  if (!skipCache && cached && !pokemonNeedsTcggo && Date.now() - cached.timestamp < quoteCacheTtl) {
     // Backward compatibility: older cache entries may miss newer fields.
     // If any required field is missing, force fresh fetch to avoid stale/zero metrics.
     const isPhysical = isPhysicalMetalTicker(ticker);
@@ -3868,10 +3875,15 @@ export async function registerRoutes(
         imageUrl: pokemonImage,
         priceNote: isPokemonTicker(displayTicker)
           ? !quote
-            ? "Anglický Cardmarket low pre tento stupeň sa nenašiel — hodnota ostáva na nákupnej cene."
+            ? "Cardmarket cena pre tento stupeň sa nenašla — hodnota ostáva na nákupnej cene."
             : quote.priceLanguage === "en"
-              ? "Cardmarket low, anglické ponuky"
-              : "Cardmarket low v EUR, denný cenník cez všetky jazyky. Anglické ponuky vyžadujú Cardmarket API tokeny."
+              ? (() => {
+                  const grade = pokemonGradeFromTicker(displayTicker);
+                  return grade
+                    ? `Cardmarket, ${grade.company} ${grade.grade}`
+                    : "Cardmarket Near Mint, anglická verzia";
+                })()
+              : "Cardmarket low v EUR, denný cenník cez všetky jazyky."
           : null,
         costCurrency: inferHoldingCostCurrency(displayTicker, txRows),
         positions,
