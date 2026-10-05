@@ -244,8 +244,30 @@ async function hydratePrices(row: Row, catalog: "cards" | "products"): Promise<R
   return detail.rows.find((item) => isEnglishRow(item) && cardmarketBlock(item) != null) ?? row;
 }
 
+async function loadTcggoRow(productId: string, catalog: "cards" | "products"): Promise<Row | null> {
+  const cacheKey = `tcggo:${catalog}:${productId}`;
+  const cached = rowCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < cached.ttl) return cached.row;
+  const path = `/pokemon/${catalog}/${encodeURIComponent(productId)}`;
+  const read = await readRows(path);
+  noteAuth(read.failed);
+  if (read.failed === "auth" || read.failed === "error") {
+    rowCache.set(cacheKey, { at: Date.now(), ttl: ERROR_TTL_MS, row: null });
+    console.warn(`Pokemon API ${catalog} ${productId}: bez ceny, posledný status ${read.status || "chyba"} ${path}`);
+    return null;
+  }
+  const row = read.rows.find((item) => isEnglishRow(item) && cardmarketBlock(item) != null) ?? null;
+  if (row) {
+    rowCache.set(cacheKey, { at: Date.now(), ttl: SUCCESS_TTL_MS, row });
+    return row;
+  }
+  console.warn(`Pokemon API ${catalog} ${productId}: bez ceny, posledný status ${read.status} ${path}`);
+  rowCache.set(cacheKey, { at: Date.now(), ttl: MISS_TTL_MS, row: null });
+  return null;
+}
+
 async function loadEnglishRow(productId: string, catalog: "cards" | "products"): Promise<Row | null> {
-  const cacheKey = `${catalog}:${productId}`;
+  const cacheKey = `cardmarket:${catalog}:${productId}`;
   const cached = rowCache.get(cacheKey);
   if (cached && Date.now() - cached.at < cached.ttl) return cached.row;
 
@@ -333,10 +355,11 @@ export async function searchTcgEpisodes(search: string): Promise<Row[]> {
   return rows;
 }
 
-/** Anglická Cardmarket cena v EUR. `low: null` znamená, že táto cena v produkte nie je. */
+/** Anglická Cardmarket cena v EUR. `source: tcggo` berie detail `/pokemon/products/{id}`. */
 export async function fetchRapidCardmarketPrice(
   productId: string,
   request: RapidPriceKind,
+  source: "cardmarket" | "tcggo" = "cardmarket",
 ): Promise<RapidPriceResult> {
   const id = productId.trim();
   if (!/^\d{1,12}$/.test(id)) return { status: "unavailable" };
@@ -349,14 +372,14 @@ export async function fetchRapidCardmarketPrice(
   }
 
   const catalog = request.kind === "sealed" ? "products" : "cards";
-  const cacheKey = `${catalog}:${id}`;
+  const cacheKey = `${source}:${catalog}:${id}`;
   const cached = rowCache.get(cacheKey);
   if (cached && Date.now() - cached.at < cached.ttl) {
     if (!cached.row) return cached.ttl === ERROR_TTL_MS ? { status: "unavailable" } : { status: "ok", low: null };
     return { status: "ok", low: priceFromRow(cached.row, request) };
   }
 
-  const row = await loadEnglishRow(id, catalog);
+  const row = source === "tcggo" ? await loadTcggoRow(id, catalog) : await loadEnglishRow(id, catalog);
   const after = rowCache.get(cacheKey);
   const result: RapidPriceResult = !row
     ? after && after.ttl === ERROR_TTL_MS

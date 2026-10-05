@@ -10,6 +10,7 @@ import {
   nearMintEur,
   searchTcgEpisodes,
   searchTcgRows,
+  type RapidPriceKind,
   type TcgCatalogQuery,
 } from "./rapidPokemonPrices";
 
@@ -28,9 +29,12 @@ export function rowToHit(row: Row, grade?: { company: string; grade: string } | 
   if (!isEnglishRow(row)) return null;
   const name = text(row.name) || text(row.name_numbered);
   const cardmarketId = text(row.cardmarket_id);
-  if (!name || !/^\d{1,12}$/.test(cardmarketId)) return null;
+  const tcggoId = text(row.id);
+  const hasCardmarket = /^\d{1,12}$/.test(cardmarketId);
+  const hasTcggo = /^\d{1,12}$/.test(tcggoId);
+  if (!name || (!hasCardmarket && !hasTcggo)) return null;
   const episode = row.episode && typeof row.episode === "object" ? (row.episode as Row) : null;
-  const externalId = text(row.tcgid) || text(row.id) || cardmarketId;
+  const externalId = text(row.tcgid) || tcggoId || cardmarketId;
   const kind = text(row.type) === "singles" || row.card_number != null || row.tcgid != null ? "raw" : "sealed";
   const priceKind = kind === "sealed" && row.card_number == null && row.tcgid == null ? "sealed" : "raw";
   const euLow = nearMintEur(row, priceKind);
@@ -44,7 +48,8 @@ export function rowToHit(row: Row, grade?: { company: string; grade: string } | 
     euLowEur: grade ? gradePrice : euLow,
     lowLanguage: (grade ? gradePrice : euLow) != null ? "en" : null,
     cardmarketUrl: httpsUrl((row.links as Row | undefined)?.cardmarket) ?? httpsUrl(row.tcggo_url),
-    cardmarketId,
+    cardmarketId: hasCardmarket ? cardmarketId : null,
+    tcggoId: hasTcggo ? tcggoId : null,
     episodeId: text(episode?.id) || null,
     gradePriceEur: gradePrice,
   };
@@ -113,30 +118,60 @@ function quoteFromLow(ticker: string, low: number): PokemonEuLowQuote {
   };
 }
 
-async function storedCatalog(ticker: string): Promise<{ kind: "card" | "product"; id: string } | null> {
+async function storedCatalog(ticker: string): Promise<{ kind: "card" | "product"; id: string; source: "cardmarket"; name: string | null } | null> {
   const upper = ticker.trim().toUpperCase();
   const holding = await db
-    .select({ id: holdings.tcgCardmarketId, category: holdings.tcgCategory })
+    .select({
+      id: holdings.tcgCardmarketId,
+      category: holdings.tcgCategory,
+      name: holdings.tcgProductName,
+      company: holdings.companyName,
+    })
     .from(holdings)
     .where(sql`upper(${holdings.ticker}) = ${upper}`)
     .limit(1);
-  const fromHolding = catalogFromStored(holding[0]?.id, holding[0]?.category);
+  const fromHolding = catalogFromStored(holding[0]?.id, holding[0]?.category, holding[0]?.name || holding[0]?.company);
   if (fromHolding) return fromHolding;
   const tx = await db
-    .select({ id: transactions.tcgCardmarketId, category: transactions.tcgCategory })
+    .select({
+      id: transactions.tcgCardmarketId,
+      category: transactions.tcgCategory,
+      name: transactions.tcgProductName,
+      company: transactions.companyName,
+    })
     .from(transactions)
     .where(sql`upper(${transactions.ticker}) = ${upper}`)
     .limit(1);
-  return catalogFromStored(tx[0]?.id, tx[0]?.category);
+  return catalogFromStored(tx[0]?.id, tx[0]?.category, tx[0]?.name || tx[0]?.company);
 }
 
 function catalogFromStored(
   id: string | null | undefined,
   category: string | null | undefined,
-): { kind: "card" | "product"; id: string } | null {
+  name: string | null | undefined,
+): { kind: "card" | "product"; id: string; source: "cardmarket"; name: string | null } | null {
   const clean = (id ?? "").trim();
   if (!/^\d{1,12}$/.test(clean)) return null;
-  return { id: clean, kind: category === "SEALED_PRODUCT" ? "product" : "card" };
+  const productName = (name ?? "").split("·")[0]?.trim() || null;
+  return { id: clean, kind: category === "SEALED_PRODUCT" ? "product" : "card", source: "cardmarket", name: productName };
+}
+
+async function priceByProductName(name: string, request: RapidPriceKind): Promise<number | null> {
+  const wanted = name.trim().toLowerCase();
+  if (wanted.length < 2) return null;
+  const kind = request.kind === "sealed" ? "products" : "cards";
+  const rows = await searchTcgRows({ kind, search: name });
+  const named = rows.filter((row) => {
+    const label = text(row.name).toLowerCase();
+    return label === wanted || label.includes(wanted) || wanted.includes(label);
+  });
+  const exact = rows.find((row) => text(row.name).toLowerCase() === wanted);
+  const pool = exact ? [exact] : named;
+  for (const row of pool) {
+    const price = request.kind === "graded" ? gradedEur(row, request.company, request.grade) : nearMintEur(row, request.kind === "sealed" ? "sealed" : "raw");
+    if (price != null) return price;
+  }
+  return null;
 }
 
 /**
@@ -146,13 +181,35 @@ function catalogFromStored(
  */
 export async function fetchPokemonEuLowQuote(ticker: string): Promise<PokemonEuLowQuote | null> {
   const grade = pokemonGradeFromTicker(ticker);
-  const ref = pokemonCatalogRef(ticker) ?? (await storedCatalog(ticker));
+  const fromTicker = pokemonCatalogRef(ticker);
+  const stored = fromTicker ? null : await storedCatalog(ticker);
+  const ref = fromTicker ?? stored;
   if (!ref) return null;
   if (grade && ref.kind !== "card") return null;
-  const live = await fetchRapidCardmarketPrice(
-    ref.id,
-    grade ? { kind: "graded", company: grade.company, grade: grade.grade } : ref.kind === "product" ? { kind: "sealed" } : { kind: "raw" },
-  );
+  const request: RapidPriceKind = grade
+    ? { kind: "graded", company: grade.company, grade: grade.grade }
+    : ref.kind === "product"
+      ? { kind: "sealed" }
+      : { kind: "raw" };
+  const live = await fetchRapidCardmarketPrice(ref.id, request, ref.source);
   if (live.status === "ok" && live.low != null) return quoteFromLow(ticker, live.low);
+  if (ref.source === "cardmarket" && request.kind === "sealed") {
+    const name = stored?.name ?? (await storedProductName(ticker));
+    if (name) {
+      const named = await priceByProductName(name, request);
+      if (named != null) return quoteFromLow(ticker, named);
+    }
+  }
   return null;
+}
+
+async function storedProductName(ticker: string): Promise<string | null> {
+  const upper = ticker.trim().toUpperCase();
+  const holding = await db
+    .select({ name: holdings.tcgProductName, company: holdings.companyName })
+    .from(holdings)
+    .where(sql`upper(${holdings.ticker}) = ${upper}`)
+    .limit(1);
+  const raw = holding[0]?.name || holding[0]?.company;
+  return raw ? raw.split("·")[0]?.trim() || null : null;
 }

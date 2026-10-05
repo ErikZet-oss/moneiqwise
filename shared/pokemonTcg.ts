@@ -59,6 +59,8 @@ export type PokemonCardHit = {
   lowLanguage: "en" | "any" | null;
   cardmarketUrl: string | null;
   cardmarketId: string | null;
+  /** Interné id TCGGO, keď Cardmarket id v odpovedi chýba. */
+  tcggoId?: string | null;
   episodeId?: string | null;
   gradePriceEur?: number | null;
 };
@@ -121,24 +123,28 @@ export function isSealedPokemonHolding(holding: {
   ticker?: string | null;
   tcgCategory?: string | null;
 }): boolean {
-  return holding.tcgCategory === "SEALED_PRODUCT" || pokemonCardmarketProductId(holding.ticker) != null;
+  return holding.tcgCategory === "SEALED_PRODUCT" || pokemonCatalogRef(holding.ticker)?.kind === "product";
 }
 
 /** Cardmarket id zo sealed tickera `PTCG:CM895551`. */
 export function pokemonCardmarketProductId(ticker: string | null | undefined): string | null {
   const ref = pokemonCatalogRef(ticker);
-  return ref?.kind === "product" ? ref.id : null;
+  return ref?.kind === "product" && ref.source === "cardmarket" ? ref.id : null;
 }
 
-/** `PTCG:CM895551` je sealed, `PTCG:CD691924` a `PTCG:CD691924:PSA10` sú karty. */
+/** `PTCG:CM895551` a `PTCG:TG66072` sú sealed, `PTCG:CD…` a `PTCG:TD…` sú karty. */
 export function pokemonCatalogRef(
   ticker: string | null | undefined,
-): { kind: "card" | "product"; id: string } | null {
+): { kind: "card" | "product"; id: string; source: "cardmarket" | "tcggo" } | null {
   const u = (ticker ?? "").trim().toUpperCase().replace(GRADE_TAIL, "");
   const product = /^PTCG:CM(\d{1,12})$/.exec(u);
-  if (product?.[1]) return { kind: "product", id: product[1] };
+  if (product?.[1]) return { kind: "product", id: product[1], source: "cardmarket" };
+  const tcggoProduct = /^PTCG:TG(\d{1,12})$/.exec(u);
+  if (tcggoProduct?.[1]) return { kind: "product", id: tcggoProduct[1], source: "tcggo" };
   const card = /^PTCG:CD(\d{1,12})$/.exec(u);
-  if (card?.[1]) return { kind: "card", id: card[1] };
+  if (card?.[1]) return { kind: "card", id: card[1], source: "cardmarket" };
+  const tcggoCard = /^PTCG:TD(\d{1,12})$/.exec(u);
+  if (tcggoCard?.[1]) return { kind: "card", id: tcggoCard[1], source: "tcggo" };
   return null;
 }
 
@@ -191,6 +197,7 @@ export function pokemonDisplayName(input: {
 export function buildPokemonTicker(input: {
   category: PokemonTcgCategory;
   cardmarketId?: string | null;
+  tcggoId?: string | null;
   externalId?: string | null;
   gradeCompany?: string | null;
   gradeValue?: string | null;
@@ -203,8 +210,14 @@ export function buildPokemonTicker(input: {
       ? `:${input.gradeCompany}${input.gradeValue}`.replace(/\s+/g, "").toUpperCase()
       : "";
   const cm = (input.cardmarketId ?? "").trim();
+  const tcggo = (input.tcggoId ?? "").trim();
   const ext = (input.externalId ?? "").trim().toUpperCase().replace(/[^A-Z0-9.-]/g, "");
-  let body = /^\d{1,12}$/.test(cm) ? `${input.category === "SEALED_PRODUCT" ? "CM" : "CD"}${cm}` : ext;
+  const sealed = input.category === "SEALED_PRODUCT";
+  let body = /^\d{1,12}$/.test(cm)
+    ? `${sealed ? "CM" : "CD"}${cm}`
+    : /^\d{1,12}$/.test(tcggo)
+      ? `${sealed ? "TG" : "TD"}${tcggo}`
+      : ext;
   if (!body) {
     body =
       "M" +
@@ -230,6 +243,7 @@ export type PokemonPositionInput = {
   certNumber?: string | null;
   imageUrl?: string | null;
   cardmarketId?: string | null;
+  tcggoId?: string | null;
   externalId?: string | null;
 };
 
@@ -246,6 +260,7 @@ export type PokemonPosition =
       certNumber: string | null;
       imageUrl: string | null;
       cardmarketId: string | null;
+      tcggoId: string | null;
       externalId: string | null;
     }
   | { ok: false; message: string };
@@ -287,11 +302,14 @@ export function buildPokemonPosition(input: PokemonPositionInput): PokemonPositi
   const externalRaw = (input.externalId ?? "").trim().toLowerCase();
   const externalId = externalRaw ? externalRaw.replace(/[^a-z0-9.-]/g, "").slice(0, 64) || null : null;
   const cmRaw = (input.cardmarketId ?? "").trim();
-  const cardmarketId = /^\d{1,20}$/.test(cmRaw) ? cmRaw : null;
+  const cardmarketId = /^\d{1,12}$/.test(cmRaw) ? cmRaw : null;
+  const tcggoRaw = (input.tcggoId ?? "").trim();
+  const tcggoId = /^\d{1,12}$/.test(tcggoRaw) ? tcggoRaw : null;
   const imageUrl = cleanHttpsUrl(input.imageUrl);
   const ticker = buildPokemonTicker({
     category,
     cardmarketId,
+    tcggoId,
     externalId,
     gradeCompany,
     gradeValue,
@@ -316,6 +334,7 @@ export function buildPokemonPosition(input: PokemonPositionInput): PokemonPositi
     certNumber,
     imageUrl,
     cardmarketId,
+    tcggoId,
     externalId,
   };
 }

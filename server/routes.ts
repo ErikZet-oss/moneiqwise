@@ -346,7 +346,7 @@ async function fetchPhysicalMetalQuote(ticker: string): Promise<any> {
 const CACHE_DIR = path.join(process.cwd(), ".cache");
 const CACHE_FILE = path.join(CACHE_DIR, "prices.json");
 /** Bump when quote shape/source changes — invalidates stale on-disk quote cache. */
-const QUOTE_CACHE_VERSION = 22;
+const QUOTE_CACHE_VERSION = 23;
 
 function isUsExtendedSessionNow(): boolean {
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -4173,6 +4173,7 @@ export async function registerRoutes(
           certNumber: typeof transactionData.tcgCertNumber === "string" ? transactionData.tcgCertNumber : null,
           imageUrl: typeof transactionData.tcgImageUrl === "string" ? transactionData.tcgImageUrl : null,
           cardmarketId: typeof transactionData.tcgCardmarketId === "string" ? transactionData.tcgCardmarketId : null,
+          tcggoId: typeof transactionData.tcggoId === "string" ? transactionData.tcggoId : null,
           externalId: typeof transactionData.tcgExternalId === "string" ? transactionData.tcgExternalId : null,
         });
         if (!position.ok) {

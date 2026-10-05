@@ -125,6 +125,7 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
       imageUrl,
       externalId,
       cardmarketId: selected ? selected.cardmarketId : null,
+      tcggoId: selected?.tcggoId ?? null,
     });
     if (!built.ok) {
       onPositionChange(null);

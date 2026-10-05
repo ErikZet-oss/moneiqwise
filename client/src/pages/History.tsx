@@ -28,7 +28,7 @@ import {
   getTickerCurrency,
 } from "@shared/tickerCurrency";
 import { AddTransactionForm } from "@/components/AddTransactionForm";
-import { isPokemonPortfolio } from "@shared/pokemonTcg";
+import { isPokemonPortfolio, isPokemonTicker } from "@shared/pokemonTcg";
 import { formatShareQuantity } from "@/lib/utils";
 import {
   buildCloseTradeFallbackPairing,
@@ -54,11 +54,15 @@ function transactionTickerDisplay(tx: Transaction, isCash: boolean): string {
   if (isCashInterestTicker(tx.ticker)) {
     return tx.type === "TAX" ? CASH_INTEREST_TAX_DISPLAY_NAME : CASH_INTEREST_DISPLAY_NAME;
   }
+  if (isPokemonTicker(tx.ticker)) {
+    return tx.tcgProductName?.trim() || tx.companyName?.trim() || tx.ticker;
+  }
   return tx.ticker;
 }
 
 function transactionCompanySubline(tx: Transaction): string | null {
   if (isCashInterestTicker(tx.ticker)) return null;
+  if (isPokemonTicker(tx.ticker)) return tx.tcgSetName?.trim() || null;
   return tx.companyName?.trim() ? tx.companyName : null;
 }
 

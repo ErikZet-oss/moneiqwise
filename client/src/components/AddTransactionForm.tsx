@@ -315,6 +315,7 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
         body.tcgCertNumber = pokemonPosition.certNumber;
         body.tcgImageUrl = pokemonPosition.imageUrl;
         body.tcgCardmarketId = pokemonPosition.cardmarketId;
+        body.tcggoId = pokemonPosition.tcggoId;
         body.tcgExternalId = pokemonPosition.externalId;
       }
       if (data.id?.trim()) body.id = data.id.trim();
