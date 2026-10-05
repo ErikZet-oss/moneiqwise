@@ -13,8 +13,8 @@
 
 const HOST = "cardmarket-api-tcg.p.rapidapi.com";
 const SUCCESS_TTL_MS = 12 * 60 * 60 * 1000;
-const MISS_TTL_MS = 12 * 60 * 60 * 1000;
-const ERROR_TTL_MS = 30 * 60 * 1000;
+const MISS_TTL_MS = 15 * 60 * 1000;
+const ERROR_TTL_MS = 5 * 60 * 1000;
 const SEARCH_TTL_MS = 10 * 60 * 1000;
 
 export type RapidPriceKind =
@@ -62,7 +62,7 @@ function positive(value: unknown): number | null {
 export function rowsFrom(body: unknown): Row[] {
   if (Array.isArray(body)) return body.filter(isRow);
   if (!isRow(body)) return [];
-  for (const key of ["data", "results", "cards", "products", "items", "episodes"]) {
+  for (const key of ["data", "results", "cards", "products", "product", "items", "episodes"]) {
     const value = body[key];
     if (Array.isArray(value)) return value.filter(isRow);
     if (isRow(value)) {
@@ -108,16 +108,20 @@ export function cardmarketBlock(row: Row): Row | null {
   const hasQuote =
     positive(block.lowest_near_mint) != null ||
     positive(block.lowest) != null ||
+    positive(block["7d_average"]) != null ||
+    positive(block["30d_average"]) != null ||
     (isRow(graded) && Object.keys(graded).length > 0);
   if (!hasQuote) return null;
   return block;
 }
 
-/** Anglický Near Mint karty, alebo `lowest` sealed produktu s lang=en. */
+/** Anglický Near Mint karty, alebo `lowest` sealed produktu s lang=en. Nula nie je cena. */
 export function nearMintEur(row: Row, kind: "raw" | "sealed" = "raw"): number | null {
   const block = cardmarketBlock(row);
   if (!block) return null;
-  if (kind === "sealed") return positive(block.lowest) ?? positive(block.lowest_near_mint);
+  if (kind === "sealed") {
+    return positive(block.lowest) ?? positive(block.lowest_near_mint) ?? positive(block["7d_average"]) ?? positive(block["30d_average"]);
+  }
   return positive(block.lowest_near_mint) ?? positive(block.lowest);
 }
 
@@ -245,21 +249,30 @@ async function loadEnglishRow(productId: string, catalog: "cards" | "products"):
   const cached = rowCache.get(cacheKey);
   if (cached && Date.now() - cached.at < cached.ttl) return cached.row;
 
-  const path = `/pokemon/${catalog}?cardmarket_id=${encodeURIComponent(productId)}`;
-  const read = await readRows(path);
-  noteAuth(read.failed);
-  if (read.failed === "auth" || read.failed === "error") {
-    rowCache.set(cacheKey, { at: Date.now(), ttl: ERROR_TTL_MS, row: null });
-    console.warn(`Pokemon API ${catalog} ${productId}: bez ceny, posledný status ${read.status || "chyba"} ${path}`);
-    return null;
+  const paths = [
+    `/pokemon/${catalog}?cardmarket_id=${encodeURIComponent(productId)}`,
+    `/pokemon/${catalog}/search?cardmarket_id=${encodeURIComponent(productId)}`,
+  ];
+  let lastStatus = 0;
+  let lastPath = paths[0] ?? "";
+  for (const path of paths) {
+    const read = await readRows(path);
+    lastStatus = read.status;
+    lastPath = path;
+    noteAuth(read.failed);
+    if (read.failed === "auth" || read.failed === "error") {
+      rowCache.set(cacheKey, { at: Date.now(), ttl: ERROR_TTL_MS, row: null });
+      console.warn(`Pokemon API ${catalog} ${productId}: bez ceny, posledný status ${read.status || "chyba"} ${path}`);
+      return null;
+    }
+    const row = candidateRow(read.rows, productId, true);
+    const full = row ? await hydratePrices(row, catalog) : null;
+    if (full && cardmarketBlock(full) && isEnglishRow(full)) {
+      rowCache.set(cacheKey, { at: Date.now(), ttl: SUCCESS_TTL_MS, row: full });
+      return full;
+    }
   }
-  const row = candidateRow(read.rows, productId, true);
-  const full = row ? await hydratePrices(row, catalog) : null;
-  if (full && cardmarketBlock(full) && isEnglishRow(full)) {
-    rowCache.set(cacheKey, { at: Date.now(), ttl: SUCCESS_TTL_MS, row: full });
-    return full;
-  }
-  console.warn(`Pokemon API ${catalog} ${productId}: bez ceny, posledný status ${read.status} ${path}`);
+  console.warn(`Pokemon API ${catalog} ${productId}: bez ceny, posledný status ${lastStatus} ${lastPath}`);
   rowCache.set(cacheKey, { at: Date.now(), ttl: MISS_TTL_MS, row: null });
   return null;
 }

@@ -250,7 +250,8 @@ export default function Overview() {
       totalInvested += pnlInvestedForDisplay(h);
 
       const quote = quotes?.[h.ticker];
-      if (quote) {
+      const hasMarket = quote != null && Number.isFinite(quote.price) && quote.price > 0;
+      if (hasMarket && quote) {
         const annualDividendPerShare = Number(quote.annualDividendPerShare ?? 0);
         if (Number.isFinite(annualDividendPerShare) && annualDividendPerShare > 0) {
           forwardDividendIncome += shares * convertPrice(annualDividendPerShare, quoteCurrency);
@@ -359,7 +360,7 @@ export default function Overview() {
 
       for (const holding of holdings) {
         const quote = quotes[holding.ticker];
-        if (!quote) continue;
+        if (!quote || !(quote.price > 0)) continue;
 
         const shares = parseFloat(holding.shares);
         if (!Number.isFinite(shares) || shares <= 0) continue;

@@ -1632,7 +1632,7 @@ export default function Dashboard() {
         
         totalInvested += investedForPnl;
         
-        if (quote) {
+        if (quote && Number.isFinite(quote.price) && quote.price > 0) {
           const convertedPrice = convertPrice(quote.price, quoteCurrency);
           const convertedChange = convertPrice(quote.change, quoteCurrency);
           const currentValue = shares * convertedPrice;
@@ -1721,7 +1721,7 @@ export default function Dashboard() {
 
     for (const holding of holdings) {
       const quote = quotes[holding.ticker];
-      if (!quote) continue;
+      if (!quote || !(quote.price > 0)) continue;
 
       const shares = parseFloat(holding.shares);
       if (!Number.isFinite(shares) || shares <= 0) continue;
@@ -3119,7 +3119,11 @@ export default function Dashboard() {
                     openAvgLocal != null ? openAvgCcy : costCurrency,
                   );
                   const investedDisplay = pnlInvestedForDisplay(holding);
-                  const regularPrice = quote ? convertPrice(quote.price, quoteCurrency) : avgCostPortfolio;
+                  const marketPrice =
+                    quote && Number.isFinite(quote.price) && quote.price > 0
+                      ? convertPrice(quote.price, quoteCurrency)
+                      : null;
+                  const regularPrice = marketPrice ?? avgCostPortfolio;
                   const preMarketPrice =
                     quote?.preMarketPrice != null ? convertPrice(quote.preMarketPrice, quoteCurrency) : null;
                   const showPremarketPrice =
@@ -3472,7 +3476,11 @@ export default function Dashboard() {
                         openAvgLocal != null ? openAvgCcy : costCurrency,
                       );
                       const investedDisplay = pnlInvestedForDisplay(holding);
-                      const currentPrice = quote ? convertPrice(quote.price, quoteCurrency) : avgCostPortfolio;
+                      const marketPrice =
+                        quote && Number.isFinite(quote.price) && quote.price > 0
+                          ? convertPrice(quote.price, quoteCurrency)
+                          : null;
+                      const currentPrice = marketPrice ?? avgCostPortfolio;
                       const preMarketPrice =
                         quote?.preMarketPrice != null ? convertPrice(quote.preMarketPrice, quoteCurrency) : null;
                       const showPremarketPrice =

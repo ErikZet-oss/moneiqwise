@@ -346,7 +346,7 @@ async function fetchPhysicalMetalQuote(ticker: string): Promise<any> {
 const CACHE_DIR = path.join(process.cwd(), ".cache");
 const CACHE_FILE = path.join(CACHE_DIR, "prices.json");
 /** Bump when quote shape/source changes — invalidates stale on-disk quote cache. */
-const QUOTE_CACHE_VERSION = 21;
+const QUOTE_CACHE_VERSION = 22;
 
 function isUsExtendedSessionNow(): boolean {
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -3952,9 +3952,14 @@ export async function registerRoutes(
 
         const { eurM, forFifo } = await loadTradeTransactionsForAssetLots(allTx, upper);
         let pNow: number | null = null;
-        const q = await fetchStockQuote(upper);
-        if (q && typeof (q as { price?: number }).price === "number" && Number.isFinite((q as { price: number }).price)) {
-          pNow = (q as { price: number }).price;
+        let q: { price?: number; preMarketPrice?: number | null } | null = null;
+        try {
+          q = await fetchStockQuote(upper);
+        } catch (error) {
+          console.warn(`Asset lots quote skipped for ${upper}:`, error instanceof Error ? error.message : error);
+        }
+        if (q && typeof q.price === "number" && Number.isFinite(q.price) && q.price > 0) {
+          pNow = q.price;
         }
         // Extended cenu len mimo RTH; pri zatvorenom trhu ostáva close (regularMarketPrice).
         const usSession = (() => {
@@ -3979,7 +3984,7 @@ export async function registerRoutes(
         })();
         const useExtended =
           usSession === "PRE_MARKET" || usSession === "POST_MARKET" || usSession === "OVERNIGHT";
-        const pre = (q as { preMarketPrice?: number | null } | null)?.preMarketPrice;
+        const pre = q?.preMarketPrice;
         if (
           useExtended &&
           typeof pre === "number" &&
