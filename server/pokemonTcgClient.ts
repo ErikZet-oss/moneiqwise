@@ -129,7 +129,16 @@ function quoteFromLow(ticker: string, low: number): PokemonEuLowQuote {
   };
 }
 
-async function storedCatalog(ticker: string): Promise<{ kind: "card" | "product"; id: string; source: "cardmarket"; name: string | null } | null> {
+type StoredCatalog = {
+  kind: "card" | "product";
+  id: string;
+  source: "cardmarket";
+  name: string | null;
+  setName: string | null;
+  externalId: string | null;
+};
+
+async function storedCatalog(ticker: string): Promise<StoredCatalog | null> {
   const upper = ticker.trim().toUpperCase();
   const holding = await db
     .select({
@@ -137,11 +146,13 @@ async function storedCatalog(ticker: string): Promise<{ kind: "card" | "product"
       category: holdings.tcgCategory,
       name: holdings.tcgProductName,
       company: holdings.companyName,
+      setName: holdings.tcgSetName,
+      externalId: holdings.tcgExternalId,
     })
     .from(holdings)
     .where(sql`upper(${holdings.ticker}) = ${upper}`)
     .limit(1);
-  const fromHolding = catalogFromStored(holding[0]?.id, holding[0]?.category, holding[0]?.name || holding[0]?.company);
+  const fromHolding = catalogFromStored(holding[0]);
   if (fromHolding) return fromHolding;
   const tx = await db
     .select({
@@ -149,22 +160,53 @@ async function storedCatalog(ticker: string): Promise<{ kind: "card" | "product"
       category: transactions.tcgCategory,
       name: transactions.tcgProductName,
       company: transactions.companyName,
+      setName: transactions.tcgSetName,
+      externalId: transactions.tcgExternalId,
     })
     .from(transactions)
     .where(sql`upper(${transactions.ticker}) = ${upper}`)
     .limit(1);
-  return catalogFromStored(tx[0]?.id, tx[0]?.category, tx[0]?.name || tx[0]?.company);
+  return catalogFromStored(tx[0]);
 }
 
 function catalogFromStored(
-  id: string | null | undefined,
-  category: string | null | undefined,
-  name: string | null | undefined,
-): { kind: "card" | "product"; id: string; source: "cardmarket"; name: string | null } | null {
-  const clean = (id ?? "").trim();
+  row:
+    | {
+        id: string | null;
+        category: string | null;
+        name: string | null;
+        company: string | null;
+        setName: string | null;
+        externalId: string | null;
+      }
+    | undefined,
+): StoredCatalog | null {
+  const clean = (row?.id ?? "").trim();
   if (!/^\d{1,12}$/.test(clean)) return null;
-  const productName = (name ?? "").split("·")[0]?.trim() || null;
-  return { id: clean, kind: category === "SEALED_PRODUCT" ? "product" : "card", source: "cardmarket", name: productName };
+  const productName = (row?.name || row?.company || "").split("·")[0]?.trim() || null;
+  return {
+    id: clean,
+    kind: row?.category === "SEALED_PRODUCT" ? "product" : "card",
+    source: "cardmarket",
+    name: productName,
+    setName: row?.setName?.trim() || null,
+    externalId: row?.externalId?.trim() || null,
+  };
+}
+
+/** `PTCG:SWSH12.5GG-GG44:PSA10` a `swsh12.5gg-gg44` → `GG44`. */
+export function collectorNumber(...sources: Array<string | null | undefined>): string | null {
+  for (const source of sources) {
+    const rest = (source ?? "")
+      .trim()
+      .toUpperCase()
+      .replace(/^PTCG:/, "")
+      .replace(/:(PSA|BGS|CGC|ACE|SGC|TAG)\d{1,2}(\.5)?$/, "");
+    if (!rest.includes("-")) continue;
+    const last = rest.split("-").pop() ?? "";
+    if (/^[A-Z]{0,4}\d{1,4}$/.test(last)) return last;
+  }
+  return null;
 }
 
 async function priceByProductName(name: string, request: RapidPriceKind): Promise<number | null> {
@@ -183,6 +225,47 @@ async function priceByProductName(name: string, request: RapidPriceKind): Promis
     if (price != null) return price;
   }
   return null;
+}
+
+function episodeName(row: Row): string {
+  const episode = row.episode && typeof row.episode === "object" ? (row.episode as Row) : null;
+  return text(episode?.name);
+}
+
+/** Graded cena tej istej anglickej karty. Číslo GG44 odlíši Mewtwo VSTAR od iných tlačí. */
+async function priceByGradedCard(
+  name: string,
+  number: string | null,
+  setName: string | null,
+  request: Extract<RapidPriceKind, { kind: "graded" }>,
+): Promise<number | null> {
+  const wanted = name.trim().toLowerCase();
+  if (wanted.length < 2) return null;
+  const rows = await searchTcgRows({ kind: "cards", search: name, cardNumber: number ?? undefined });
+  const wantedNumber = (number ?? "").toUpperCase();
+  const wantedSet = (setName ?? "").trim().toLowerCase();
+  const pool = rows.filter((row) => {
+    if (!isEnglishRow(row)) return false;
+    const label = text(row.name).toLowerCase();
+    if (label !== wanted && !label.includes(wanted) && !wanted.includes(label)) return false;
+    const cardNumber = text(row.card_number).toUpperCase();
+    return !wantedNumber || cardNumber === wantedNumber;
+  });
+  const uniqueNumbers = new Set(pool.map((row) => text(row.card_number).toUpperCase()).filter(Boolean));
+  const candidates = !wantedNumber && uniqueNumbers.size > 1 ? [] : pool;
+  const ranked = [...candidates].sort((a, b) => scoreSet(b, wantedSet) - scoreSet(a, wantedSet));
+  for (const row of ranked) {
+    const price = gradedEur(row, request.company, request.grade);
+    if (price != null) return price;
+  }
+  return null;
+}
+
+function scoreSet(row: Row, wantedSet: string): number {
+  if (!wantedSet) return 0;
+  const episode = episodeName(row).toLowerCase();
+  if (!episode) return 0;
+  return wantedSet.includes(episode) || episode.includes(wantedSet) ? 1 : 0;
 }
 
 /**
@@ -208,6 +291,13 @@ export async function fetchPokemonEuLowQuote(ticker: string): Promise<PokemonEuL
     const name = stored?.name ?? (await storedProductName(ticker));
     if (name) {
       const named = await priceByProductName(name, request);
+      if (named != null) return quoteFromLow(ticker, named);
+    }
+  }
+  if (request.kind === "graded") {
+    const name = stored?.name ?? (await storedProductName(ticker));
+    if (name) {
+      const named = await priceByGradedCard(name, collectorNumber(stored?.externalId, ticker), stored?.setName ?? null, request);
       if (named != null) return quoteFromLow(ticker, named);
     }
   }
