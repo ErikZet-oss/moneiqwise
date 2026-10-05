@@ -26,7 +26,7 @@ import {
   CASH_INTEREST_TICKER,
 } from "@shared/tickerCurrency";
 import { isPhysicalMetalTicker, isPhysicalSilverTicker } from "@shared/physicalMetal";
-import { buildPokemonPosition, isPokemonPortfolio, isPokemonTicker, pokemonGradeFromTicker } from "@shared/pokemonTcg";
+import { buildPokemonPosition, isGradedPokemonTicker, isPokemonPortfolio, isPokemonTicker, pokemonGradeFromTicker } from "@shared/pokemonTcg";
 import { fetchPokemonEuLowQuote, searchPokemonCatalog, searchPokemonEpisodes } from "./pokemonTcgClient";
 import {
   enrichHoldingsWithCostCurrency,
@@ -346,7 +346,7 @@ async function fetchPhysicalMetalQuote(ticker: string): Promise<any> {
 const CACHE_DIR = path.join(process.cwd(), ".cache");
 const CACHE_FILE = path.join(CACHE_DIR, "prices.json");
 /** Bump when quote shape/source changes — invalidates stale on-disk quote cache. */
-const QUOTE_CACHE_VERSION = 24;
+const QUOTE_CACHE_VERSION = 25;
 
 function isUsExtendedSessionNow(): boolean {
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -3836,7 +3836,9 @@ export async function registerRoutes(
         imageUrl: pokemonImage,
         priceNote: isPokemonTicker(displayTicker)
           ? !quote
-            ? "Cardmarket cena v EUR sa nenašla — hodnota ostáva na nákupnej cene."
+            ? isGradedPokemonTicker(displayTicker)
+              ? "Živá najlacnejšia ponuka stupňa na Cardmarkete v API nie je. Súhrnné číslo nesedí s ponukami, hodnota ostáva na nákupnej cene."
+              : "Cardmarket cena v EUR sa nenašla — hodnota ostáva na nákupnej cene."
             : (() => {
                 const grade = pokemonGradeFromTicker(displayTicker);
                 return grade

@@ -8,7 +8,7 @@
  * Jedna položka = jeden dopyt podľa Cardmarket id. Expanzie sa neprechádzajú.
  * Karty: prices.cardmarket.lowest_near_mint (anglický Near Mint).
  * Sealed: prices.cardmarket.lowest na riadku lang=en.
- * Graded: prices.cardmarket.graded. Jazykové suffixy a eBay USD sa neberú.
+ * Graded súhrn z API nie je najlacnejšia živá ponuka, preto sa ako cena neberie.
  */
 
 const HOST = "cardmarket-api-tcg.p.rapidapi.com";
@@ -125,31 +125,12 @@ export function nearMintEur(row: Row, kind: "raw" | "sealed" = "raw"): number | 
   return positive(block.lowest_near_mint) ?? positive(block.lowest);
 }
 
-/** Cena stupňa len z Cardmarket bloku v EUR. Prázdne graded aj chýbajúci stupeň vrátia null. */
-export function gradedEur(row: Row, company: string, grade: string): number | null {
-  const graded = cardmarketBlock(row)?.graded;
-  if (!isRow(graded)) return null;
-  const companyKey = company.trim().toLowerCase();
-  const bucket = graded[companyKey] ?? graded[companyKey.toUpperCase()];
-  if (!isRow(bucket)) return null;
-  const gradeKey = grade.trim();
-  const keys = [
-    `${companyKey}${gradeKey}`,
-    gradeKey,
-    `${companyKey}${gradeKey.replace(".", "_")}`,
-    `${companyKey}${gradeKey.replace(".", "")}`,
-    gradeKey.replace(".", "_"),
-    gradeKey.replace(".", ""),
-  ];
-  for (const key of keys) {
-    const direct = bucket[key] ?? bucket[key.toUpperCase()] ?? bucket[key.toLowerCase()];
-    const flat = positive(direct);
-    if (flat != null) return flat;
-    if (isRow(direct)) {
-      const nested = positive(direct.median_price ?? direct.price ?? direct.lowest ?? direct.low);
-      if (nested != null) return nested;
-    }
-  }
+/**
+ * TCGGO `graded.psa.psa10` nie je najlacnejšia živá ponuka na Cardmarkete.
+ * Pri Mewtwo VSTAR GG44 API vracia 324 €, kým najlacnejší PSA 10 na Cardmarkete je 600 €.
+ * Súhrn sa preto ako trhová cena nepoužíva.
+ */
+export function gradedEur(_row: Row, _company: string, _grade: string): number | null {
   return null;
 }
 

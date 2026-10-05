@@ -194,21 +194,6 @@ function catalogFromStored(
   };
 }
 
-/** `PTCG:SWSH12.5GG-GG44:PSA10` a `swsh12.5gg-gg44` → `GG44`. */
-export function collectorNumber(...sources: Array<string | null | undefined>): string | null {
-  for (const source of sources) {
-    const rest = (source ?? "")
-      .trim()
-      .toUpperCase()
-      .replace(/^PTCG:/, "")
-      .replace(/:(PSA|BGS|CGC|ACE|SGC|TAG)\d{1,2}(\.5)?$/, "");
-    if (!rest.includes("-")) continue;
-    const last = rest.split("-").pop() ?? "";
-    if (/^[A-Z]{0,4}\d{1,4}$/.test(last)) return last;
-  }
-  return null;
-}
-
 async function priceByProductName(name: string, request: RapidPriceKind): Promise<number | null> {
   const wanted = name.trim().toLowerCase();
   if (wanted.length < 2) return null;
@@ -221,83 +206,32 @@ async function priceByProductName(name: string, request: RapidPriceKind): Promis
   const exact = rows.find((row) => text(row.name).toLowerCase() === wanted);
   const pool = exact ? [exact] : named;
   for (const row of pool) {
-    const price = request.kind === "graded" ? gradedEur(row, request.company, request.grade) : nearMintEur(row, request.kind === "sealed" ? "sealed" : "raw");
+    const price = nearMintEur(row, request.kind === "sealed" ? "sealed" : "raw");
     if (price != null) return price;
   }
   return null;
-}
-
-function episodeName(row: Row): string {
-  const episode = row.episode && typeof row.episode === "object" ? (row.episode as Row) : null;
-  return text(episode?.name);
-}
-
-/** Graded cena tej istej anglickej karty. Číslo GG44 odlíši Mewtwo VSTAR od iných tlačí. */
-async function priceByGradedCard(
-  name: string,
-  number: string | null,
-  setName: string | null,
-  request: Extract<RapidPriceKind, { kind: "graded" }>,
-): Promise<number | null> {
-  const wanted = name.trim().toLowerCase();
-  if (wanted.length < 2) return null;
-  const rows = await searchTcgRows({ kind: "cards", search: name, cardNumber: number ?? undefined });
-  const wantedNumber = (number ?? "").toUpperCase();
-  const wantedSet = (setName ?? "").trim().toLowerCase();
-  const pool = rows.filter((row) => {
-    if (!isEnglishRow(row)) return false;
-    const label = text(row.name).toLowerCase();
-    if (label !== wanted && !label.includes(wanted) && !wanted.includes(label)) return false;
-    const cardNumber = text(row.card_number).toUpperCase();
-    return !wantedNumber || cardNumber === wantedNumber;
-  });
-  const uniqueNumbers = new Set(pool.map((row) => text(row.card_number).toUpperCase()).filter(Boolean));
-  const candidates = !wantedNumber && uniqueNumbers.size > 1 ? [] : pool;
-  const ranked = [...candidates].sort((a, b) => scoreSet(b, wantedSet) - scoreSet(a, wantedSet));
-  for (const row of ranked) {
-    const price = gradedEur(row, request.company, request.grade);
-    if (price != null) return price;
-  }
-  return null;
-}
-
-function scoreSet(row: Row, wantedSet: string): number {
-  if (!wantedSet) return 0;
-  const episode = episodeName(row).toLowerCase();
-  if (!episode) return 0;
-  return wantedSet.includes(episode) || episode.includes(wantedSet) ? 1 : 0;
 }
 
 /**
  * Anglická Cardmarket cena v EUR z TCGGO.
- * Raw je Near Mint, sealed je lowest anglického produktu, graded je cena stupňa.
- * Keď API cenu nevráti, kotácia ostane prázdna a prehľad drží nákupnú cenu.
+ * Raw je Near Mint, sealed je lowest anglického produktu.
+ * Graded súhrn z API nie je živá ponuka, preto kotácia ostane prázdna a prehľad drží nákupnú cenu.
  */
 export async function fetchPokemonEuLowQuote(ticker: string): Promise<PokemonEuLowQuote | null> {
   const grade = pokemonGradeFromTicker(ticker);
+  // Súhrnné graded.psa.psa10 nie je najlacnejší živý listing. Mewtwo GG44: API 324 €, Cardmarket od 600 €.
+  if (grade) return null;
   const fromTicker = pokemonCatalogRef(ticker);
   const stored = fromTicker ? null : await storedCatalog(ticker);
   const ref = fromTicker ?? stored;
   if (!ref) return null;
-  if (grade && ref.kind !== "card") return null;
-  const request: RapidPriceKind = grade
-    ? { kind: "graded", company: grade.company, grade: grade.grade }
-    : ref.kind === "product"
-      ? { kind: "sealed" }
-      : { kind: "raw" };
+  const request: RapidPriceKind = ref.kind === "product" ? { kind: "sealed" } : { kind: "raw" };
   const live = await fetchRapidCardmarketPrice(ref.id, request, ref.source);
   if (live.status === "ok" && live.low != null) return quoteFromLow(ticker, live.low);
   if (ref.source === "cardmarket" && request.kind === "sealed") {
     const name = stored?.name ?? (await storedProductName(ticker));
     if (name) {
       const named = await priceByProductName(name, request);
-      if (named != null) return quoteFromLow(ticker, named);
-    }
-  }
-  if (request.kind === "graded") {
-    const name = stored?.name ?? (await storedProductName(ticker));
-    if (name) {
-      const named = await priceByGradedCard(name, collectorNumber(stored?.externalId, ticker), stored?.setName ?? null, request);
       if (named != null) return quoteFromLow(ticker, named);
     }
   }
