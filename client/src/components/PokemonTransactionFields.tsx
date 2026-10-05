@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import {
@@ -59,7 +58,6 @@ const CATEGORIES: { id: PokemonTcgCategory; label: string }[] = [
 export function PokemonTransactionFields({ onPositionChange }: Props) {
   const [category, setCategory] = useState<PokemonTcgCategory>("RAW_CARD");
   const [query, setQuery] = useState("");
-  const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<PokemonCardHit | null>(null);
   const [manualName, setManualName] = useState("");
   const [manualSet, setManualSet] = useState("");
@@ -152,7 +150,6 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
     setManualName(card.name);
     setManualSet(card.setName);
     setQuery("");
-    setOpen(false);
   };
 
   const clearCard = () => {
@@ -256,84 +253,61 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
 
       <div className="space-y-2">
           <Label>{isSealed ? "Sealed produkt" : "Karta"}</Label>
-          <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                role="combobox"
-                className="w-full justify-between"
-                data-testid="button-pokemon-search"
-              >
-                <span className="truncate">
-                  {selected ? `${selected.name} · ${selected.setName}` : isSealed ? "Vyhľadajte ETB, booster, tin…" : "Vyhľadajte kartu..."}
-                </span>
-                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[min(420px,90vw)] p-0">
-              <div className="flex items-center border-b px-3">
-                <Input
-                  placeholder={isSealed ? "napr. 30th Celebration Elite Trainer Box" : "Názov karty, napr. Charizard"}
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  className="border-0 focus-visible:ring-0 h-11"
-                  data-testid="input-pokemon-search"
-                  autoFocus
-                />
-              </div>
-              <div className="max-h-[min(70vh,420px)] overflow-y-auto">
-                {isLoading && (
-                  <div className="p-4 text-center">
-                    <Loader2 className="h-4 w-4 animate-spin mx-auto" />
-                  </div>
-                )}
-                {isError && (
-                  <p className="p-3 text-sm text-destructive">
-                    Katalóg sa nepodarilo načítať. Položku môžete zadať ručne.
-                  </p>
-                )}
-                {!isLoading && cards && cards.length > 0 && (
-                  <div className="p-1">
-                    {cards.map((card) => (
-                      <button
-                        key={card.externalId}
-                        type="button"
-                        onClick={() => pickCard(card)}
-                        className="flex w-full items-center gap-2 px-2 py-1.5 rounded-sm text-left hover:bg-accent"
-                        data-testid={`option-pokemon-${card.externalId}`}
-                      >
-                        <Check className={cn("h-4 w-4", selected?.externalId === card.externalId ? "opacity-100" : "opacity-0")} />
-                        {card.imageUrl ? (
-                          <img src={card.imageUrl} alt="" className="h-12 w-9 object-contain rounded-sm bg-background" />
-                        ) : (
-                          <span className="h-12 w-9 rounded-sm bg-muted" />
-                        )}
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-sm font-medium truncate">{card.name}</span>
-                          <span className="block text-xs text-muted-foreground truncate">
-                            {card.setName}
-                            {card.number ? ` · #${card.number}` : ""}
-                          </span>
-                          <span className="block text-xs tabular-nums">
-                            {category === "GRADED_CARD" ? formatLow(card, true) : formatLow(card, false)}
-                          </span>
+          <Input
+            placeholder={isSealed ? "napr. 30th Celebration ex tin" : "Názov karty, napr. Charizard"}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            data-testid="input-pokemon-search"
+          />
+          {(canSearch || isLoading || isError) && (
+            <div className="rounded-md border bg-background">
+              {isLoading && (
+                <div className="p-4 text-center">
+                  <Loader2 className="h-4 w-4 animate-spin mx-auto" />
+                </div>
+              )}
+              {isError && (
+                <p className="p-3 text-sm text-destructive">
+                  Katalóg sa nepodarilo načítať. Položku môžete zadať ručne.
+                </p>
+              )}
+              {!isLoading && cards && cards.length > 0 && (
+                <div className="p-1">
+                  {cards.map((card) => (
+                    <button
+                      key={card.externalId}
+                      type="button"
+                      onClick={() => pickCard(card)}
+                      className="flex w-full items-center gap-2 px-2 py-1.5 rounded-sm text-left hover:bg-accent"
+                      data-testid={`option-pokemon-${card.externalId}`}
+                    >
+                      <Check className={cn("h-4 w-4", selected?.externalId === card.externalId ? "opacity-100" : "opacity-0")} />
+                      {card.imageUrl ? (
+                        <img src={card.imageUrl} alt="" className="h-12 w-9 object-contain rounded-sm bg-background" />
+                      ) : (
+                        <span className="h-12 w-9 rounded-sm bg-muted" />
+                      )}
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-medium truncate">{card.name}</span>
+                        <span className="block text-xs text-muted-foreground truncate">
+                          {card.setName}
+                          {card.number ? ` · #${card.number}` : ""}
                         </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {!isLoading && canSearch && cards && cards.length === 0 && (
-                  <p className="p-3 text-sm text-muted-foreground">
-                    Nič sa nenašlo. Skúste kratší názov alebo zadajte položku ručne.
-                  </p>
-                )}
-                {!canSearch && (
-                  <p className="p-3 text-sm text-muted-foreground">Zadajte aspoň 2 znaky.</p>
-                )}
-              </div>
-            </PopoverContent>
-          </Popover>
+                        <span className="block text-xs tabular-nums">
+                          {category === "GRADED_CARD" ? formatLow(card, true) : formatLow(card, false)}
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {!isLoading && canSearch && cards && cards.length === 0 && (
+                <p className="p-3 text-sm text-muted-foreground">
+                  Nič sa nenašlo. Skúste kratší názov alebo zadajte položku ručne.
+                </p>
+              )}
+            </div>
+          )}
           {selected && (
             <div className="flex items-center gap-3 text-sm">
               {selected.imageUrl ? (
