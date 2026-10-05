@@ -316,13 +316,14 @@ export async function searchTcgRows(query: TcgCatalogQuery): Promise<Row[]> {
 
   let path: string;
   if (hasEpisode && search.length < 2 && !cardNumber) {
-    path = `/pokemon/episodes/${episodeId}/${query.kind}?sort=${sort}`;
+    path = `/pokemon/episodes/${episodeId}/${query.kind}?sort=${sort}&per_page=100`;
   } else {
     const params = new URLSearchParams();
     if (search) params.set("search", search);
     if (hasEpisode) params.set("episode_id", episodeId);
     if (query.kind === "cards" && cardNumber) params.set("card_number", cardNumber);
     params.set("sort", sort);
+    params.set("per_page", "100");
     path = `/pokemon/${query.kind}/search?${params.toString()}`;
   }
 
@@ -336,7 +337,7 @@ export async function searchTcgRows(query: TcgCatalogQuery): Promise<Row[]> {
     console.warn(`Pokemon API search ${query.kind}: status ${read.status || "chyba"}`);
     return [];
   }
-  const rows = read.rows.filter(isEnglishRow).slice(0, 20);
+  const rows = read.rows.filter(isEnglishRow).slice(0, 100);
   listCache.set(cacheKey, { at: Date.now(), ttl: SEARCH_TTL_MS, rows });
   return rows;
 }
@@ -350,7 +351,7 @@ export async function searchTcgEpisodes(search: string): Promise<Row[]> {
   const read = await readRows(path);
   noteAuth(read.failed);
   if (read.failed) return [];
-  const rows = read.rows.filter(isEnglishRow).slice(0, 20);
+  const rows = read.rows.filter(isEnglishRow).slice(0, 100);
   listCache.set(path, { at: Date.now(), ttl: SEARCH_TTL_MS, rows });
   return rows;
 }

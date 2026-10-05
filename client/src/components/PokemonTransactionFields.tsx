@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import {
@@ -283,7 +282,7 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
                   autoFocus
                 />
               </div>
-              <ScrollArea className="max-h-[320px]">
+              <div className="max-h-[min(70vh,420px)] overflow-y-auto">
                 {isLoading && (
                   <div className="p-4 text-center">
                     <Loader2 className="h-4 w-4 animate-spin mx-auto" />
@@ -332,7 +331,7 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
                 {!canSearch && (
                   <p className="p-3 text-sm text-muted-foreground">Zadajte aspoň 2 znaky.</p>
                 )}
-              </ScrollArea>
+              </div>
             </PopoverContent>
           </Popover>
           {selected && (

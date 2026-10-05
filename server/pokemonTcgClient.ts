@@ -65,7 +65,18 @@ export async function searchPokemonCatalog(query: TcgCatalogQuery & { gradeCompa
   const grade =
     query.gradeCompany && query.gradeValue ? { company: query.gradeCompany, grade: query.gradeValue } : null;
   const rows = await searchTcgRows(query);
-  return rows.map((row) => rowToHit(row, query.kind === "cards" ? grade : null)).filter((hit): hit is PokemonCardHit => hit != null);
+  const hits = rows.map((row) => rowToHit(row, query.kind === "cards" ? grade : null)).filter((hit): hit is PokemonCardHit => hit != null);
+  return rankCatalogHits(hits, query.search ?? "");
+}
+
+function rankCatalogHits(hits: PokemonCardHit[], search: string): PokemonCardHit[] {
+  const tokens = search.toLowerCase().split(/\s+/).filter((token) => token.length > 1);
+  if (tokens.length === 0) return hits;
+  const score = (hit: PokemonCardHit) => {
+    const name = `${hit.name} ${hit.setName}`.toLowerCase();
+    return tokens.reduce((total, token) => total + (name.includes(token) ? 1 : 0), 0);
+  };
+  return [...hits].sort((a, b) => score(b) - score(a) || a.name.localeCompare(b.name, "sk"));
 }
 
 export async function searchPokemonEpisodes(search: string): Promise<PokemonEpisodeHit[]> {
