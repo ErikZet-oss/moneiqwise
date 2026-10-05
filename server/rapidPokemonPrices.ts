@@ -1,15 +1,16 @@
 /**
- * Cardmarket ceny v EUR cez Pokémon TCG API (RapidAPI).
- * https://www.pokemon-api.com/docs/
+ * Cardmarket ceny v EUR cez TCGGO API v1 (RapidAPI, host cardmarket-api-tcg).
+ * https://www.tcggo.com/api-docs/v1/
  *
- * Jedna položka = jeden dopyt GET /cards?cardmarket_id= alebo GET /products?cardmarket_id=.
- * Detail GET /cards/{id} len keď zoznam ceny vynechá.
+ * Jedna položka = jeden dopyt GET /pokemon/cards?cardmarket_id= alebo
+ * GET /pokemon/products?cardmarket_id=. Detail len keď zoznam ceny vynechá.
  * Raw a sealed: prices.cardmarket.lowest_near_mint (anglická verzia, EUR).
  * Graded: prices.cardmarket.graded. eBay je USD a na cenu v EUR sa neberie.
  * Free plán má 100 požiadaviek denne, preto sa výsledok cachuje 12 hodín.
  */
 
-const HOST = "pokemon-tcg-api.p.rapidapi.com";
+const HOST = "cardmarket-api-tcg.p.rapidapi.com";
+const GAME = "pokemon";
 const SUCCESS_TTL_MS = 12 * 60 * 60 * 1000;
 const MISS_TTL_MS = 12 * 60 * 60 * 1000;
 const ERROR_TTL_MS = 30 * 60 * 1000;
@@ -210,7 +211,7 @@ async function hydratePrices(row: Row, catalog: "cards" | "products"): Promise<R
   if (cardmarketBlock(row)) return row;
   const id = internalId(row);
   if (!id) return row;
-  const detail = await readRows(`/${catalog}/${encodeURIComponent(id)}`);
+  const detail = await readRows(`/${GAME}/${catalog}/${encodeURIComponent(id)}`);
   return detail.rows.find((item) => cardmarketBlock(item) != null) ?? detail.rows[0] ?? row;
 }
 
@@ -219,7 +220,7 @@ async function loadEnglishRow(productId: string, catalog: "cards" | "products"):
   const cached = rowCache.get(cacheKey);
   if (cached && Date.now() - cached.at < cached.ttl) return cached.row;
 
-  const paths = [`/${catalog}?cardmarket_id=${productId}`];
+  const paths = [`/${GAME}/${catalog}?cardmarket_id=${encodeURIComponent(productId)}`];
 
   let lastError = false;
   let lastStatus = 0;
@@ -230,7 +231,7 @@ async function loadEnglishRow(productId: string, catalog: "cards" | "products"):
     lastPath = path;
     if (read.failed === "auth" && !authLogged) {
       authLogged = true;
-      console.warn("Pokémon TCG API odmietlo kľúč. Skontroluj RAPIDAPI_KEY a predplatné Pokémon TCG API.");
+      console.warn("TCGGO API odmietlo kľúč. Skontroluj RAPIDAPI_KEY a predplatné CardMarket API TCG.");
     }
     if (read.failed === "auth" || read.status === 429 || read.status >= 500 || read.status === 0) {
       lastError = true;
@@ -239,7 +240,7 @@ async function loadEnglishRow(productId: string, catalog: "cards" | "products"):
     if (read.failed) continue;
     const row = candidateRow(read.rows, productId, path.includes("cardmarket_id="));
     if (!row) continue;
-    const full = await hydratePrices(row, path.startsWith("/cards") ? "cards" : catalog);
+    const full = await hydratePrices(row, catalog);
     if (cardmarketBlock(full)) {
       rowCache.set(cacheKey, { at: Date.now(), ttl: SUCCESS_TTL_MS, row: full });
       return full;
