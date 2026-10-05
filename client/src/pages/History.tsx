@@ -67,14 +67,23 @@ function transactionCompanySubline(tx: Transaction): string | null {
 
 function sellRealizedDisplay(
   tx: Transaction,
-  gainEurBySellId: Map<string, number> | undefined,
-): { amount: number; currency: "EUR" } | null {
+  bySell: Map<string, { gainEur: number; pct: number | null }> | undefined,
+): { amount: number; currency: "EUR"; pct: number | null } | null {
   if (tx.type !== "SELL") return null;
-  const eur = gainEurBySellId?.get(tx.id);
-  if (eur == null || !Number.isFinite(eur) || Math.abs(eur) < REALIZED_NEAR_ZERO) {
+  const row = bySell?.get(tx.id);
+  if (!row || !Number.isFinite(row.gainEur) || Math.abs(row.gainEur) < REALIZED_NEAR_ZERO) {
     return null;
   }
-  return { amount: eur, currency: "EUR" };
+  return {
+    amount: row.gainEur,
+    currency: "EUR",
+    pct: row.pct != null && Number.isFinite(row.pct) ? row.pct : null,
+  };
+}
+
+function formatRealizedPct(pct: number): string {
+  const sign = pct > 0 ? "+" : "";
+  return `${sign}${pct.toFixed(1)} %`;
 }
 
 interface ImportResult {
@@ -174,7 +183,10 @@ export default function History() {
     refetchOnMount: true,
   });
 
-  const { data: sellGainsPayload } = useQuery<{ gains: Record<string, number> }>({
+  const { data: sellGainsPayload } = useQuery<{
+    gains: Record<string, number>;
+    bySell?: Record<string, { gainEur: number; costEur: number; pct: number | null }>;
+  }>({
     queryKey: ["/api/sell-realized-gains", portfolioParam],
     queryFn: async () => {
       const res = await fetch(
@@ -189,16 +201,32 @@ export default function History() {
     refetchOnMount: true,
   });
 
-  const gainEurBySellId = useMemo(() => {
-    const m = new Map<string, number>();
+  const sellRealizedById = useMemo(() => {
+    const m = new Map<string, { gainEur: number; pct: number | null }>();
+    const bySell = sellGainsPayload?.bySell;
+    if (bySell) {
+      for (const [id, row] of Object.entries(bySell)) {
+        if (row && Number.isFinite(row.gainEur)) {
+          m.set(id, { gainEur: row.gainEur, pct: row.pct ?? null });
+        }
+      }
+      return m;
+    }
+    // Starší tvar odpovede (len gains)
     const g = sellGainsPayload?.gains;
     if (g) {
       for (const [id, v] of Object.entries(g)) {
-        if (Number.isFinite(v)) m.set(id, v);
+        if (Number.isFinite(v)) m.set(id, { gainEur: v, pct: null });
       }
     }
     return m;
   }, [sellGainsPayload]);
+
+  const gainEurBySellId = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const [id, row] of sellRealizedById) m.set(id, row.gainEur);
+    return m;
+  }, [sellRealizedById]);
 
   const invalidateAllQueries = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
@@ -1023,7 +1051,7 @@ export default function History() {
                     ? grossAmount + commission
                     : grossAmount - commission;
                   const isSelected = selectedIds.has(transaction.id);
-                  const sellRealized = sellRealizedDisplay(transaction, gainEurBySellId);
+                  const sellRealized = sellRealizedDisplay(transaction, sellRealizedById);
                   const isPairedCloseTrade =
                     isCloseTradeCash && fallbackPairing.pairedCloseTradeIds.has(transaction.id);
                   const tickerLabel = transactionTickerDisplay(transaction, isCash);
@@ -1107,8 +1135,15 @@ export default function History() {
                               )}
                               {sellRealized ? (
                                 <div className={`text-xs font-medium ${sellRealized.amount >= 0 ? "text-green-500" : "text-red-500"}`}>
-                                  {sellRealized.amount >= 0 ? "+" : ""}
-                                  {formatCurrency(convertPrice(sellRealized.amount, sellRealized.currency))}
+                                  <div>
+                                    {sellRealized.amount >= 0 ? "+" : ""}
+                                    {formatCurrency(convertPrice(sellRealized.amount, sellRealized.currency))}
+                                  </div>
+                                  {sellRealized.pct != null ? (
+                                    <div className="tabular-nums opacity-90">
+                                      {formatRealizedPct(sellRealized.pct)}
+                                    </div>
+                                  ) : null}
                                 </div>
                               ) : isCloseTradeCash && !isPairedCloseTrade && Math.abs(cashDisplayAmount) > 1e-9 ? (
                                 <div className={`text-xs font-medium ${cashDisplayAmount >= 0 ? "text-green-500" : "text-red-500"}`}>
@@ -1223,7 +1258,7 @@ export default function History() {
                     ? grossAmount + commission
                     : grossAmount - commission;
                   const isSelected = selectedIds.has(transaction.id);
-                  const sellRealized = sellRealizedDisplay(transaction, gainEurBySellId);
+                  const sellRealized = sellRealizedDisplay(transaction, sellRealizedById);
                   const isPairedCloseTrade =
                     isCloseTradeCash && fallbackPairing.pairedCloseTradeIds.has(transaction.id);
                   const tickerLabel = transactionTickerDisplay(transaction, isCash);
@@ -1313,10 +1348,17 @@ export default function History() {
                       </TableCell>
                       <TableCell className="text-right">
                         {sellRealized ? (
-                          <span className={`font-medium ${sellRealized.amount >= 0 ? "text-green-500" : "text-red-500"}`}>
-                            {sellRealized.amount >= 0 ? "+" : ""}
-                            {formatCurrency(convertPrice(sellRealized.amount, sellRealized.currency))}
-                          </span>
+                          <div className={`inline-flex flex-col items-end font-medium ${sellRealized.amount >= 0 ? "text-green-500" : "text-red-500"}`}>
+                            <span>
+                              {sellRealized.amount >= 0 ? "+" : ""}
+                              {formatCurrency(convertPrice(sellRealized.amount, sellRealized.currency))}
+                            </span>
+                            {sellRealized.pct != null ? (
+                              <span className="text-xs tabular-nums opacity-90">
+                                {formatRealizedPct(sellRealized.pct)}
+                              </span>
+                            ) : null}
+                          </div>
                         ) : isCloseTradeCash && !isPairedCloseTrade && Math.abs(cashDisplayAmount) > 1e-9 ? (
                           <span className={`font-medium ${cashDisplayAmount >= 0 ? "text-green-500" : "text-red-500"}`}>
                             {cashDisplayAmount >= 0 ? "+" : ""}

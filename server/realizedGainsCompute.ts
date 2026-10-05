@@ -328,11 +328,19 @@ export async function computeRealizedGainsFromTransactionsAsync(
   return computeRealizedGainsCore(userTransactions, m, now, portfolioMetaById);
 }
 
-/** Rovnaká logika ako Zisk / FIFO — zisk v EUR pre každý SELL (pre Históriu). */
-export async function buildSellGainEurById(
+export type SellRealizedRow = {
+  gainEur: number;
+  /** FIFO náklad (EUR); 0 ak neznámy. */
+  costEur: number;
+  /** zisk / náklad × 100; null ak náklad ≈ 0. */
+  pct: number | null;
+};
+
+/** Rovnaká logika ako Zisk / FIFO — zisk + % pre každý SELL (História). */
+export async function buildSellRealizedById(
   userTransactions: Transaction[],
   now = new Date(),
-): Promise<Map<string, number>> {
+): Promise<Map<string, SellRealizedRow>> {
   const eurPerUnitByTxnId = await buildEurPerUnitByTxnIdForTransactions(userTransactions);
   const { bySellId: fallbackBySellId } = buildCloseTradeFallbackPairing(userTransactions);
   const fifo = computeFifoRealizedGainsFromTransactions(
@@ -347,7 +355,7 @@ export async function buildSellGainEurById(
         .trim()
         .toUpperCase() === "SELL",
   );
-  const out = new Map<string, number>();
+  const out = new Map<string, SellRealizedRow>();
   for (const sell of sells) {
     const row = resolveSellGainEur(
       sell,
@@ -356,8 +364,33 @@ export async function buildSellGainEurById(
       fifo.gainEurBySellId,
       fifo.closeTradePairedSellIds,
     );
-    if (row) out.set(sell.id, row.gainEur);
+    if (!row) continue;
+    const m = metricsForSell(
+      sell,
+      row.gainEur,
+      eurPerUnitByTxnId,
+      fifo.costEurBySellId,
+      fifo.buyWeightedLocalBySellId,
+      fifo.sellPriceLocalBySellId,
+    );
+    const costEur = m?.costEur ?? Math.max(0, (m?.soldEur ?? 0) - row.gainEur);
+    const pct =
+      costEur > REALIZED_NEAR_ZERO && Number.isFinite(costEur)
+        ? (row.gainEur / costEur) * 100
+        : null;
+    out.set(sell.id, { gainEur: row.gainEur, costEur, pct });
   }
+  return out;
+}
+
+/** @deprecated Prefer `buildSellRealizedById` (vracia aj %). */
+export async function buildSellGainEurById(
+  userTransactions: Transaction[],
+  now = new Date(),
+): Promise<Map<string, number>> {
+  const byId = await buildSellRealizedById(userTransactions, now);
+  const out = new Map<string, number>();
+  for (const [id, row] of byId) out.set(id, row.gainEur);
   return out;
 }
 

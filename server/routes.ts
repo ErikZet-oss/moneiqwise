@@ -43,7 +43,7 @@ import { parseEtoroFile } from "./etoroParser";
 import { toYahooTicker } from "./yahooTicker";
 import {
   computeRealizedGainsFromTransactionsAsync,
-  buildSellGainEurById,
+  buildSellRealizedById,
   transactionLotKey,
 } from "./realizedGainsCompute";
 import { computePnlBreakdown } from "./pnlBreakdown";
@@ -5192,16 +5192,24 @@ export async function registerRoutes(
     }
   });
 
-  /** Realizovaný zisk (EUR) po SELL — rovnaký výpočet ako /api/realized-gains. */
+  /** Realizovaný zisk (EUR + %) po SELL — rovnaký výpočet ako /api/realized-gains. */
   app.get("/api/sell-realized-gains", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const portfolioId = req.query.portfolio as string | undefined;
       const userTransactions = await storage.getTransactionsByUser(userId, portfolioId);
-      const byId = await buildSellGainEurById(userTransactions);
+      const byId = await buildSellRealizedById(userTransactions);
       const gains: Record<string, number> = {};
-      for (const [id, eur] of byId) gains[id] = eur;
-      res.json({ gains });
+      const bySell: Record<string, { gainEur: number; costEur: number; pct: number | null }> = {};
+      for (const [id, row] of byId) {
+        gains[id] = row.gainEur;
+        bySell[id] = {
+          gainEur: row.gainEur,
+          costEur: row.costEur,
+          pct: row.pct,
+        };
+      }
+      res.json({ gains, bySell });
     } catch (error) {
       console.error("Error fetching sell realized gains:", error);
       res.status(500).json({ message: "Nepodarilo sa vypočítať realizovaný zisk predajov." });
