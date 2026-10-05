@@ -328,6 +328,39 @@ export async function computeRealizedGainsFromTransactionsAsync(
   return computeRealizedGainsCore(userTransactions, m, now, portfolioMetaById);
 }
 
+/** Rovnaká logika ako Zisk / FIFO — zisk v EUR pre každý SELL (pre Históriu). */
+export async function buildSellGainEurById(
+  userTransactions: Transaction[],
+  now = new Date(),
+): Promise<Map<string, number>> {
+  const eurPerUnitByTxnId = await buildEurPerUnitByTxnIdForTransactions(userTransactions);
+  const { bySellId: fallbackBySellId } = buildCloseTradeFallbackPairing(userTransactions);
+  const fifo = computeFifoRealizedGainsFromTransactions(
+    userTransactions,
+    eurPerUnitByTxnId,
+    now,
+    fallbackBySellId,
+  );
+  const sells = userTransactions.filter(
+    (t) =>
+      String(t.type ?? "")
+        .trim()
+        .toUpperCase() === "SELL",
+  );
+  const out = new Map<string, number>();
+  for (const sell of sells) {
+    const row = resolveSellGainEur(
+      sell,
+      eurPerUnitByTxnId,
+      fallbackBySellId,
+      fifo.gainEurBySellId,
+      fifo.closeTradePairedSellIds,
+    );
+    if (row) out.set(sell.id, row.gainEur);
+  }
+  return out;
+}
+
 /**
  * FIFO bez čakania na API (len uložené kurzy / base v riadku).
  */

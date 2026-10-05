@@ -79,6 +79,7 @@ function shouldSkipPersistQueryKey(keyStr: string): boolean {
   if (keyStr.includes("/api/exchange-rate")) return true;
   // Alerty sa menia často (radar) — persistovaný prázdny inbox vs. badge ≠ 0.
   if (keyStr.includes("/api/ai-bot/alerts")) return true;
+  if (keyStr.includes("/api/sell-realized-gains")) return true;
   return false;
 }
 

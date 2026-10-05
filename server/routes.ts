@@ -43,6 +43,7 @@ import { parseEtoroFile } from "./etoroParser";
 import { toYahooTicker } from "./yahooTicker";
 import {
   computeRealizedGainsFromTransactionsAsync,
+  buildSellGainEurById,
   transactionLotKey,
 } from "./realizedGainsCompute";
 import { computePnlBreakdown } from "./pnlBreakdown";
@@ -5188,6 +5189,22 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error computing portfolio performance:", error);
       res.status(500).json({ message: "Nepodarilo sa vypočítať výkonnosť portfólia." });
+    }
+  });
+
+  /** Realizovaný zisk (EUR) po SELL — rovnaký výpočet ako /api/realized-gains. */
+  app.get("/api/sell-realized-gains", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const portfolioId = req.query.portfolio as string | undefined;
+      const userTransactions = await storage.getTransactionsByUser(userId, portfolioId);
+      const byId = await buildSellGainEurById(userTransactions);
+      const gains: Record<string, number> = {};
+      for (const [id, eur] of byId) gains[id] = eur;
+      res.json({ gains });
+    } catch (error) {
+      console.error("Error fetching sell realized gains:", error);
+      res.status(500).json({ message: "Nepodarilo sa vypočítať realizovaný zisk predajov." });
     }
   });
 

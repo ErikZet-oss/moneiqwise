@@ -32,7 +32,6 @@ import { isPokemonPortfolio, isPokemonTicker } from "@shared/pokemonTcg";
 import { formatShareQuantity } from "@/lib/utils";
 import {
   buildCloseTradeFallbackPairing,
-  hasAuthoritativeStoredRealizedGain,
   isCloseTradeCashRow,
 } from "@shared/sellCloseTradeFallback";
 
@@ -68,30 +67,14 @@ function transactionCompanySubline(tx: Transaction): string | null {
 
 function sellRealizedDisplay(
   tx: Transaction,
-  fallbackSellRealizedEur: number | undefined,
-): { amount: number; currency: ReturnType<typeof realizedGainSourceCurrency> } | null {
+  gainEurBySellId: Map<string, number> | undefined,
+): { amount: number; currency: "EUR" } | null {
   if (tx.type !== "SELL") return null;
-  const stored = parseFloat(String(tx.realizedGain ?? "0"));
-  const closeFb = fallbackSellRealizedEur;
-  if (
-    closeFb != null &&
-    Number.isFinite(closeFb) &&
-    Math.abs(closeFb) > 1e-9 &&
-    !hasAuthoritativeStoredRealizedGain(tx, closeFb)
-  ) {
-    return { amount: closeFb, currency: "EUR" };
+  const eur = gainEurBySellId?.get(tx.id);
+  if (eur == null || !Number.isFinite(eur) || Math.abs(eur) < REALIZED_NEAR_ZERO) {
+    return null;
   }
-  if (hasAuthoritativeStoredRealizedGain(tx, closeFb)) {
-    return { amount: stored, currency: realizedGainSourceCurrency(tx) };
-  }
-  if (
-    fallbackSellRealizedEur != null &&
-    Number.isFinite(fallbackSellRealizedEur) &&
-    Math.abs(fallbackSellRealizedEur) >= REALIZED_NEAR_ZERO
-  ) {
-    return { amount: fallbackSellRealizedEur, currency: "EUR" };
-  }
-  return null;
+  return { amount: eur, currency: "EUR" };
 }
 
 interface ImportResult {
@@ -190,6 +173,32 @@ export default function History() {
     // Glob. refetchOnMount: false + neaktívna query pri invalidácii — týmto po návrate na stránku obnovíme dáta, ak sú neplatné.
     refetchOnMount: true,
   });
+
+  const { data: sellGainsPayload } = useQuery<{ gains: Record<string, number> }>({
+    queryKey: ["/api/sell-realized-gains", portfolioParam],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/sell-realized-gains?portfolio=${encodeURIComponent(portfolioParam)}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) throw new Error("Failed to fetch sell realized gains");
+      return res.json();
+    },
+    enabled: (transactions?.length ?? 0) > 0,
+    staleTime: 0,
+    refetchOnMount: true,
+  });
+
+  const gainEurBySellId = useMemo(() => {
+    const m = new Map<string, number>();
+    const g = sellGainsPayload?.gains;
+    if (g) {
+      for (const [id, v] of Object.entries(g)) {
+        if (Number.isFinite(v)) m.set(id, v);
+      }
+    }
+    return m;
+  }, [sellGainsPayload]);
 
   const invalidateAllQueries = () => {
     queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
@@ -471,8 +480,8 @@ export default function History() {
 
     const realizedAmount = (t: Transaction) => {
       if (t.type !== "SELL") return 0;
-      const rg = parseFloat(String(t.realizedGain ?? "0"));
-      return Number.isFinite(rg) ? rg : 0;
+      const eur = gainEurBySellId.get(t.id);
+      return eur != null && Number.isFinite(eur) ? eur : 0;
     };
 
     const getKey = (t: Transaction): string | number => {
@@ -508,7 +517,7 @@ export default function History() {
     });
 
     return rows;
-  }, [filteredTransactions, sortField, sortDirection]);
+  }, [filteredTransactions, sortField, sortDirection, gainEurBySellId]);
 
   const allSelected = filteredTransactions && filteredTransactions.length > 0 && 
     filteredTransactions.every(t => selectedIds.has(t.id));
@@ -548,14 +557,9 @@ export default function History() {
       if (Number.isFinite(txTotal)) totalAmount += txTotal;
 
       if (t.type === "SELL") {
-        const rg = parseFloat(String(t.realizedGain ?? "0"));
-        if (Number.isFinite(rg) && Math.abs(rg) > 1e-9) {
-          realizedGain += convertPrice(rg, realizedGainSourceCurrency(t));
-        } else {
-          const fallbackEur = fallbackPairing.bySellId.get(t.id);
-          if (Number.isFinite(fallbackEur)) {
-            realizedGain += convertPrice(fallbackEur as number, "EUR");
-          }
+        const eur = gainEurBySellId.get(t.id);
+        if (eur != null && Number.isFinite(eur)) {
+          realizedGain += convertPrice(eur, "EUR");
         }
       }
       if (t.type === "DIVIDEND" && Number.isFinite(txTotal)) dividends += txTotal;
@@ -563,7 +567,7 @@ export default function History() {
     }
 
     return { totalAmount, realizedGain, dividends, cashFlow };
-  }, [selectedTransactions, convertPrice, fallbackPairing]);
+  }, [selectedTransactions, convertPrice, gainEurBySellId]);
 
   const realizedDebug = useMemo(() => {
     if (!showRealizedDebug) {
@@ -588,17 +592,18 @@ export default function History() {
     for (const t of all) {
       if (t.type === "SELL") {
         sellRows += 1;
-        const rg = parseFloat(String(t.realizedGain ?? "0"));
-        if (Number.isFinite(rg) && Math.abs(rg) > 1e-9) {
-          const converted = convertPrice(rg, realizedGainSourceCurrency(t));
-          sellStored += converted;
+        const eur = gainEurBySellId.get(t.id);
+        if (eur != null && Number.isFinite(eur) && Math.abs(eur) > 1e-9) {
+          const converted = convertPrice(eur, "EUR");
           sellDisplayed += converted;
-        } else {
-          const fb = fallbackPairing.bySellId.get(t.id);
-          if (Number.isFinite(fb)) {
-            const converted = convertPrice(fb as number, "EUR");
-            sellFallback += converted;
-            sellDisplayed += converted;
+          const rg = parseFloat(String(t.realizedGain ?? "0"));
+          if (Number.isFinite(rg) && Math.abs(rg) > 1e-9) {
+            sellStored += convertPrice(rg, realizedGainSourceCurrency(t));
+          } else if (fallbackPairing.bySellId.has(t.id)) {
+            const fb = fallbackPairing.bySellId.get(t.id);
+            if (Number.isFinite(fb)) {
+              sellFallback += convertPrice(fb as number, "EUR");
+            }
           }
         }
       }
@@ -624,10 +629,8 @@ export default function History() {
     ).length;
     const unmatchedSellRows = all.filter((t) => {
       if (t.type !== "SELL") return false;
-      const rg = parseFloat(String(t.realizedGain ?? "0"));
-      const hasStored = Number.isFinite(rg) && Math.abs(rg) > 1e-9;
-      const hasFallback = fallbackPairing.bySellId.has(t.id);
-      return !hasStored && !hasFallback;
+      const eur = gainEurBySellId.get(t.id);
+      return eur == null || !Number.isFinite(eur) || Math.abs(eur) < 1e-9;
     }).length;
 
     return {
@@ -640,7 +643,7 @@ export default function History() {
       unmatchedSellRows,
       unmatchedCloseTradeRows,
     };
-  }, [filteredTransactions, transactions, convertPrice, fallbackPairing, showRealizedDebug]);
+  }, [filteredTransactions, transactions, convertPrice, fallbackPairing, gainEurBySellId, showRealizedDebug]);
 
   const formatDate = (date: Date | string) => {
     const d = typeof date === "string" ? new Date(date) : date;
@@ -1020,8 +1023,7 @@ export default function History() {
                     ? grossAmount + commission
                     : grossAmount - commission;
                   const isSelected = selectedIds.has(transaction.id);
-                  const fallbackSellRealizedEur = fallbackPairing.bySellId.get(transaction.id);
-                  const sellRealized = sellRealizedDisplay(transaction, fallbackSellRealizedEur);
+                  const sellRealized = sellRealizedDisplay(transaction, gainEurBySellId);
                   const isPairedCloseTrade =
                     isCloseTradeCash && fallbackPairing.pairedCloseTradeIds.has(transaction.id);
                   const tickerLabel = transactionTickerDisplay(transaction, isCash);
@@ -1221,8 +1223,7 @@ export default function History() {
                     ? grossAmount + commission
                     : grossAmount - commission;
                   const isSelected = selectedIds.has(transaction.id);
-                  const fallbackSellRealizedEur = fallbackPairing.bySellId.get(transaction.id);
-                  const sellRealized = sellRealizedDisplay(transaction, fallbackSellRealizedEur);
+                  const sellRealized = sellRealizedDisplay(transaction, gainEurBySellId);
                   const isPairedCloseTrade =
                     isCloseTradeCash && fallbackPairing.pairedCloseTradeIds.has(transaction.id);
                   const tickerLabel = transactionTickerDisplay(transaction, isCash);
