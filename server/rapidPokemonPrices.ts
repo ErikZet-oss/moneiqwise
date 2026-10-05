@@ -1,19 +1,21 @@
 /**
- * Cardmarket ceny v EUR cez Pokémon TCG API (RapidAPI).
- * https://rapidapi.com/tcggopro/api/pokemon-tcg-api
+ * Cardmarket ceny v EUR cez CardMarket API TCG (TCGGO) na RapidAPI.
+ * https://rapidapi.com/tcggopro/api/cardmarket-api-tcg
+ * https://www.tcggo.com/api-docs/v1/
  *
- * Kľúč ide v query rapidapi-key. Jedna položka = jeden dopyt:
- * raw a graded GET /cards?cardmarket_id=, sealed GET /products?cardmarket_id=.
- * Detail len keď zoznam ceny vynechá. Expanzie sa neprechádzajú.
- * Raw a sealed: prices.cardmarket.lowest_near_mint (anglická verzia, EUR).
- * Graded: prices.cardmarket.graded. eBay je USD a na cenu v EUR sa neberie.
- * Free plán má 100 požiadaviek denne, preto sa výsledok cachuje 12 hodín.
+ * Host cardmarket-api-tcg.p.rapidapi.com, hra v ceste `/pokemon/...`.
+ * Kľúč ide v hlavičke aj v query rapidapi-key.
+ * Jedna položka = jeden dopyt podľa Cardmarket id. Expanzie sa neprechádzajú.
+ * Karty: prices.cardmarket.lowest_near_mint (anglický Near Mint).
+ * Sealed: prices.cardmarket.lowest na riadku lang=en.
+ * Graded: prices.cardmarket.graded. Jazykové suffixy a eBay USD sa neberú.
  */
 
-const HOST = "pokemon-tcg-api.p.rapidapi.com";
+const HOST = "cardmarket-api-tcg.p.rapidapi.com";
 const SUCCESS_TTL_MS = 12 * 60 * 60 * 1000;
 const MISS_TTL_MS = 12 * 60 * 60 * 1000;
 const ERROR_TTL_MS = 30 * 60 * 1000;
+const SEARCH_TTL_MS = 10 * 60 * 1000;
 
 export type RapidPriceKind =
   | { kind: "raw" }
@@ -25,10 +27,22 @@ export type RapidPriceResult =
   | { status: "unconfigured" }
   | { status: "unavailable" };
 
+export type TcgSort = "relevance" | "price_highest" | "price_lowest";
+
+export type TcgCatalogQuery = {
+  kind: "cards" | "products";
+  search?: string;
+  episodeId?: string;
+  cardNumber?: string;
+  sort?: string;
+};
+
 type Row = Record<string, unknown>;
 type RowCache = { at: number; ttl: number; row: Row | null };
+type ListCache = { at: number; ttl: number; rows: Row[] };
 
 const rowCache = new Map<string, RowCache>();
+const listCache = new Map<string, ListCache>();
 let missingKeyLogged = false;
 let authLogged = false;
 
@@ -45,7 +59,7 @@ function positive(value: unknown): number | null {
   return Number.isFinite(num) && num > 0 ? num : null;
 }
 
-function rowsFrom(body: unknown): Row[] {
+export function rowsFrom(body: unknown): Row[] {
   if (Array.isArray(body)) return body.filter(isRow);
   if (!isRow(body)) return [];
   for (const key of ["data", "results", "cards", "products", "items", "episodes"]) {
@@ -56,7 +70,7 @@ function rowsFrom(body: unknown): Row[] {
       if (nested.length > 0) return nested;
     }
   }
-  if (body.prices != null || body.cardmarket_id != null || body.cardmarket != null) return [body];
+  if (body.prices != null || body.cardmarket_id != null || body.cardmarket != null || body.name != null) return [body];
   return [];
 }
 
@@ -78,7 +92,7 @@ function productIdOf(row: Row): string | null {
   );
 }
 
-function isEnglishRow(row: Row): boolean {
+export function isEnglishRow(row: Row): boolean {
   const lang = String(row.lang ?? row.language ?? "").trim().toLowerCase();
   return lang === "" || lang === "en" || lang === "english";
 }
@@ -91,13 +105,20 @@ export function cardmarketBlock(row: Row): Row | null {
   const currency = String(block.currency ?? "EUR").trim().toUpperCase();
   if (currency !== "EUR") return null;
   const graded = block.graded;
-  const hasQuote = positive(block.lowest_near_mint) != null || (isRow(graded) && Object.keys(graded).length > 0);
+  const hasQuote =
+    positive(block.lowest_near_mint) != null ||
+    positive(block.lowest) != null ||
+    (isRow(graded) && Object.keys(graded).length > 0);
   if (!hasQuote) return null;
   return block;
 }
 
-export function nearMintEur(row: Row): number | null {
-  return positive(cardmarketBlock(row)?.lowest_near_mint);
+/** Anglický Near Mint karty, alebo `lowest` sealed produktu s lang=en. */
+export function nearMintEur(row: Row, kind: "raw" | "sealed" = "raw"): number | null {
+  const block = cardmarketBlock(row);
+  if (!block) return null;
+  if (kind === "sealed") return positive(block.lowest) ?? positive(block.lowest_near_mint);
+  return positive(block.lowest_near_mint) ?? positive(block.lowest);
 }
 
 /** Cena stupňa len z Cardmarket bloku v EUR. Prázdne graded aj chýbajúci stupeň vrátia null. */
@@ -130,7 +151,7 @@ export function gradedEur(row: Row, company: string, grade: string): number | nu
 
 function priceFromRow(row: Row, request: RapidPriceKind): number | null {
   if (request.kind === "graded") return gradedEur(row, request.company, request.grade);
-  return nearMintEur(row);
+  return nearMintEur(row, request.kind === "sealed" ? "sealed" : "raw");
 }
 
 async function rapidGet(path: string): Promise<{ status: number; body: unknown } | "auth" | "error"> {
@@ -144,7 +165,7 @@ async function rapidGet(path: string): Promise<{ status: number; body: unknown }
         "x-rapidapi-key": key,
         "x-rapidapi-host": HOST,
       },
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(12000),
     });
     if (res.status === 401 || res.status === 403) return "auth";
     const text = await res.text();
@@ -158,22 +179,16 @@ async function rapidGet(path: string): Promise<{ status: number; body: unknown }
     }
     return { status: res.status, body };
   } catch (error) {
-    console.warn("Pokémon TCG API request failed:", error instanceof Error ? error.message : error);
+    console.warn("TCGGO API request failed:", error instanceof Error ? error.message : error);
     return "error";
   }
 }
 
-/**
- * Presný filter podľa Cardmarket id.
- * Pri priamom id dopyte API id v tele často neopakuje, tak sa berie anglický záznam z malej odpovede.
- * Vyhľadávanie podľa mena berie len zhodu id, inak by sa ocenila iná karta.
- */
 export function pickIdMatch(rows: Row[], productId: string, allowUnlabeled: boolean): Row | null {
   const idMatches = rows.filter((row) => productIdOf(row) === productId);
   const pool = idMatches.length > 0 ? idMatches : allowUnlabeled && rows.length > 0 && rows.length <= 8 ? rows : [];
   const english = pool.filter(isEnglishRow);
-  const list = english.length > 0 ? english : pool;
-  return list.find((row) => cardmarketBlock(row) != null) ?? null;
+  return english.find((row) => cardmarketBlock(row) != null) ?? null;
 }
 
 function internalId(row: Row): string | null {
@@ -187,10 +202,9 @@ function candidateRow(rows: Row[], productId: string, allowUnlabeled: boolean): 
   return (
     pickIdMatch(rows, productId, allowUnlabeled) ??
     (() => {
-      const idMatches = rows.filter((row) => productIdOf(row) === productId);
-      const pool = idMatches.length > 0 ? idMatches : allowUnlabeled && rows.length > 0 && rows.length <= 8 ? rows : [];
-      const english = pool.filter(isEnglishRow);
-      return (english.length > 0 ? english : pool)[0] ?? null;
+      const idMatches = rows.filter((row) => productIdOf(row) === productId && isEnglishRow(row));
+      const pool = idMatches.length > 0 ? idMatches : allowUnlabeled ? rows.filter(isEnglishRow).slice(0, 8) : [];
+      return pool[0] ?? null;
     })()
   );
 }
@@ -200,8 +214,9 @@ async function readRows(
 ): Promise<{ rows: Row[]; failed: "auth" | "error" | null; notFound: boolean; status: number }> {
   const result = await rapidGet(path);
   if (result === "auth") return { rows: [], failed: "auth", notFound: false, status: 401 };
-  if (result === "error" || result.status === 429 || result.status >= 500) {
-    return { rows: [], failed: "error", notFound: false, status: result === "error" ? 0 : result.status };
+  if (result === "error") return { rows: [], failed: "error", notFound: false, status: 0 };
+  if (result.status === 429 || result.status >= 500) {
+    return { rows: [], failed: "error", notFound: false, status: result.status };
   }
   if (result.status === 404) return { rows: [], failed: null, notFound: true, status: 404 };
   if (result.status !== 200) return { rows: [], failed: "error", notFound: false, status: result.status };
@@ -209,13 +224,20 @@ async function readRows(
   return { rows, failed: null, notFound: rows.length === 0, status: 200 };
 }
 
-/** Zoznam často nemá ceny. Detail `/cards/:id` ich má. */
+function noteAuth(failed: "auth" | "error" | null) {
+  if (failed === "auth" && !authLogged) {
+    authLogged = true;
+    console.warn("TCGGO API odmietlo kľúč. Skontroluj RAPIDAPI_KEY a predplatné CardMarket API TCG.");
+  }
+}
+
 async function hydratePrices(row: Row, catalog: "cards" | "products"): Promise<Row> {
   if (cardmarketBlock(row)) return row;
   const id = internalId(row);
   if (!id) return row;
-  const detail = await readRows(`/${catalog}/${encodeURIComponent(id)}`);
-  return detail.rows.find((item) => cardmarketBlock(item) != null) ?? detail.rows[0] ?? row;
+  const detail = await readRows(`/pokemon/${catalog}/${encodeURIComponent(id)}`);
+  noteAuth(detail.failed);
+  return detail.rows.find((item) => isEnglishRow(item) && cardmarketBlock(item) != null) ?? row;
 }
 
 async function loadEnglishRow(productId: string, catalog: "cards" | "products"): Promise<Row | null> {
@@ -223,53 +245,92 @@ async function loadEnglishRow(productId: string, catalog: "cards" | "products"):
   const cached = rowCache.get(cacheKey);
   if (cached && Date.now() - cached.at < cached.ttl) return cached.row;
 
-  const paths = [`/${catalog}?cardmarket_id=${encodeURIComponent(productId)}`];
+  const path = `/pokemon/${catalog}?cardmarket_id=${encodeURIComponent(productId)}`;
+  const read = await readRows(path);
+  noteAuth(read.failed);
+  if (read.failed === "auth" || read.failed === "error") {
+    rowCache.set(cacheKey, { at: Date.now(), ttl: ERROR_TTL_MS, row: null });
+    console.warn(`Pokemon API ${catalog} ${productId}: bez ceny, posledný status ${read.status || "chyba"} ${path}`);
+    return null;
+  }
+  const row = candidateRow(read.rows, productId, true);
+  const full = row ? await hydratePrices(row, catalog) : null;
+  if (full && cardmarketBlock(full) && isEnglishRow(full)) {
+    rowCache.set(cacheKey, { at: Date.now(), ttl: SUCCESS_TTL_MS, row: full });
+    return full;
+  }
+  console.warn(`Pokemon API ${catalog} ${productId}: bez ceny, posledný status ${read.status} ${path}`);
+  rowCache.set(cacheKey, { at: Date.now(), ttl: MISS_TTL_MS, row: null });
+  return null;
+}
 
-  let lastError = false;
-  let lastStatus = 0;
-  let lastPath = "";
-  for (const path of paths) {
-    const read = await readRows(path);
-    lastStatus = read.status;
-    lastPath = path;
-    if (read.failed === "auth" && !authLogged) {
-      authLogged = true;
-      console.warn("Pokémon TCG API odmietlo kľúč. Skontroluj RAPIDAPI_KEY a predplatné Pokémon TCG API.");
-    }
-    if (read.failed === "auth" || read.status === 429 || read.status >= 500 || read.status === 0) {
-      lastError = true;
-      break;
-    }
-    if (read.failed) continue;
-    const row = candidateRow(read.rows, productId, path.includes("cardmarket_id="));
-    if (!row) continue;
-    const full = await hydratePrices(row, catalog);
-    if (cardmarketBlock(full)) {
-      rowCache.set(cacheKey, { at: Date.now(), ttl: SUCCESS_TTL_MS, row: full });
-      return full;
-    }
+export function normalizeSort(sort: string | undefined): TcgSort {
+  if (sort === "price_highest" || sort === "price_lowest" || sort === "relevance") return sort;
+  return "relevance";
+}
+
+/** Vyhľadanie kariet, sealed produktov alebo sád. Jedna HTTP požiadavka. */
+export async function searchTcgRows(query: TcgCatalogQuery): Promise<Row[]> {
+  if (!rapidApiKey()) return [];
+  const search = (query.search ?? "").trim();
+  const episodeId = (query.episodeId ?? "").trim();
+  const cardNumber = (query.cardNumber ?? "").trim();
+  const sort = normalizeSort(query.sort);
+  const hasEpisode = /^\d{1,12}$/.test(episodeId);
+  if (search.length < 2 && !hasEpisode && cardNumber.length < 1) return [];
+
+  let path: string;
+  if (hasEpisode && search.length < 2 && !cardNumber) {
+    path = `/pokemon/episodes/${episodeId}/${query.kind}?sort=${sort}`;
+  } else {
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
+    if (hasEpisode) params.set("episode_id", episodeId);
+    if (query.kind === "cards" && cardNumber) params.set("card_number", cardNumber);
+    params.set("sort", sort);
+    path = `/pokemon/${query.kind}/search?${params.toString()}`;
   }
 
-  console.warn(`Pokemon API ${catalog} ${productId}: bez ceny, posledný status ${lastStatus || "chyba"} ${lastPath}`);
-  rowCache.set(cacheKey, { at: Date.now(), ttl: lastError ? ERROR_TTL_MS : MISS_TTL_MS, row: null });
-  return null;
+  const cacheKey = path;
+  const cached = listCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < cached.ttl) return cached.rows;
+
+  const read = await readRows(path);
+  noteAuth(read.failed);
+  if (read.failed) {
+    console.warn(`Pokemon API search ${query.kind}: status ${read.status || "chyba"}`);
+    return [];
+  }
+  const rows = read.rows.filter(isEnglishRow).slice(0, 20);
+  listCache.set(cacheKey, { at: Date.now(), ttl: SEARCH_TTL_MS, rows });
+  return rows;
+}
+
+export async function searchTcgEpisodes(search: string): Promise<Row[]> {
+  const q = search.trim();
+  if (q.length < 2 || !rapidApiKey()) return [];
+  const path = `/pokemon/episodes/search?search=${encodeURIComponent(q)}`;
+  const cached = listCache.get(path);
+  if (cached && Date.now() - cached.at < cached.ttl) return cached.rows;
+  const read = await readRows(path);
+  noteAuth(read.failed);
+  if (read.failed) return [];
+  const rows = read.rows.filter(isEnglishRow).slice(0, 20);
+  listCache.set(path, { at: Date.now(), ttl: SEARCH_TTL_MS, rows });
+  return rows;
 }
 
 /** Anglická Cardmarket cena v EUR. `low: null` znamená, že táto cena v produkte nie je. */
 export async function fetchRapidCardmarketPrice(
   productId: string,
   request: RapidPriceKind,
-  _productName?: string | null,
-  _cardNumber?: string | null,
 ): Promise<RapidPriceResult> {
   const id = productId.trim();
   if (!/^\d{1,12}$/.test(id)) return { status: "unavailable" };
   if (!rapidApiKey()) {
     if (!missingKeyLogged) {
       missingKeyLogged = true;
-      console.warn(
-        "RAPIDAPI_KEY chýba. Raw a sealed berú denný Cardmarket cenník, graded ostáva na nákupnej cene.",
-      );
+      console.warn("RAPIDAPI_KEY chýba. Pokémon položky ostávajú na nákupnej cene.");
     }
     return { status: "unconfigured" };
   }

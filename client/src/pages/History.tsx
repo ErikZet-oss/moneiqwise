@@ -128,6 +128,9 @@ export default function History() {
   const historyIsPokemon = !isAllPortfolios && isPokemonPortfolio(selectedPortfolio?.brokerCode);
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [tickerFilter, setTickerFilter] = useState<string>("all");
+  const [catalogFilter, setCatalogFilter] = useState<"all" | "cards" | "products">("all");
+  const [catalogQuery, setCatalogQuery] = useState("");
+  const [setQuery, setSetQuery] = useState("");
   const [idFilter, setIdFilter] = useState<string>("");
   const [sortField, setSortField] = useState<SortField>("transactionDate");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -157,6 +160,9 @@ export default function History() {
   /** Pri zmene portfólia v bočnom paneli zrušiť filter „Akcia“, aby neostal napr. len AAPL v inom portfóliu. */
   useEffect(() => {
     setTickerFilter("all");
+    setCatalogFilter("all");
+    setCatalogQuery("");
+    setSetQuery("");
   }, [portfolioParam]);
 
   useEffect(() => {
@@ -426,9 +432,20 @@ export default function History() {
         if (typeFilter !== "all" && t.type !== typeFilter) return false;
         if (tickerFilter !== "all" && t.ticker !== tickerFilter) return false;
         if (idFilter && !t.id.toLowerCase().includes(idFilter.toLowerCase())) return false;
+        if (historyIsPokemon) {
+          if (catalogFilter === "cards" && t.tcgCategory === "SEALED_PRODUCT") return false;
+          if (catalogFilter === "products" && t.tcgCategory !== "SEALED_PRODUCT") return false;
+          const q = catalogQuery.trim().toLowerCase();
+          if (q) {
+            const hay = [t.tcgProductName, t.companyName, t.tcgCardmarketId, t.ticker].filter(Boolean).join(" ").toLowerCase();
+            if (!hay.includes(q)) return false;
+          }
+          const setNeedle = setQuery.trim().toLowerCase();
+          if (setNeedle && !(t.tcgSetName ?? "").toLowerCase().includes(setNeedle)) return false;
+        }
         return true;
       }),
-    [transactions, typeFilter, tickerFilter, idFilter],
+    [transactions, typeFilter, tickerFilter, idFilter, historyIsPokemon, catalogFilter, catalogQuery, setQuery],
   );
 
   const sortedTransactions = useMemo(() => {
@@ -863,6 +880,7 @@ export default function History() {
               </Select>
             </div>
 
+            {!historyIsPokemon && (
             <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2 md:flex-row">
               <span className="text-sm text-muted-foreground shrink-0">Akcia</span>
               <Select value={tickerFilter} onValueChange={setTickerFilter}>
@@ -879,6 +897,45 @@ export default function History() {
                 </SelectContent>
               </Select>
             </div>
+            )}
+
+            {historyIsPokemon && (
+              <>
+                <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2 md:flex-row">
+                  <span className="text-sm text-muted-foreground shrink-0">Katalóg</span>
+                  <Select value={catalogFilter} onValueChange={(value) => setCatalogFilter(value as "all" | "cards" | "products")}>
+                    <SelectTrigger className="w-full md:w-[160px]" data-testid="select-pokemon-catalog-filter">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Karty aj produkty</SelectItem>
+                      <SelectItem value="cards">Karty</SelectItem>
+                      <SelectItem value="products">Sealed produkty</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2 md:flex-row">
+                  <span className="text-sm text-muted-foreground shrink-0">Hľadať</span>
+                  <Input
+                    value={catalogQuery}
+                    onChange={(e) => setCatalogQuery(e.target.value)}
+                    placeholder="názov alebo Cardmarket id"
+                    className="w-full md:w-[220px]"
+                    data-testid="input-pokemon-history-search"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2 md:flex-row">
+                  <span className="text-sm text-muted-foreground shrink-0">Sada</span>
+                  <Input
+                    value={setQuery}
+                    onChange={(e) => setSetQuery(e.target.value)}
+                    placeholder="napr. 30th Celebration"
+                    className="w-full md:w-[200px]"
+                    data-testid="input-pokemon-history-set"
+                  />
+                </div>
+              </>
+            )}
 
             <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2 md:flex-row">
               <span className="text-sm text-muted-foreground shrink-0">Zoradiť</span>

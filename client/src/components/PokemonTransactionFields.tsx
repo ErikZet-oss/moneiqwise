@@ -25,10 +25,13 @@ type Props = {
   onPositionChange: (position: PokemonFormPosition | null) => void;
 };
 
-function formatLow(card: PokemonCardHit): string {
-  if (card.euLowEur == null) return "EN low nie je v ponukách";
-  const price = `${card.euLowEur.toFixed(2)} €`;
-  return card.lowLanguage === "en" ? `EN low ${price}` : `Low ${price} (všetky jazyky)`;
+function formatLow(card: PokemonCardHit, graded: boolean): string {
+  if (graded) {
+    if (card.gradePriceEur == null) return "Cena stupňa v API nie je";
+    return `${card.gradePriceEur.toFixed(2)} €`;
+  }
+  if (card.euLowEur == null) return "Anglická cena v API nie je";
+  return `${card.euLowEur.toFixed(2)} €`;
 }
 
 function useDebounce<T>(value: T, delay: number): T {
@@ -39,6 +42,14 @@ function useDebounce<T>(value: T, delay: number): T {
   }, [value, delay]);
   return debouncedValue;
 }
+
+type EpisodeHit = { id: string; name: string; code: string };
+
+const SORTS = [
+  { id: "relevance", label: "Relevancia" },
+  { id: "price_highest", label: "Najdrahšie" },
+  { id: "price_lowest", label: "Najlacnejšie" },
+] as const;
 
 const CATEGORIES: { id: PokemonTcgCategory; label: string }[] = [
   { id: "RAW_CARD", label: "Raw" },
@@ -57,18 +68,46 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
   const [gradeCompany, setGradeCompany] = useState("PSA");
   const [gradeValue, setGradeValue] = useState("10");
   const [certNumber, setCertNumber] = useState("");
-  const debouncedQuery = useDebounce(query, 300);
+  const [sort, setSort] = useState<(typeof SORTS)[number]["id"]>("relevance");
+  const [cardNumber, setCardNumber] = useState("");
+  const [episodeQuery, setEpisodeQuery] = useState("");
+  const [episode, setEpisode] = useState<EpisodeHit | null>(null);
+  const debouncedQuery = useDebounce(query, 400);
+  const debouncedEpisode = useDebounce(episodeQuery, 400);
+  const debouncedNumber = useDebounce(cardNumber, 400);
   const isSealed = category === "SEALED_PRODUCT";
-  const searchPath = isSealed ? "/api/pokemon/sealed/search" : "/api/pokemon/search";
+  const isGraded = category === "GRADED_CARD";
+  const canSearch = debouncedQuery.trim().length >= 2 || Boolean(episode) || (!isSealed && debouncedNumber.trim().length >= 1);
+
+  const { data: episodes } = useQuery<EpisodeHit[]>({
+    queryKey: ["/api/pokemon/episodes", debouncedEpisode],
+    queryFn: async () => {
+      const res = await fetch(`/api/pokemon/episodes?q=${encodeURIComponent(debouncedEpisode)}`);
+      if (!res.ok) throw new Error("episodes failed");
+      return res.json();
+    },
+    enabled: debouncedEpisode.trim().length >= 2 && !episode,
+  });
 
   const { data: cards, isLoading, isError } = useQuery<PokemonCardHit[]>({
-    queryKey: [searchPath, debouncedQuery],
+    queryKey: ["/api/pokemon/search", isSealed ? "products" : "cards", debouncedQuery, episode?.id ?? "", debouncedNumber, sort, isGraded ? gradeCompany : "", isGraded ? gradeValue : ""],
     queryFn: async () => {
-      const res = await fetch(`${searchPath}?q=${encodeURIComponent(debouncedQuery)}`);
+      const params = new URLSearchParams({
+        kind: isSealed ? "products" : "cards",
+        q: debouncedQuery.trim(),
+        sort,
+      });
+      if (episode) params.set("episodeId", episode.id);
+      if (!isSealed && debouncedNumber.trim()) params.set("cardNumber", debouncedNumber.trim());
+      if (isGraded) {
+        params.set("gradeCompany", gradeCompany);
+        params.set("gradeValue", gradeValue);
+      }
+      const res = await fetch(`/api/pokemon/search?${params.toString()}`);
       if (!res.ok) throw new Error("search failed");
       return res.json();
     },
-    enabled: debouncedQuery.trim().length >= 2,
+    enabled: canSearch,
   });
 
   useEffect(() => {
@@ -125,8 +164,8 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
       <div>
         <p className="text-sm font-medium">Pokémon TCG</p>
         <p className="text-xs text-muted-foreground mt-1">
-          Nákupná cena je to, čo ste zaplatili v EUR. Hodnota v prehľade je Cardmarket v EUR: anglický Near Mint
-          pre raw a sealed, a cena daného stupňa pre graded.
+          Nákupná cena je to, čo ste zaplatili v EUR. Hodnota v prehľade je anglický Cardmarket z TCG API:
+          Near Mint pre raw, lowest pre sealed a cena stupňa pre graded.
         </p>
       </div>
 
@@ -142,6 +181,9 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
               setCategory(item.id);
               setSelected(null);
               setQuery("");
+              setCardNumber("");
+              setEpisode(null);
+              setEpisodeQuery("");
               setManualName("");
               setManualSet("");
               setManualImage("");
@@ -153,8 +195,67 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
         ))}
       </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label>Sada</Label>
+          <Input
+            value={episode ? `${episode.name}${episode.code ? ` (${episode.code})` : ""}` : episodeQuery}
+            onChange={(e) => {
+              setEpisode(null);
+              setEpisodeQuery(e.target.value);
+            }}
+            placeholder="napr. 30th Celebration"
+            data-testid="input-pokemon-episode"
+          />
+          {!episode && episodes && episodes.length > 0 && (
+            <div className="rounded-md border bg-background">
+              {episodes.slice(0, 6).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="block w-full px-3 py-1.5 text-left text-sm hover:bg-accent"
+                  onClick={() => {
+                    setEpisode(item);
+                    setEpisodeQuery("");
+                  }}
+                >
+                  {item.name}
+                  {item.code ? ` · ${item.code}` : ""}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="space-y-2">
+          <Label>Zoradiť</Label>
+          <Select value={sort} onValueChange={(value) => setSort(value as (typeof SORTS)[number]["id"])}>
+            <SelectTrigger data-testid="select-pokemon-sort">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SORTS.map((item) => (
+                <SelectItem key={item.id} value={item.id}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {!isSealed && (
+          <div className="space-y-2 sm:col-span-2">
+            <Label>Číslo karty</Label>
+            <Input
+              value={cardNumber}
+              onChange={(e) => setCardNumber(e.target.value)}
+              placeholder="napr. 125 alebo GG44"
+              data-testid="input-pokemon-card-number"
+            />
+          </div>
+        )}
+      </div>
+
       <div className="space-y-2">
-          <Label>{isSealed ? "Sealed z Cardmarketu" : "Karta z katalógu"}</Label>
+          <Label>{isSealed ? "Sealed produkt" : "Karta"}</Label>
           <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
               <Button
@@ -215,19 +316,19 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
                             {card.number ? ` · #${card.number}` : ""}
                           </span>
                           <span className="block text-xs tabular-nums">
-                            {category === "GRADED_CARD" ? "Cena sa doplní podľa stupňa" : formatLow(card)}
+                            {category === "GRADED_CARD" ? formatLow(card, true) : formatLow(card, false)}
                           </span>
                         </span>
                       </button>
                     ))}
                   </div>
                 )}
-                {!isLoading && debouncedQuery.trim().length >= 2 && cards && cards.length === 0 && (
+                {!isLoading && canSearch && cards && cards.length === 0 && (
                   <p className="p-3 text-sm text-muted-foreground">
                     Nič sa nenašlo. Skúste kratší názov alebo zadajte položku ručne.
                   </p>
                 )}
-                {debouncedQuery.trim().length < 2 && (
+                {!canSearch && (
                   <p className="p-3 text-sm text-muted-foreground">Zadajte aspoň 2 znaky.</p>
                 )}
               </ScrollArea>
@@ -242,7 +343,7 @@ export function PokemonTransactionFields({ onPositionChange }: Props) {
                 <p className="font-medium truncate">{selected.name}</p>
                 <p className="text-xs text-muted-foreground truncate">{selected.setName}</p>
                 <p className="text-xs tabular-nums">
-                  {category === "GRADED_CARD" ? "Cena sa doplní podľa stupňa" : formatLow(selected)}
+                  {formatLow(selected, category === "GRADED_CARD")}
                 </p>
                 <button type="button" className="text-xs text-primary hover:underline" onClick={clearCard}>
                   Zadať iný názov ručne

@@ -4,9 +4,8 @@
  * ale žijú len v portfóliu s brokerom `pokemon`. Evidujú sa len nákupy a predaje,
  * bez vkladov, výberov a hotovostného účtu. Akciový systém sa ich netýka.
  *
- * Trhová cena je Cardmarket v EUR cez Pokémon TCG API.
- * Raw a sealed sú anglický Near Mint. Graded je cena daného stupňa, nie raw low.
- * Obrázok karty (aj graded) ide z TCGdex.
+ * Trhová cena je anglický Cardmarket v EUR cez CardMarket API TCG.
+ * Raw je Near Mint, sealed je lowest anglického produktu, graded je cena stupňa.
  */
 
 export const POKEMON_PORTFOLIO_BROKER = "pokemon" as const;
@@ -56,10 +55,12 @@ export type PokemonCardHit = {
   number: string;
   imageUrl: string | null;
   euLowEur: number | null;
-  /** `en` = anglický Near Mint. `any` = denný cenník cez všetky jazyky. */
+  /** `en` = anglická Cardmarket cena z TCGGO. */
   lowLanguage: "en" | "any" | null;
   cardmarketUrl: string | null;
   cardmarketId: string | null;
+  episodeId?: string | null;
+  gradePriceEur?: number | null;
 };
 
 export function isPokemonPortfolio(brokerCode: string | null | undefined): boolean {
@@ -123,10 +124,22 @@ export function isSealedPokemonHolding(holding: {
   return holding.tcgCategory === "SEALED_PRODUCT" || pokemonCardmarketProductId(holding.ticker) != null;
 }
 
-/** Cardmarket idProduct zo sealed tickera `PTCG:CM895551`. */
+/** Cardmarket id zo sealed tickera `PTCG:CM895551`. */
 export function pokemonCardmarketProductId(ticker: string | null | undefined): string | null {
-  const match = /^PTCG:CM(\d{1,12})$/.exec((ticker ?? "").trim().toUpperCase());
-  return match?.[1] ?? null;
+  const ref = pokemonCatalogRef(ticker);
+  return ref?.kind === "product" ? ref.id : null;
+}
+
+/** `PTCG:CM895551` je sealed, `PTCG:CD691924` a `PTCG:CD691924:PSA10` sú karty. */
+export function pokemonCatalogRef(
+  ticker: string | null | undefined,
+): { kind: "card" | "product"; id: string } | null {
+  const u = (ticker ?? "").trim().toUpperCase().replace(GRADE_TAIL, "");
+  const product = /^PTCG:CM(\d{1,12})$/.exec(u);
+  if (product?.[1]) return { kind: "product", id: product[1] };
+  const card = /^PTCG:CD(\d{1,12})$/.exec(u);
+  if (card?.[1]) return { kind: "card", id: card[1] };
+  return null;
 }
 
 export function isPokemonTcgCategory(value: string | null | undefined): value is PokemonTcgCategory {
@@ -177,6 +190,7 @@ export function pokemonDisplayName(input: {
 
 export function buildPokemonTicker(input: {
   category: PokemonTcgCategory;
+  cardmarketId?: string | null;
   externalId?: string | null;
   gradeCompany?: string | null;
   gradeValue?: string | null;
@@ -188,8 +202,9 @@ export function buildPokemonTicker(input: {
     graded && input.gradeCompany && input.gradeValue
       ? `:${input.gradeCompany}${input.gradeValue}`.replace(/\s+/g, "").toUpperCase()
       : "";
+  const cm = (input.cardmarketId ?? "").trim();
   const ext = (input.externalId ?? "").trim().toUpperCase().replace(/[^A-Z0-9.-]/g, "");
-  let body = ext;
+  let body = /^\d{1,12}$/.test(cm) ? `${input.category === "SEALED_PRODUCT" ? "CM" : "CD"}${cm}` : ext;
   if (!body) {
     body =
       "M" +
@@ -276,6 +291,7 @@ export function buildPokemonPosition(input: PokemonPositionInput): PokemonPositi
   const imageUrl = cleanHttpsUrl(input.imageUrl);
   const ticker = buildPokemonTicker({
     category,
+    cardmarketId,
     externalId,
     gradeCompany,
     gradeValue,

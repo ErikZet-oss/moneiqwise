@@ -26,10 +26,8 @@ import {
   CASH_INTEREST_TICKER,
 } from "@shared/tickerCurrency";
 import { isPhysicalMetalTicker, isPhysicalSilverTicker } from "@shared/physicalMetal";
-import { buildPokemonPosition, isPokemonGroupTicker, isPokemonPortfolio, isPokemonTicker, isSealedPokemonHolding, pokemonGradeFromTicker, pokemonTcgdexCardId } from "@shared/pokemonTcg";
-import { findSealedProductImage } from "./sealedProductImage";
-import { fetchPokemonEuLowQuote, fetchTcgdexImage, fetchTcgdexImageByName, searchPokemonCards } from "./pokemonTcgClient";
-import { searchSealedProducts } from "./cardmarketSealed";
+import { buildPokemonPosition, isPokemonPortfolio, isPokemonTicker, pokemonGradeFromTicker } from "@shared/pokemonTcg";
+import { fetchPokemonEuLowQuote, searchPokemonCatalog, searchPokemonEpisodes } from "./pokemonTcgClient";
 import {
   enrichHoldingsWithCostCurrency,
   inferHoldingCostCurrency,
@@ -348,7 +346,7 @@ async function fetchPhysicalMetalQuote(ticker: string): Promise<any> {
 const CACHE_DIR = path.join(process.cwd(), ".cache");
 const CACHE_FILE = path.join(CACHE_DIR, "prices.json");
 /** Bump when quote shape/source changes — invalidates stale on-disk quote cache. */
-const QUOTE_CACHE_VERSION = 20;
+const QUOTE_CACHE_VERSION = 21;
 
 function isUsExtendedSessionNow(): boolean {
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -3593,43 +3591,6 @@ export async function registerRoutes(
         console.warn("Pokemon holdings ensure skipped:", error);
       }
       const userHoldings = await storage.getHoldingsByUser(userId, portfolioId);
-      const missingImages = userHoldings.filter((row) => {
-        if (row.tcgImageUrl || isPokemonGroupTicker(row.ticker)) return false;
-        return isPokemonTicker(row.ticker) || isSealedPokemonHolding(row);
-      });
-      const imageQueue = [...missingImages];
-      if (imageQueue.length > 0) {
-        const fillImages = Promise.all(
-          Array.from({ length: Math.min(4, imageQueue.length) }, async () => {
-            while (imageQueue.length > 0) {
-              const row = imageQueue.shift();
-              if (!row) return;
-              try {
-                const cardId =
-                  pokemonTcgdexCardId(row.ticker) ||
-                  pokemonTcgdexCardId(row.tcgExternalId ? `PTCG:${row.tcgExternalId}` : null);
-                const productName = row.tcgProductName || row.companyName || "";
-                let url: string | null = null;
-                if (cardId && !isSealedPokemonHolding(row)) {
-                  url = await fetchTcgdexImage(cardId);
-                }
-                if (!url && isSealedPokemonHolding(row)) {
-                  url = await findSealedProductImage(productName);
-                }
-                if (!url && (row.tcgCategory === "GRADED_CARD" || row.tcgCategory === "RAW_CARD")) {
-                  url = await fetchTcgdexImageByName(productName, row.tcgSetName);
-                }
-                if (!url) continue;
-                row.tcgImageUrl = url;
-                await storage.setHoldingTcgImageUrl(userId, row.ticker, url);
-              } catch (error) {
-                console.warn(`Pokemon image skipped for ${row.ticker}:`, error);
-              }
-            }
-          }),
-        );
-        await fillImages;
-      }
       const txns = await storage.getTransactionsByUser(userId, portfolioId ?? "all");
       const rates = await fetchAllExchangeRates();
       const eurM = await buildEurPerUnitByTxnIdForTransactions(txns);
@@ -3876,14 +3837,12 @@ export async function registerRoutes(
         priceNote: isPokemonTicker(displayTicker)
           ? !quote
             ? "Cardmarket cena v EUR sa nenašla — hodnota ostáva na nákupnej cene."
-            : quote.priceLanguage === "en"
-              ? (() => {
-                  const grade = pokemonGradeFromTicker(displayTicker);
-                  return grade
-                    ? `Cardmarket, ${grade.company} ${grade.grade}`
-                    : "Cardmarket Near Mint, anglická verzia";
-                })()
-              : "Cardmarket low v EUR, denný cenník cez všetky jazyky."
+            : (() => {
+                const grade = pokemonGradeFromTicker(displayTicker);
+                return grade
+                  ? `Cardmarket, ${grade.company} ${grade.grade}`
+                  : "Cardmarket, anglická verzia";
+              })()
           : null,
         costCurrency: inferHoldingCostCurrency(displayTicker, txRows),
         positions,
@@ -4403,22 +4362,47 @@ export async function registerRoutes(
   app.get("/api/pokemon/search", isAuthenticated, async (req: any, res) => {
     try {
       const q = typeof req.query.q === "string" ? req.query.q : "";
-      const results = await searchPokemonCards(q);
+      const kind = req.query.kind === "products" ? "products" : "cards";
+      const episodeId = typeof req.query.episodeId === "string" ? req.query.episodeId : "";
+      const cardNumber = typeof req.query.cardNumber === "string" ? req.query.cardNumber : "";
+      const sort = typeof req.query.sort === "string" ? req.query.sort : "relevance";
+      const gradeCompany = typeof req.query.gradeCompany === "string" ? req.query.gradeCompany : "";
+      const gradeValue = typeof req.query.gradeValue === "string" ? req.query.gradeValue : "";
+      const results = await searchPokemonCatalog({
+        kind,
+        search: q,
+        episodeId,
+        cardNumber,
+        sort,
+        gradeCompany,
+        gradeValue,
+      });
       res.json(results);
     } catch (error) {
-      console.error("Error searching Pokemon cards:", error);
-      res.status(500).json({ message: "Nepodarilo sa vyhľadať Pokémon karty." });
+      console.error("Error searching Pokemon catalog:", error);
+      res.status(500).json({ message: "Nepodarilo sa vyhľadať položky v TCG API." });
+    }
+  });
+
+  app.get("/api/pokemon/episodes", isAuthenticated, async (req: any, res) => {
+    try {
+      const q = typeof req.query.q === "string" ? req.query.q : "";
+      const results = await searchPokemonEpisodes(q);
+      res.json(results);
+    } catch (error) {
+      console.error("Error searching Pokemon episodes:", error);
+      res.status(500).json({ message: "Nepodarilo sa vyhľadať sady v TCG API." });
     }
   });
 
   app.get("/api/pokemon/sealed/search", isAuthenticated, async (req: any, res) => {
     try {
       const q = typeof req.query.q === "string" ? req.query.q : "";
-      const results = await searchSealedProducts(q);
+      const results = await searchPokemonCatalog({ kind: "products", search: q });
       res.json(results);
     } catch (error) {
       console.error("Error searching sealed Pokemon products:", error);
-      res.status(500).json({ message: "Nepodarilo sa vyhľadať sealed produkty na Cardmarkete." });
+      res.status(500).json({ message: "Nepodarilo sa vyhľadať sealed produkty v TCG API." });
     }
   });
 
