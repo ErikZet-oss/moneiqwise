@@ -129,7 +129,16 @@ function quoteFromLow(ticker: string, low: number): PokemonEuLowQuote {
   };
 }
 
-async function storedCatalog(ticker: string): Promise<{ kind: "card" | "product"; id: string; source: "cardmarket"; name: string | null } | null> {
+type StoredCatalog = {
+  kind: "card" | "product";
+  id: string;
+  source: "cardmarket";
+  name: string | null;
+  setName: string | null;
+  externalId: string | null;
+};
+
+async function storedCatalog(ticker: string): Promise<StoredCatalog | null> {
   const upper = ticker.trim().toUpperCase();
   const holding = await db
     .select({
@@ -137,11 +146,13 @@ async function storedCatalog(ticker: string): Promise<{ kind: "card" | "product"
       category: holdings.tcgCategory,
       name: holdings.tcgProductName,
       company: holdings.companyName,
+      setName: holdings.tcgSetName,
+      externalId: holdings.tcgExternalId,
     })
     .from(holdings)
     .where(sql`upper(${holdings.ticker}) = ${upper}`)
     .limit(1);
-  const fromHolding = catalogFromStored(holding[0]?.id, holding[0]?.category, holding[0]?.name || holding[0]?.company);
+  const fromHolding = catalogFromStored(holding[0]);
   if (fromHolding) return fromHolding;
   const tx = await db
     .select({
@@ -149,22 +160,38 @@ async function storedCatalog(ticker: string): Promise<{ kind: "card" | "product"
       category: transactions.tcgCategory,
       name: transactions.tcgProductName,
       company: transactions.companyName,
+      setName: transactions.tcgSetName,
+      externalId: transactions.tcgExternalId,
     })
     .from(transactions)
     .where(sql`upper(${transactions.ticker}) = ${upper}`)
     .limit(1);
-  return catalogFromStored(tx[0]?.id, tx[0]?.category, tx[0]?.name || tx[0]?.company);
+  return catalogFromStored(tx[0]);
 }
 
 function catalogFromStored(
-  id: string | null | undefined,
-  category: string | null | undefined,
-  name: string | null | undefined,
-): { kind: "card" | "product"; id: string; source: "cardmarket"; name: string | null } | null {
-  const clean = (id ?? "").trim();
+  row:
+    | {
+        id: string | null;
+        category: string | null;
+        name: string | null;
+        company: string | null;
+        setName: string | null;
+        externalId: string | null;
+      }
+    | undefined,
+): StoredCatalog | null {
+  const clean = (row?.id ?? "").trim();
   if (!/^\d{1,12}$/.test(clean)) return null;
-  const productName = (name ?? "").split("·")[0]?.trim() || null;
-  return { id: clean, kind: category === "SEALED_PRODUCT" ? "product" : "card", source: "cardmarket", name: productName };
+  const productName = (row?.name || row?.company || "").split("·")[0]?.trim() || null;
+  return {
+    id: clean,
+    kind: row?.category === "SEALED_PRODUCT" ? "product" : "card",
+    source: "cardmarket",
+    name: productName,
+    setName: row?.setName?.trim() || null,
+    externalId: row?.externalId?.trim() || null,
+  };
 }
 
 async function priceByProductName(name: string, request: RapidPriceKind): Promise<number | null> {
@@ -179,7 +206,7 @@ async function priceByProductName(name: string, request: RapidPriceKind): Promis
   const exact = rows.find((row) => text(row.name).toLowerCase() === wanted);
   const pool = exact ? [exact] : named;
   for (const row of pool) {
-    const price = request.kind === "graded" ? gradedEur(row, request.company, request.grade) : nearMintEur(row, request.kind === "sealed" ? "sealed" : "raw");
+    const price = nearMintEur(row, request.kind === "sealed" ? "sealed" : "raw");
     if (price != null) return price;
   }
   return null;
@@ -187,21 +214,18 @@ async function priceByProductName(name: string, request: RapidPriceKind): Promis
 
 /**
  * Anglická Cardmarket cena v EUR z TCGGO.
- * Raw je Near Mint, sealed je lowest anglického produktu, graded je cena stupňa.
- * Keď API cenu nevráti, kotácia ostane prázdna a prehľad drží nákupnú cenu.
+ * Raw je Near Mint, sealed je lowest anglického produktu.
+ * Graded súhrn z API nie je živá ponuka, preto kotácia ostane prázdna a prehľad drží nákupnú cenu.
  */
 export async function fetchPokemonEuLowQuote(ticker: string): Promise<PokemonEuLowQuote | null> {
   const grade = pokemonGradeFromTicker(ticker);
+  // Súhrnné graded.psa.psa10 nie je najlacnejší živý listing. Mewtwo GG44: API 324 €, Cardmarket od 600 €.
+  if (grade) return null;
   const fromTicker = pokemonCatalogRef(ticker);
   const stored = fromTicker ? null : await storedCatalog(ticker);
   const ref = fromTicker ?? stored;
   if (!ref) return null;
-  if (grade && ref.kind !== "card") return null;
-  const request: RapidPriceKind = grade
-    ? { kind: "graded", company: grade.company, grade: grade.grade }
-    : ref.kind === "product"
-      ? { kind: "sealed" }
-      : { kind: "raw" };
+  const request: RapidPriceKind = ref.kind === "product" ? { kind: "sealed" } : { kind: "raw" };
   const live = await fetchRapidCardmarketPrice(ref.id, request, ref.source);
   if (live.status === "ok" && live.low != null) return quoteFromLow(ticker, live.low);
   if (ref.source === "cardmarket" && request.kind === "sealed") {
