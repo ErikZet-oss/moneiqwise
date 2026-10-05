@@ -348,7 +348,7 @@ async function fetchPhysicalMetalQuote(ticker: string): Promise<any> {
 const CACHE_DIR = path.join(process.cwd(), ".cache");
 const CACHE_FILE = path.join(CACHE_DIR, "prices.json");
 /** Bump when quote shape/source changes — invalidates stale on-disk quote cache. */
-const QUOTE_CACHE_VERSION = 17;
+const QUOTE_CACHE_VERSION = 18;
 
 function isUsExtendedSessionNow(): boolean {
   const parts = new Intl.DateTimeFormat("en-GB", {
@@ -2007,7 +2007,7 @@ async function fetchStockQuote(ticker: string, skipCache = false): Promise<any> 
   const pokemonNeedsRapid =
     isPokemonTicker(ticker) &&
     Boolean(process.env.RAPIDAPI_KEY?.trim()) &&
-    (cached?.data?.rapidChecked !== true || cached?.data?.priceLanguage === "any");
+    cached?.data?.rapidChecked !== true;
   if (!skipCache && cached && !pokemonNeedsRapid && Date.now() - cached.timestamp < quoteCacheTtl) {
     // Backward compatibility: older cache entries may miss newer fields.
     // If any required field is missing, force fresh fetch to avoid stale/zero metrics.

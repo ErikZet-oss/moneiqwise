@@ -1,6 +1,6 @@
 import type { PokemonCardHit } from "@shared/pokemonTcg";
 import { pokemonCardmarketProductId, pokemonGradeFromTicker, pokemonTcgdexCardId } from "@shared/pokemonTcg";
-import { fetchSealedEuLow, sealedProductName } from "./cardmarketSealed";
+import { fetchSealedEuLow } from "./cardmarketSealed";
 import { fetchRapidCardmarketPrice } from "./rapidPokemonPrices";
 
 const TCGDEX = "https://api.tcgdex.net/v2/en/cards";
@@ -212,11 +212,10 @@ async function loadTcgdexCard(cardId: string): Promise<TcgdexCard | null> {
 export async function fetchPokemonEuLowQuote(ticker: string): Promise<PokemonEuLowQuote | null> {
   const sealedId = pokemonCardmarketProductId(ticker);
   if (sealedId) {
-    const name = await sealedProductName(sealedId).catch(() => null);
-    const live = await fetchRapidCardmarketPrice(sealedId, { kind: "sealed" }, name);
+    const live = await fetchRapidCardmarketPrice(sealedId, { kind: "sealed" });
     if (live.status === "ok" && live.low != null) return quoteFromLow(ticker, live.low, "en", true);
     const guide = await fetchSealedEuLow(sealedId);
-    return guide == null ? null : quoteFromLow(ticker, guide.price, "any", false);
+    return guide == null ? null : quoteFromLow(ticker, guide.price, "any", live.status !== "unconfigured");
   }
   const cardId = pokemonTcgdexCardId(ticker);
   if (!cardId) return null;
@@ -238,7 +237,7 @@ export async function fetchPokemonEuLowQuote(ticker: string): Promise<PokemonEuL
   if (typeof productId === "number") {
     const live = await fetchRapidCardmarketPrice(String(productId), { kind: "raw" }, card.name, card.localId);
     if (live.status === "ok" && live.low != null) return quoteFromLow(ticker, live.low, "en", true);
-    return guide == null ? null : quoteFromLow(ticker, guide, "any", false);
+    return guide == null ? null : quoteFromLow(ticker, guide, "any", live.status !== "unconfigured");
   }
   return guide == null ? null : quoteFromLow(ticker, guide, "any", false);
 }
