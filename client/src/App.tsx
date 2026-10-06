@@ -31,6 +31,7 @@ import FaqPage from "@/pages/FaqPage";
 import AdminRegistrations from "@/pages/AdminRegistrations";
 import { MarketQuoteTicker } from "@/components/MarketQuoteTicker";
 import { QuickNavFab, QUICK_NAV_CONTENT_PAD } from "@/components/QuickNavFab";
+import { DashboardEditHeaderButton } from "@/components/DashboardEditHeaderButton";
 import { useQuickNavFab } from "@/hooks/useQuickNavFab";
 import { cn } from "@/lib/utils";
 
@@ -137,6 +138,7 @@ function AuthenticatedLayout() {
               <header className="flex items-center gap-1.5 px-3 py-2 md:gap-2 md:p-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                 <SidebarTrigger data-testid="button-sidebar-toggle" />
                 <div className="flex-1" />
+                <DashboardEditHeaderButton />
               </header>
               <main
                 className={cn(

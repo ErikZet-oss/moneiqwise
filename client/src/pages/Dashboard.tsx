@@ -57,8 +57,6 @@ import {
   ChevronRight,
   LayoutList,
   ArrowDownUp,
-  Pencil,
-  Check,
 } from "lucide-react";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio, type Portfolio } from "@/hooks/usePortfolio";
@@ -803,11 +801,9 @@ export default function Dashboard() {
     order: dashboardOrder,
     visible: dashboardVisible,
     editing: dashboardEditing,
-    setEditing: setDashboardEditing,
     isVisible: isDashboardWidgetVisible,
     toggleVisible: toggleDashboardWidget,
     reorder: reorderDashboardWidgets,
-    resetLayout: resetDashboardLayout,
   } = useDashboardLayout();
   const isMobileViewport = useIsMobile();
   const dashboardDnDSensors = useSensors(
@@ -2153,58 +2149,11 @@ export default function Dashboard() {
         </DialogContent>
       </Dialog>
 
-      <div
-        className="flex items-center justify-between gap-2 sticky top-0 z-20 -mx-1 px-1 py-1 bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/75"
-        data-testid="dashboard-edit-toolbar"
-      >
-        <div className="min-w-0">
-          {dashboardEditing ? (
-            <p className="text-xs text-muted-foreground truncate">
-              Upravte widgety — oko skryje/zobrazí, ťahaním zmeňte poradie.
-            </p>
-          ) : (
-            <span className="sr-only">Prehľad</span>
-          )}
-        </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          {dashboardEditing ? (
-            <>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 text-xs"
-                onClick={resetDashboardLayout}
-                data-testid="button-dashboard-reset-layout"
-              >
-                Predvolené
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                className="h-8 gap-1.5"
-                onClick={() => setDashboardEditing(false)}
-                data-testid="button-dashboard-edit-done"
-              >
-                <Check className="h-3.5 w-3.5" />
-                Hotovo
-              </Button>
-            </>
-          ) : (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => setDashboardEditing(true)}
-              aria-label="Upraviť prehľad"
-              data-testid="button-dashboard-edit"
-            >
-              <Pencil className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
-      </div>
+      {dashboardEditing && (
+        <p className="text-[11px] text-muted-foreground px-0.5 -mt-1 mb-0.5" data-testid="dashboard-edit-hint">
+          Oko skryje/zobrazí widget, ťahaním zmeňte poradie.
+        </p>
+      )}
 
       <DndContext
         sensors={dashboardDnDSensors}

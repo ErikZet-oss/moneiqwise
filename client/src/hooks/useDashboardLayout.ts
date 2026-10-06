@@ -80,10 +80,11 @@ function syncChartSettingsVisibility(layout: DashboardLayout) {
 
 export function useDashboardLayout() {
   const [layout, setLayout] = useState<DashboardLayout>(loadLayout);
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditingState] = useState(false);
 
   useEffect(() => {
     const onLayout = (e: CustomEvent<DashboardLayout>) => setLayout(e.detail);
+    const onEditing = (e: CustomEvent<boolean>) => setEditingState(e.detail === true);
     const onChart = (e: CustomEvent<Record<string, unknown>>) => {
       const d = e.detail;
       setLayout((prev) => {
@@ -117,11 +118,18 @@ export function useDashboardLayout() {
       });
     };
     window.addEventListener("dashboardLayoutChanged", onLayout as EventListener);
+    window.addEventListener("dashboardEditingChanged", onEditing as EventListener);
     window.addEventListener("chartSettingsChanged", onChart as EventListener);
     return () => {
       window.removeEventListener("dashboardLayoutChanged", onLayout as EventListener);
+      window.removeEventListener("dashboardEditingChanged", onEditing as EventListener);
       window.removeEventListener("chartSettingsChanged", onChart as EventListener);
     };
+  }, []);
+
+  const setEditing = useCallback((value: boolean) => {
+    setEditingState(value);
+    window.dispatchEvent(new CustomEvent("dashboardEditingChanged", { detail: value }));
   }, []);
 
   const commit = useCallback((next: DashboardLayout, syncChart = true) => {
