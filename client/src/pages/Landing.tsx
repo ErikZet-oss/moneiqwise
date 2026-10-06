@@ -8,11 +8,6 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useMemo, useState, useId, type FormEvent } from "react";
 import {
-  Area,
-  AreaChart,
-  ResponsiveContainer,
-} from "recharts";
-import {
   TrendingUp,
   BarChart3,
   PieChart,
@@ -62,8 +57,6 @@ const LANDING_BENEFITS: { Icon: LucideIcon; title: string; description: string }
   },
 ];
 
-const HERO_HIGHLIGHTS = LANDING_BENEFITS.slice(0, 4);
-
 function getPasswordStrength(password: string) {
   const checks = {
     minLength: password.length >= 8,
@@ -77,70 +70,64 @@ function getPasswordStrength(password: string) {
   return { checks, score, label };
 }
 
-/** Decorative portfolio-style curve for the login hero (static demo data). */
-function LandingHeroChart({ className }: { className?: string }) {
+/** Soft rising green stroke across the full landing backdrop (decorative only). */
+function LandingAmbientLine() {
   const uid = useId().replace(/:/g, "");
-  const fillId = `landingHeroFill-${uid}`;
-  const glowId = `landingHeroGlow-${uid}`;
-  const chartColor = "hsl(160 70% 52%)";
-  const data = useMemo(() => {
-    const points: { i: number; value: number }[] = [];
-    let v = 42;
-    for (let i = 0; i < 48; i++) {
-      const wave = Math.sin(i / 5.2) * 3.2 + Math.sin(i / 11) * 1.6;
-      const drift = i * 0.55;
-      v = 42 + drift + wave + (i > 30 ? (i - 30) * 0.35 : 0);
-      points.push({ i, value: Math.round(v * 100) / 100 });
+  const strokeId = `landingAmbientStroke-${uid}`;
+  const fillId = `landingAmbientFill-${uid}`;
+  const glowId = `landingAmbientGlow-${uid}`;
+  const path = useMemo(() => {
+    const w = 1200;
+    const h = 640;
+    const pts: string[] = [];
+    for (let i = 0; i <= 48; i++) {
+      const t = i / 48;
+      const x = t * w;
+      const wave = Math.sin(t * Math.PI * 2.1) * 38 + Math.sin(t * Math.PI * 5.4) * 14;
+      const y = h * 0.62 - t * h * 0.28 + wave;
+      pts.push(`${i === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`);
     }
-    return points;
+    return pts.join(" ");
   }, []);
 
   return (
-    <div className={className}>
-      <div className="relative h-full w-full min-h-[180px] overflow-hidden rounded-2xl border border-white/10 bg-black/25 backdrop-blur-[2px]">
-        <div className="landing-fade-grid opacity-60" aria-hidden />
-        <div className="absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-3 px-4 pt-3.5">
-          <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-white/45">Ukázka výkonu</p>
-            <p className="mt-0.5 text-sm font-semibold text-white/90 tabular-nums">+24,8 % YTD</p>
-          </div>
-          <div className="rounded-md bg-emerald-500/15 px-2 py-1 text-[10px] font-medium text-emerald-300 ring-1 ring-emerald-400/25">
-            Portfólio vs. trh
-          </div>
-        </div>
-        <div className="absolute inset-0 pt-12">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 4 }}>
-              <defs>
-                <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={chartColor} stopOpacity={0.4} />
-                  <stop offset="100%" stopColor={chartColor} stopOpacity={0} />
-                </linearGradient>
-                <filter id={glowId} x="-20%" y="-20%" width="140%" height="140%">
-                  <feGaussianBlur stdDeviation="2.4" result="coloredBlur" />
-                  <feMerge>
-                    <feMergeNode in="coloredBlur" />
-                    <feMergeNode in="SourceGraphic" />
-                  </feMerge>
-                </filter>
-              </defs>
-              <Area
-                type="monotone"
-                dataKey="value"
-                stroke={chartColor}
-                strokeWidth={2.25}
-                fill={`url(#${fillId})`}
-                style={{ filter: `url(#${glowId})` }}
-                isAnimationActive
-                animationDuration={900}
-                dot={false}
-                activeDot={false}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-    </div>
+    <svg
+      className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.55] blur-[1.5px]"
+      viewBox="0 0 1200 640"
+      preserveAspectRatio="xMidYMid slice"
+      aria-hidden
+    >
+      <defs>
+        <linearGradient id={strokeId} x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="hsl(160 70% 52%)" stopOpacity="0" />
+          <stop offset="18%" stopColor="hsl(160 70% 52%)" stopOpacity="0.55" />
+          <stop offset="55%" stopColor="hsl(160 75% 58%)" stopOpacity="0.85" />
+          <stop offset="82%" stopColor="hsl(160 70% 52%)" stopOpacity="0.45" />
+          <stop offset="100%" stopColor="hsl(160 70% 52%)" stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id={fillId} x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="hsl(160 70% 52%)" stopOpacity="0.18" />
+          <stop offset="100%" stopColor="hsl(160 70% 52%)" stopOpacity="0" />
+        </linearGradient>
+        <filter id={glowId} x="-10%" y="-40%" width="120%" height="180%">
+          <feGaussianBlur stdDeviation="6" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+      <path d={`${path} L 1200 640 L 0 640 Z`} fill={`url(#${fillId})`} opacity="0.7" />
+      <path
+        d={path}
+        fill="none"
+        stroke={`url(#${strokeId})`}
+        strokeWidth="2.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        filter={`url(#${glowId})`}
+      />
+    </svg>
   );
 }
 
@@ -291,65 +278,59 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen flex relative overflow-hidden">
-      {/* Left hero — brand, fading grid, chart */}
-      <div className="hidden lg:flex lg:w-[52%] relative flex-col justify-between overflow-hidden bg-[#070809] text-white p-10 xl:p-14">
-        <div
-          className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_20%_20%,hsl(160_45%_28%_/_0.22),transparent_55%),radial-gradient(ellipse_70%_50%_at_85%_75%,hsl(210_50%_30%_/_0.18),transparent_50%)]"
-          aria-hidden
-        />
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-sidebar text-sidebar-foreground flex-col justify-between p-12">
         <div className="landing-fade-grid" aria-hidden />
+        <LandingAmbientLine />
 
         <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-12">
-            <div className="p-2 rounded-lg bg-emerald-500/20 ring-1 ring-emerald-400/30">
-              <TrendingUp className="h-7 w-7 text-emerald-300" />
+          <div className="flex items-center gap-3 mb-16">
+            <div className="p-2 bg-primary rounded-lg">
+              <TrendingUp className="h-8 w-8 text-primary-foreground" />
             </div>
-            <span className="text-3xl font-bold tracking-tight">Moneiqwise</span>
+            <span className="text-3xl font-bold">Moneiqwise</span>
           </div>
 
-          <h1 className="text-4xl xl:text-[2.75rem] font-bold mb-4 leading-[1.15] tracking-tight">
+          <h1 className="text-4xl font-bold mb-6 leading-tight">
             Komplexný nástroj
             <br />
             pre správu investícií
           </h1>
-          <p className="text-base xl:text-lg text-white/60 max-w-md leading-relaxed">
-            Sledujte portfólio v reálnom čase. Analyzujte zisky, dividendy a výkonnosť na jednom mieste.
+          <p className="text-lg text-sidebar-foreground/70 mb-12">
+            Sledujte svoje portfólio v reálnom čase. Analyzujte zisky, dividendy a výkonnosť vašich
+            investícií.
           </p>
-        </div>
 
-        <LandingHeroChart className="relative z-10 my-8 h-[240px] xl:h-[280px] w-full max-w-xl" />
-
-        <div className="relative z-10 grid grid-cols-2 gap-3">
-          {HERO_HIGHLIGHTS.map(({ Icon, title, description }) => (
-            <div
-              key={title}
-              className="rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-3 backdrop-blur-[1px]"
-            >
-              <div className="flex items-center gap-2 mb-1.5">
-                <Icon className="h-4 w-4 text-emerald-300/90 shrink-0" />
-                <h3 className="text-sm font-semibold truncate">{title}</h3>
+          <div className="space-y-6">
+            {LANDING_BENEFITS.map(({ Icon, title, description }) => (
+              <div key={title} className="flex items-start gap-4">
+                <div className="p-2 bg-sidebar-accent rounded-lg">
+                  <Icon className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-1">{title}</h3>
+                  <p className="text-sm text-sidebar-foreground/60">{description}</p>
+                </div>
               </div>
-              <p className="text-[11px] text-white/50 leading-snug line-clamp-2">{description}</p>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Auth panel */}
-      <div className="flex-1 relative flex flex-col justify-start items-stretch bg-background px-4 pt-6 pb-12 sm:px-6 sm:pb-14 lg:items-center lg:justify-center lg:py-10 lg:px-8">
+      <div className="flex-1 relative flex flex-col justify-start items-stretch bg-background px-4 pt-6 pb-12 sm:px-6 sm:pb-14 lg:items-center lg:justify-center lg:py-10 lg:px-8 overflow-hidden">
         <div className="landing-fade-grid-soft" aria-hidden />
+        <div className="absolute inset-0 opacity-40 lg:opacity-50" aria-hidden>
+          <LandingAmbientLine />
+        </div>
 
         <div className="relative z-10 w-full max-w-md mx-auto">
-          <div className="lg:hidden flex items-center gap-3 mb-6 justify-center">
+          <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
             <div className="p-2 bg-primary rounded-lg">
               <TrendingUp className="h-6 w-6 text-primary-foreground" />
             </div>
             <span className="text-2xl font-bold tracking-tight">Moneiqwise</span>
           </div>
 
-          <LandingHeroChart className="lg:hidden mb-6 h-[160px] w-full" />
-
-          <Card className="border border-border/60 shadow-md bg-card/90 backdrop-blur-sm lg:border-border/50 lg:shadow-lg">
+          <Card className="border border-border/60 shadow-md bg-card/95 backdrop-blur-[2px] lg:border-0 lg:shadow-lg">
             <CardHeader className="text-center pb-2">
               <CardTitle className="text-2xl">Vitajte späť</CardTitle>
               <CardDescription>Prihláste sa alebo si vytvorte účet</CardDescription>
@@ -533,7 +514,7 @@ export default function Landing() {
             </CardContent>
           </Card>
 
-          <div className="lg:hidden mt-8 w-full">
+          <div className="lg:hidden mt-10 w-full">
             <div className="overflow-hidden rounded-2xl border border-border/50 bg-muted/25">
               <div className="border-b border-border/40 bg-muted/20 px-4 py-3.5">
                 <h2 className="text-base font-semibold leading-snug">Čo v aplikácii nájdeš</h2>
