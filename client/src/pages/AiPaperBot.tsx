@@ -646,7 +646,8 @@ function EquityAreaChart({
         </div>
       </div>
 
-      <div className="h-56 w-full min-w-0">
+      <div className="relative h-56 w-full min-w-0 overflow-hidden rounded-lg">
+        <div className="chart-fade-grid" aria-hidden />
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart
             data={points}
@@ -662,6 +663,7 @@ function EquityAreaChart({
               strokeDasharray="3 3"
               vertical={false}
               className="stroke-border/60"
+              opacity={0.4}
             />
             <XAxis
               dataKey="t"

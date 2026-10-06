@@ -834,7 +834,8 @@ export default function Dividends() {
             };
             return (
               <>
-                <div className="h-[200px] sm:h-[280px] w-full min-w-0">
+                <div className="relative h-[200px] sm:h-[280px] w-full min-w-0 overflow-hidden rounded-lg">
+                  <div className="chart-fade-grid" aria-hidden />
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                       data={yearlyBars}
@@ -842,7 +843,7 @@ export default function Dividends() {
                       barCategoryGap="12%"
                       barGap={2}
                     >
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} opacity={0.4} />
                       <XAxis
                         dataKey="label"
                         tick={{ fontSize: 9 }}

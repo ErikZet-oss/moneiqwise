@@ -993,10 +993,11 @@ export default function Profit() {
           {historySeriesLoading && dailyData.length === 0 ? (
             <Skeleton className="h-[200px] w-full md:h-[280px]" />
           ) : (
-          <div className="h-[200px] w-full max-w-full min-w-0 md:h-[280px]">
+          <div className="relative h-[200px] w-full max-w-full min-w-0 overflow-hidden rounded-lg md:h-[280px]">
+            <div className="chart-fade-grid" aria-hidden />
             <ResponsiveContainer width="100%" height="100%">
             <LineChart data={dailyData} margin={{ top: 4, right: 4, left: -8, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.45} />
               <XAxis 
                 dataKey="dateStr" 
                 stroke="hsl(var(--muted-foreground))"
@@ -1051,13 +1052,14 @@ export default function Profit() {
           <CardDescription className="text-xs md:text-sm">Zisk alebo strata za obdobie</CardDescription>
         </CardHeader>
         <CardContent className="p-4 pt-3">
-          <div className="h-[200px] w-full max-w-full min-w-0 md:h-[280px]">
+          <div className="relative h-[200px] w-full max-w-full min-w-0 overflow-hidden rounded-lg md:h-[280px]">
+            <div className="chart-fade-grid" aria-hidden />
             <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={periodStats}
               margin={{ top: 4, right: 4, left: -8, bottom: narrowViewport ? 16 : 8 }}
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.45} />
               <XAxis 
                 dataKey="period" 
                 stroke="hsl(var(--muted-foreground))"

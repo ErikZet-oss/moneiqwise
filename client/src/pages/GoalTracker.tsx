@@ -363,13 +363,14 @@ export default function GoalTracker() {
             Prerušovaná čiara = cieľový plán. Plocha = reálna historická hodnota portfólia.
           </CardDescription>
         </CardHeader>
-        <CardContent className={isMobile ? "h-[260px] px-2" : "h-[340px]"}>
+        <CardContent className={isMobile ? "relative h-[260px] overflow-hidden px-2" : "relative h-[340px] overflow-hidden"}>
+          <div className="chart-fade-grid rounded-lg" aria-hidden />
           {isLoading ? (
             <div className="h-full rounded-md border bg-muted/20 animate-pulse" />
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={projection}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" opacity={0.4} />
                 <XAxis dataKey="label" minTickGap={isMobile ? 18 : 24} tick={{ fontSize: isMobile ? 10 : 12 }} />
                 <YAxis
                   width={isMobile ? 40 : 56}

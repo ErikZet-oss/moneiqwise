@@ -289,20 +289,21 @@ function ChartContent({
         <span className="text-foreground font-medium tabular-nums">{formatVolume(totalVolume)}</span>
       </div>
 
-      <div className="h-56 w-full rounded-lg border bg-card/40 p-1">
+      <div className="relative h-56 w-full overflow-hidden rounded-lg border bg-card/40 p-1">
+        <div className="chart-fade-grid" aria-hidden />
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={chartData} margin={{ top: 8, right: 6, left: -4, bottom: 0 }}>
             <defs>
               <linearGradient id="watchlistChartUp" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="hsl(142 76% 36%)" stopOpacity={0.28} />
-                <stop offset="100%" stopColor="hsl(142 76% 36%)" stopOpacity={0.02} />
+                <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity={0.28} />
+                <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity={0.02} />
               </linearGradient>
               <linearGradient id="watchlistChartDown" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="hsl(0 84% 60%)" stopOpacity={0.28} />
-                <stop offset="100%" stopColor="hsl(0 84% 60%)" stopOpacity={0.02} />
+                <stop offset="0%" stopColor="hsl(var(--chart-2))" stopOpacity={0.28} />
+                <stop offset="100%" stopColor="hsl(var(--chart-2))" stopOpacity={0.02} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" className="stroke-muted/60" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" className="stroke-muted/60" vertical={false} opacity={0.4} />
             <XAxis
               dataKey="label"
               tick={{ fontSize: 9 }}

@@ -296,7 +296,8 @@ export default function Grafy() {
               : "Nedostatok dát"}
           </p>
         </CardHeader>
-        <CardContent className="h-[260px] sm:h-[320px] w-full min-w-0 px-3 sm:px-6">
+        <CardContent className="relative h-[260px] sm:h-[320px] w-full min-w-0 overflow-hidden px-3 sm:px-6">
+          <div className="chart-fade-grid rounded-lg" aria-hidden />
           {histLoading || pLoading || !chartReady ? (
             <Skeleton className="h-full w-full" />
           ) : points.length === 0 ? (
@@ -308,18 +309,18 @@ export default function Grafy() {
                   <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
                     {inProfit ? (
                       <>
-                        <stop offset="0%" stopColor="hsl(142, 60%, 45%)" stopOpacity={0.35} />
-                        <stop offset="100%" stopColor="hsl(142, 50%, 45%)" stopOpacity={0.05} />
+                        <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity={0.35} />
+                        <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity={0.05} />
                       </>
                     ) : (
                       <>
-                        <stop offset="0%" stopColor="hsl(0, 60%, 55%)" stopOpacity={0.3} />
-                        <stop offset="100%" stopColor="hsl(0, 40%, 55%)" stopOpacity={0.04} />
+                        <stop offset="0%" stopColor="hsl(var(--chart-2))" stopOpacity={0.3} />
+                        <stop offset="100%" stopColor="hsl(var(--chart-2))" stopOpacity={0.04} />
                       </>
                     )}
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" opacity={0.4} />
                 <XAxis
                   dataKey="date"
                   tick={xAxisTick}
@@ -408,7 +409,8 @@ export default function Grafy() {
             portfóliu; index výnos (uzávierky) voči tomu istému prvému dňu.
           </CardDescription>
         </CardHeader>
-        <CardContent className="h-[240px] sm:h-[300px] w-full min-w-0 px-3 sm:px-6">
+        <CardContent className="relative h-[240px] sm:h-[300px] w-full min-w-0 overflow-hidden px-3 sm:px-6">
+          <div className="chart-fade-grid rounded-lg" aria-hidden />
           {histLoading || pLoading || !chartReady ? (
             <Skeleton className="h-full w-full" />
           ) : points.length < 2 ? (
@@ -416,7 +418,7 @@ export default function Grafy() {
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={points} margin={chartMargin}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" opacity={0.4} />
                 <XAxis
                   dataKey="date"
                   tick={xAxisTick}
