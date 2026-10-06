@@ -2605,7 +2605,7 @@ export default function Dashboard() {
                 </DashboardWidgetFrame>
               );
             }
-            if (widgetId === "realizedGain") {
+            if (widgetId === "realizedDividends") {
               return (
                 <DashboardWidgetFrame
                   key={widgetId}
@@ -2616,97 +2616,79 @@ export default function Dashboard() {
                   empty={!isMobileViewport}
                   emptyHint="Tento box je na mobile"
                 >
-      <div className="md:hidden">
-          <div className="bg-card rounded-lg p-2.5 border">
-            <div className="flex items-center justify-between gap-1">
-              <div className="text-[10px] text-muted-foreground flex items-center gap-1 min-w-0">
-                <span className="truncate">Realizovaný zisk</span>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      className="inline-flex rounded-sm p-0.5 hover:bg-muted shrink-0"
-                      aria-label="Info: realizovaný zisk"
-                    >
-                      <HelpCircle className="h-2.5 w-2.5" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent className="max-w-[280px] p-3" align="start">
-                    <p className="font-semibold mb-1 text-sm">Realizovaný zisk</p>
-                    <p className="text-xs">
-                      Akcie: zisk/strata z predajov (FIFO) a z hot. riadkov XTB close trade. Plus realizácia opcií, ak sú v celku vyššie.
-                    </p>
-                  </PopoverContent>
-                </Popover>
-              </div>
-              <div className={`text-xs font-semibold shrink-0 ${getChangeColor(metrics.stockRealizedGain + metrics.optionsRealizedGain)}`}>
-                {maskAmount(formatCurrency(metrics.stockRealizedGain + metrics.optionsRealizedGain))}
-              </div>
-            </div>
-          </div>
-      </div>
-
-                </DashboardWidgetFrame>
-              );
-            }
-            if (widgetId === "dividends") {
-              return (
-                <DashboardWidgetFrame
-                  key={widgetId}
-                  id={widgetId}
-                  editing={dashboardEditing}
-                  visible={visible}
-                  onToggleVisible={() => toggleDashboardWidget(widgetId)}
-                  empty={!isMobileViewport}
-                  emptyHint="Tento box je na mobile"
-                >
-      <div className="md:hidden">
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className="bg-card rounded-lg p-2.5 border w-full text-left"
-                aria-label="Detail dividend"
-                data-testid="button-mobile-dividends-detail"
-              >
-                <div className="flex items-center justify-between gap-1">
-                  <div className="text-[10px] text-muted-foreground flex items-center gap-1 min-w-0">
-                    <span className="truncate">Dividendy (spolu)</span>
-                    <HelpCircle className="h-2.5 w-2.5 shrink-0" />
+                  <div className="md:hidden grid gap-1.5 grid-cols-2">
+                    <div className="bg-card rounded-lg p-2.5 border">
+                      <div className="flex items-center justify-between gap-1">
+                        <div className="text-[10px] text-muted-foreground flex items-center gap-1 min-w-0">
+                          <span className="truncate">Realizovaný zisk</span>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <button
+                                type="button"
+                                className="inline-flex rounded-sm p-0.5 hover:bg-muted shrink-0"
+                                aria-label="Info: realizovaný zisk"
+                              >
+                                <HelpCircle className="h-2.5 w-2.5" />
+                              </button>
+                            </PopoverTrigger>
+                            <PopoverContent className="max-w-[280px] p-3" align="start">
+                              <p className="font-semibold mb-1 text-sm">Realizovaný zisk</p>
+                              <p className="text-xs">
+                                Akcie: zisk/strata z predajov (FIFO) a z hot. riadkov XTB close trade. Plus realizácia opcií, ak sú v celku vyššie.
+                              </p>
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+                        <div className={`text-xs font-semibold shrink-0 ${getChangeColor(metrics.stockRealizedGain + metrics.optionsRealizedGain)}`}>
+                          {maskAmount(formatCurrency(metrics.stockRealizedGain + metrics.optionsRealizedGain))}
+                        </div>
+                      </div>
+                    </div>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className="bg-card rounded-lg p-2.5 border w-full text-left"
+                          aria-label="Detail dividend"
+                          data-testid="button-mobile-dividends-detail"
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <div className="text-[10px] text-muted-foreground flex items-center gap-1 min-w-0">
+                              <span className="truncate">Dividendy (spolu)</span>
+                              <HelpCircle className="h-2.5 w-2.5 shrink-0" />
+                            </div>
+                            <div className="text-xs font-semibold text-blue-500 shrink-0">
+                              +{maskAmount(formatCurrency(metrics.dividendGain))}
+                            </div>
+                          </div>
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="max-w-[260px] p-3" align="start">
+                        <p className="font-semibold mb-2 text-sm">Dividendy - rozpis</p>
+                        <div className="space-y-1.5 text-xs">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-muted-foreground">Hrubé</span>
+                            <span className="font-medium">
+                              +{maskAmount(formatCurrency(dividends?.totalGross ?? (metrics.dividendGain + (dividends?.totalTax || 0))))}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-muted-foreground">Daň</span>
+                            <span className="font-medium text-muted-foreground">
+                              -{maskAmount(formatCurrency(dividends?.totalTax || 0))}
+                            </span>
+                          </div>
+                          <div className="h-px bg-border my-1" />
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-muted-foreground">Čisté</span>
+                            <span className="font-semibold text-blue-500">
+                              +{maskAmount(formatCurrency(metrics.dividendGain))}
+                            </span>
+                          </div>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
                   </div>
-                  <div className="text-xs font-semibold text-blue-500 shrink-0">
-                    +{maskAmount(formatCurrency(metrics.dividendGain))}
-                  </div>
-                </div>
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="max-w-[260px] p-3" align="start">
-              <p className="font-semibold mb-2 text-sm">Dividendy - rozpis</p>
-              <div className="space-y-1.5 text-xs">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground">Hrubé</span>
-                  <span className="font-medium">
-                    +{maskAmount(formatCurrency(dividends?.totalGross ?? (metrics.dividendGain + (dividends?.totalTax || 0))))}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground">Daň</span>
-                  <span className="font-medium text-muted-foreground">
-                    -{maskAmount(formatCurrency(dividends?.totalTax || 0))}
-                  </span>
-                </div>
-                <div className="h-px bg-border my-1" />
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-muted-foreground">Čisté</span>
-                  <span className="font-semibold text-blue-500">
-                    +{maskAmount(formatCurrency(metrics.dividendGain))}
-                  </span>
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
-      </div>
-
                 </DashboardWidgetFrame>
               );
             }

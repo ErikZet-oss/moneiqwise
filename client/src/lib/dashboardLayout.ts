@@ -2,8 +2,7 @@
 export const DASHBOARD_WIDGET_IDS = [
   "summary",
   "chart",
-  "realizedGain",
-  "dividends",
+  "realizedDividends",
   "ytdBenchmark",
   "earnings",
   "topPosition",
@@ -18,8 +17,7 @@ export type DashboardWidgetId = (typeof DASHBOARD_WIDGET_IDS)[number];
 
 /** Starý monolitický Insights → tieto widgety. */
 export const INSIGHT_WIDGET_IDS = [
-  "realizedGain",
-  "dividends",
+  "realizedDividends",
   "ytdBenchmark",
   "earnings",
   "topPosition",
@@ -38,8 +36,7 @@ export const DASHBOARD_WIDGET_META: Record<
 > = {
   summary: { label: "Súhrn", required: true },
   chart: { label: "Graf", required: false },
-  realizedGain: { label: "Realizovaný zisk", required: false },
-  dividends: { label: "Dividendy", required: false },
+  realizedDividends: { label: "Zisk a dividendy", required: false },
   ytdBenchmark: { label: "YTD vs S&P", required: false },
   earnings: { label: "Earnings", required: false },
   topPosition: { label: "Top pozícia", required: false },
@@ -55,8 +52,7 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = {
   visible: {
     summary: true,
     chart: true,
-    realizedGain: true,
-    dividends: true,
+    realizedDividends: true,
     ytdBenchmark: true,
     earnings: true,
     topPosition: true,
@@ -77,6 +73,8 @@ export function isDashboardWidgetId(value: unknown): value is DashboardWidgetId 
 
 function expandOrderItem(item: unknown): DashboardWidgetId[] {
   if (item === "insights") return [...INSIGHT_WIDGET_IDS];
+  // Staršie rozdelené boxy → jeden spoločný widget
+  if (item === "realizedGain" || item === "dividends") return ["realizedDividends"];
   if (isDashboardWidgetId(item)) return [item];
   return [];
 }
@@ -112,6 +110,15 @@ export function normalizeDashboardLayout(
   for (const id of DASHBOARD_WIDGET_IDS) {
     if (typeof rawVisible[id] === "boolean") {
       visible[id] = rawVisible[id] as boolean;
+    } else if (id === "realizedDividends") {
+      const rg = rawVisible.realizedGain;
+      const dv = rawVisible.dividends;
+      if (typeof rg === "boolean" || typeof dv === "boolean") {
+        // Skryť len ak boli oba staré boxy vypnuté
+        visible[id] = !(rg === false && dv === false);
+      } else {
+        visible[id] = legacyInsights;
+      }
     } else if ((INSIGHT_WIDGET_IDS as readonly string[]).includes(id)) {
       visible[id] = legacyInsights;
     } else if (id === "news" && typeof seed?.news === "boolean") {
