@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { Fragment, useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -3995,17 +3995,25 @@ export default function Dashboard() {
                         quote?.marketState,
                         quote?.preMarketChangePercent,
                       );
+                      const useExtendedForValuation =
+                        shouldUseExtendedQuotes(usSessionState) && showPremarketPrice;
+                      const valuationPrice = useExtendedForValuation
+                        ? (preMarketPrice as number)
+                        : currentPrice;
                       const currentValue = shares * currentPrice;
                       const gainLoss = currentValue - investedDisplay;
                       const gainLossPercent = investedDisplay > 0 ? (gainLoss / investedDisplay) * 100 : 0;
+                      const canExpandLots = canExpandMobileHoldingLots(holding);
+                      const isLotsExpanded = expandedMobileHoldingId === holding.id;
 
                       return (
-                        (() => {
-                          return (
+                        <Fragment key={holding.id}>
                         <TableRow
-                          key={holding.id}
                           data-testid={`row-holding-${holding.ticker}`}
                           className={`cursor-pointer hover:bg-muted/50${isPokemonChild ? " bg-muted/20" : ""}`}
+                          aria-expanded={
+                            isPokemonGroup ? pokemonGroupOpen : canExpandLots ? isLotsExpanded : undefined
+                          }
                           onClick={() => {
                             if (isPokemonGroup) {
                               setPokemonGroupOpen((open) => !open);
@@ -4015,13 +4023,41 @@ export default function Dashboard() {
                           }}
                         >
                           <TableCell>
-                            <div className={`flex items-center gap-3${isPokemonChild ? " pl-6" : ""}`}>
-                              {isPokemonGroup ? (
-                                <ChevronDown
-                                  className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${pokemonGroupOpen ? "" : "-rotate-90"}`}
-                                  aria-hidden
-                                />
-                              ) : null}
+                            <div className={`flex items-center gap-2${isPokemonChild ? " pl-6" : ""}`}>
+                              {isPokemonGroup || canExpandLots ? (
+                                <button
+                                  type="button"
+                                  className="shrink-0 inline-flex items-center justify-center rounded p-0.5 hover:bg-muted"
+                                  aria-label={
+                                    isPokemonGroup
+                                      ? pokemonGroupOpen
+                                        ? "Zbaliť Pokémon TCG"
+                                        : "Rozbaliť Pokémon TCG"
+                                      : isLotsExpanded
+                                        ? "Skryť nákupy"
+                                        : "Zobraziť nákupy"
+                                  }
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (isPokemonGroup) {
+                                      setPokemonGroupOpen((open) => !open);
+                                      return;
+                                    }
+                                    setExpandedMobileHoldingId((prev) =>
+                                      prev === holding.id ? null : holding.id,
+                                    );
+                                  }}
+                                >
+                                  <ChevronDown
+                                    className={`h-4 w-4 text-muted-foreground transition-transform ${
+                                      (isPokemonGroup ? pokemonGroupOpen : isLotsExpanded) ? "" : "-rotate-90"
+                                    }`}
+                                    aria-hidden
+                                  />
+                                </button>
+                              ) : (
+                                <span className="w-5 shrink-0" aria-hidden />
+                              )}
                               <HoldingMark holding={holding} size="md" />
                               {isSealedPokemonHolding(holding) ? null : isPokemonTicker(holding.ticker) ? (
                                 <span className="font-medium" data-testid={`link-ticker-${holding.ticker}`}>
@@ -4076,8 +4112,31 @@ export default function Dashboard() {
                             </div>
                           </TableCell>
                         </TableRow>
-                          );
-                        })()
+                        {isLotsExpanded && canExpandLots ? (
+                          <TableRow
+                            className="hover:bg-transparent"
+                            data-testid={`row-holding-lots-${holding.ticker}`}
+                          >
+                            <TableCell colSpan={7} className="bg-muted/25 py-2 px-4">
+                              <MobileHoldingBuyLotsPanel
+                                portfolioId={holding.portfolioId}
+                                allPortfolios={isAllPortfolios}
+                                ticker={holding.ticker}
+                                currentPrice={Number.isFinite(valuationPrice) ? valuationPrice : null}
+                                shares={shares}
+                                investedDisplay={investedDisplay}
+                                maskAmount={maskAmount}
+                                formatShareQuantityFn={formatShareQuantity}
+                                formatAverageCostCurrencyFn={formatAverageCostCurrency}
+                                convertAverageCostPriceFn={convertAverageCostPrice}
+                                convertPriceFn={convertPrice}
+                                formatPercentFn={formatPercent}
+                                getChangeColorFn={getChangeColor}
+                              />
+                            </TableCell>
+                          </TableRow>
+                        ) : null}
+                        </Fragment>
                       );
                     })}
                   </TableBody>
