@@ -251,9 +251,9 @@
     inset: 0;
     border-radius: inherit;
     background-image:
-      linear-gradient(to right, hsl(0 0% 100% / 0.055) 1px, transparent 1px),
-      linear-gradient(to bottom, hsl(0 0% 100% / 0.055) 1px, transparent 1px);
-    background-size: 52px 40px;
+      linear-gradient(to right, hsl(0 0% 100% / 0.13) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(0 0% 100% / 0.13) 1px, transparent 1px);
+    background-size: 48px 36px;
     background-position: center;
     opacity: 0;
   }
@@ -261,11 +261,11 @@
   .dark .chart-fade-grid {
     opacity: 1;
     -webkit-mask-image:
-      radial-gradient(ellipse 85% 75% at 50% 38%, #000 12%, transparent 72%),
-      linear-gradient(to bottom, #000 0%, #000 55%, transparent 96%);
+      radial-gradient(ellipse 90% 80% at 50% 40%, #000 22%, transparent 78%),
+      linear-gradient(to bottom, #000 0%, #000 62%, transparent 98%);
     mask-image:
-      radial-gradient(ellipse 85% 75% at 50% 38%, #000 12%, transparent 72%),
-      linear-gradient(to bottom, #000 0%, #000 55%, transparent 96%);
+      radial-gradient(ellipse 90% 80% at 50% 40%, #000 22%, transparent 78%),
+      linear-gradient(to bottom, #000 0%, #000 62%, transparent 98%);
     -webkit-mask-composite: source-in;
     mask-composite: intersect;
   }
