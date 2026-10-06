@@ -830,7 +830,6 @@ export default function Dashboard() {
   const [mobileEarningsIndex, setMobileEarningsIndex] = useState(0);
   const [mobileTopPositionIndex, setMobileTopPositionIndex] = useState(0);
   const [mobileMacroEventIndex, setMobileMacroEventIndex] = useState(0);
-  const [desktopInsightIndex, setDesktopInsightIndex] = useState(0);
   const [athDialogOpen, setAthDialogOpen] = useState(false);
   const [athReachedPortfolios, setAthReachedPortfolios] = useState<AthReachedPortfolio[]>([]);
   const [athPopupEvaluated, setAthPopupEvaluated] = useState(false);
@@ -1446,17 +1445,6 @@ export default function Dashboard() {
     currentMobileTopPosition && mobileTopPositionsTotalValue > 0
       ? (currentMobileTopPosition.value / mobileTopPositionsTotalValue) * 100
       : 0;
-  const desktopInsightSlides = useMemo(() => {
-    const slides: Array<"earnings" | "macro" | "top"> = [];
-    if (dashboardVisible.earnings !== false) slides.push("earnings");
-    if (dashboardVisible.macroEvent !== false) slides.push("macro");
-    if (dashboardVisible.topPosition !== false) slides.push("top");
-    return slides;
-  }, [dashboardVisible.earnings, dashboardVisible.macroEvent, dashboardVisible.topPosition]);
-  const desktopInsightSlideCount = desktopInsightSlides.length;
-  const safeDesktopInsightIndex =
-    desktopInsightSlideCount > 0 ? desktopInsightIndex % desktopInsightSlideCount : 0;
-  const activeDesktopInsightSlide = desktopInsightSlides[safeDesktopInsightIndex] ?? null;
   const mobileMacroEvents = upcomingMacroEvents?.all ?? [];
   const currentMobileMacroEvent =
     mobileMacroEvents.length > 0
@@ -2787,7 +2775,6 @@ export default function Dashboard() {
             }
             if (widgetId === "chart") {
               const allocationVisible = isDashboardWidgetVisible("allocation");
-              const sidePanel = allocationVisible || desktopInsightSlideCount > 0;
               return (
                 <DashboardWidgetFrame
                   key={widgetId}
@@ -2800,10 +2787,10 @@ export default function Dashboard() {
                 >
       <div
         className={`hidden md:grid gap-4 ${
-          sidePanel ? "lg:grid-cols-3" : ""
+          allocationVisible ? "lg:grid-cols-3" : ""
         }`}
       >
-        <div className={sidePanel ? "lg:col-span-2 min-w-0" : "min-w-0"}>
+        <div className={allocationVisible ? "lg:col-span-2 min-w-0" : "min-w-0"}>
           <DesktopPortfolioChart
             totalValue={metrics.totalValue}
             totalInvested={metrics.totalInvested}
@@ -2820,137 +2807,6 @@ export default function Dashboard() {
               holdingsLoading={holdingsLoading}
               isAllPortfolios={isAllPortfolios}
             />
-          </div>
-        ) : desktopInsightSlideCount > 0 ? (
-          <div className="lg:col-span-1 min-w-0">
-            <Card className="h-full border-border bg-card shadow-sm" data-testid="card-desktop-insights-carousel">
-              <CardHeader className="space-y-0 p-4 pb-1">
-                <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                  Rýchly prehľad
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-[300px]">
-                      <p className="font-semibold mb-1">Desktop quick slider</p>
-                      <p className="text-xs">
-                        Posuvný prehľad: najbližší earnings, najbližšia ekonomická udalosť a najväčšie zastúpenie aktíva.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 p-4 pt-1">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="text-[11px] text-muted-foreground">
-                    {activeDesktopInsightSlide === "earnings" && "Najbližší earnings"}
-                    {activeDesktopInsightSlide === "macro" && "Najbližšia makro udalosť"}
-                    {activeDesktopInsightSlide === "top" && "Najväčšie zastúpenie aktíva"}
-                  </div>
-                  {desktopInsightSlideCount > 1 && (
-                  <div className="flex items-center gap-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      onClick={() =>
-                        setDesktopInsightIndex(
-                          (v) => (v + desktopInsightSlideCount - 1) % desktopInsightSlideCount,
-                        )
-                      }
-                      data-testid="button-desktop-insight-prev"
-                    >
-                      <ChevronRight className="h-3.5 w-3.5 rotate-180" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6"
-                      onClick={() =>
-                        setDesktopInsightIndex((v) => (v + 1) % desktopInsightSlideCount)
-                      }
-                      data-testid="button-desktop-insight-next"
-                    >
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                  )}
-                </div>
-
-                {activeDesktopInsightSlide === "earnings" && (
-                  currentMobileEarnings ? (
-                    <button
-                      type="button"
-                      className="w-full rounded-lg border border-amber-500/25 bg-amber-500/[0.08] p-3 text-left hover:bg-amber-500/[0.12]"
-                      onClick={() => setLocation(`/asset/${encodeURIComponent(currentMobileEarnings.ticker)}`)}
-                      data-testid="card-desktop-next-earnings"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <CompanyLogo ticker={currentMobileEarnings.ticker} companyName={currentMobileEarnings.companyName} size="sm" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold truncate">{currentMobileEarnings.ticker}</p>
-                          <p className="text-xs text-muted-foreground truncate">{currentMobileEarnings.companyName}</p>
-                        </div>
-                      </div>
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        {new Date(currentMobileEarnings.date).toLocaleDateString("sk-SK")}
-                      </p>
-                    </button>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">Žiadny najbližší earnings pre zvolený výber.</p>
-                  )
-                )}
-
-                {activeDesktopInsightSlide === "macro" && (
-                  currentMobileMacroEvent ? (
-                    <div className="w-full rounded-lg border border-orange-500/25 bg-orange-500/[0.08] p-3" data-testid="card-desktop-next-macro">
-                      <p className="text-sm font-semibold">{currentMobileMacroEvent.shortLabel}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{currentMobileMacroEvent.title}</p>
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        {new Date(currentMobileMacroEvent.date).toLocaleDateString("sk-SK")}
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">Žiadna najbližšia makro udalosť.</p>
-                  )
-                )}
-
-                {activeDesktopInsightSlide === "top" && (
-                  currentMobileTopPosition ? (
-                    <button
-                      type="button"
-                      className="w-full rounded-lg border border-primary/25 bg-primary/[0.06] p-3 text-left hover:bg-primary/[0.1]"
-                      onClick={() => setLocation(`/asset/${encodeURIComponent(currentMobileTopPosition.ticker)}`)}
-                      data-testid="card-desktop-top-position"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-semibold truncate">{currentMobileTopPosition.ticker}</p>
-                        <span className="text-xs font-medium text-primary">{currentMobileTopPositionPct.toFixed(1)}%</span>
-                      </div>
-                      <p className="mt-0.5 text-xs text-muted-foreground truncate">{currentMobileTopPosition.companyName || "Bez názvu"}</p>
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        Hodnota: {maskAmount(formatCurrency(currentMobileTopPosition.value))}
-                      </p>
-                    </button>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">Nie je dostupná žiadna top pozícia.</p>
-                  )
-                )}
-
-                {desktopInsightSlideCount > 1 && (
-                <div className="flex items-center justify-center gap-1 pt-1">
-                  {desktopInsightSlides.map((slideId, idx) => (
-                    <span
-                      key={slideId}
-                      className={`h-1.5 w-1.5 rounded-full ${safeDesktopInsightIndex === idx ? "bg-primary" : "bg-muted-foreground/40"}`}
-                    />
-                  ))}
-                </div>
-                )}
-              </CardContent>
-            </Card>
           </div>
         ) : null}
       </div>
@@ -3113,14 +2969,11 @@ export default function Dashboard() {
                   editing={dashboardEditing}
                   visible={visible}
                   onToggleVisible={() => toggleDashboardWidget(widgetId)}
-                  empty={!isMobileViewport}
-                  emptyHint="Na desktope je v karusele Rýchly prehľad"
                 >
-      <div className="md:hidden">
         {(currentMobileEarnings || dashboardEditing) ? (
           currentMobileEarnings ? (
           <div
-            className="w-full flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.07] px-2.5 py-1.5 text-left transition-colors hover:bg-amber-500/12 dark:border-amber-500/25 dark:bg-amber-500/10 dark:hover:bg-amber-500/[0.14]"
+            className="w-full flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.07] px-2.5 py-1.5 md:px-3 md:py-2.5 text-left transition-colors hover:bg-amber-500/12 dark:border-amber-500/25 dark:bg-amber-500/10 dark:hover:bg-amber-500/[0.14]"
             data-testid="row-mobile-next-earnings"
           >
             <button
@@ -3141,11 +2994,14 @@ export default function Dashboard() {
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wide shrink-0">
                   Earnings
                 </span>
-                <span className="text-[11px] font-medium truncate min-w-0 text-foreground/90">
+                <span className="text-[11px] md:text-sm font-medium truncate min-w-0 text-foreground/90">
                   {currentMobileEarnings.ticker}
                 </span>
+                <span className="hidden md:inline text-xs text-muted-foreground truncate min-w-0">
+                  {currentMobileEarnings.companyName}
+                </span>
               </div>
-              <span className="text-[11px] font-semibold tabular-nums text-amber-950 dark:text-amber-100 shrink-0">
+              <span className="text-[11px] md:text-sm font-semibold tabular-nums text-amber-950 dark:text-amber-100 shrink-0">
                 {format(
                   parse(currentMobileEarnings.date, "yyyy-MM-dd", new Date()),
                   "d. MMM yyyy",
@@ -3173,7 +3029,6 @@ export default function Dashboard() {
             </div>
           )
         ) : null}
-      </div>
 
                 </DashboardWidgetFrame>
               );
@@ -3186,14 +3041,11 @@ export default function Dashboard() {
                   editing={dashboardEditing}
                   visible={visible}
                   onToggleVisible={() => toggleDashboardWidget(widgetId)}
-                  empty={!isMobileViewport}
-                  emptyHint="Na desktope je v karusele Rýchly prehľad"
                 >
-      <div className="md:hidden">
         {(currentMobileTopPosition || dashboardEditing) ? (
           currentMobileTopPosition ? (
           <div
-            className="w-full flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/[0.06] px-2.5 py-1.5 text-left transition-colors hover:bg-primary/[0.1] dark:border-primary/30 dark:bg-primary/10 dark:hover:bg-primary/[0.16]"
+            className="w-full flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/[0.06] px-2.5 py-1.5 md:px-3 md:py-2.5 text-left transition-colors hover:bg-primary/[0.1] dark:border-primary/30 dark:bg-primary/10 dark:hover:bg-primary/[0.16]"
             data-testid="row-mobile-top-position"
           >
             <button
@@ -3213,12 +3065,18 @@ export default function Dashboard() {
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wide shrink-0">
                   Pozícia
                 </span>
-                <span className="text-[11px] font-medium truncate min-w-0 text-foreground/90">
+                <span className="text-[11px] md:text-sm font-medium truncate min-w-0 text-foreground/90">
                   {currentMobileTopPosition.ticker}
                 </span>
+                <span className="hidden md:inline text-xs text-muted-foreground truncate min-w-0">
+                  {currentMobileTopPosition.companyName || "Bez názvu"}
+                </span>
               </div>
-              <span className="text-[11px] font-semibold tabular-nums text-foreground shrink-0">
+              <span className="text-[11px] md:text-sm font-semibold tabular-nums text-foreground shrink-0">
                 {currentMobileTopPositionPct.toFixed(2)}%
+              </span>
+              <span className="hidden md:inline text-xs text-muted-foreground shrink-0">
+                {maskAmount(formatCurrency(currentMobileTopPosition.value))}
               </span>
             </button>
             {mobileTopPositions.length > 1 && (
@@ -3241,7 +3099,6 @@ export default function Dashboard() {
             </div>
           )
         ) : null}
-      </div>
 
                 </DashboardWidgetFrame>
               );
@@ -3254,14 +3111,11 @@ export default function Dashboard() {
                   editing={dashboardEditing}
                   visible={visible}
                   onToggleVisible={() => toggleDashboardWidget(widgetId)}
-                  empty={!isMobileViewport}
-                  emptyHint="Na desktope je v karusele Rýchly prehľad"
                 >
-      <div className="md:hidden">
         {(currentMobileMacroEvent || dashboardEditing) ? (
           currentMobileMacroEvent ? (
           <div
-            className="w-full flex items-center gap-2 rounded-lg border border-sky-500/25 bg-sky-500/[0.08] px-2.5 py-1.5 text-left transition-colors hover:bg-sky-500/[0.13] dark:border-sky-500/35 dark:bg-sky-500/10 dark:hover:bg-sky-500/[0.16]"
+            className="w-full flex items-center gap-2 rounded-lg border border-sky-500/25 bg-sky-500/[0.08] px-2.5 py-1.5 md:px-3 md:py-2.5 text-left transition-colors hover:bg-sky-500/[0.13] dark:border-sky-500/35 dark:bg-sky-500/10 dark:hover:bg-sky-500/[0.16]"
             data-testid="row-mobile-next-macro-event"
           >
             <div className="min-w-0 flex-1 flex items-center gap-1.5">
@@ -3269,11 +3123,14 @@ export default function Dashboard() {
               <span className="text-[10px] text-muted-foreground uppercase tracking-wide shrink-0">
                 Udalosť
               </span>
-              <span className="text-[11px] font-medium truncate min-w-0 text-foreground/90">
+              <span className="text-[11px] md:text-sm font-medium truncate min-w-0 text-foreground/90">
                 {currentMobileMacroEvent.shortLabel}
               </span>
+              <span className="hidden md:inline text-xs text-muted-foreground truncate min-w-0">
+                {currentMobileMacroEvent.title}
+              </span>
             </div>
-            <span className="text-[11px] font-semibold tabular-nums text-sky-950 dark:text-sky-100 shrink-0">
+            <span className="text-[11px] md:text-sm font-semibold tabular-nums text-sky-950 dark:text-sky-100 shrink-0">
               {format(
                 parse(currentMobileMacroEvent.date, "yyyy-MM-dd", new Date()),
                 "d. MMM yyyy",
@@ -3300,7 +3157,6 @@ export default function Dashboard() {
             </div>
           )
         ) : null}
-      </div>
 
                 </DashboardWidgetFrame>
               );
