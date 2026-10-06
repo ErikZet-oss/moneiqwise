@@ -49,6 +49,9 @@ const SLICE_COLORS = [
   "hsl(195 75% 58%)",
 ];
 
+/** Max legend rows beside the donut; full list lives on /allocation */
+const LEGEND_LIMIT = 6;
+
 function sliceColor(i: number): string {
   return SLICE_COLORS[i % SLICE_COLORS.length]!;
 }
@@ -287,12 +290,14 @@ export function DashboardAllocationWidget({
 
   const chartData = useMemo(
     () =>
-      slices.slice(0, 8).map((s, i) => ({
+      slices.slice(0, LEGEND_LIMIT).map((s, i) => ({
         ...s,
         fill: sliceColor(i),
       })),
     [slices],
   );
+
+  const hasMoreSlices = slices.length > LEGEND_LIMIT;
 
   useEffect(() => {
     setActiveIndex(null);
@@ -345,17 +350,21 @@ export function DashboardAllocationWidget({
         </div>
 
         {loading ? (
-          <div className="flex flex-col items-center gap-3 py-4">
-            <Skeleton className="h-[200px] w-[200px] rounded-full" />
-            <Skeleton className="h-4 w-32" />
+          <div className="flex items-center gap-3 py-2">
+            <Skeleton className="h-[168px] w-[168px] shrink-0 rounded-full" />
+            <div className="flex-1 space-y-2">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="h-5 w-full" />
+              ))}
+            </div>
           </div>
         ) : chartData.length === 0 ? (
-          <div className="flex h-[220px] items-center justify-center text-sm text-muted-foreground">
+          <div className="flex h-[180px] items-center justify-center text-sm text-muted-foreground">
             Zatiaľ nie sú dáta na alokáciu
           </div>
         ) : (
-          <>
-            <div className="relative mx-auto h-[220px] w-full max-w-[260px]">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="relative h-[168px] w-[168px] shrink-0">
               {!chartReady ? (
                 <div className="h-full w-full rounded-full bg-muted/30 animate-pulse" />
               ) : (
@@ -382,8 +391,8 @@ export function DashboardAllocationWidget({
                       nameKey="name"
                       cx="50%"
                       cy="50%"
-                      innerRadius="62%"
-                      outerRadius="84%"
+                      innerRadius="58%"
+                      outerRadius="82%"
                       paddingAngle={2.5}
                       cornerRadius={4}
                       stroke="transparent"
@@ -419,16 +428,16 @@ export function DashboardAllocationWidget({
                 </ResponsiveContainer>
               )}
 
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center px-6">
-                <div className="rounded-full bg-background/40 dark:bg-black/35 backdrop-blur-[2px] px-4 py-3 min-w-[7.5rem]">
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground leading-tight">
-                    {active ? active.name : "Celková hodnota"}
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center px-3">
+                <div className="rounded-full bg-background/40 dark:bg-black/35 backdrop-blur-[2px] px-2.5 py-2 min-w-[5.5rem]">
+                  <p className="text-[9px] uppercase tracking-wide text-muted-foreground leading-tight truncate max-w-[88px]">
+                    {active ? active.name : "Celkom"}
                   </p>
-                  <p className="text-lg font-semibold tabular-nums tracking-tight mt-0.5 truncate max-w-[140px]">
+                  <p className="text-sm font-semibold tabular-nums tracking-tight mt-0.5 truncate max-w-[96px]">
                     {mask(formatCurrency(active ? active.value : total))}
                   </p>
                   {activePct != null && (
-                    <p className="text-xs font-medium text-muted-foreground tabular-nums mt-0.5">
+                    <p className="text-[10px] font-medium text-muted-foreground tabular-nums mt-0.5">
                       {activePct.toFixed(1)} %
                     </p>
                   )}
@@ -436,38 +445,50 @@ export function DashboardAllocationWidget({
               </div>
             </div>
 
-            <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2" data-testid="list-allocation-legend">
-              {chartData.slice(0, 6).map((slice, i) => {
-                const pct = total > 0 ? (slice.value / total) * 100 : 0;
-                const isActive = activeIndex === i;
-                return (
-                  <li key={`${slice.name}-${i}`}>
-                    <button
-                      type="button"
-                      className={cn(
-                        "w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors",
-                        isActive ? "bg-white/10" : "hover:bg-white/5",
-                      )}
-                      onMouseEnter={() => setActiveIndex(i)}
-                      onMouseLeave={() => setActiveIndex(null)}
-                      onClick={() => setActiveIndex((prev) => (prev === i ? null : i))}
-                    >
-                      <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-full shadow-[0_0_8px_currentColor]"
-                        style={{ backgroundColor: slice.fill, color: slice.fill }}
-                      />
-                      <span className="min-w-0 flex-1 truncate text-xs font-medium">
-                        {slice.name}
-                      </span>
-                      <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
-                        {pct.toFixed(0)}%
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </>
+            <div className="min-w-0 flex-1 flex flex-col justify-center gap-0.5">
+              <ul className="space-y-0.5" data-testid="list-allocation-legend">
+                {chartData.map((slice, i) => {
+                  const pct = total > 0 ? (slice.value / total) * 100 : 0;
+                  const isActive = activeIndex === i;
+                  return (
+                    <li key={`${slice.name}-${i}`}>
+                      <button
+                        type="button"
+                        className={cn(
+                          "w-full flex items-center gap-1.5 rounded-md px-1.5 py-1 text-left transition-colors",
+                          isActive ? "bg-white/10" : "hover:bg-white/5",
+                        )}
+                        onMouseEnter={() => setActiveIndex(i)}
+                        onMouseLeave={() => setActiveIndex(null)}
+                        onClick={() => setActiveIndex((prev) => (prev === i ? null : i))}
+                      >
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-sm shadow-[0_0_6px_currentColor]"
+                          style={{ backgroundColor: slice.fill, color: slice.fill }}
+                        />
+                        <span className="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight">
+                          {slice.name}
+                        </span>
+                        <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                          {pct.toFixed(0)}%
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              {hasMoreSlices && (
+                <button
+                  type="button"
+                  className="mt-0.5 self-start px-1.5 text-[10px] font-medium text-sky-400 hover:text-sky-300 transition-colors"
+                  onClick={() => setLocation("/allocation")}
+                  data-testid="button-allocation-more-slices"
+                >
+                  +{slices.length - LEGEND_LIMIT} ďalších v Rozložení
+                </button>
+              )}
+            </div>
+          </div>
         )}
       </CardContent>
     </Card>
