@@ -3867,6 +3867,16 @@ export default function Dashboard() {
                           {getSortIcon("gainLoss")}
                         </div>
                       </TableHead>
+                      <TableHead 
+                        className="text-right cursor-pointer hover:bg-muted/50 select-none"
+                        onClick={() => handleSort("gainLossPercent")}
+                        data-testid="sort-gainloss-percent"
+                      >
+                        <div className="flex items-center justify-end">
+                          Zisk/Strata %
+                          {getSortIcon("gainLossPercent")}
+                        </div>
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -4025,11 +4035,11 @@ export default function Dashboard() {
                             </div>
                           </TableCell>
                           <TableCell className="text-right">{maskAmount(formatCurrency(currentValue))}</TableCell>
-                          <TableCell className={`text-right ${getChangeColor(gainLoss)}`}>
-                            <div className="flex flex-col items-end">
-                              <span>{maskAmount(formatCurrency(gainLoss))}</span>
-                              <span className="text-xs">{formatPercent(gainLossPercent)}</span>
-                            </div>
+                          <TableCell className={`text-right tabular-nums ${getChangeColor(gainLoss)}`}>
+                            {maskAmount(formatCurrency(gainLoss))}
+                          </TableCell>
+                          <TableCell className={`text-right tabular-nums ${getChangeColor(gainLossPercent)}`}>
+                            {formatPercent(gainLossPercent)}
                           </TableCell>
                         </TableRow>
                         {isLotsExpanded && canExpandLots ? (
@@ -4037,7 +4047,7 @@ export default function Dashboard() {
                             className="hover:bg-transparent"
                             data-testid={`row-holding-lots-${holding.ticker}`}
                           >
-                            <TableCell colSpan={7} className="bg-muted/25 py-2 px-4">
+                            <TableCell colSpan={8} className="bg-muted/25 py-2 px-4">
                               <MobileHoldingBuyLotsPanel
                                 portfolioId={holding.portfolioId}
                                 allPortfolios={isAllPortfolios}
