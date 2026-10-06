@@ -20,6 +20,8 @@ interface ChartSettings {
   dailyMoversCount: DailyMoversDisplayCount;
   showAthPopup: boolean;
   showCalendarEventsPopup: boolean;
+  /** Popup pri zmene analyst ratingu na držanom aktíve. */
+  showAnalystRatingPopup: boolean;
   /** Zoradenie zoznamu aktív na mobile (Dashboard). */
   mobileAssetsSortBy: MobileAssetsSortBy;
   mobileAssetsSortOrder: "asc" | "desc";
@@ -37,6 +39,7 @@ const defaultSettings: ChartSettings = {
   dailyMoversCount: 5,
   showAthPopup: true,
   showCalendarEventsPopup: true,
+  showAnalystRatingPopup: true,
   mobileAssetsSortBy: "name",
   mobileAssetsSortOrder: "asc",
   mobileAssetsView: "detailed",
@@ -125,6 +128,7 @@ export function useChartSettings() {
     dailyMoversCount: normalizeDailyMoversCount(settings.dailyMoversCount),
     showAthPopup: settings.showAthPopup !== false,
     showCalendarEventsPopup: settings.showCalendarEventsPopup !== false,
+    showAnalystRatingPopup: settings.showAnalystRatingPopup !== false,
     mobileAssetsSortBy: normalizeMobileAssetsSortBy(settings.mobileAssetsSortBy),
     mobileAssetsSortOrder: normalizeMobileAssetsSortOrder(settings.mobileAssetsSortOrder),
     mobileAssetsView: normalizeMobileAssetsView(settings.mobileAssetsView),
@@ -138,6 +142,8 @@ export function useChartSettings() {
     setShowAthPopup: (value: boolean) => updateSettings({ showAthPopup: value }),
     setShowCalendarEventsPopup: (value: boolean) =>
       updateSettings({ showCalendarEventsPopup: value }),
+    setShowAnalystRatingPopup: (value: boolean) =>
+      updateSettings({ showAnalystRatingPopup: value }),
     setMobileAssetsSortBy: (value: MobileAssetsSortBy) =>
       updateSettings({ mobileAssetsSortBy: normalizeMobileAssetsSortBy(value) }),
     setMobileAssetsSortOrder: (value: "asc" | "desc") =>

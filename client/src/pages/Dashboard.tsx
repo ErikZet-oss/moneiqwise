@@ -57,10 +57,15 @@ import {
   ChevronRight,
   LayoutList,
   ArrowDownUp,
+  Sparkles,
 } from "lucide-react";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio, type Portfolio } from "@/hooks/usePortfolio";
 import { useChartSettings, type MobileAssetsSortBy, type MobileAssetsView } from "@/hooks/useChartSettings";
+import {
+  detectAnalystRatingPopupChanges,
+  type AnalystRatingUpdateRow,
+} from "@/lib/analystRatingSeen";
 import { useDashboardLayout } from "@/hooks/useDashboardLayout";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { CompanyLogo } from "@/components/CompanyLogo";
@@ -790,6 +795,7 @@ export default function Dashboard() {
     dailyMoversCount,
     showAthPopup,
     showCalendarEventsPopup,
+    showAnalystRatingPopup,
     mobileAssetsSortBy,
     mobileAssetsSortOrder,
     mobileAssetsView,
@@ -830,6 +836,9 @@ export default function Dashboard() {
   const [calendarTodayDialogOpen, setCalendarTodayDialogOpen] = useState(false);
   const [todayCalendarEvents, setTodayCalendarEvents] = useState<DashboardCalendarEvent[]>([]);
   const calendarPopupHandledRef = useRef(false);
+  const [analystRatingDialogOpen, setAnalystRatingDialogOpen] = useState(false);
+  const [analystRatingChanges, setAnalystRatingChanges] = useState<AnalystRatingUpdateRow[]>([]);
+  const analystRatingPopupHandledRef = useRef(false);
   const [athDontShowAgainToday, setAthDontShowAgainToday] = useState(false);
   const [mobileAssetsSortDialogOpen, setMobileAssetsSortDialogOpen] = useState(false);
   const [mobileAssetsViewPopoverOpen, setMobileAssetsViewPopoverOpen] = useState(false);
@@ -848,6 +857,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     calendarPopupHandledRef.current = false;
+    analystRatingPopupHandledRef.current = false;
   }, [portfolioParam]);
 
   useEffect(() => {
@@ -874,6 +884,12 @@ export default function Dashboard() {
       calendarPopupHandledRef.current = false;
     }
   }, [showCalendarEventsPopup]);
+
+  useEffect(() => {
+    if (showAnalystRatingPopup) {
+      analystRatingPopupHandledRef.current = false;
+    }
+  }, [showAnalystRatingPopup]);
 
   /** Drží ťažké dotazy (P&L, poplatky, …) až po idle — menej paralelných requestov pri prvom načítaní, menej „stránka nereaguje“. */
   const [dashboardSecondaryReady, setDashboardSecondaryReady] = useState(false);
@@ -1320,6 +1336,23 @@ export default function Dashboard() {
     enabled: dashboardSecondaryReady,
   });
 
+  const {
+    data: analystRatingUpdatesRes,
+    isFetched: analystRatingUpdatesFetched,
+  } = useQuery<{ updates: AnalystRatingUpdateRow[] }>({
+    queryKey: ["/api/holdings/analyst-rating-updates", portfolioParam],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/holdings/analyst-rating-updates?portfolio=${encodeURIComponent(portfolioParam)}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) throw new Error("analyst rating updates");
+      return res.json();
+    },
+    staleTime: 30 * 60 * 1000,
+    enabled: dashboardSecondaryReady && showAnalystRatingPopup,
+  });
+
   const mergedDashboardCalendarEvents = useMemo(() => {
     const out: DashboardCalendarEvent[] = [];
     for (const e of holdingsNextEarnings?.all ?? []) {
@@ -1547,6 +1580,50 @@ export default function Dashboard() {
     mergedDashboardCalendarEvents,
     portfolioParam,
     showCalendarEventsPopup,
+  ]);
+
+  useEffect(() => {
+    if (!showAnalystRatingPopup) {
+      setAnalystRatingDialogOpen(false);
+      analystRatingPopupHandledRef.current = true;
+      return;
+    }
+    if (portfolios.length > 0 && !athPopupEvaluated) return;
+    if (athDialogOpen || calendarTodayDialogOpen) return;
+    if (!analystRatingUpdatesFetched) return;
+    if (analystRatingPopupHandledRef.current) return;
+
+    const todayIso = format(startOfDay(new Date()), "yyyy-MM-dd");
+    const storageKey = `mw-dash-analyst-popup-${todayIso}-${portfolioParam}`;
+    try {
+      if (typeof sessionStorage !== "undefined" && sessionStorage.getItem(storageKey)) {
+        analystRatingPopupHandledRef.current = true;
+        return;
+      }
+    } catch {
+      /* ignore */
+    }
+
+    const changed = detectAnalystRatingPopupChanges(analystRatingUpdatesRes?.updates ?? []);
+    analystRatingPopupHandledRef.current = true;
+    if (changed.length === 0) return;
+
+    setAnalystRatingChanges(changed);
+    setAnalystRatingDialogOpen(true);
+    try {
+      if (typeof sessionStorage !== "undefined") sessionStorage.setItem(storageKey, "1");
+    } catch {
+      /* ignore */
+    }
+  }, [
+    analystRatingUpdatesFetched,
+    analystRatingUpdatesRes?.updates,
+    athDialogOpen,
+    athPopupEvaluated,
+    calendarTodayDialogOpen,
+    portfolioParam,
+    portfolios.length,
+    showAnalystRatingPopup,
   ]);
 
   const formatRelativeTime = (timestamp: number) => {
@@ -2300,6 +2377,105 @@ export default function Dashboard() {
                 </a>
               </li>
             ))}
+          </ul>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showAnalystRatingPopup && analystRatingDialogOpen}
+        onOpenChange={setAnalystRatingDialogOpen}
+      >
+        <DialogContent className="max-w-md max-h-[min(85vh,520px)] flex flex-col gap-0">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 shrink-0 text-sky-600 dark:text-sky-400" />
+              Zmeny analyst ratingov
+            </DialogTitle>
+            <DialogDescription>
+              Analytik zmenil ohodnotenie aktíva vo vašom portfóliu.
+            </DialogDescription>
+          </DialogHeader>
+          <ul
+            className="mt-3 space-y-3 overflow-y-auto pr-1 text-sm"
+            data-testid="list-dashboard-analyst-rating-changes"
+          >
+            {analystRatingChanges.map((row) => {
+              const ch = row.latestChange;
+              const action = (ch?.action ?? "").toLowerCase();
+              const actionLabel =
+                action === "up"
+                  ? "Upgrade"
+                  : action === "down"
+                    ? "Downgrade"
+                    : action === "init"
+                      ? "Init"
+                      : action === "main" || action === "reit"
+                        ? "Maintain"
+                        : ch?.action || "Zmena";
+              const gradeLine =
+                ch?.fromGrade || ch?.toGrade
+                  ? `${ch?.fromGrade || "—"} → ${ch?.toGrade || "—"}`
+                  : null;
+              const targetLine =
+                ch?.priceTarget != null
+                  ? `${ch.priceTarget.toLocaleString("sk-SK", {
+                      maximumFractionDigits: 2,
+                    })}${row.currency ? ` ${row.currency}` : ""}`
+                  : null;
+              return (
+                <li
+                  key={`${row.ticker}-${ch?.date ?? ""}-${ch?.firm ?? ""}`}
+                  className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-medium leading-snug truncate">
+                        {row.companyName}{" "}
+                        <span className="font-mono text-xs text-muted-foreground">{row.ticker}</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {ch?.firm || "Analytik"}
+                        {ch?.date
+                          ? ` · ${format(parse(ch.date, "yyyy-MM-dd", new Date()), "d. MMM yyyy", {
+                              locale: sk,
+                            })}`
+                          : ""}
+                      </p>
+                      <p className="text-xs mt-1">
+                        <span className="font-medium">{actionLabel}</span>
+                        {gradeLine ? <span className="text-muted-foreground"> · {gradeLine}</span> : null}
+                      </p>
+                      {targetLine && (
+                        <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">
+                          Target {targetLine}
+                          {ch?.priorPriceTarget != null
+                            ? ` (pred: ${ch.priorPriceTarget.toLocaleString("sk-SK", {
+                                maximumFractionDigits: 2,
+                              })})`
+                            : ""}
+                        </p>
+                      )}
+                    </div>
+                    {row.recommendationKey && (
+                      <Badge variant="outline" className="shrink-0 capitalize text-[10px]">
+                        {row.recommendationKey.replace(/_/g, " ")}
+                      </Badge>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 text-xs text-primary mt-2 hover:underline"
+                    onClick={() => {
+                      setAnalystRatingDialogOpen(false);
+                      setLocation(`/asset/${encodeURIComponent(row.ticker)}`);
+                    }}
+                  >
+                    Otvoriť detail aktíva
+                    <ExternalLink className="h-3 w-3" />
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </DialogContent>
       </Dialog>

@@ -3914,6 +3914,92 @@ export async function registerRoutes(
     }
   });
 
+  /**
+   * Najnovšia zmena analyst ratingu pre držané tickery (Yahoo) —
+   * pre popup na Dashboarde.
+   */
+  app.get("/api/holdings/analyst-rating-updates", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const portfolioId = req.query.portfolio as string | undefined;
+      const userHoldings = await storage.getHoldingsByUser(userId, portfolioId);
+
+      const seen = new Set<string>();
+      const unique: { ticker: string; companyName: string }[] = [];
+      for (const h of userHoldings) {
+        const sh = parseFloat(h.shares);
+        if (!(sh > 1e-9)) continue;
+        const t = h.ticker.toUpperCase();
+        if (t === "CASH" || t === CASH_FLOW_TICKER || isPokemonTicker(t)) continue;
+        if (seen.has(t)) continue;
+        seen.add(t);
+        unique.push({ ticker: t, companyName: h.companyName || t });
+      }
+
+      if (unique.length === 0) {
+        return res.json({ updates: [] });
+      }
+
+      const CONCURRENCY = 3;
+      type UpdateRow = {
+        ticker: string;
+        companyName: string;
+        currency: string | null;
+        recommendationKey: string | null;
+        latestChange: {
+          date: string | null;
+          firm: string;
+          action: string | null;
+          fromGrade: string | null;
+          toGrade: string | null;
+          priceTarget: number | null;
+          priorPriceTarget: number | null;
+        } | null;
+      };
+      const updates: UpdateRow[] = [];
+
+      for (let i = 0; i < unique.length; i += CONCURRENCY) {
+        const chunk = unique.slice(i, i + CONCURRENCY);
+        const chunkResults = await Promise.all(
+          chunk.map(async (row) => {
+            try {
+              const ratings = await fetchAnalystRatingsForAsset(row.ticker);
+              const latest =
+                ratings.history.find((h) => h.date || h.firm || h.action || h.toGrade) ?? null;
+              return {
+                ticker: row.ticker,
+                companyName: row.companyName,
+                currency: ratings.currency,
+                recommendationKey: ratings.recommendationKey,
+                latestChange: latest
+                  ? {
+                      date: latest.date,
+                      firm: latest.firm,
+                      action: latest.action,
+                      fromGrade: latest.fromGrade,
+                      toGrade: latest.toGrade,
+                      priceTarget: latest.priceTarget,
+                      priorPriceTarget: latest.priorPriceTarget,
+                    }
+                  : null,
+              } satisfies UpdateRow;
+            } catch {
+              return null;
+            }
+          }),
+        );
+        for (const r of chunkResults) {
+          if (r) updates.push(r);
+        }
+      }
+
+      res.json({ updates });
+    } catch (error) {
+      console.error("Error fetching analyst rating updates for holdings:", error);
+      res.status(500).json({ message: "Nepodarilo sa načítať zmeny analyst ratings." });
+    }
+  });
+
   /** Analyst ratings / price targets (Yahoo) — pre detail držaného aktíva. */
   app.get("/api/assets/:ticker/analyst-ratings", isAuthenticated, async (req: any, res) => {
     try {

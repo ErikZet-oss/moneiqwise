@@ -54,6 +54,7 @@ export default function Settings() {
     dailyMoversCount,
     showAthPopup,
     showCalendarEventsPopup,
+    showAnalystRatingPopup,
     setShowChart,
     setShowTooltip,
     setHideAmounts,
@@ -62,6 +63,7 @@ export default function Settings() {
     setDailyMoversCount,
     setShowAthPopup,
     setShowCalendarEventsPopup,
+    setShowAnalystRatingPopup,
   } = useChartSettings();
   const {
     enabled: quickNavEnabled,
@@ -1032,6 +1034,20 @@ export default function Settings() {
               checked={showCalendarEventsPopup}
               onCheckedChange={setShowCalendarEventsPopup}
               data-testid="switch-show-calendar-events-popup"
+            />
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t">
+            <div className="space-y-0.5">
+              <div className="text-sm font-medium">Popup zmeny analyst ratingu</div>
+              <div className="text-xs text-muted-foreground">
+                Zobraziť okno, keď analytik zmení ohodnotenie aktíva vo vašom portfóliu
+              </div>
+            </div>
+            <Switch
+              checked={showAnalystRatingPopup}
+              onCheckedChange={setShowAnalystRatingPopup}
+              data-testid="switch-show-analyst-rating-popup"
             />
           </div>
         </CardContent>
