@@ -1,11 +1,11 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   PieChart,
   Pie,
   Cell,
-  Tooltip,
   ResponsiveContainer,
+  Sector,
 } from "recharts";
 import { PieChartIcon } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,6 +39,22 @@ const ASSET_TYPE_LABELS: Record<AssetType, string> = {
   INE: "Iné",
 };
 
+/** Same pastel palette as DashboardAllocationWidget */
+const SLICE_COLORS = [
+  "hsl(210 85% 62%)",
+  "hsl(145 68% 52%)",
+  "hsl(32 92% 58%)",
+  "hsl(280 58% 70%)",
+  "hsl(168 72% 52%)",
+  "hsl(350 68% 68%)",
+  "hsl(45 85% 62%)",
+  "hsl(195 75% 58%)",
+];
+
+function sliceColor(i: number): string {
+  return SLICE_COLORS[i % SLICE_COLORS.length]!;
+}
+
 const SECTOR_OPTIONS = [
   "Technológie",
   "Financie",
@@ -68,11 +84,6 @@ interface StockQuote {
 }
 
 type Slice = { name: string; value: number; hint?: string };
-
-function sliceFill(i: number): string {
-  const n = (i % 5) + 1;
-  return `hsl(var(--chart-${n}))`;
-}
 
 function aggregateSlices(rows: Slice[]): Slice[] {
   const m = new Map<string, number>();
@@ -130,18 +141,58 @@ function useChartReady() {
   return ready;
 }
 
-function useIsNarrowScreen() {
-  const [narrow, setNarrow] = useState(
-    typeof window !== "undefined" ? window.innerWidth < 640 : true
+type ActiveShapeProps = {
+  cx?: number;
+  cy?: number;
+  innerRadius?: number;
+  outerRadius?: number;
+  startAngle?: number;
+  endAngle?: number;
+  fill?: string;
+};
+
+function ActiveDonutShape(props: ActiveShapeProps) {
+  const { cx = 0, cy = 0, innerRadius = 0, outerRadius = 0, startAngle = 0, endAngle = 0, fill } =
+    props;
+  return (
+    <g>
+      <Sector
+        cx={cx}
+        cy={cy}
+        innerRadius={innerRadius - 1}
+        outerRadius={outerRadius + 5}
+        startAngle={startAngle}
+        endAngle={endAngle}
+        fill={fill}
+        cornerRadius={4}
+        style={{ filter: `drop-shadow(0 0 10px ${fill})` }}
+      />
+      <Sector
+        cx={cx}
+        cy={cy}
+        innerRadius={outerRadius + 7}
+        outerRadius={outerRadius + 10}
+        startAngle={startAngle}
+        endAngle={endAngle}
+        fill={fill}
+        opacity={0.35}
+        cornerRadius={3}
+      />
+    </g>
   );
+}
+
+/** Desktop hover only — touch + synthetic mouseenter would toggle selection off. */
+function useFineHover() {
+  const [fineHover, setFineHover] = useState(false);
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 639px)");
-    const fn = () => setNarrow(mq.matches);
-    fn();
-    mq.addEventListener("change", fn);
-    return () => mq.removeEventListener("change", fn);
+    const mq = window.matchMedia("(hover: hover) and (pointer: fine)");
+    const sync = () => setFineHover(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
   }, []);
-  return narrow;
+  return fineHover;
 }
 
 export default function Allocation() {
@@ -398,28 +449,6 @@ export default function Allocation() {
     isAllPortfolios,
   ]);
 
-  const renderTooltip = (props: {
-    active?: boolean;
-    payload?: Array<{ name?: string; value?: number; payload?: Slice }>;
-  }) => {
-    if (!props.active || !props.payload?.length) return null;
-    const row = props.payload[0];
-    const name = row.name ?? row.payload?.name;
-    const hint = row.payload?.hint;
-    const value = row.value ?? row.payload?.value ?? 0;
-    const pct = totalMarket > 0 ? (value / totalMarket) * 100 : 0;
-    return (
-      <div className="rounded-lg border bg-popover px-3 py-2 text-sm shadow-lg">
-        <div className="font-medium">{hint ? `${name} — ${hint}` : name}</div>
-        <div className="text-muted-foreground">
-          {mask(formatCurrency(value))}
-          {" · "}
-          {pct.toFixed(1)} %
-        </div>
-      </div>
-    );
-  };
-
   const loading =
     portfoliosLoading ||
     holdingsLoading ||
@@ -483,6 +512,7 @@ export default function Allocation() {
       ) : (
         <div className="grid gap-3 md:gap-5 md:grid-cols-2 xl:grid-cols-4">
           <AllocationPieCard
+            chartId="ticker"
             title="Podľa akcií"
             description="Každý ticker + hotovosť"
             data={byTicker}
@@ -490,11 +520,11 @@ export default function Allocation() {
             displayMode={displayMode}
             mask={mask}
             formatCurrency={formatCurrency}
-            renderTooltip={renderTooltip}
             denseLegend
             chartReady={chartReady}
           />
           <AllocationPieCard
+            chartId="sector"
             title="Podľa sektorov"
             description="Odvetvie podľa Yahoo"
             data={bySector}
@@ -502,10 +532,10 @@ export default function Allocation() {
             displayMode={displayMode}
             mask={mask}
             formatCurrency={formatCurrency}
-            renderTooltip={renderTooltip}
             chartReady={chartReady}
           />
           <AllocationPieCard
+            chartId="country"
             title="Podľa krajín"
             description="Krajina sídla emitenta"
             data={byCountry}
@@ -513,10 +543,10 @@ export default function Allocation() {
             displayMode={displayMode}
             mask={mask}
             formatCurrency={formatCurrency}
-            renderTooltip={renderTooltip}
             chartReady={chartReady}
           />
           <AllocationPieCard
+            chartId="type"
             title="Podľa typu"
             description="Akcia, ETF, krypto…"
             data={byType}
@@ -524,7 +554,6 @@ export default function Allocation() {
             displayMode={displayMode}
             mask={mask}
             formatCurrency={formatCurrency}
-            renderTooltip={renderTooltip}
             chartReady={chartReady}
           />
         </div>
@@ -635,6 +664,7 @@ export default function Allocation() {
 }
 
 function AllocationPieCard({
+  chartId,
   title,
   description,
   data,
@@ -642,10 +672,10 @@ function AllocationPieCard({
   displayMode,
   mask,
   formatCurrency,
-  renderTooltip,
   denseLegend,
   chartReady,
 }: {
+  chartId: string;
   title: string;
   description: string;
   data: Slice[];
@@ -653,214 +683,192 @@ function AllocationPieCard({
   displayMode: "percent" | "value";
   mask: (s: string) => string;
   formatCurrency: (n: number) => string;
-  renderTooltip: (p: {
-    active?: boolean;
-    payload?: Array<{ name?: string; value?: number; payload?: Slice }>;
-  }) => import("react").ReactNode;
-  /** Viac riadkov + vyšší scroll pre koláč podľa tickerov */
   denseLegend?: boolean;
   chartReady: boolean;
 }) {
-  const narrow = useIsNarrowScreen();
+  const fineHover = useFineHover();
+  const lastSelectAt = useRef(0);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [showAllLegendItems, setShowAllLegendItems] = useState(false);
-  const chartData = data.map((d) => ({ ...d }));
 
-  const innerR = narrow ? "44%" : "48%";
-  const outerR = narrow ? "88%" : "88%";
-  const mobileLegendLimit = denseLegend ? 10 : 8;
-  const hasMoreLegendItems = narrow && chartData.length > mobileLegendLimit;
+  const chartData = useMemo(
+    () =>
+      data.map((s, i) => ({
+        ...s,
+        fill: sliceColor(i),
+      })),
+    [data],
+  );
+
+  const legendLimit = denseLegend ? 12 : 10;
+  const hasMoreLegendItems = chartData.length > legendLimit;
   const visibleLegendSlices =
-    narrow && !showAllLegendItems ? chartData.slice(0, mobileLegendLimit) : chartData;
+    !showAllLegendItems && hasMoreLegendItems
+      ? chartData.slice(0, legendLimit)
+      : chartData;
+
+  const selectSlice = (index: number) => {
+    const now = Date.now();
+    if (now - lastSelectAt.current < 320) return;
+    lastSelectAt.current = now;
+    setActiveIndex((prev) => (prev === index ? null : index));
+  };
+
+  useEffect(() => {
+    setActiveIndex(null);
+  }, [data, displayMode]);
+
+  const active = activeIndex != null ? chartData[activeIndex] : null;
+  const activePct = active && total > 0 ? (active.value / total) * 100 : null;
 
   return (
-    <Card
-      className={cn(
-        "flex flex-col overflow-hidden border-border bg-card shadow-sm",
-      )}
-    >
+    <Card className="flex flex-col overflow-hidden border-border bg-card shadow-sm">
       <CardHeader className="px-3 py-2.5 md:px-4 md:py-3 space-y-0.5">
         <CardTitle className="text-xs font-medium text-muted-foreground">{title}</CardTitle>
         <CardDescription className="text-[11px] md:text-xs leading-snug">{description}</CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-2.5 md:gap-3 px-3 pb-3 pt-0 md:px-4 md:pb-4">
+      <CardContent className="flex flex-col gap-2.5 px-3 pb-3 pt-0 md:px-4 md:pb-4">
         {chartData.length === 0 ? (
           <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
             Nedostatok dát
           </div>
         ) : (
           <>
-            <div className="min-w-0">
-              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                Celkom
-              </span>
-              <div className="text-xl md:text-2xl font-semibold tabular-nums leading-tight tracking-tight truncate">
-                {mask(formatCurrency(total))}
+            <div className="relative mx-auto h-[200px] w-[200px] md:h-[220px] md:w-[220px] shrink-0">
+              {!chartReady ? (
+                <div className="h-full w-full rounded-full bg-muted/30 animate-pulse" />
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <defs>
+                      {chartData.map((s, i) => (
+                        <linearGradient
+                          key={`${chartId}-grad-${i}`}
+                          id={`${chartId}-grad-${i}`}
+                          x1="0"
+                          y1="0"
+                          x2="1"
+                          y2="1"
+                        >
+                          <stop offset="0%" stopColor={s.fill} stopOpacity={1} />
+                          <stop offset="100%" stopColor={s.fill} stopOpacity={0.72} />
+                        </linearGradient>
+                      ))}
+                    </defs>
+                    <Pie
+                      data={chartData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius="56%"
+                      outerRadius="92%"
+                      paddingAngle={2}
+                      cornerRadius={4}
+                      stroke="transparent"
+                      strokeWidth={0}
+                      isAnimationActive
+                      animationDuration={650}
+                      activeIndex={activeIndex ?? undefined}
+                      activeShape={ActiveDonutShape}
+                      onMouseEnter={
+                        fineHover ? (_, index) => setActiveIndex(index) : undefined
+                      }
+                      onMouseLeave={fineHover ? () => setActiveIndex(null) : undefined}
+                      onClick={(_, index, e) => {
+                        e?.stopPropagation?.();
+                        selectSlice(index);
+                      }}
+                      style={{ cursor: "pointer", outline: "none", touchAction: "manipulation" }}
+                    >
+                      {chartData.map((_, i) => (
+                        <Cell
+                          key={`${chartId}-cell-${i}`}
+                          fill={`url(#${chartId}-grad-${i})`}
+                          className="outline-none"
+                          style={{
+                            opacity:
+                              activeIndex == null || activeIndex === i ? 1 : 0.35,
+                            filter:
+                              activeIndex === i
+                                ? undefined
+                                : "drop-shadow(0 2px 6px rgba(0,0,0,0.35))",
+                            cursor: "pointer",
+                          }}
+                        />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center px-3">
+                <div className="rounded-full bg-background/40 dark:bg-black/35 backdrop-blur-[2px] px-2.5 py-2 min-w-[5.5rem]">
+                  <p className="text-[9px] uppercase tracking-wide text-muted-foreground leading-tight truncate max-w-[96px]">
+                    {active ? active.name : "Celkom"}
+                  </p>
+                  <p className="text-sm font-semibold tabular-nums tracking-tight mt-0.5 truncate max-w-[108px]">
+                    {mask(formatCurrency(active ? active.value : total))}
+                  </p>
+                  {activePct != null && (
+                    <p className="text-[10px] font-medium text-muted-foreground tabular-nums mt-0.5">
+                      {activePct.toFixed(1)} %
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
 
-            <div className="flex justify-center w-full min-w-0">
-              <div
-                className={cn(
-                  "w-full aspect-square max-h-[min(72vw,280px)] md:max-h-[260px] xl:max-h-[300px]",
-                  !chartReady && "opacity-0 pointer-events-none"
-                )}
-              >
-                {chartReady ? (
-                  <ResponsiveContainer width="100%" height="100%" minWidth={140} minHeight={140}>
-                    <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
-                      <Pie
-                        data={chartData}
-                        dataKey="value"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={innerR}
-                        outerRadius={outerR}
-                        paddingAngle={2}
-                        strokeWidth={2}
-                        stroke="hsl(var(--background))"
-                        cornerRadius={4}
-                        label={false}
-                        isAnimationActive={true}
-                      >
-                        {chartData.map((_, i) => (
-                          <Cell key={i} fill={sliceFill(i)} />
-                        ))}
-                      </Pie>
-                      <Tooltip content={renderTooltip} wrapperStyle={{ zIndex: 50 }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="w-full h-full rounded-full bg-muted/40 animate-pulse" />
-                )}
-              </div>
-            </div>
-
-            <AllocationLegend
-              slices={visibleLegendSlices}
-              total={total}
-              displayMode={displayMode}
-              mask={mask}
-              formatCurrency={formatCurrency}
-              dense={denseLegend}
-            />
+            <ul className="space-y-0.5" data-testid={`list-allocation-legend-${chartId}`}>
+              {visibleLegendSlices.map((slice, i) => {
+                const pct = total > 0 ? (slice.value / total) * 100 : 0;
+                const isActive = activeIndex === i;
+                const valueLabel =
+                  displayMode === "value"
+                    ? mask(formatCurrency(slice.value))
+                    : `${pct.toFixed(0)}%`;
+                return (
+                  <li key={`${slice.name}-${i}`}>
+                    <button
+                      type="button"
+                      className={cn(
+                        "w-full flex items-center gap-1.5 rounded-md px-1.5 py-1 text-left transition-colors",
+                        isActive ? "bg-white/10" : "hover:bg-white/5",
+                      )}
+                      title={slice.hint ? `${slice.name} — ${slice.hint}` : slice.name}
+                      onMouseEnter={fineHover ? () => setActiveIndex(i) : undefined}
+                      onMouseLeave={fineHover ? () => setActiveIndex(null) : undefined}
+                      onClick={() => selectSlice(i)}
+                    >
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-sm shadow-[0_0_6px_currentColor]"
+                        style={{ backgroundColor: slice.fill, color: slice.fill }}
+                      />
+                      <span className="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight">
+                        {slice.name}
+                      </span>
+                      <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                        {valueLabel}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
             {hasMoreLegendItems && (
-              <div className="flex justify-center">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-7 px-2.5 text-[11px]"
-                  onClick={() => setShowAllLegendItems((prev) => !prev)}
-                >
-                  {showAllLegendItems
-                    ? "Zobraziť menej"
-                    : `Zobraziť viac (${chartData.length - mobileLegendLimit})`}
-                </Button>
-              </div>
+              <button
+                type="button"
+                className="self-start px-1.5 text-[10px] font-medium text-sky-400 hover:text-sky-300 transition-colors"
+                onClick={() => setShowAllLegendItems((prev) => !prev)}
+              >
+                {showAllLegendItems
+                  ? "Zobraziť menej"
+                  : `+${chartData.length - legendLimit} ďalších`}
+              </button>
             )}
           </>
         )}
       </CardContent>
     </Card>
-  );
-}
-
-function AllocationLegend({
-  slices,
-  total,
-  displayMode,
-  mask,
-  formatCurrency,
-  dense,
-}: {
-  slices: Slice[];
-  total: number;
-  displayMode: "percent" | "value";
-  mask: (s: string) => string;
-  formatCurrency: (n: number) => string;
-  dense?: boolean;
-}) {
-  const narrow = useIsNarrowScreen();
-
-  return (
-    <div
-      className={cn(
-        "rounded-lg border border-border/70 bg-muted/25",
-        narrow ? "px-1 py-1 space-y-0" : "rounded-xl px-1.5 py-2 sm:px-3 space-y-1",
-      )}
-      role="list"
-    >
-      {slices.map((slice, i) => {
-        const pct = total > 0 ? (slice.value / total) * 100 : 0;
-        const valueStr = mask(formatCurrency(slice.value));
-        const pctStr = `${pct.toFixed(1)} %`;
-
-        if (narrow) {
-          return (
-            <div
-              key={`${slice.name}-${i}`}
-              role="listitem"
-              className="flex items-center gap-1.5 rounded px-1 py-0.5 min-h-[22px]"
-            >
-              <span
-                className="h-2 w-2 shrink-0 rounded-sm ring-1 ring-border/50"
-                style={{ backgroundColor: sliceFill(i) }}
-                aria-hidden
-              />
-              <span
-                className="min-w-0 flex-1 truncate text-[11px] font-medium leading-none"
-                title={slice.hint ? `${slice.name} — ${slice.hint}` : slice.name}
-              >
-                {slice.name}
-              </span>
-              <span className="shrink-0 text-[10px] tabular-nums leading-none whitespace-nowrap">
-                <span className={displayMode === "value" ? "text-foreground font-medium" : "text-muted-foreground"}>
-                  {valueStr}
-                </span>
-                <span className="text-muted-foreground/80 mx-0.5">·</span>
-                <span className={displayMode === "percent" ? "text-foreground font-medium" : "text-muted-foreground"}>
-                  {pctStr}
-                </span>
-              </span>
-            </div>
-          );
-        }
-
-        return (
-          <div
-            key={`${slice.name}-${i}`}
-            role="listitem"
-            className={cn(
-              "flex items-center justify-between gap-2 rounded-md hover:bg-muted/60 transition-colors",
-              dense ? "px-1.5 py-1" : "px-1.5 py-1.5",
-            )}
-          >
-            <span className="flex items-center gap-2 min-w-0 flex-1">
-              <span
-                className="h-2.5 w-2.5 shrink-0 rounded-sm ring-1 ring-border/60"
-                style={{ backgroundColor: sliceFill(i) }}
-                aria-hidden
-              />
-              <span
-                className="truncate text-sm font-medium leading-tight"
-                title={slice.hint ? `${slice.name} — ${slice.hint}` : slice.name}
-              >
-                {slice.name}
-              </span>
-            </span>
-            <span className="shrink-0 text-right text-xs tabular-nums leading-tight whitespace-nowrap">
-              <span className={displayMode === "value" ? "text-foreground font-medium" : "text-muted-foreground"}>
-                {valueStr}
-              </span>
-              <span className="text-muted-foreground/70 mx-1">·</span>
-              <span className={displayMode === "percent" ? "text-foreground font-medium" : "text-muted-foreground"}>
-                {pctStr}
-              </span>
-            </span>
-          </div>
-        );
-      })}
-    </div>
   );
 }
