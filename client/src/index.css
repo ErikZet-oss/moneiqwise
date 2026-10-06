@@ -270,6 +270,55 @@
     mask-composite: intersect;
   }
 
+  /**
+   * Full-bleed fade grid for marketing / login surfaces (works without .dark).
+   */
+  .landing-fade-grid {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(to right, hsl(0 0% 100% / 0.11) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(0 0% 100% / 0.11) 1px, transparent 1px);
+    background-size: 52px 40px;
+    background-position: center;
+    opacity: 1;
+    -webkit-mask-image:
+      radial-gradient(ellipse 95% 85% at 42% 38%, #000 18%, transparent 72%),
+      linear-gradient(to bottom, #000 0%, #000 58%, transparent 100%);
+    mask-image:
+      radial-gradient(ellipse 95% 85% at 42% 38%, #000 18%, transparent 72%),
+      linear-gradient(to bottom, #000 0%, #000 58%, transparent 100%);
+    -webkit-mask-composite: source-in;
+    mask-composite: intersect;
+  }
+
+  .landing-fade-grid-soft {
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(to right, hsl(215 20% 40% / 0.12) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(215 20% 40% / 0.12) 1px, transparent 1px);
+    background-size: 52px 40px;
+    background-position: center;
+    opacity: 1;
+    -webkit-mask-image:
+      radial-gradient(ellipse 80% 70% at 70% 30%, #000 10%, transparent 70%),
+      linear-gradient(to bottom, #000 0%, transparent 85%);
+    mask-image:
+      radial-gradient(ellipse 80% 70% at 70% 30%, #000 10%, transparent 70%),
+      linear-gradient(to bottom, #000 0%, transparent 85%);
+    -webkit-mask-composite: source-in;
+    mask-composite: intersect;
+  }
+
+  .dark .landing-fade-grid-soft {
+    background-image:
+      linear-gradient(to right, hsl(0 0% 100% / 0.07) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(0 0% 100% / 0.07) 1px, transparent 1px);
+  }
+
   /* Soft pastel profit/loss in dark mode for common Tailwind greens/reds on dashboard */
   .dark .text-green-500 {
     color: hsl(160 65% 58%);
