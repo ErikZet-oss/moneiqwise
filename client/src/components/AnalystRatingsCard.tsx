@@ -154,40 +154,38 @@ export function AnalystRatingsCard({ ticker, enabled = true, formatPrice }: Prop
   const totalVotes = buyCount + holdCount + sellCount;
   const upside = data?.upsidePercent;
   const upsidePositive = upside != null && upside >= 0;
-  const historyRows = data?.history.slice(0, 8) ?? [];
+  const historyRows = data?.history.slice(0, 6) ?? [];
 
   return (
     <Card
       data-testid="asset-analyst-ratings"
       className="overflow-hidden border-border bg-card shadow-sm"
     >
-      <CardHeader className="p-4 pb-2">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0">
-            <CardTitle className="text-base md:text-lg font-semibold flex items-center gap-2">
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-sky-500/15 text-sky-700 dark:text-sky-300">
-                <Sparkles className="h-3.5 w-3.5" />
-              </span>
-              Analyst Ratings
-            </CardTitle>
-            <CardDescription className="mt-1 text-xs md:text-sm">
-              Konsenzus analytikov a cieľové ceny (Yahoo)
-            </CardDescription>
-          </div>
+      <CardHeader className="p-3 pb-1.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle className="text-sm md:text-base font-semibold flex items-center gap-2">
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-sky-500/15 text-sky-700 dark:text-sky-300">
+              <Sparkles className="h-3.5 w-3.5" />
+            </span>
+            Analyst Ratings
+          </CardTitle>
           {data?.recommendationKey && (
             <Badge
               variant="outline"
-              className={cn("shrink-0 capitalize", recommendationTone(data.recommendationKey))}
+              className={cn("shrink-0 capitalize text-[10px]", recommendationTone(data.recommendationKey))}
               data-testid="analyst-recommendation-badge"
             >
               {recommendationLabel(data.recommendationKey)}
             </Badge>
           )}
         </div>
+        <CardDescription className="text-[11px] md:text-xs">
+          Konsenzus analytikov a cieľové ceny (Yahoo)
+        </CardDescription>
       </CardHeader>
-      <CardContent className="p-4 pt-2 space-y-4">
+      <CardContent className="p-3 pt-1.5 space-y-3">
         {isLoading ? (
-          <Skeleton className="h-36 w-full" />
+          <Skeleton className="h-28 w-full" />
         ) : isError ? (
           <p className="text-sm text-destructive">Analyst ratings sa nepodarilo načítať.</p>
         ) : !data ||
@@ -199,27 +197,27 @@ export function AnalystRatingsCard({ ticker, enabled = true, formatPrice }: Prop
           </p>
         ) : (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="rounded-lg border border-border/70 bg-muted/20 p-3 min-w-0">
-                <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="rounded-md border border-border/70 bg-muted/20 px-2.5 py-2 min-w-0">
+                <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
                   <Target className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400 shrink-0" />
                   Target (mean)
                 </div>
                 <div
-                  className="mt-1 text-xl md:text-2xl font-semibold tabular-nums truncate"
+                  className="mt-0.5 text-lg md:text-xl font-semibold tabular-nums truncate"
                   data-testid="analyst-target-mean"
                 >
                   {data.targetMean != null ? formatPrice(data.targetMean) : "—"}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1 truncate">
+                <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
                   {data.numberOfAnalystOpinions != null
                     ? `${data.numberOfAnalystOpinions} analytikov`
                     : "Konsenzus analytikov"}
                 </p>
               </div>
 
-              <div className="rounded-lg border border-border/70 bg-muted/20 p-3 min-w-0">
-                <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <div className="rounded-md border border-border/70 bg-muted/20 px-2.5 py-2 min-w-0">
+                <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
                   {upsidePositive ? (
                     <ArrowUpRight className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   ) : (
@@ -229,7 +227,7 @@ export function AnalystRatingsCard({ ticker, enabled = true, formatPrice }: Prop
                 </div>
                 <div
                   className={cn(
-                    "mt-1 text-xl md:text-2xl font-semibold tabular-nums truncate",
+                    "mt-0.5 text-lg md:text-xl font-semibold tabular-nums truncate",
                     upside == null
                       ? "text-muted-foreground"
                       : upsidePositive
@@ -240,26 +238,26 @@ export function AnalystRatingsCard({ ticker, enabled = true, formatPrice }: Prop
                 >
                   {upside == null ? "—" : `${upsidePositive ? "+" : ""}${upside.toFixed(1)}%`}
                 </div>
-                <p className="text-xs text-muted-foreground mt-1 truncate">
+                <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
                   {data.currentPrice != null
                     ? `Cena: ${formatPrice(data.currentPrice)}`
                     : "Od mean targetu"}
                 </p>
               </div>
 
-              <div className="rounded-lg border border-border/70 bg-muted/20 p-3 min-w-0">
-                <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <div className="rounded-md border border-border/70 bg-muted/20 px-2.5 py-2 min-w-0">
+                <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
                   <Crosshair className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
                   Rozpätie targetov
                 </div>
-                <div className="mt-1 text-sm md:text-base font-semibold tabular-nums leading-snug">
+                <div className="mt-0.5 text-sm font-semibold tabular-nums leading-snug">
                   <span className="block truncate">
                     {data.targetLow != null ? formatPrice(data.targetLow) : "—"}
                     <span className="text-muted-foreground font-normal"> — </span>
                     {data.targetHigh != null ? formatPrice(data.targetHigh) : "—"}
                   </span>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1 truncate">
+                <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
                   Medián: {data.targetMedian != null ? formatPrice(data.targetMedian) : "—"}
                 </p>
               </div>
@@ -267,14 +265,14 @@ export function AnalystRatingsCard({ ticker, enabled = true, formatPrice }: Prop
 
             <div
               className={cn(
-                "grid gap-3",
+                "grid gap-2.5",
                 trend && totalVotes > 0 && historyRows.length > 0 && "lg:grid-cols-5",
               )}
             >
               {trend && totalVotes > 0 && (
                 <div
                   className={cn(
-                    "rounded-lg border border-border/70 bg-muted/20 p-3 space-y-3 min-w-0",
+                    "rounded-md border border-border/70 bg-muted/20 px-2.5 py-2 space-y-2 min-w-0",
                     historyRows.length > 0 ? "lg:col-span-2" : "",
                   )}
                 >
@@ -284,12 +282,12 @@ export function AnalystRatingsCard({ ticker, enabled = true, formatPrice }: Prop
                       Buy / Hold / Sell
                     </div>
                     {data.recommendationMean != null && (
-                      <span className="text-xs text-muted-foreground tabular-nums shrink-0">
+                      <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">
                         Mean {data.recommendationMean.toFixed(2)}
                       </span>
                     )}
                   </div>
-                  <div className="flex h-2.5 overflow-hidden rounded-full bg-muted">
+                  <div className="flex h-2 overflow-hidden rounded-full bg-muted">
                     <div
                       className="bg-emerald-500 transition-all"
                       style={{ width: `${(buyCount / totalVotes) * 100}%` }}
@@ -306,32 +304,32 @@ export function AnalystRatingsCard({ ticker, enabled = true, formatPrice }: Prop
                       title={`Sell ${sellCount}`}
                     />
                   </div>
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="rounded-md bg-emerald-500/10 px-2 py-2 min-w-0">
-                      <div className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+                  <div className="grid grid-cols-3 gap-1.5 text-center">
+                    <div className="rounded-md bg-emerald-500/10 px-1.5 py-1.5 min-w-0">
+                      <div className="inline-flex items-center gap-0.5 text-[10px] uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
                         <TrendingUp className="h-3 w-3" /> Buy
                       </div>
-                      <div className="text-lg font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">
+                      <div className="text-base font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">
                         {buyCount}
                       </div>
                       <div className="text-[10px] text-muted-foreground truncate">
                         {trend.strongBuy > 0 ? `${trend.strongBuy} strong` : "\u00a0"}
                       </div>
                     </div>
-                    <div className="rounded-md bg-amber-500/10 px-2 py-2 min-w-0">
-                      <div className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide text-amber-800 dark:text-amber-300">
+                    <div className="rounded-md bg-amber-500/10 px-1.5 py-1.5 min-w-0">
+                      <div className="inline-flex items-center gap-0.5 text-[10px] uppercase tracking-wide text-amber-800 dark:text-amber-300">
                         <Minus className="h-3 w-3" /> Hold
                       </div>
-                      <div className="text-lg font-semibold tabular-nums text-amber-800 dark:text-amber-300">
+                      <div className="text-base font-semibold tabular-nums text-amber-800 dark:text-amber-300">
                         {holdCount}
                       </div>
                       <div className="text-[10px] text-muted-foreground">&nbsp;</div>
                     </div>
-                    <div className="rounded-md bg-rose-500/10 px-2 py-2 min-w-0">
-                      <div className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wide text-rose-700 dark:text-rose-300">
+                    <div className="rounded-md bg-rose-500/10 px-1.5 py-1.5 min-w-0">
+                      <div className="inline-flex items-center gap-0.5 text-[10px] uppercase tracking-wide text-rose-700 dark:text-rose-300">
                         <TrendingDown className="h-3 w-3" /> Sell
                       </div>
-                      <div className="text-lg font-semibold tabular-nums text-rose-700 dark:text-rose-300">
+                      <div className="text-base font-semibold tabular-nums text-rose-700 dark:text-rose-300">
                         {sellCount}
                       </div>
                       <div className="text-[10px] text-muted-foreground truncate">
@@ -345,19 +343,19 @@ export function AnalystRatingsCard({ ticker, enabled = true, formatPrice }: Prop
               {historyRows.length > 0 && (
                 <div
                   className={cn(
-                    "min-w-0 space-y-2",
+                    "min-w-0 space-y-1.5",
                     trend && totalVotes > 0 ? "lg:col-span-3" : "",
                   )}
                 >
                   <div className="flex items-center gap-1.5 text-xs font-medium">
                     <Scale className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                    Posledné hodnotenia analytikov
+                    Posledné hodnotenia
                   </div>
-                  <div className="divide-y divide-border/70 rounded-lg border border-border/70 bg-muted/10 overflow-hidden">
+                  <div className="divide-y divide-border/70 rounded-md border border-border/70 bg-muted/10 overflow-hidden">
                     {historyRows.map((row, idx) => (
                       <div
                         key={`${row.firm}-${row.date}-${idx}`}
-                        className="flex items-start justify-between gap-3 px-3 py-2.5"
+                        className="flex items-start justify-between gap-3 px-2.5 py-2"
                         data-testid={`analyst-history-row-${idx}`}
                       >
                         <div className="min-w-0">

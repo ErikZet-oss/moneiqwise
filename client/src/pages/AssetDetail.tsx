@@ -523,34 +523,34 @@ export default function AssetDetail() {
 
 
   return (
-    <div className="flex flex-col gap-3 md:gap-5 pb-10">
+    <div className="flex flex-col gap-3 pb-8">
       {/* Mobile header */}
-      <div className="md:hidden space-y-2 min-w-0">
-        <Button variant="ghost" size="sm" className="gap-2 -ml-2 w-fit" onClick={() => setLocation("/")}>
+      <div className="md:hidden space-y-1.5 min-w-0">
+        <Button variant="ghost" size="sm" className="gap-2 -ml-2 h-8 w-fit" onClick={() => setLocation("/")}>
           <ArrowLeft className="h-4 w-4" />
           Späť na prehľad
         </Button>
-        <div className="flex items-start gap-3">
+        <div className="flex items-start gap-2.5">
           {data.imageUrl && isPokemonTicker(data.ticker) ? (
             <img
               src={data.imageUrl}
               alt={data.companyName}
-              className="h-14 w-14 shrink-0 rounded-md object-contain bg-muted"
+              className="h-11 w-11 shrink-0 rounded-md object-contain bg-muted"
             />
           ) : (
             <CompanyLogo
               ticker={data.ticker}
               companyName={data.companyName}
               imageUrl={data.imageUrl}
-              size="lg"
+              size="md"
               className="shrink-0"
             />
           )}
           <div className="min-w-0">
-            <h1 className="text-lg font-semibold truncate" data-testid="asset-detail-title">
+            <h1 className="text-base font-semibold truncate" data-testid="asset-detail-title">
               {data.companyName}
             </h1>
-            <div className="flex flex-wrap items-center gap-2 text-muted-foreground text-sm">
+            <div className="flex flex-wrap items-center gap-2 text-muted-foreground text-xs">
               {isPokemonTicker(data.ticker) ? (
                 <span>{data.priceNote || "Pokémon TCG"}</span>
               ) : (
@@ -572,42 +572,46 @@ export default function AssetDetail() {
         </div>
       </div>
 
-      {/* Desktop header */}
-      <div className="hidden md:flex items-center justify-between gap-3 min-w-0" data-testid="desktop-asset-header">
-        <div className="min-w-0 space-y-1">
-          <Button variant="ghost" size="sm" className="gap-2 -ml-2 h-8 w-fit px-2" onClick={() => setLocation("/")}>
-            <ArrowLeft className="h-4 w-4" />
-            Portfólio
-          </Button>
-          <h1 className="text-lg md:text-xl font-semibold text-foreground truncate" data-testid="asset-detail-title-desktop">
-            Detail aktíva
-          </h1>
-        </div>
+      {/* Desktop back + hero */}
+      <div className="hidden md:block min-w-0" data-testid="desktop-asset-header">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-1.5 -ml-2 h-7 w-fit px-2 text-xs text-muted-foreground mb-1.5"
+          onClick={() => setLocation("/")}
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Portfólio
+        </Button>
       </div>
 
-      {/* Hero summary */}
       <Card className="border-border bg-card shadow-sm" data-testid="asset-hero-summary">
-        <CardContent className="p-4 md:p-5">
-          <div className="flex flex-col gap-4 md:gap-5">
-            <div className="hidden md:flex items-start gap-3 min-w-0">
+        <CardContent className="p-3 md:p-4">
+          <div className="flex flex-col gap-3">
+            <div className="hidden md:flex items-center gap-2.5 min-w-0">
               {data.imageUrl && isPokemonTicker(data.ticker) ? (
                 <img
                   src={data.imageUrl}
                   alt={data.companyName}
-                  className="h-14 w-14 shrink-0 rounded-md object-contain bg-muted"
+                  className="h-10 w-10 shrink-0 rounded-md object-contain bg-muted"
                 />
               ) : (
                 <CompanyLogo
                   ticker={data.ticker}
                   companyName={data.companyName}
                   imageUrl={data.imageUrl}
-                  size="lg"
+                  size="md"
                   className="shrink-0"
                 />
               )}
               <div className="min-w-0 flex-1">
-                <div className="text-base md:text-lg font-semibold truncate">{data.companyName}</div>
-                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                <h1
+                  className="text-base font-semibold truncate leading-tight"
+                  data-testid="asset-detail-title-desktop"
+                >
+                  {data.companyName}
+                </h1>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
                   {isPokemonTicker(data.ticker) ? (
                     <span>{data.priceNote || "Pokémon TCG"}</span>
                   ) : (
@@ -672,55 +676,55 @@ export default function AssetDetail() {
             )}
 
             {data.ticker !== "CASH" ? (
-              <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
-                <div className="min-w-0">
-                  <div className="text-xs font-medium text-muted-foreground">Aktuálna cena</div>
+              <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5 md:gap-3">
+                <div className="min-w-0 rounded-md bg-muted/25 px-2.5 py-2">
+                  <div className="text-[11px] font-medium text-muted-foreground">Aktuálna cena</div>
                   {quote ? (
-                    <div className="text-xl md:text-3xl font-semibold leading-tight tracking-tight truncate mt-1">
+                    <div className="text-lg md:text-2xl font-semibold leading-tight tracking-tight truncate mt-0.5">
                       {mask(formatQuoteAmount(quote.price))}
                     </div>
                   ) : (
-                    <div className="text-sm text-muted-foreground mt-1">Kotácia nedostupná</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">Kotácia nedostupná</div>
                   )}
                 </div>
-                <div className="min-w-0">
-                  <div className="text-xs font-medium text-muted-foreground">Dnes</div>
+                <div className="min-w-0 rounded-md bg-muted/25 px-2.5 py-2">
+                  <div className="text-[11px] font-medium text-muted-foreground">Dnes</div>
                   {quote ? (
                     <div
-                      className={`text-xl md:text-3xl font-semibold leading-tight tracking-tight mt-1 flex items-baseline gap-1.5 flex-wrap ${
+                      className={`text-lg md:text-2xl font-semibold leading-tight tracking-tight mt-0.5 flex items-baseline gap-1 flex-wrap ${
                         changePositive ? "text-green-500" : "text-red-500"
                       }`}
                     >
                       <span className="inline-flex items-center gap-1 min-w-0">
                         {changePositive ? (
-                          <TrendingUp className="h-5 w-5 shrink-0" />
+                          <TrendingUp className="h-4 w-4 shrink-0" />
                         ) : (
-                          <TrendingDown className="h-5 w-5 shrink-0" />
+                          <TrendingDown className="h-4 w-4 shrink-0" />
                         )}
                         <span className="truncate">{mask(formatQuoteAmount(quote.change))}</span>
                       </span>
-                      <span className="text-sm md:text-base font-medium">
+                      <span className="text-xs md:text-sm font-medium">
                         ({changePositive ? "+" : ""}
                         {(quote.changePercent ?? 0).toFixed(2)}%)
                       </span>
                     </div>
                   ) : (
-                    <div className="text-sm text-muted-foreground mt-1">—</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">—</div>
                   )}
                 </div>
-                <div className="min-w-0">
-                  <div className="text-xs font-medium text-muted-foreground">Vaša pozícia</div>
-                  <div className="text-xl md:text-3xl font-semibold leading-tight tracking-tight truncate mt-1">
+                <div className="min-w-0 rounded-md bg-muted/25 px-2.5 py-2">
+                  <div className="text-[11px] font-medium text-muted-foreground">Vaša pozícia</div>
+                  <div className="text-lg md:text-2xl font-semibold leading-tight tracking-tight truncate mt-0.5">
                     {holdingValuePref == null ? "—" : mask(formatCurrency(holdingValuePref))}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1 truncate">
+                  <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
                     {formatShareQuantity(data.totals.shares)} ks
                   </p>
                 </div>
-                <div className="min-w-0">
-                  <div className="text-xs font-medium text-muted-foreground">Celkový výnos</div>
+                <div className="min-w-0 rounded-md bg-muted/25 px-2.5 py-2">
+                  <div className="text-[11px] font-medium text-muted-foreground">Celkový výnos</div>
                   <div
-                    className={`text-xl md:text-3xl font-semibold leading-tight tracking-tight mt-1 flex flex-wrap items-baseline gap-x-1.5 ${
+                    className={`text-lg md:text-2xl font-semibold leading-tight tracking-tight mt-0.5 flex flex-wrap items-baseline gap-x-1 ${
                       totalReturnPref == null
                         ? "text-muted-foreground"
                         : totalReturnPref >= 0
@@ -736,27 +740,27 @@ export default function AssetDetail() {
                           )}
                     </span>
                     {positionRoiPct != null && (
-                      <span className="text-sm md:text-base font-medium">
+                      <span className="text-xs md:text-sm font-medium">
                         · {mask(formatRoiPct(positionRoiPct))}
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1 truncate">
+                  <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
                     Investované: {mask(formatCurrency(investedPref))}
                   </p>
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
-                <div>
-                  <div className="text-xs font-medium text-muted-foreground">Počet kusov</div>
-                  <div className="text-xl md:text-3xl font-semibold mt-1">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 md:gap-3">
+                <div className="rounded-md bg-muted/25 px-2.5 py-2">
+                  <div className="text-[11px] font-medium text-muted-foreground">Počet kusov</div>
+                  <div className="text-lg md:text-2xl font-semibold mt-0.5">
                     {formatShareQuantity(data.totals.shares)}
                   </div>
                 </div>
-                <div>
-                  <div className="text-xs font-medium text-muted-foreground">Celkom investované</div>
-                  <div className="text-xl md:text-3xl font-semibold mt-1">
+                <div className="rounded-md bg-muted/25 px-2.5 py-2">
+                  <div className="text-[11px] font-medium text-muted-foreground">Celkom investované</div>
+                  <div className="text-lg md:text-2xl font-semibold mt-0.5">
                     {mask(formatCurrency(convertPrice(data.totals.totalInvested, costCurrency)))}
                   </div>
                 </div>
@@ -767,14 +771,14 @@ export default function AssetDetail() {
       </Card>
 
       {/* Chart + position details */}
-      <div className="grid gap-3 md:gap-4 lg:grid-cols-3 items-start">
+      <div className="grid gap-3 lg:grid-cols-3 items-start">
         <div className="lg:col-span-2 min-w-0">
       <Card>
-        <CardHeader className="p-4 pb-2">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div className="space-y-1 min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <CardTitle className="text-base md:text-lg font-semibold">Vývoj ceny a obchody</CardTitle>
+        <CardHeader className="p-3 pb-1.5 space-y-0">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <CardTitle className="text-sm md:text-base font-semibold">Vývoj ceny a obchody</CardTitle>
                 <HelpTip title="Návratnosť a graf">
                   <p>
                     <strong>ROI pozície</strong> je pomer aktuálnej kotácie k váženému priemernému nákupu (v mene
@@ -787,10 +791,10 @@ export default function AssetDetail() {
                   <p>Čiaru „Priem. nákup“ vidíte len pri otvorenej pozícii.</p>
                 </HelpTip>
               </div>
-              <CardDescription className="text-xs md:text-sm">
+              <CardDescription className="text-[11px] md:text-xs mt-0.5">
                 {data.totals.shares > 0 && data.totals.averageCost > 0 ? (
                   <>
-                    Priemerná nákupná cena{" "}
+                    Priem. nákup{" "}
                     {mask(
                       formatAverageCostCurrency(
                         convertAverageCostPrice(data.totals.averageCost, costCurrency),
@@ -799,36 +803,29 @@ export default function AssetDetail() {
                     {" · "}
                   </>
                 ) : null}
-                Zelené body: nákup, červené: predaj.
+                zelené = nákup, červené = predaj
               </CardDescription>
             </div>
-            <div className="w-full sm:w-auto">
-              <label
-                htmlFor="asset-trade-portfolio-filter"
-                className="block text-[11px] text-muted-foreground mb-1"
-              >
-                Obchody podľa portfólia
-              </label>
-              <select
-                id="asset-trade-portfolio-filter"
-                value={tradePortfolioFilter}
-                onChange={(e) => setTradePortfolioFilter(e.target.value)}
-                className="h-8 w-full sm:w-[220px] rounded-md border bg-background px-2 text-xs"
-                data-testid="select-asset-trade-portfolio-filter"
-              >
-                <option value="all">Všetky portfóliá</option>
-                {tradePortfolioOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <select
+              id="asset-trade-portfolio-filter"
+              aria-label="Obchody podľa portfólia"
+              value={tradePortfolioFilter}
+              onChange={(e) => setTradePortfolioFilter(e.target.value)}
+              className="h-7 w-full sm:w-[180px] rounded-md border bg-background px-2 text-xs shrink-0"
+              data-testid="select-asset-trade-portfolio-filter"
+            >
+              <option value="all">Všetky portfóliá</option>
+              {tradePortfolioOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
           </div>
         </CardHeader>
-        <CardContent className="p-4 pt-3 space-y-4">
+        <CardContent className="p-3 pt-2 space-y-2.5">
           {chartData.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">
+            <p className="text-sm text-muted-foreground py-6 text-center">
               Historické ceny nie sú k dispozícii (alebo ide o hotovosť).
             </p>
           ) : (
@@ -842,13 +839,13 @@ export default function AssetDetail() {
                   type="single"
                   value={priceChartRange}
                   onValueChange={(v) => v && setPriceChartRange(v as PriceChartRange)}
-                  className="flex w-max min-w-full flex-nowrap justify-start gap-1 sm:w-full sm:flex-wrap"
+                  className="flex w-max min-w-full flex-nowrap justify-start gap-0.5 sm:w-full sm:flex-wrap"
                 >
                   {PRICE_CHART_RANGE_OPTIONS.map((o) => (
                     <ToggleGroupItem
                       key={o.v}
                       value={o.v}
-                      className="shrink-0 text-xs px-2.5 data-[state=on]:z-10"
+                      className="shrink-0 text-[11px] h-7 px-2 data-[state=on]:z-10"
                     >
                       {o.label}
                     </ToggleGroupItem>
@@ -907,7 +904,7 @@ export default function AssetDetail() {
                 </p>
               ) : (
                 <div
-                  className={cn("w-full", isMobile ? "h-[260px]" : "h-[360px]")}
+                  className={cn("w-full", isMobile ? "h-[240px]" : "h-[280px]")}
                   data-testid="asset-price-chart"
                 >
                   <ResponsiveContainer width="100%" height="100%">
@@ -997,123 +994,119 @@ export default function AssetDetail() {
         </CardContent>
       </Card>
         </div>
-        <div className="flex flex-col gap-3 md:gap-4 min-w-0">
+        <div className="min-w-0">
           <Card className="border-border bg-card shadow-sm" data-testid="asset-position-details">
-            <CardHeader className="p-4 pb-2">
-              <CardTitle className="text-base md:text-lg font-semibold">Detail pozície</CardTitle>
-              <CardDescription className="text-xs md:text-sm">
-                Celkom naprieč viditeľnými portfóliami
-              </CardDescription>
+            <CardHeader className="p-3 pb-1.5">
+              <CardTitle className="text-sm md:text-base font-semibold">Detail pozície</CardTitle>
             </CardHeader>
-            <CardContent className="p-4 pt-2 space-y-3">
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="text-xs text-muted-foreground">Počet kusov</span>
-                <span className="font-semibold tabular-nums">
-                  {formatShareQuantity(data.totals.shares)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="text-xs text-muted-foreground">Priemerná nákupná cena</span>
-                <span className="font-semibold tabular-nums">
-                  {mask(
-                    formatAverageCostCurrency(
-                      convertAverageCostPrice(data.totals.averageCost, costCurrency),
-                    ),
-                  )}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="text-xs text-muted-foreground">Nákladová báza</span>
-                <span className="font-semibold tabular-nums">
-                  {mask(formatCurrency(convertPrice(data.totals.totalInvested, costCurrency)))}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="text-xs text-muted-foreground">ROI pozície</span>
-                <span
-                  className={cn(
-                    "font-semibold tabular-nums",
-                    positionRoiPct == null
-                      ? "text-muted-foreground"
-                      : positionRoiPct >= 0
-                        ? "text-emerald-600 dark:text-emerald-400"
-                        : "text-red-500",
-                  )}
-                >
-                  {data.totals.shares <= 0
-                    ? "—"
-                    : positionRoiPct == null
-                      ? "—"
-                      : mask(formatRoiPct(positionRoiPct))}
-                </span>
-              </div>
-              {periodPriceReturnPct != null && (
-                <div className="flex items-center justify-between gap-3 text-sm">
-                  <span className="text-xs text-muted-foreground">Zmena ceny v období</span>
+            <CardContent className="p-3 pt-0 space-y-0">
+              <div className="divide-y divide-border/60">
+                <div className="flex items-center justify-between gap-3 py-1.5 text-sm">
+                  <span className="text-xs text-muted-foreground">Kusy</span>
+                  <span className="font-semibold tabular-nums text-sm">
+                    {formatShareQuantity(data.totals.shares)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3 py-1.5 text-sm">
+                  <span className="text-xs text-muted-foreground">Priem. nákup</span>
+                  <span className="font-semibold tabular-nums text-sm">
+                    {mask(
+                      formatAverageCostCurrency(
+                        convertAverageCostPrice(data.totals.averageCost, costCurrency),
+                      ),
+                    )}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3 py-1.5 text-sm">
+                  <span className="text-xs text-muted-foreground">Nákladová báza</span>
+                  <span className="font-semibold tabular-nums text-sm">
+                    {mask(formatCurrency(convertPrice(data.totals.totalInvested, costCurrency)))}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3 py-1.5 text-sm">
+                  <span className="text-xs text-muted-foreground">ROI pozície</span>
                   <span
                     className={cn(
-                      "font-semibold tabular-nums",
-                      periodPriceReturnPct >= 0
-                        ? "text-emerald-600 dark:text-emerald-400"
-                        : "text-red-500",
+                      "font-semibold tabular-nums text-sm",
+                      positionRoiPct == null
+                        ? "text-muted-foreground"
+                        : positionRoiPct >= 0
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-red-500",
                     )}
                   >
-                    {mask(formatRoiPct(periodPriceReturnPct))}
+                    {data.totals.shares <= 0
+                      ? "—"
+                      : positionRoiPct == null
+                        ? "—"
+                        : mask(formatRoiPct(positionRoiPct))}
                   </span>
+                </div>
+                {periodPriceReturnPct != null && (
+                  <div className="flex items-center justify-between gap-3 py-1.5 text-sm">
+                    <span className="text-xs text-muted-foreground">Zmena v období</span>
+                    <span
+                      className={cn(
+                        "font-semibold tabular-nums text-sm",
+                        periodPriceReturnPct >= 0
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-red-500",
+                      )}
+                    >
+                      {mask(formatRoiPct(periodPriceReturnPct))}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {data.ticker !== "CASH" && (
+                <div
+                  className={cn(
+                    "mt-2.5 rounded-md px-2.5 py-2",
+                    data.nextEarnings
+                      ? "border border-amber-500/25 bg-amber-500/[0.06] dark:bg-amber-500/10"
+                      : "border border-dashed border-muted-foreground/25",
+                  )}
+                  title={
+                    data.nextEarnings
+                      ? "Očakávaný dátum (Yahoo alebo Finnhub), môže sa zmeniť."
+                      : "Yahoo často blokuje API; so FINNHUB_API_KEY na serveri sa použije záložný kalendár Finnhub."
+                  }
+                >
+                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground uppercase tracking-wide">
+                    <Calendar
+                      className={cn(
+                        "h-3.5 w-3.5 shrink-0",
+                        data.nextEarnings
+                          ? "text-amber-600 dark:text-amber-400"
+                          : "opacity-70",
+                      )}
+                    />
+                    Najbližšie earnings
+                  </div>
+                  {data.nextEarnings ? (
+                    <div className="text-sm font-semibold mt-0.5 tabular-nums">
+                      {format(parse(data.nextEarnings.date, "yyyy-MM-dd", new Date()), "d. MMM yyyy", {
+                        locale: sk,
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                      Dátum sa nepodarilo načítať.
+                    </p>
+                  )}
                 </div>
               )}
             </CardContent>
           </Card>
-
-          {data.ticker !== "CASH" &&
-            (data.nextEarnings ? (
-              <Card
-                className="border-amber-500/25 bg-amber-500/[0.06] dark:bg-amber-500/10"
-                title="Očakávaný dátum (Yahoo alebo Finnhub), môže sa zmeniť."
-              >
-                <CardContent className="p-4 pt-3">
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground uppercase tracking-wide">
-                    <Calendar className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                    Najbližšie earnings
-                  </div>
-                  <div className="text-base md:text-lg font-semibold mt-1 tabular-nums">
-                    {format(parse(data.nextEarnings.date, "yyyy-MM-dd", new Date()), "d. MMMM yyyy", {
-                      locale: sk,
-                    })}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1 leading-snug">
-                    Očakávaný dátum, môže sa zmeniť.
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <Card
-                className="border-dashed border-muted-foreground/25"
-                title="Yahoo často blokuje API; so FINNHUB_API_KEY na serveri sa použije záložný kalendár Finnhub."
-              >
-                <CardContent className="p-4 pt-3">
-                  <div className="flex items-start gap-2 text-xs text-muted-foreground leading-snug">
-                    <Calendar className="h-3.5 w-3.5 shrink-0 mt-0.5 opacity-70" />
-                    <span>
-                      Najbližšie earnings sa nepodarilo načítať. So{" "}
-                      <span className="font-mono">FINNHUB_API_KEY</span> na serveri sa použije záložný
-                      kalendár Finnhub.
-                    </span>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
         </div>
       </div>
 
       <Card>
-        <CardHeader className="p-4 pb-2">
-          <CardTitle className="text-base md:text-lg font-semibold">Podľa portfólia</CardTitle>
-          <CardDescription className="text-xs md:text-sm">
-            Držané množstvo a priemerná nákupná cena v každom portfóliu
-          </CardDescription>
+        <CardHeader className="p-3 pb-1.5">
+          <CardTitle className="text-sm md:text-base font-semibold">Podľa portfólia</CardTitle>
         </CardHeader>
-        <CardContent className="p-4 pt-3">
+        <CardContent className="p-3 pt-1">
           {data.positions.length === 0 ? (
             <p className="text-sm text-muted-foreground">Momentálne nemáte otvorenú pozíciu (všetko predané).</p>
           ) : (
@@ -1166,14 +1159,13 @@ export default function AssetDetail() {
 
       {data.ticker !== "CASH" && data.positions.length > 0 && (
         <Card>
-          <CardHeader className="p-4 pb-2">
-            <CardTitle className="text-base md:text-lg font-semibold">Otvorené pozície (FIFO loty)</CardTitle>
-            <CardDescription className="text-xs md:text-sm">
-              Nákupné dávky v poradí FIFO; PnL je nerealizovaný podľa aktuálnej kotácie a kurzov. Oslobodenie: orient. 365 dní
-              držby.
+          <CardHeader className="p-3 pb-1.5">
+            <CardTitle className="text-sm md:text-base font-semibold">Otvorené pozície (FIFO loty)</CardTitle>
+            <CardDescription className="text-[11px] md:text-xs">
+              FIFO nákupné dávky · nerealizovaný PnL · oslobodenie orient. 365 dní
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-4 pt-3">
+          <CardContent className="p-3 pt-1">
             {anyLotsLoading && fifoLotRows.length === 0 ? (
               <Skeleton className="h-32 w-full" />
             ) : lotsError ? (
@@ -1369,23 +1361,22 @@ export default function AssetDetail() {
 
       {data.dividends.paymentCount > 0 && (
         <Card>
-          <CardHeader className="p-4 pb-2">
-            <CardTitle className="text-base md:text-lg font-semibold">Dividendy</CardTitle>
-            <CardDescription className="text-xs md:text-sm">Čo ste od tohto aktíva dostali (viditeľné portfóliá)</CardDescription>
+          <CardHeader className="p-3 pb-1.5">
+            <CardTitle className="text-sm md:text-base font-semibold">Dividendy</CardTitle>
           </CardHeader>
-          <CardContent className="p-4 pt-3 space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
-              <div>
-                <div className="text-muted-foreground">Hrubá suma ({currency})</div>
-                <div className="font-semibold">{mask(formatCurrency(data.dividends.totalGross))}</div>
+          <CardContent className="p-3 pt-1 space-y-3">
+            <div className="grid grid-cols-3 gap-2 text-sm">
+              <div className="rounded-md bg-muted/25 px-2.5 py-2 min-w-0">
+                <div className="text-[11px] text-muted-foreground">Hrubá ({currency})</div>
+                <div className="font-semibold text-sm truncate">{mask(formatCurrency(data.dividends.totalGross))}</div>
               </div>
-              <div>
-                <div className="text-muted-foreground">Zrážky / daň ({currency})</div>
-                <div className="font-semibold">{mask(formatCurrency(data.dividends.totalTax))}</div>
+              <div className="rounded-md bg-muted/25 px-2.5 py-2 min-w-0">
+                <div className="text-[11px] text-muted-foreground">Daň ({currency})</div>
+                <div className="font-semibold text-sm truncate">{mask(formatCurrency(data.dividends.totalTax))}</div>
               </div>
-              <div>
-                <div className="text-muted-foreground">Čistá suma ({currency})</div>
-                <div className="font-semibold text-green-600 dark:text-green-400">
+              <div className="rounded-md bg-muted/25 px-2.5 py-2 min-w-0">
+                <div className="text-[11px] text-muted-foreground">Čistá ({currency})</div>
+                <div className="font-semibold text-sm text-green-600 dark:text-green-400 truncate">
                   {mask(formatCurrency(data.dividends.totalNet))}
                 </div>
               </div>
@@ -1424,13 +1415,13 @@ export default function AssetDetail() {
 
       {data.ticker !== "CASH" && (
         <Card data-testid="asset-earnings-history">
-          <CardHeader className="p-4 pb-2">
-            <CardTitle className="text-base md:text-lg font-semibold">Výsledky (earnings)</CardTitle>
-            <CardDescription className="text-xs md:text-sm">
-              EPS a finančné ukazovatele podľa rokov a kvartálov. Otvorte rok a potom kvartál.
+          <CardHeader className="p-3 pb-1.5">
+            <CardTitle className="text-sm md:text-base font-semibold">Výsledky (earnings)</CardTitle>
+            <CardDescription className="text-[11px] md:text-xs">
+              EPS a ukazovatele podľa rokov / kvartálov
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-4 pt-1">
+          <CardContent className="p-3 pt-0">
             {earningsHistoryLoading ? (
               <Skeleton className="h-28 w-full" />
             ) : earningsHistoryError ? (
@@ -1629,11 +1620,10 @@ export default function AssetDetail() {
       )}
 
       <Card>
-        <CardHeader className="p-4 pb-2">
-          <CardTitle className="text-base md:text-lg font-semibold">História transakcií</CardTitle>
-          <CardDescription className="text-xs md:text-sm">Všetky záznamy pre tento ticker</CardDescription>
+        <CardHeader className="p-3 pb-1.5">
+          <CardTitle className="text-sm md:text-base font-semibold">História transakcií</CardTitle>
         </CardHeader>
-        <CardContent className="p-4 pt-3 overflow-x-auto">
+        <CardContent className="p-3 pt-1 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
