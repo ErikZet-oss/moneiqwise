@@ -12,13 +12,13 @@
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
 
-  --background: 210 24% 97%;
+  --background: 210 20% 94%;
   --foreground: 220 25% 12%;
-  --border: 214 18% 88%;
+  --border: 214 16% 86%;
 
   --card: 0 0% 100%;
   --card-foreground: 220 25% 12%;
-  --card-border: 214 20% 90%;
+  --card-border: 214 18% 88%;
 
   --sidebar: 220 22% 14%;
   --sidebar-foreground: 210 16% 92%;
@@ -174,18 +174,20 @@
     0 8px 24px -12px hsl(0 0% 0% / 0.65);
 }
 
-/* Light cards only when NOT in dark mode (theme class lives on <html>) */
+/* Light cards: white with a soft gradient lift (never applied in dark) */
 html:not(.dark) .shadcn-card {
   background-color: hsl(var(--card));
   background-image: linear-gradient(
-    180deg,
+    165deg,
     hsl(0 0% 100%) 0%,
-    hsl(210 30% 99%) 100%
+    hsl(210 28% 99.2%) 48%,
+    hsl(210 22% 97.5%) 100%
   );
-  border-color: hsl(214 20% 88% / 0.95);
+  border-color: hsl(214 18% 88% / 0.95);
   box-shadow:
-    0 1px 0 0 hsl(0 0% 100% / 0.8),
-    0 8px 24px -16px hsl(220 30% 40% / 0.14);
+    inset 0 1px 0 0 hsl(0 0% 100% / 0.9),
+    0 1px 0 0 hsl(0 0% 100% / 0.65),
+    0 8px 22px -16px hsl(220 25% 40% / 0.12);
 }
 
 /* Login stays dark glass regardless of app light/dark theme */
