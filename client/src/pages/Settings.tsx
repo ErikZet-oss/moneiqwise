@@ -901,7 +901,7 @@ export default function Settings() {
             <CardTitle className="text-sm font-medium">Zobrazenie na prehľade</CardTitle>
           </div>
           <CardDescription>
-            Nastavte, čo sa zobrazí na hlavnej stránke a v Prehľade. Vypnutie sekcií môže urýchliť načítanie.
+            Globálne voľby pre Prehľad. Poradie a zapínanie widgetov upravíte aj priamo na Prehľade (ikona pera).
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 pt-3 space-y-4">

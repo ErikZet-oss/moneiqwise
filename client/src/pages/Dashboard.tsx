@@ -1,6 +1,19 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import {
+  DndContext,
+  closestCenter,
+  MouseSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { format, parse, parseISO, startOfDay } from "date-fns";
 import { sk } from "date-fns/locale";
 import { queryClient } from "@/lib/queryClient";
@@ -44,15 +57,20 @@ import {
   ChevronRight,
   LayoutList,
   ArrowDownUp,
+  Pencil,
+  Check,
 } from "lucide-react";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio, type Portfolio } from "@/hooks/usePortfolio";
 import { useChartSettings, type MobileAssetsSortBy, type MobileAssetsView } from "@/hooks/useChartSettings";
+import { useDashboardLayout } from "@/hooks/useDashboardLayout";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { CompanyLogo } from "@/components/CompanyLogo";
 import { AssetThumb } from "@/components/AssetThumb";
 import { BrokerLogo } from "@/components/BrokerLogo";
 import { MobilePortfolioChart } from "@/components/MobilePortfolioChart";
 import { DesktopPortfolioChart } from "@/components/DesktopPortfolioChart";
+import { DashboardWidgetFrame } from "@/components/DashboardWidgetFrame";
 import type { HoldingWithCostCurrency } from "@shared/holdingCostCurrency";
 import { isPhysicalSilverTicker } from "@shared/physicalMetal";
 import {
@@ -781,6 +799,28 @@ export default function Dashboard() {
     setMobileAssetsSortOrder,
     setMobileAssetsView,
   } = useChartSettings();
+  const {
+    order: dashboardOrder,
+    editing: dashboardEditing,
+    setEditing: setDashboardEditing,
+    isVisible: isDashboardWidgetVisible,
+    toggleVisible: toggleDashboardWidget,
+    reorder: reorderDashboardWidgets,
+    resetLayout: resetDashboardLayout,
+  } = useDashboardLayout();
+  const isMobileViewport = useIsMobile();
+  const dashboardDnDSensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 1000, tolerance: 12 } }),
+  );
+  const handleDashboardDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      reorderDashboardWidgets(String(active.id), String(over.id));
+    },
+    [reorderDashboardWidgets],
+  );
   const [sortField, setSortField] = useState<SortField>("ticker");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [mobileEarningsIndex, setMobileEarningsIndex] = useState(0);
@@ -1227,7 +1267,11 @@ export default function Dashboard() {
       if (!res.ok) throw new Error("Failed to fetch news");
       return res.json();
     },
-    enabled: dashboardSecondaryReady && showNews && !!holdings && holdings.length > 0,
+    enabled:
+      dashboardSecondaryReady &&
+      (showNews || isDashboardWidgetVisible("news")) &&
+      !!holdings &&
+      holdings.length > 0,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -2097,6 +2141,77 @@ export default function Dashboard() {
         </DialogContent>
       </Dialog>
 
+      <div
+        className="flex items-center justify-between gap-2 sticky top-0 z-20 -mx-1 px-1 py-1 bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/75"
+        data-testid="dashboard-edit-toolbar"
+      >
+        <div className="min-w-0">
+          {dashboardEditing ? (
+            <p className="text-xs text-muted-foreground truncate">
+              Upravte widgety — oko skryje/zobrazí, ťahaním zmeňte poradie.
+            </p>
+          ) : (
+            <span className="sr-only">Prehľad</span>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {dashboardEditing ? (
+            <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={resetDashboardLayout}
+                data-testid="button-dashboard-reset-layout"
+              >
+                Predvolené
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 gap-1.5"
+                onClick={() => setDashboardEditing(false)}
+                data-testid="button-dashboard-edit-done"
+              >
+                <Check className="h-3.5 w-3.5" />
+                Hotovo
+              </Button>
+            </>
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setDashboardEditing(true)}
+              aria-label="Upraviť prehľad"
+              data-testid="button-dashboard-edit"
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <DndContext
+        sensors={dashboardDnDSensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDashboardDragEnd}
+      >
+        <SortableContext items={dashboardOrder} strategy={verticalListSortingStrategy}>
+          {dashboardOrder.map((widgetId) => {
+            const visible = isDashboardWidgetVisible(widgetId);
+            if (widgetId === "summary") {
+              return (
+                <DashboardWidgetFrame
+                  key={widgetId}
+                  id={widgetId}
+                  editing={dashboardEditing}
+                  visible={visible}
+                  onToggleVisible={() => toggleDashboardWidget(widgetId)}
+                >
+                  <>
       <MobilePortfolioChart 
         totalValue={metrics.totalValue}
         totalInvested={metrics.totalInvested}
@@ -2490,6 +2605,21 @@ export default function Dashboard() {
         </Card>
       </div>
 
+                  </>
+                </DashboardWidgetFrame>
+              );
+            }
+            if (widgetId === "chart") {
+              return (
+                <DashboardWidgetFrame
+                  key={widgetId}
+                  id={widgetId}
+                  editing={dashboardEditing}
+                  visible={visible}
+                  onToggleVisible={() => toggleDashboardWidget(widgetId)}
+                  empty={isMobileViewport}
+                  emptyHint="Na mobile je graf v súhrne — oko ho zapína/vypína"
+                >
       <DesktopPortfolioChart 
         totalValue={metrics.totalValue}
         totalInvested={metrics.totalInvested}
@@ -2497,6 +2627,20 @@ export default function Dashboard() {
         totalProfitPercent={metrics.totalProfitPercent}
       />
       
+                </DashboardWidgetFrame>
+              );
+            }
+            if (widgetId === "insights") {
+              return (
+                <DashboardWidgetFrame
+                  key={widgetId}
+                  id={widgetId}
+                  editing={dashboardEditing}
+                  visible={visible}
+                  onToggleVisible={() => toggleDashboardWidget(widgetId)}
+                  empty={!isMobileViewport}
+                  emptyHint="Insights karty sú na mobile; na desktope sú v súhrne"
+                >
       <div className="md:hidden space-y-1.5 -mt-1">
         <div className="grid gap-1.5 grid-cols-2">
           <div className="bg-card rounded-lg p-2.5 border">
@@ -2742,9 +2886,21 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* News Section */}
-      {showNews && holdings && holdings.length > 0 && (
-        <Card>
+                </DashboardWidgetFrame>
+              );
+            }
+            if (widgetId === "news") {
+              return (
+                <DashboardWidgetFrame
+                  key={widgetId}
+                  id={widgetId}
+                  editing={dashboardEditing}
+                  visible={visible}
+                  onToggleVisible={() => toggleDashboardWidget(widgetId)}
+                >
+                  {(holdings && holdings.length > 0) || dashboardEditing ? (
+                    <>
+<Card>
           <CardHeader className="p-2.5 md:p-4 pb-2">
             <div className="flex items-center gap-1.5">
               <Newspaper className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -2805,10 +2961,23 @@ export default function Dashboard() {
             )}
           </CardContent>
         </Card>
-      )}
-
-      {showDailyMovers && portfolios.length > 0 && moversTickers.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
+                    </>
+                  ) : null}
+                </DashboardWidgetFrame>
+              );
+            }
+            if (widgetId === "dailyMovers") {
+              return (
+                <DashboardWidgetFrame
+                  key={widgetId}
+                  id={widgetId}
+                  editing={dashboardEditing}
+                  visible={visible}
+                  onToggleVisible={() => toggleDashboardWidget(widgetId)}
+                >
+                  {(portfolios.length > 0 && moversTickers.length > 0) || dashboardEditing ? (
+                    <>
+<div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
           <Card data-testid="dashboard-daily-gainers">
             <CardHeader className="p-2.5 md:p-6">
               <CardTitle className="text-base md:text-lg flex items-center gap-2 flex-wrap">
@@ -2949,8 +3118,19 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
-      )}
-
+                    </>
+                  ) : null}
+                </DashboardWidgetFrame>
+              );
+            }
+            return (
+              <DashboardWidgetFrame
+                key={widgetId}
+                id={widgetId}
+                editing={dashboardEditing}
+                visible={visible}
+                onToggleVisible={() => toggleDashboardWidget(widgetId)}
+              >
       <Card>
         <CardHeader className="p-2.5 md:p-6">
           <CardTitle className="text-base md:text-lg">Prehľad aktív</CardTitle>
@@ -3589,6 +3769,11 @@ export default function Dashboard() {
           )}
         </CardContent>
       </Card>
+              </DashboardWidgetFrame>
+            );
+          })}
+        </SortableContext>
+      </DndContext>
     </div>
   );
 }
