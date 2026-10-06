@@ -1106,23 +1106,12 @@ export default function AssetDetail() {
         </div>
       </div>
 
-      {/* Portfolios + analyst */}
-      <div
-        className={cn(
-          "grid gap-3 md:gap-4 items-start",
-          data.ticker !== "CASH" && !isPokemonTicker(data.ticker) && "lg:grid-cols-3",
-        )}
-      >
-        <div
-          className={cn(
-            "min-w-0",
-            data.ticker !== "CASH" && !isPokemonTicker(data.ticker) && "lg:col-span-2",
-          )}
-        >
       <Card>
         <CardHeader className="p-4 pb-2">
           <CardTitle className="text-base md:text-lg font-semibold">Podľa portfólia</CardTitle>
-          <CardDescription className="text-xs md:text-sm">Držané množstvo a priemerná nákupná cena v každom portfóliu</CardDescription>
+          <CardDescription className="text-xs md:text-sm">
+            Držané množstvo a priemerná nákupná cena v každom portfóliu
+          </CardDescription>
         </CardHeader>
         <CardContent className="p-4 pt-3">
           {data.positions.length === 0 ? (
@@ -1141,21 +1130,25 @@ export default function AssetDetail() {
                 {data.positions.map((p) => {
                   const positionCostCurrency = p.costCurrency ?? costCurrency;
                   return (
-                  <TableRow key={p.portfolioId ?? "none"}>
-                    <TableCell>
-                      <div className="flex items-center gap-2 min-w-0">
-                        <BrokerLogo brokerCode={p.brokerCode as BrokerCode | null} size="xs" />
-                        <span className="truncate">{p.portfolioName}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right font-mono">{formatShareQuantity(p.shares)}</TableCell>
-                    <TableCell className="text-right">
-                      {mask(formatAverageCostCurrency(convertAverageCostPrice(p.averageCost, positionCostCurrency)))}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {mask(formatCurrency(convertPrice(p.totalInvested, positionCostCurrency)))}
-                    </TableCell>
-                  </TableRow>
+                    <TableRow key={p.portfolioId ?? "none"}>
+                      <TableCell>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <BrokerLogo brokerCode={p.brokerCode as BrokerCode | null} size="xs" />
+                          <span className="truncate">{p.portfolioName}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-mono">{formatShareQuantity(p.shares)}</TableCell>
+                      <TableCell className="text-right">
+                        {mask(
+                          formatAverageCostCurrency(
+                            convertAverageCostPrice(p.averageCost, positionCostCurrency),
+                          ),
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {mask(formatCurrency(convertPrice(p.totalInvested, positionCostCurrency)))}
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
               </TableBody>
@@ -1163,16 +1156,13 @@ export default function AssetDetail() {
           )}
         </CardContent>
       </Card>
-        </div>
-        <div className="min-w-0">
+
       {data.ticker !== "CASH" && !isPokemonTicker(data.ticker) && (
         <AnalystRatingsCard
           ticker={data.ticker}
           formatPrice={(amount) => mask(formatQuoteAmount(amount))}
         />
       )}
-        </div>
-      </div>
 
       {data.ticker !== "CASH" && data.positions.length > 0 && (
         <Card>
