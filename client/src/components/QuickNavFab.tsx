@@ -19,6 +19,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useQuickNavFab } from "@/hooks/useQuickNavFab";
+import { useTheme } from "@/hooks/useTheme";
 import { getQuickNavSection } from "@/lib/quickNavSections";
 import { cn } from "@/lib/utils";
 
@@ -43,6 +44,9 @@ const ICON_BY_PATH: Record<string, LucideIcon> = {
   "/faq": CircleHelp,
 };
 
+/** Šírka jedného slotu — panel rastie s počtom položiek. */
+const SLOT_WIDTH_REM = 4.75;
+
 function isOnPath(current: string, target: string): boolean {
   if (target === "/") return current === "/";
   if (target === "/ai-agent/bot") {
@@ -52,37 +56,45 @@ function isOnPath(current: string, target: string): boolean {
 }
 
 export function QuickNavFab() {
-  const { enabled, items, appearance } = useQuickNavFab();
+  const { enabled, items } = useQuickNavFab();
+  const { theme } = useTheme();
   const [location, setLocation] = useLocation();
 
   if (!enabled || items.length === 0) return null;
 
-  const isDark = appearance === "dark";
+  const isDark = theme === "dark";
+  const count = items.length;
 
   const bar = (
     <nav
       aria-label="Rýchla navigácia"
       data-testid="quick-nav-bar"
+      style={{
+        width: `min(${count * SLOT_WIDTH_REM + 0.75}rem, calc(100vw - 1.5rem))`,
+      }}
       className={cn(
         "fixed z-50 left-1/2 -translate-x-1/2",
         "bottom-[max(0.75rem,env(safe-area-inset-bottom,0px))]",
-        "w-[min(22.5rem,calc(100vw-1.5rem))]",
         "rounded-full border px-1.5 py-1.5",
         "backdrop-blur-xl shadow-lg",
-        "pointer-events-auto",
+        "pointer-events-auto transition-[width] duration-200 ease-out",
         isDark
           ? "bg-[#1c1f26]/92 border-white/12 shadow-black/40 text-white"
           : "bg-white/90 border-black/8 shadow-black/10 text-zinc-900",
       )}
     >
-      <ul className="flex items-stretch justify-between gap-0.5">
+      <ul className="flex items-stretch justify-center gap-0.5">
         {items.map((path) => {
           const section = getQuickNavSection(path);
           if (!section) return null;
           const Icon = ICON_BY_PATH[path] ?? BarChart3;
           const active = isOnPath(location, path);
           return (
-            <li key={path} className="min-w-0 flex-1">
+            <li
+              key={path}
+              className="min-w-0"
+              style={{ flex: `1 1 ${SLOT_WIDTH_REM}rem`, maxWidth: `${SLOT_WIDTH_REM + 0.5}rem` }}
+            >
               <button
                 type="button"
                 data-testid={`quick-nav-item-${path === "/" ? "home" : path.replace(/^\//, "").replace(/\//g, "-")}`}

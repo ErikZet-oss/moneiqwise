@@ -4,10 +4,8 @@ import {
   DEFAULT_QUICK_NAV_PATH,
   MAX_QUICK_NAV_ITEMS,
   QUICK_NAV_SECTIONS,
-  normalizeQuickNavAppearance,
   normalizeQuickNavItems,
   normalizeQuickNavPath,
-  type QuickNavAppearance,
 } from "@/lib/quickNavSections";
 
 export type QuickNavFabSettings = {
@@ -15,7 +13,6 @@ export type QuickNavFabSettings = {
   /** @deprecated legacy single path — migruje sa do `items` */
   path?: string;
   items: string[];
-  appearance: QuickNavAppearance;
 };
 
 const STORAGE_KEY = "moneiqwise-quick-nav-fab";
@@ -23,7 +20,6 @@ const STORAGE_KEY = "moneiqwise-quick-nav-fab";
 const defaultSettings: QuickNavFabSettings = {
   enabled: false,
   items: [...DEFAULT_QUICK_NAV_ITEMS],
-  appearance: "dark",
 };
 
 function loadSettings(): QuickNavFabSettings {
@@ -44,7 +40,6 @@ function loadSettings(): QuickNavFabSettings {
       return {
         enabled: parsed.enabled === true,
         items,
-        appearance: normalizeQuickNavAppearance(parsed.appearance),
       };
     }
   } catch {
@@ -84,11 +79,6 @@ export function useQuickNavFab() {
       const next: QuickNavFabSettings = {
         enabled: updates.enabled ?? prev.enabled,
         items: nextItems,
-        appearance:
-          updates.appearance != null
-            ? normalizeQuickNavAppearance(updates.appearance)
-            : prev.appearance,
-        // legacy field for staršie čítače
         path: nextItems[0] ?? DEFAULT_QUICK_NAV_PATH,
       };
       saveSettings(next);
@@ -96,27 +86,24 @@ export function useQuickNavFab() {
     });
   }, []);
 
-  const setItemPath = useCallback(
-    (index: number, path: string) => {
-      setSettings((prev) => {
-        const items = [...prev.items];
-        if (index < 0 || index >= items.length) return prev;
-        const normalized = normalizeQuickNavPath(path);
-        // Ak už slot má túto sekciu, vymeň ich
-        const dup = items.findIndex((p, i) => i !== index && p === normalized);
-        if (dup >= 0) items[dup] = items[index]!;
-        items[index] = normalized;
-        const next: QuickNavFabSettings = {
-          ...prev,
-          items: normalizeQuickNavItems(items),
-          path: normalizeQuickNavItems(items)[0],
-        };
-        saveSettings(next);
-        return next;
-      });
-    },
-    [],
-  );
+  const setItemPath = useCallback((index: number, path: string) => {
+    setSettings((prev) => {
+      const items = [...prev.items];
+      if (index < 0 || index >= items.length) return prev;
+      const normalized = normalizeQuickNavPath(path);
+      const dup = items.findIndex((p, i) => i !== index && p === normalized);
+      if (dup >= 0) items[dup] = items[index]!;
+      items[index] = normalized;
+      const nextItems = normalizeQuickNavItems(items);
+      const next: QuickNavFabSettings = {
+        ...prev,
+        items: nextItems,
+        path: nextItems[0],
+      };
+      saveSettings(next);
+      return next;
+    });
+  }, []);
 
   const addItem = useCallback(() => {
     setSettings((prev) => {
@@ -146,11 +133,8 @@ export function useQuickNavFab() {
   return {
     enabled: settings.enabled,
     items: settings.items,
-    appearance: settings.appearance,
-    /** legacy — prvý slot */
     path: settings.items[0] ?? DEFAULT_QUICK_NAV_PATH,
     setEnabled: (value: boolean) => updateSettings({ enabled: value }),
-    setAppearance: (appearance: QuickNavAppearance) => updateSettings({ appearance }),
     setItems: (items: string[]) => updateSettings({ items }),
     setItemPath,
     addItem,

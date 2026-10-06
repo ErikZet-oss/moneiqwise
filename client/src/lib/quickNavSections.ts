@@ -30,8 +30,6 @@ export const DEFAULT_QUICK_NAV_ITEMS = ["/", "/watchlist", "/profit", "/ai-agent
 
 export const MAX_QUICK_NAV_ITEMS = 4;
 
-export type QuickNavAppearance = "dark" | "light";
-
 export function getQuickNavSection(path: string): QuickNavSection | undefined {
   return QUICK_NAV_SECTIONS.find((s) => s.path === path);
 }
@@ -58,8 +56,4 @@ export function normalizeQuickNavItems(raw: unknown): string[] {
   }
   if (out.length === 0) out.push(DEFAULT_QUICK_NAV_PATH);
   return out;
-}
-
-export function normalizeQuickNavAppearance(raw: unknown): QuickNavAppearance {
-  return raw === "light" ? "light" : "dark";
 }

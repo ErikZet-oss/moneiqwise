@@ -66,9 +66,7 @@ export default function Settings() {
   const {
     enabled: quickNavEnabled,
     items: quickNavItems,
-    appearance: quickNavAppearance,
     setEnabled: setQuickNavEnabled,
-    setAppearance: setQuickNavAppearance,
     setItemPath: setQuickNavItemPath,
     addItem: addQuickNavItem,
     removeItem: removeQuickNavItem,
@@ -829,34 +827,13 @@ export default function Settings() {
 
           {quickNavEnabled && (
             <div className="space-y-4 pt-2 border-t">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="space-y-0.5 min-w-0">
-                  <div className="text-sm font-medium">Vzhľad</div>
-                  <div className="text-xs text-muted-foreground">
-                    Tmavá alebo bledá varianta panelu
-                  </div>
-                </div>
-                <Select
-                  value={quickNavAppearance}
-                  onValueChange={(v) => setQuickNavAppearance(v === "light" ? "light" : "dark")}
-                >
-                  <SelectTrigger className="w-full sm:w-[180px] shrink-0" data-testid="select-quick-nav-appearance">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="dark">Tmavá</SelectItem>
-                    <SelectItem value="light">Bledá</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
               <div className="space-y-2">
                 <div className="space-y-0.5">
                   <div className="text-sm font-medium">
                     Položky ({quickNavItems.length}/{quickNavMaxItems})
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    Priraďte každej pozícii inú sekciu z menu
+                    Priraďte každej pozícii inú sekciu z menu. Vzhľad panelu kopíruje tmavý/bledý režim aplikácie.
                   </div>
                 </div>
                 <div className="space-y-2">
