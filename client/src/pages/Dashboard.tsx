@@ -2821,7 +2821,7 @@ export default function Dashboard() {
               isAllPortfolios={isAllPortfolios}
             />
           </div>
-        ) : desktopInsightSlideCount > 0 && (
+        ) : desktopInsightSlideCount > 0 ? (
           <div className="lg:col-span-1 min-w-0">
             <Card className="h-full border-border bg-card shadow-sm" data-testid="card-desktop-insights-carousel">
               <CardHeader className="space-y-0 p-4 pb-1">
