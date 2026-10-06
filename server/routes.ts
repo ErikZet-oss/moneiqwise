@@ -55,6 +55,10 @@ import {
   computeChainedTwrPercent,
   computePortfolioHistorySeries,
   computeSp500PercentForRange,
+  hybridSnapshotDates,
+  stepDaysForHistoryRange,
+  subsampleRowsByStepDays,
+  dateRangeWithStep,
   type PortfolioHistoryRange,
 } from "./portfolioHistorySeries";
 import { buildCalculationAuditWorkbook } from "./calculationAuditXlsx";
@@ -5635,6 +5639,7 @@ export async function registerRoutes(
   function parsePortfolioHistoryRange(q: string | undefined): PortfolioHistoryRange {
     const u = (q || "1y").trim().toLowerCase();
     if (u === "1m") return "1m";
+    if (u === "3m") return "3m";
     if (u === "6m") return "6m";
     if (u === "ytd") return "ytd";
     if (u === "1y" || u === "12m") return "1y";
@@ -5644,19 +5649,12 @@ export async function registerRoutes(
 
   function parseSnapshotRange(
     q: string | undefined,
-  ): "1m" | "3m" | "6m" | "ytd" | "1y" | "all" {
-    const u = (q || "1y").trim().toLowerCase();
-    if (u === "1m") return "1m";
-    if (u === "3m") return "3m";
-    if (u === "6m") return "6m";
-    if (u === "ytd") return "ytd";
-    if (u === "1y" || u === "12m") return "1y";
-    if (u === "all" || u === "max") return "all";
-    return "1y";
+  ): PortfolioHistoryRange {
+    return parsePortfolioHistoryRange(q);
   }
 
   function rangeStartIsoFromEnd(
-    range: "1m" | "3m" | "6m" | "ytd" | "1y" | "all",
+    range: PortfolioHistoryRange,
     endIso: string,
     firstIso: string,
   ): string {
@@ -5701,7 +5699,7 @@ export async function registerRoutes(
   async function computeSnapshotSeriesForScope(
     userId: string,
     portfolioParam: string,
-    opts?: { userCcy?: string; maxHistoryPoints?: number },
+    opts?: { userCcy?: string; maxHistoryPoints?: number; dates?: string[] },
   ) {
     const userCcy = opts?.userCcy ?? "EUR";
     const maxHistoryPoints = opts?.maxHistoryPoints ?? 12000;
@@ -5796,6 +5794,14 @@ export async function registerRoutes(
       historicalFxEurPerUnitByCurrency[ccy] = eurPerUnit;
     }
 
+    const firstTxIso = new Date(sorted[0]!.transactionDate as unknown as string)
+      .toISOString()
+      .slice(0, 10);
+    const dates =
+      opts?.dates && opts.dates.length > 0
+        ? opts.dates
+        : hybridSnapshotDates(firstTxIso, todayIso);
+
     const out = computePortfolioHistorySeries(
       sorted,
       spHist,
@@ -5807,6 +5813,7 @@ export async function registerRoutes(
       todayIso,
       "all",
       maxHistoryPoints,
+      { dates },
     );
     return out;
   }
@@ -5818,23 +5825,27 @@ export async function registerRoutes(
       const scopeKey = portfolioParam === "all" ? "all" : portfolioParam;
       const range = parseSnapshotRange(req.query.range as string | undefined);
       const todayIso = new Date().toISOString().slice(0, 10);
+      const stepDays = stepDaysForHistoryRange(range);
+
       const respondFromLiveFallback = async () => {
         const out = await computeSnapshotSeriesForScope(userId, portfolioParam);
         const firstIso = out.points[0]?.date ?? todayIso;
         const startIso = rangeStartIsoFromEnd(range, todayIso, firstIso);
         const liveRows = out.points.filter((p) => p.date >= startIso && p.date <= todayIso);
+        const sampled = subsampleRowsByStepDays(liveRows, stepDays);
         return res.json({
-          points: liveRows.map((p, i) => ({
+          points: sampled.map((p, i) => ({
             date: p.date,
             totalValueEur: Number(p.totalValue),
             investedAmountEur: Number(p.netInvested),
             dailyProfitEur:
-              i === 0 ? 0 : Number(p.totalValue) - Number(liveRows[i - 1]!.totalValue),
+              i === 0 ? 0 : Number(p.totalValue) - Number(sampled[i - 1]!.totalValue),
           })),
           range,
           portfolio: portfolioParam,
           currency: "EUR",
           source: "live-fallback",
+          stepDays,
           startIso,
           endIso: todayIso,
         });
@@ -5857,16 +5868,58 @@ export async function registerRoutes(
             portfolio: portfolioParam,
             currency: "EUR",
             source: "snapshots",
+            stepDays,
           });
+        }
+
+        // Inkrementálny refresh: dopočítaj len dieru od posledného snapshotu (nie celú históriu).
+        if (last.date < todayIso) {
+          const gapStart = (() => {
+            const d = new Date(`${last.date}T12:00:00.000Z`);
+            d.setUTCDate(d.getUTCDate() + 1);
+            return d.toISOString().slice(0, 10);
+          })();
+          if (gapStart <= todayIso) {
+            try {
+              const gapDates = dateRangeWithStep(gapStart, todayIso, 1);
+              if (gapDates.length > 0 && gapDates.length <= 45) {
+                const gapSeries = await computeSnapshotSeriesForScope(userId, portfolioParam, {
+                  dates: gapDates,
+                });
+                const gapPoints = gapSeries.points.filter(
+                  (p) => p.date >= gapStart && p.date <= todayIso,
+                );
+                let prevTotal = Number(last.totalValueEur);
+                for (const p of gapPoints) {
+                  const daily = p.totalValue - prevTotal;
+                  await storage.upsertPortfolioSnapshot({
+                    userId,
+                    scopeKey,
+                    date: p.date,
+                    totalValueEur: p.totalValue,
+                    investedAmountEur: p.netInvested,
+                    dailyProfitEur: daily,
+                  });
+                  prevTotal = p.totalValue;
+                }
+              } else if (gapDates.length > 45) {
+                // Veľká diera — hybridný backfill namiesto denného doháňania.
+                await backfillPortfolioSnapshotsForScope(userId, portfolioParam);
+              }
+            } catch (err) {
+              console.warn("[portfolio/history] incremental snapshot refresh failed:", err);
+            }
+          }
         }
 
         const allRows = await storage.getPortfolioSnapshots(userId, scopeKey);
         const firstIso = allRows[0]?.date ?? last.date;
         const startIso = rangeStartIsoFromEnd(range, todayIso, firstIso);
         const rows = await storage.getPortfolioSnapshots(userId, scopeKey, startIso, todayIso);
+        const sampled = subsampleRowsByStepDays(rows, stepDays);
 
         return res.json({
-          points: rows.map((r) => ({
+          points: sampled.map((r) => ({
             date: r.date,
             totalValueEur: Number(r.totalValueEur),
             investedAmountEur: Number(r.investedAmountEur),
@@ -5876,6 +5929,7 @@ export async function registerRoutes(
           portfolio: portfolioParam,
           currency: "EUR",
           source: "snapshots",
+          stepDays,
           startIso,
           endIso: todayIso,
         });

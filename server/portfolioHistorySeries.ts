@@ -3,7 +3,7 @@ import { mtmValueAtEod } from "./gipsMtmValue";
 import { sumCashFlowEurUpTo } from "@shared/cashFromTransactions";
 import { convertAmountBetween, type AllExchangeRates } from "./convertAmountBetween";
 
-export type PortfolioHistoryRange = "1m" | "6m" | "ytd" | "1y" | "all";
+export type PortfolioHistoryRange = "1m" | "3m" | "6m" | "ytd" | "1y" | "all";
 
 function addDaysIso(iso: string, n: number): string {
   const d = new Date(`${iso}T12:00:00.000Z`);
@@ -52,7 +52,54 @@ function toUserCcy(
 }
 
 /**
+ * Dashboard graf — hustota bodov podľa rozsahu:
+ * 1M denne, 3M/6M/YTD/1Y každých 5 dní, Všetko každých 30 dní.
+ */
+export function stepDaysForHistoryRange(range: PortfolioHistoryRange): number {
+  if (range === "1m") return 1;
+  if (range === "all") return 30;
+  return 5;
+}
+
+/** Dátumy od start do end s pevným krokom (vždy vrátane začiatku a konca). */
+export function dateRangeWithStep(
+  startIso: string,
+  endIso: string,
+  stepDays: number,
+): string[] {
+  if (startIso > endIso) return [];
+  const step = Math.max(1, Math.floor(stepDays) || 1);
+  const end = new Date(`${endIso}T12:00:00.000Z`);
+  const out: string[] = [];
+  let d = new Date(`${startIso}T12:00:00.000Z`);
+  while (d.getTime() <= end.getTime()) {
+    out.push(d.toISOString().slice(0, 10));
+    d.setUTCDate(d.getUTCDate() + step);
+  }
+  const last = endIso.slice(0, 10);
+  if (out.length === 0) out.push(startIso.slice(0, 10));
+  if (out[out.length - 1] !== last) out.push(last);
+  return Array.from(new Set(out)).sort();
+}
+
+/**
+ * Snapshot úložisko: posledných ~30 dní denne, staršie každých 5 dní.
+ * Rýchly backfill + dostatok dát na 1M/3M/6M/YTD.
+ */
+export function hybridSnapshotDates(startIso: string, endIso: string): string[] {
+  if (startIso > endIso) return [];
+  const recentStart = addDaysIso(endIso, -30);
+  const cutoff = recentStart < startIso ? startIso : recentStart;
+  const olderEnd = addDaysIso(cutoff, -1);
+  const older =
+    startIso <= olderEnd ? dateRangeWithStep(startIso, olderEnd, 5) : [];
+  const recent = dateRangeWithStep(cutoff, endIso, 1);
+  return Array.from(new Set([...older, ...recent])).sort();
+}
+
+/**
  * Dátumy v intervale (krok) tak, aby najviac `maxPoints` bodov.
+ * (TWR — dashboard graf používa `dateRangeWithStep`.)
  */
 export function subsampleDateRange(
   startIso: string,
@@ -65,20 +112,35 @@ export function subsampleDateRange(
   let n = 0;
   for (let t = d.getTime(); t <= end.getTime(); t += 86400000) n++;
   const step = Math.max(1, Math.ceil(n / Math.max(1, maxPoints)));
-  const out: string[] = [];
-  let i = 0;
-  d = new Date(`${startIso}T12:00:00.000Z`);
-  while (d.getTime() <= end.getTime()) {
-    if (i % step === 0) {
-      out.push(d.toISOString().slice(0, 10));
+  return dateRangeWithStep(startIso, endIso, step);
+}
+
+/** Z hustých snapshotov vyber body podľa kroku rozsahu (najbližší predchádzajúci deň). */
+export function subsampleRowsByStepDays<T extends { date: string }>(
+  rows: T[],
+  stepDays: number,
+): T[] {
+  if (rows.length === 0) return [];
+  if (stepDays <= 1) return rows;
+  const byDate = new Map(rows.map((r) => [r.date, r]));
+  const start = rows[0]!.date;
+  const end = rows[rows.length - 1]!.date;
+  const want = dateRangeWithStep(start, end, stepDays);
+  const out: T[] = [];
+  for (const d of want) {
+    let hit = byDate.get(d);
+    if (!hit) {
+      for (let i = 1; i <= stepDays + 5 && !hit; i++) {
+        hit = byDate.get(addDaysIso(d, -i));
+      }
     }
-    d.setUTCDate(d.getUTCDate() + 1);
-    i++;
+    if (hit && (out.length === 0 || out[out.length - 1]!.date !== hit.date)) {
+      out.push(hit);
+    }
   }
-  const last = end.toISOString().slice(0, 10);
-  if (out.length === 0) out.push(startIso);
-  if (out[out.length - 1] !== last) out.push(last);
-  return Array.from(new Set(out)).sort();
+  const last = rows[rows.length - 1]!;
+  if (out.length === 0 || out[out.length - 1]!.date !== last.date) out.push(last);
+  return out;
 }
 
 function rangeToStartIso(
@@ -90,6 +152,8 @@ function rangeToStartIso(
   const start = new Date(end);
   if (range === "1m") {
     start.setUTCMonth(start.getUTCMonth() - 1);
+  } else if (range === "3m") {
+    start.setUTCMonth(start.getUTCMonth() - 3);
   } else if (range === "6m") {
     start.setUTCMonth(start.getUTCMonth() - 6);
   } else if (range === "ytd") {
@@ -114,6 +178,7 @@ export type HistoryPoint = {
 
 /**
  * Denné / vybrané dni MTM (rovnaký motor ako TWR) + porovnateľné % k S&amp;P 500.
+ * `@deprecated maxPoints` — dashboard používa krok podľa `range`; parameter ostáva kvôli API.
  */
 export function computePortfolioHistorySeries(
   sortedTx: Transaction[],
@@ -125,7 +190,8 @@ export function computePortfolioHistorySeries(
   userCcy: string,
   endIso: string,
   range: PortfolioHistoryRange,
-  maxPoints = 150,
+  _maxPoints = 150,
+  opts?: { dates?: string[]; stepDays?: number },
 ): {
   points: HistoryPoint[];
   startIso: string;
@@ -157,15 +223,19 @@ export function computePortfolioHistorySeries(
     };
   }
   const hasSp = spHist && Object.keys(spHist).length > 0;
-  if (!hasSp) {
-    // Graf celkovej hodnoty a investované ostávajú; benchmark len 0.
-  }
 
-  const dates = subsampleDateRange(startIso, endIso, maxPoints);
+  const stepDays = opts?.stepDays ?? stepDaysForHistoryRange(range);
+  const dates =
+    opts?.dates && opts.dates.length > 0
+      ? Array.from(
+          new Set(opts.dates.filter((d) => d >= startIso && d <= endIso)),
+        ).sort()
+      : dateRangeWithStep(startIso, endIso, stepDays);
+
   const todayIso = endIso;
   const points: HistoryPoint[] = [];
   let cumFactor = 1;
-  const sStart = hasSp ? spCloseOnOrBefore(spHist, dates[0]!) : null;
+  const sStart = hasSp && dates[0] ? spCloseOnOrBefore(spHist, dates[0]) : null;
 
   for (let i = 0; i < dates.length; i++) {
     const iso = dates[i]!;
@@ -231,7 +301,7 @@ export function computePortfolioHistorySeries(
       (hasSp
         ? "Kumulatívny % portfólia: reťaz. segmenty výnosov (V−V0−ΔN)/V0 medzi dátumami; S&P: uzávierky voči prvému dňu rozsahu. "
         : "S&P 500 nebolo možné načítať; benchmark 0 %. ") +
-      "Krivky % v prvom bode: 0.",
+      `Vzorkovanie: každých ${stepDays} d. Krivky % v prvom bode: 0.`,
   };
 }
 
