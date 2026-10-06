@@ -239,7 +239,7 @@ export function MobilePortfolioChart({
   }, [chartData]);
 
   const isPositive = periodChange.amount >= 0;
-  const chartColor = isPositive ? "#22c55e" : "#ef4444";
+  const chartColor = isPositive ? "hsl(168 72% 52%)" : "hsl(350 65% 68%)";
 
   const preOpenPreview = useMemo(() => {
     if (!holdings || holdings.length === 0 || !quotes) {
@@ -499,15 +499,23 @@ export function MobilePortfolioChart({
 
       {showChart && (
         <>
-          <div className="h-[180px] -mx-4" data-testid="chart-portfolio-performance">
+          <div className="relative h-[180px] -mx-4 overflow-hidden" data-testid="chart-portfolio-performance">
+            <div className="chart-fade-grid" aria-hidden />
             {chartData.length > 1 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={chartData} margin={{ top: 5, right: 0, left: 0, bottom: 5 }}>
                   <defs>
                     <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={chartColor} stopOpacity={0.3} />
+                      <stop offset="0%" stopColor={chartColor} stopOpacity={0.35} />
                       <stop offset="100%" stopColor={chartColor} stopOpacity={0} />
                     </linearGradient>
+                    <filter id="chartLineGlowMobile" x="-20%" y="-20%" width="140%" height="140%">
+                      <feGaussianBlur stdDeviation="2" result="coloredBlur" />
+                      <feMerge>
+                        <feMergeNode in="coloredBlur" />
+                        <feMergeNode in="SourceGraphic" />
+                      </feMerge>
+                    </filter>
                   </defs>
                   <XAxis 
                     dataKey="displayDate" 
@@ -537,8 +545,9 @@ export function MobilePortfolioChart({
                     type="monotone"
                     dataKey="value"
                     stroke={chartColor}
-                    strokeWidth={2}
+                    strokeWidth={2.25}
                     fill="url(#colorValue)"
+                    style={{ filter: "url(#chartLineGlowMobile)" }}
                   />
                 </AreaChart>
               </ResponsiveContainer>

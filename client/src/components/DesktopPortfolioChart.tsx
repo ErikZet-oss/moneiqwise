@@ -143,7 +143,7 @@ export function DesktopPortfolioChart({
   }, [chartData]);
 
   const isPositive = periodGainLoss.amount >= 0;
-  const chartColor = isPositive ? "#22c55e" : "#ef4444";
+  const chartColor = isPositive ? "hsl(168 72% 52%)" : "hsl(350 65% 68%)";
 
   const periods: TimePeriod[] = ["1M", "3M", "6M", "YTD", "ALL"];
 
@@ -198,15 +198,23 @@ export function DesktopPortfolioChart({
         </div>
       </CardHeader>
       <CardContent className="pt-0">
-        <div className="h-[220px] w-full min-w-0" data-testid="chart-desktop-portfolio-performance">
+        <div className="relative h-[220px] w-full min-w-0 overflow-hidden rounded-lg" data-testid="chart-desktop-portfolio-performance">
+          <div className="chart-fade-grid" aria-hidden />
           {chartData.length > 1 ? (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 10 }}>
                 <defs>
                   <linearGradient id="colorValueDesktop" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={chartColor} stopOpacity={0.3} />
+                    <stop offset="0%" stopColor={chartColor} stopOpacity={0.35} />
                     <stop offset="100%" stopColor={chartColor} stopOpacity={0} />
                   </linearGradient>
+                  <filter id="chartLineGlowDesktop" x="-20%" y="-20%" width="140%" height="140%">
+                    <feGaussianBlur stdDeviation="2.2" result="coloredBlur" />
+                    <feMerge>
+                      <feMergeNode in="coloredBlur" />
+                      <feMergeNode in="SourceGraphic" />
+                    </feMerge>
+                  </filter>
                 </defs>
                 <XAxis 
                   dataKey="displayDate" 
@@ -243,8 +251,9 @@ export function DesktopPortfolioChart({
                   type="monotone"
                   dataKey="value"
                   stroke={chartColor}
-                  strokeWidth={2}
+                  strokeWidth={2.25}
                   fill="url(#colorValueDesktop)"
+                  style={{ filter: "url(#chartLineGlowDesktop)" }}
                 />
               </AreaChart>
             </ResponsiveContainer>

@@ -8,7 +8,6 @@ import {
   Line,
   XAxis,
   YAxis,
-  CartesianGrid,
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
   ReferenceDot,
@@ -904,9 +903,13 @@ export default function AssetDetail() {
                 </p>
               ) : (
                 <div
-                  className={cn("w-full", isMobile ? "h-[240px]" : "h-[280px]")}
+                  className={cn(
+                    "relative w-full overflow-hidden rounded-lg",
+                    isMobile ? "h-[240px]" : "h-[280px]",
+                  )}
                   data-testid="asset-price-chart"
                 >
+                  <div className="chart-fade-grid" aria-hidden />
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart
                       data={filteredChartData}
@@ -917,7 +920,6 @@ export default function AssetDetail() {
                         bottom: 0,
                       }}
                     >
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                       <XAxis
                         dataKey="date"
                         tick={{ fontSize: 10 }}
@@ -971,7 +973,7 @@ export default function AssetDetail() {
                         dataKey="price"
                         stroke="hsl(var(--primary))"
                         dot={false}
-                        strokeWidth={2}
+                        strokeWidth={2.25}
                         isAnimationActive={!isMobile}
                       />
                       {tradeMarkersInRange.map((m) => (
@@ -980,7 +982,7 @@ export default function AssetDetail() {
                           x={m.date}
                           y={m.price}
                           r={isMobile ? 4 : 5}
-                          fill={m.kind === "BUY" ? "#22c55e" : "#ef4444"}
+                          fill={m.kind === "BUY" ? "hsl(160 65% 52%)" : "hsl(350 65% 62%)"}
                           stroke="#fff"
                           strokeWidth={1}
                         />
