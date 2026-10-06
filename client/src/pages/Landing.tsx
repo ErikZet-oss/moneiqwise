@@ -279,7 +279,7 @@ export default function Landing() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden bg-[#08090b] text-white">
+    <div className="landing-page min-h-screen relative overflow-hidden bg-[#08090b] text-white">
       <div className="absolute inset-0 landing-fade-grid" aria-hidden />
       <div className="absolute inset-0 opacity-70" aria-hidden>
         <LandingAmbientLine />

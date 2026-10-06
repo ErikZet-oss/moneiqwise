@@ -174,7 +174,7 @@
     0 8px 24px -12px hsl(0 0% 0% / 0.65);
 }
 
-/* Light cards: soft lift off cool canvas */
+/* Light cards: soft lift off cool canvas (never on login landing) */
 :root:not(.dark) .shadcn-card {
   background-color: hsl(var(--card));
   background-image: linear-gradient(
@@ -186,6 +186,25 @@
   box-shadow:
     0 1px 0 0 hsl(0 0% 100% / 0.8),
     0 8px 24px -16px hsl(220 30% 40% / 0.14);
+}
+
+/* Login stays dark glass regardless of app light/dark theme */
+.landing-page {
+  --primary: 168 70% 52%;
+  --primary-foreground: 0 0% 4%;
+  --ring: 168 70% 52%;
+  color-scheme: dark;
+}
+
+:root:not(.dark) .landing-page .shadcn-card,
+.dark .landing-page .shadcn-card {
+  background-color: rgb(255 255 255 / 0.06);
+  background-image: none;
+  border-color: rgb(52 211 153 / 0.2);
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.06),
+    0 24px 60px -20px rgb(0 0 0 / 0.65),
+    0 0 48px -12px rgb(52 211 153 / 0.28);
 }
 
 /* Soft popovers stay slightly above pure black via --popover tokens */
