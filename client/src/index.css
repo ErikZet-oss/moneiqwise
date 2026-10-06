@@ -51,8 +51,8 @@
   --input: 214 16% 82%;
   --ring: 168 62% 36%;
 
-  /* Pastel chart palette tuned for light backgrounds */
-  --chart-1: 168 58% 38%;
+  /* Chart green matches Tailwind green-500 (plus values) */
+  --chart-1: 142 71% 45%;
   --chart-2: 350 62% 52%;
   --chart-3: 210 68% 48%;
   --chart-4: 280 42% 52%;

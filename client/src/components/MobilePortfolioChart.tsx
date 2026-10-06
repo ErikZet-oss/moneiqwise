@@ -6,6 +6,7 @@ import { sk } from "date-fns/locale";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
+import { useTheme } from "@/hooks/useTheme";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { BrokerLogo } from "@/components/BrokerLogo";
@@ -91,6 +92,7 @@ export function MobilePortfolioChart({
   const { getQueryParam, selectedPortfolio, selectedPortfolioId, isAllPortfolios } = usePortfolio();
   const hideCash = !isAllPortfolios && isPokemonPortfolio(selectedPortfolio?.brokerCode);
   const { showChart, showTooltip, hideAmounts, toggleHideAmounts } = useChartSettings();
+  const { theme } = useTheme();
   
   const maskAmount = (amount: string) => hideAmounts ? "••••••" : amount;
   
@@ -239,7 +241,14 @@ export function MobilePortfolioChart({
   }, [chartData]);
 
   const isPositive = periodChange.amount >= 0;
-  const chartColor = isPositive ? "hsl(168 72% 52%)" : "hsl(350 65% 68%)";
+  // Light: match text-green-500 / text-red-500; dark: keep existing pastel strokes
+  const chartColor = isPositive
+    ? theme === "dark"
+      ? "hsl(168 72% 52%)"
+      : "hsl(142 71% 45%)"
+    : theme === "dark"
+      ? "hsl(350 65% 68%)"
+      : "hsl(0 84% 60%)";
 
   const preOpenPreview = useMemo(() => {
     if (!holdings || holdings.length === 0 || !quotes) {

@@ -6,6 +6,7 @@ import { sk } from "date-fns/locale";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
+import { useTheme } from "@/hooks/useTheme";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 type TimePeriod = "1M" | "3M" | "6M" | "YTD" | "ALL";
 
@@ -57,6 +58,7 @@ export function DesktopPortfolioChart({
   const { formatCurrency, convertPrice } = useCurrency();
   const { getQueryParam } = usePortfolio();
   const { showChart, showTooltip } = useChartSettings();
+  const { theme } = useTheme();
   
   const portfolioParam = getQueryParam();
   const chartQueriesEnabled = showChart && chartDataIdle;
@@ -143,7 +145,14 @@ export function DesktopPortfolioChart({
   }, [chartData]);
 
   const isPositive = periodGainLoss.amount >= 0;
-  const chartColor = isPositive ? "hsl(168 72% 52%)" : "hsl(350 65% 68%)";
+  // Light: match text-green-500 / text-red-500; dark: keep existing pastel strokes
+  const chartColor = isPositive
+    ? theme === "dark"
+      ? "hsl(168 72% 52%)"
+      : "hsl(142 71% 45%)"
+    : theme === "dark"
+      ? "hsl(350 65% 68%)"
+      : "hsl(0 84% 60%)";
 
   const periods: TimePeriod[] = ["1M", "3M", "6M", "YTD", "ALL"];
 
