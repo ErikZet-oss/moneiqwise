@@ -30,7 +30,9 @@ import TaxSummaryPage from "@/pages/TaxSummaryPage";
 import FaqPage from "@/pages/FaqPage";
 import AdminRegistrations from "@/pages/AdminRegistrations";
 import { MarketQuoteTicker } from "@/components/MarketQuoteTicker";
-import { QuickNavFab } from "@/components/QuickNavFab";
+import { QuickNavFab, QUICK_NAV_CONTENT_PAD } from "@/components/QuickNavFab";
+import { useQuickNavFab } from "@/hooks/useQuickNavFab";
+import { cn } from "@/lib/utils";
 
 function QuickNavFabGate() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -113,6 +115,7 @@ function Router() {
 
 function AuthenticatedLayout() {
   const { isAuthenticated, isLoading } = useAuth();
+  const { enabled: quickNavEnabled } = useQuickNavFab();
 
   if (isLoading || !isAuthenticated) {
     return <Router />;
@@ -135,7 +138,12 @@ function AuthenticatedLayout() {
                 <SidebarTrigger data-testid="button-sidebar-toggle" />
                 <div className="flex-1" />
               </header>
-              <main className="flex-1 overflow-auto p-2 md:p-6">
+              <main
+                className={cn(
+                  "flex-1 overflow-auto p-2 md:p-6",
+                  quickNavEnabled && QUICK_NAV_CONTENT_PAD,
+                )}
+              >
                 <Router />
               </main>
             </div>

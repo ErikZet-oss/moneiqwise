@@ -11,8 +11,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
 import { useQuickNavFab } from "@/hooks/useQuickNavFab";
-import { QUICK_NAV_SECTIONS } from "@/lib/quickNavSections";
-import { Loader2, Eye, EyeOff, Coins, Calculator, RefreshCw, Briefcase, Plus, Pencil, Trash2, LineChart, Newspaper, AlertTriangle, ChevronUp, ChevronDown, Eraser, TrendingUp, Code2, Download, MousePointerClick } from "lucide-react";
+import { MAX_QUICK_NAV_ITEMS, QUICK_NAV_SECTIONS } from "@/lib/quickNavSections";
+import { Loader2, Eye, EyeOff, Coins, Calculator, RefreshCw, Briefcase, Plus, Pencil, Trash2, LineChart, Newspaper, AlertTriangle, ChevronUp, ChevronDown, Eraser, TrendingUp, Code2, Download, MousePointerClick, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { BrokerLogo, BrokerSelectItem, BROKER_CATALOG } from "@/components/BrokerLogo";
 import { BROKER_CODES, type Currency, type BrokerCode } from "@shared/schema";
@@ -63,8 +63,17 @@ export default function Settings() {
     setShowAthPopup,
     setShowCalendarEventsPopup,
   } = useChartSettings();
-  const { enabled: quickNavEnabled, path: quickNavPath, setEnabled: setQuickNavEnabled, setPath: setQuickNavPath } =
-    useQuickNavFab();
+  const {
+    enabled: quickNavEnabled,
+    items: quickNavItems,
+    appearance: quickNavAppearance,
+    setEnabled: setQuickNavEnabled,
+    setAppearance: setQuickNavAppearance,
+    setItemPath: setQuickNavItemPath,
+    addItem: addQuickNavItem,
+    removeItem: removeQuickNavItem,
+    maxItems: quickNavMaxItems,
+  } = useQuickNavFab();
   const [newPortfolioName, setNewPortfolioName] = useState("");
   const [newPortfolioBroker, setNewPortfolioBroker] = useState<BrokerCode | undefined>(undefined);
   const [editingPortfolio, setEditingPortfolio] = useState<{ id: string; name: string; brokerCode: BrokerCode | null } | null>(null);
@@ -800,15 +809,15 @@ export default function Settings() {
             <CardTitle className="text-sm font-medium">Rýchla navigácia</CardTitle>
           </div>
           <CardDescription>
-            Plávajúce tlačidlo vpravo dole pre rýchly skok do vašej najpoužívanejšej sekcie.
+            Spodný panel s až {MAX_QUICK_NAV_ITEMS} skratkami do sekcií z menu. Každú položku si vyberiete sami.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 pt-3 space-y-4">
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <div className="text-sm font-medium">Zobraziť rýchle tlačidlo</div>
+              <div className="text-sm font-medium">Zobraziť spodnú navigáciu</div>
               <div className="text-xs text-muted-foreground">
-                Po kliknutí otvorí vybranú sekciu z menu aplikácie
+                Plávajúci panel dole na stránke
               </div>
             </div>
             <Switch
@@ -819,25 +828,90 @@ export default function Settings() {
           </div>
 
           {quickNavEnabled && (
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-2 border-t">
-              <div className="space-y-0.5 min-w-0">
-                <div className="text-sm font-medium">Sekcia po kliknutí</div>
-                <div className="text-xs text-muted-foreground">
-                  Vyberte stránku, na ktorú sa po stlačení tlačidla prejde
+            <div className="space-y-4 pt-2 border-t">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-0.5 min-w-0">
+                  <div className="text-sm font-medium">Vzhľad</div>
+                  <div className="text-xs text-muted-foreground">
+                    Tmavá alebo bledá varianta panelu
+                  </div>
                 </div>
+                <Select
+                  value={quickNavAppearance}
+                  onValueChange={(v) => setQuickNavAppearance(v === "light" ? "light" : "dark")}
+                >
+                  <SelectTrigger className="w-full sm:w-[180px] shrink-0" data-testid="select-quick-nav-appearance">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="dark">Tmavá</SelectItem>
+                    <SelectItem value="light">Bledá</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <Select value={quickNavPath} onValueChange={setQuickNavPath}>
-                <SelectTrigger className="w-full sm:w-[220px] shrink-0" data-testid="select-quick-nav-section">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {QUICK_NAV_SECTIONS.map((section) => (
-                    <SelectItem key={section.path} value={section.path}>
-                      {section.label}
-                    </SelectItem>
+
+              <div className="space-y-2">
+                <div className="space-y-0.5">
+                  <div className="text-sm font-medium">
+                    Položky ({quickNavItems.length}/{quickNavMaxItems})
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Priraďte každej pozícii inú sekciu z menu
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {quickNavItems.map((path, index) => (
+                    <div key={`${path}-${index}`} className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground w-4 shrink-0 tabular-nums">
+                        {index + 1}.
+                      </span>
+                      <Select
+                        value={path}
+                        onValueChange={(v) => setQuickNavItemPath(index, v)}
+                      >
+                        <SelectTrigger
+                          className="flex-1 min-w-0"
+                          data-testid={`select-quick-nav-slot-${index}`}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {QUICK_NAV_SECTIONS.map((section) => (
+                            <SelectItem key={section.path} value={section.path}>
+                              {section.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="shrink-0 h-9 w-9"
+                        disabled={quickNavItems.length <= 1}
+                        onClick={() => removeQuickNavItem(index)}
+                        aria-label={`Odstrániť položku ${index + 1}`}
+                        data-testid={`button-quick-nav-remove-${index}`}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
                   ))}
-                </SelectContent>
-              </Select>
+                </div>
+                {quickNavItems.length < quickNavMaxItems && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="w-full sm:w-auto"
+                    onClick={addQuickNavItem}
+                    data-testid="button-quick-nav-add"
+                  >
+                    <Plus className="h-4 w-4 mr-1.5" />
+                    Pridať položku
+                  </Button>
+                )}
+              </div>
             </div>
           )}
         </CardContent>
