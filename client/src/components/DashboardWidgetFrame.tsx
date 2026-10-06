@@ -2,6 +2,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Eye, EyeOff, GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DashboardWidgetSettingsButton } from "@/components/DashboardWidgetSettingsButton";
 import {
   DASHBOARD_WIDGET_META,
   type DashboardWidgetId,
@@ -63,7 +64,8 @@ export function DashboardWidgetFrame({
     >
       {editing && (
         <div className="absolute -top-2.5 right-2 z-30 flex items-center gap-1">
-          {!meta.required && (
+          <DashboardWidgetSettingsButton id={id} />
+          {!meta.required ? (
             <Button
               type="button"
               size="icon"
@@ -78,7 +80,7 @@ export function DashboardWidgetFrame({
             >
               {visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
             </Button>
-          )}
+          ) : null}
           <button
             type="button"
             ref={setActivatorNodeRef}

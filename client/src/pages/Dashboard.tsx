@@ -2151,7 +2151,7 @@ export default function Dashboard() {
 
       {dashboardEditing && (
         <p className="text-[11px] text-muted-foreground px-0.5 -mt-1 mb-0.5" data-testid="dashboard-edit-hint">
-          Oko skryje/zobrazí widget, ťahaním zmeňte poradie.
+          Oko skryje/zobrazí widget, ⋯ otvorí nastavenia, ťahaním zmeňte poradie.
         </p>
       )}
 
