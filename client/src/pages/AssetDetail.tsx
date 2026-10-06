@@ -1102,53 +1102,284 @@ export default function AssetDetail() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader className="p-3 pb-1.5">
-          <CardTitle className="text-sm md:text-base font-semibold">Podľa portfólia</CardTitle>
-        </CardHeader>
-        <CardContent className="p-3 pt-1">
-          {data.positions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Momentálne nemáte otvorenú pozíciu (všetko predané).</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Portfólio</TableHead>
-                  <TableHead className="text-right">Kusy</TableHead>
-                  <TableHead className="text-right">Priem. nákup</TableHead>
-                  <TableHead className="text-right">Investované</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.positions.map((p) => {
-                  const positionCostCurrency = p.costCurrency ?? costCurrency;
-                  return (
-                    <TableRow key={p.portfolioId ?? "none"}>
-                      <TableCell>
-                        <div className="flex items-center gap-2 min-w-0">
-                          <BrokerLogo brokerCode={p.brokerCode as BrokerCode | null} size="xs" />
-                          <span className="truncate">{p.portfolioName}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-mono">{formatShareQuantity(p.shares)}</TableCell>
-                      <TableCell className="text-right">
-                        {mask(
-                          formatAverageCostCurrency(
-                            convertAverageCostPrice(p.averageCost, positionCostCurrency),
-                          ),
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {mask(formatCurrency(convertPrice(p.totalInvested, positionCostCurrency)))}
-                      </TableCell>
+      <div
+        className={cn(
+          "grid gap-3 items-start",
+          data.ticker !== "CASH" && "md:grid-cols-2",
+        )}
+      >
+        <div className="min-w-0">
+          <Card className="h-full">
+            <CardHeader className="p-3 pb-1.5">
+              <CardTitle className="text-sm md:text-base font-semibold">Podľa portfólia</CardTitle>
+            </CardHeader>
+            <CardContent className="p-3 pt-1">
+              {data.positions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Momentálne nemáte otvorenú pozíciu (všetko predané).
+                </p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Portfólio</TableHead>
+                      <TableHead className="text-right">Kusy</TableHead>
+                      <TableHead className="text-right">Priem. nákup</TableHead>
+                      <TableHead className="text-right">Investované</TableHead>
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {data.positions.map((p) => {
+                      const positionCostCurrency = p.costCurrency ?? costCurrency;
+                      return (
+                        <TableRow key={p.portfolioId ?? "none"}>
+                          <TableCell>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <BrokerLogo brokerCode={p.brokerCode as BrokerCode | null} size="xs" />
+                              <span className="truncate">{p.portfolioName}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            {formatShareQuantity(p.shares)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {mask(
+                              formatAverageCostCurrency(
+                                convertAverageCostPrice(p.averageCost, positionCostCurrency),
+                              ),
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {mask(formatCurrency(convertPrice(p.totalInvested, positionCostCurrency)))}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {data.ticker !== "CASH" && (
+          <div className="min-w-0">
+            <Card className="h-full" data-testid="asset-earnings-history">
+              <CardHeader className="p-3 pb-1.5">
+                <CardTitle className="text-sm md:text-base font-semibold">Výsledky (earnings)</CardTitle>
+                <CardDescription className="text-[11px] md:text-xs">
+                  EPS a ukazovatele podľa rokov / kvartálov
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-3 pt-0 max-h-[420px] overflow-y-auto">
+                {earningsHistoryLoading ? (
+                  <Skeleton className="h-28 w-full" />
+                ) : earningsHistoryError ? (
+                  <p className="text-sm text-destructive">Históriu earnings sa nepodarilo načítať.</p>
+                ) : !earningsHistory?.years?.length ? (
+                  <p className="text-sm text-muted-foreground">
+                    Pre tento ticker nie sú dostupné historické výsledky (bežné pri ETF, kryptomenách
+                    alebo keď Yahoo/Finnhub neodpovie).
+                  </p>
+                ) : (
+                  <Accordion
+                    type="multiple"
+                    defaultValue={
+                      earningsHistory.years[0] ? [String(earningsHistory.years[0].year)] : []
+                    }
+                    className="w-full"
+                  >
+                    {earningsHistory.years.map((yearGroup) => {
+                      return (
+                        <AccordionItem key={yearGroup.year} value={String(yearGroup.year)}>
+                          <AccordionTrigger
+                            className="py-2.5 hover:no-underline text-left"
+                            data-testid={`earnings-year-${yearGroup.year}`}
+                          >
+                            <div className="flex flex-1 flex-wrap items-center gap-x-3 gap-y-1 pr-2">
+                              <span className="font-semibold tabular-nums">{yearGroup.year}</span>
+                              {yearGroup.revenue != null && (
+                                <span className="text-xs text-muted-foreground">
+                                  Tržby {formatCompactMoney(yearGroup.revenue, earningsHistory.currency)}
+                                </span>
+                              )}
+                              {yearGroup.netIncome != null && (
+                                <span className="text-xs text-muted-foreground">
+                                  Zisk {formatCompactMoney(yearGroup.netIncome, earningsHistory.currency)}
+                                </span>
+                              )}
+                              {yearGroup.quarters.length > 0 && (
+                                <Badge variant="secondary" className="text-[10px] font-normal">
+                                  {yearGroup.quarters.length}{" "}
+                                  {yearGroup.quarters.length === 1 ? "kvartál" : "kvartály"}
+                                </Badge>
+                              )}
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent>
+                            {yearGroup.quarters.length === 0 ? (
+                              <p className="text-xs text-muted-foreground pb-1">
+                                Kvartálne EPS pre tento rok nie sú v zdroji dostupné
+                                {yearGroup.revenue != null || yearGroup.netIncome != null
+                                  ? " — vyššie sú len ročné súhrny."
+                                  : "."}
+                              </p>
+                            ) : (
+                              <Accordion type="multiple" className="w-full border rounded-md px-3">
+                                {yearGroup.quarters.map((q) => {
+                                  const tone = surpriseTone(q.epsSurprisePercent);
+                                  return (
+                                    <AccordionItem
+                                      key={`${q.year}-Q${q.quarter}`}
+                                      value={`Q${q.quarter}`}
+                                      className="border-b last:border-b-0"
+                                    >
+                                      <AccordionTrigger
+                                        className="py-2 hover:no-underline text-sm"
+                                        data-testid={`earnings-quarter-${q.year}-Q${q.quarter}`}
+                                      >
+                                        <div className="flex flex-1 flex-wrap items-center gap-2 pr-2">
+                                          <span className="font-medium">{q.label}</span>
+                                          {tone === "beat" && (
+                                            <Badge className="bg-emerald-600 hover:bg-emerald-600 text-[10px]">
+                                              Beat
+                                              {q.epsSurprisePercent != null
+                                                ? ` +${q.epsSurprisePercent.toFixed(1)}%`
+                                                : ""}
+                                            </Badge>
+                                          )}
+                                          {tone === "miss" && (
+                                            <Badge variant="destructive" className="text-[10px]">
+                                              Miss
+                                              {q.epsSurprisePercent != null
+                                                ? ` ${q.epsSurprisePercent.toFixed(1)}%`
+                                                : ""}
+                                            </Badge>
+                                          )}
+                                          {tone === "flat" && q.epsSurprisePercent != null && (
+                                            <Badge variant="secondary" className="text-[10px]">
+                                              {q.epsSurprisePercent >= 0 ? "+" : ""}
+                                              {q.epsSurprisePercent.toFixed(1)}%
+                                            </Badge>
+                                          )}
+                                          {q.epsActual != null && (
+                                            <span className="text-xs text-muted-foreground tabular-nums">
+                                              EPS {formatEps(q.epsActual)}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </AccordionTrigger>
+                                      <AccordionContent>
+                                        <div className="grid grid-cols-2 gap-2 text-sm pb-1">
+                                          <div>
+                                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                              EPS skutočné
+                                            </div>
+                                            <div className="font-semibold tabular-nums">
+                                              {formatEps(q.epsActual)}
+                                            </div>
+                                          </div>
+                                          <div>
+                                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                              EPS odhad
+                                            </div>
+                                            <div className="font-semibold tabular-nums">
+                                              {formatEps(q.epsEstimate)}
+                                            </div>
+                                          </div>
+                                          <div>
+                                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                              Surprise
+                                            </div>
+                                            <div
+                                              className={cn(
+                                                "font-semibold tabular-nums",
+                                                tone === "beat" && "text-emerald-600",
+                                                tone === "miss" && "text-red-500",
+                                              )}
+                                            >
+                                              {q.epsSurprise != null ? formatEps(q.epsSurprise) : "—"}
+                                              {q.epsSurprisePercent != null
+                                                ? ` (${q.epsSurprisePercent >= 0 ? "+" : ""}${q.epsSurprisePercent.toFixed(2)}%)`
+                                                : ""}
+                                            </div>
+                                          </div>
+                                          <div>
+                                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                              Tržby
+                                            </div>
+                                            <div className="font-semibold tabular-nums">
+                                              {q.revenue != null
+                                                ? formatCompactMoney(q.revenue, earningsHistory.currency)
+                                                : "—"}
+                                            </div>
+                                          </div>
+                                          <div>
+                                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                              Čistý zisk
+                                            </div>
+                                            <div className="font-semibold tabular-nums">
+                                              {q.netIncome != null
+                                                ? formatCompactMoney(q.netIncome, earningsHistory.currency)
+                                                : "—"}
+                                            </div>
+                                          </div>
+                                          <div>
+                                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                              Koniec obdobia
+                                            </div>
+                                            <div className="font-semibold tabular-nums">
+                                              {q.periodEnd
+                                                ? format(
+                                                    parse(q.periodEnd, "yyyy-MM-dd", new Date()),
+                                                    "d. M. yyyy",
+                                                    { locale: sk },
+                                                  )
+                                                : "—"}
+                                            </div>
+                                          </div>
+                                          {q.reportedDate && (
+                                            <div className="col-span-2">
+                                              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                                Dátum reportu
+                                              </div>
+                                              <div className="font-semibold tabular-nums">
+                                                {format(
+                                                  parse(q.reportedDate, "yyyy-MM-dd", new Date()),
+                                                  "d. M. yyyy",
+                                                  { locale: sk },
+                                                )}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </AccordionContent>
+                                    </AccordionItem>
+                                  );
+                                })}
+                              </Accordion>
+                            )}
+                          </AccordionContent>
+                        </AccordionItem>
+                      );
+                    })}
+                  </Accordion>
+                )}
+                {earningsHistory?.source && (
+                  <p className="text-[10px] text-muted-foreground mt-2">
+                    Zdroj:{" "}
+                    {earningsHistory.source === "yahoo"
+                      ? "Yahoo Finance"
+                      : earningsHistory.source === "finnhub"
+                        ? "Finnhub"
+                        : "Alpha Vantage"}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </div>
 
       {data.ticker !== "CASH" && !isPokemonTicker(data.ticker) && (
         <AnalystRatingsCard
@@ -1409,212 +1640,6 @@ export default function AssetDetail() {
                 ))}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
-      )}
-
-      {data.ticker !== "CASH" && (
-        <Card data-testid="asset-earnings-history">
-          <CardHeader className="p-3 pb-1.5">
-            <CardTitle className="text-sm md:text-base font-semibold">Výsledky (earnings)</CardTitle>
-            <CardDescription className="text-[11px] md:text-xs">
-              EPS a ukazovatele podľa rokov / kvartálov
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-3 pt-0">
-            {earningsHistoryLoading ? (
-              <Skeleton className="h-28 w-full" />
-            ) : earningsHistoryError ? (
-              <p className="text-sm text-destructive">Históriu earnings sa nepodarilo načítať.</p>
-            ) : !earningsHistory?.years?.length ? (
-              <p className="text-sm text-muted-foreground">
-                Pre tento ticker nie sú dostupné historické výsledky (bežné pri ETF, kryptomenách alebo keď
-                Yahoo/Finnhub neodpovie).
-              </p>
-            ) : (
-              <Accordion
-                type="multiple"
-                defaultValue={earningsHistory.years[0] ? [String(earningsHistory.years[0].year)] : []}
-                className="w-full"
-              >
-                {earningsHistory.years.map((yearGroup) => {
-                  return (
-                    <AccordionItem key={yearGroup.year} value={String(yearGroup.year)}>
-                      <AccordionTrigger
-                        className="py-3 hover:no-underline text-left"
-                        data-testid={`earnings-year-${yearGroup.year}`}
-                      >
-                        <div className="flex flex-1 flex-wrap items-center gap-x-3 gap-y-1 pr-2">
-                          <span className="font-semibold tabular-nums">{yearGroup.year}</span>
-                          {yearGroup.revenue != null && (
-                            <span className="text-xs text-muted-foreground">
-                              Tržby {formatCompactMoney(yearGroup.revenue, earningsHistory.currency)}
-                            </span>
-                          )}
-                          {yearGroup.netIncome != null && (
-                            <span className="text-xs text-muted-foreground">
-                              Zisk {formatCompactMoney(yearGroup.netIncome, earningsHistory.currency)}
-                            </span>
-                          )}
-                          {yearGroup.quarters.length > 0 && (
-                            <Badge variant="secondary" className="text-[10px] font-normal">
-                              {yearGroup.quarters.length}{" "}
-                              {yearGroup.quarters.length === 1 ? "kvartál" : "kvartály"}
-                            </Badge>
-                          )}
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        {yearGroup.quarters.length === 0 ? (
-                          <p className="text-xs text-muted-foreground pb-1">
-                            Kvartálne EPS pre tento rok nie sú v zdroji dostupné
-                            {yearGroup.revenue != null || yearGroup.netIncome != null
-                              ? " — vyššie sú len ročné súhrny."
-                              : "."}
-                          </p>
-                        ) : (
-                          <Accordion type="multiple" className="w-full border rounded-md px-3">
-                            {yearGroup.quarters.map((q) => {
-                              const tone = surpriseTone(q.epsSurprisePercent);
-                              return (
-                                <AccordionItem
-                                  key={`${q.year}-Q${q.quarter}`}
-                                  value={`Q${q.quarter}`}
-                                  className="border-b last:border-b-0"
-                                >
-                                  <AccordionTrigger
-                                    className="py-2.5 hover:no-underline text-sm"
-                                    data-testid={`earnings-quarter-${q.year}-Q${q.quarter}`}
-                                  >
-                                    <div className="flex flex-1 flex-wrap items-center gap-2 pr-2">
-                                      <span className="font-medium">{q.label}</span>
-                                      {tone === "beat" && (
-                                        <Badge className="bg-emerald-600 hover:bg-emerald-600 text-[10px]">
-                                          Beat
-                                          {q.epsSurprisePercent != null
-                                            ? ` +${q.epsSurprisePercent.toFixed(1)}%`
-                                            : ""}
-                                        </Badge>
-                                      )}
-                                      {tone === "miss" && (
-                                        <Badge variant="destructive" className="text-[10px]">
-                                          Miss
-                                          {q.epsSurprisePercent != null
-                                            ? ` ${q.epsSurprisePercent.toFixed(1)}%`
-                                            : ""}
-                                        </Badge>
-                                      )}
-                                      {tone === "flat" && q.epsSurprisePercent != null && (
-                                        <Badge variant="secondary" className="text-[10px]">
-                                          {q.epsSurprisePercent >= 0 ? "+" : ""}
-                                          {q.epsSurprisePercent.toFixed(1)}%
-                                        </Badge>
-                                      )}
-                                      {q.epsActual != null && (
-                                        <span className="text-xs text-muted-foreground tabular-nums">
-                                          EPS {formatEps(q.epsActual)}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </AccordionTrigger>
-                                  <AccordionContent>
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm pb-1">
-                                      <div>
-                                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                          EPS skutočné
-                                        </div>
-                                        <div className="font-semibold tabular-nums">{formatEps(q.epsActual)}</div>
-                                      </div>
-                                      <div>
-                                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                          EPS odhad
-                                        </div>
-                                        <div className="font-semibold tabular-nums">{formatEps(q.epsEstimate)}</div>
-                                      </div>
-                                      <div>
-                                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                          Surprise
-                                        </div>
-                                        <div
-                                          className={cn(
-                                            "font-semibold tabular-nums",
-                                            tone === "beat" && "text-emerald-600",
-                                            tone === "miss" && "text-red-500",
-                                          )}
-                                        >
-                                          {q.epsSurprise != null ? formatEps(q.epsSurprise) : "—"}
-                                          {q.epsSurprisePercent != null
-                                            ? ` (${q.epsSurprisePercent >= 0 ? "+" : ""}${q.epsSurprisePercent.toFixed(2)}%)`
-                                            : ""}
-                                        </div>
-                                      </div>
-                                      <div>
-                                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                          Tržby
-                                        </div>
-                                        <div className="font-semibold tabular-nums">
-                                          {q.revenue != null
-                                            ? formatCompactMoney(q.revenue, earningsHistory.currency)
-                                            : "—"}
-                                        </div>
-                                      </div>
-                                      <div>
-                                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                          Čistý zisk
-                                        </div>
-                                        <div className="font-semibold tabular-nums">
-                                          {q.netIncome != null
-                                            ? formatCompactMoney(q.netIncome, earningsHistory.currency)
-                                            : "—"}
-                                        </div>
-                                      </div>
-                                      <div>
-                                        <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                          Koniec obdobia
-                                        </div>
-                                        <div className="font-semibold tabular-nums">
-                                          {q.periodEnd
-                                            ? format(parse(q.periodEnd, "yyyy-MM-dd", new Date()), "d. M. yyyy", {
-                                                locale: sk,
-                                              })
-                                            : "—"}
-                                        </div>
-                                      </div>
-                                      {q.reportedDate && (
-                                        <div className="col-span-2 sm:col-span-3">
-                                          <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                            Dátum reportu
-                                          </div>
-                                          <div className="font-semibold tabular-nums">
-                                            {format(parse(q.reportedDate, "yyyy-MM-dd", new Date()), "d. M. yyyy", {
-                                              locale: sk,
-                                            })}
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </AccordionContent>
-                                </AccordionItem>
-                              );
-                            })}
-                          </Accordion>
-                        )}
-                      </AccordionContent>
-                    </AccordionItem>
-                  );
-                })}
-              </Accordion>
-            )}
-            {earningsHistory?.source && (
-              <p className="text-[10px] text-muted-foreground mt-3">
-                Zdroj:{" "}
-                {earningsHistory.source === "yahoo"
-                  ? "Yahoo Finance"
-                  : earningsHistory.source === "finnhub"
-                    ? "Finnhub"
-                    : "Alpha Vantage"}
-              </p>
-            )}
           </CardContent>
         </Card>
       )}
