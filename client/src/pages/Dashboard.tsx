@@ -2510,17 +2510,18 @@ export default function Dashboard() {
 
       <div
         className={cn(
-          "hidden md:grid gap-4 md:grid-cols-2",
+          "hidden md:grid gap-4 md:grid-cols-2 lg:grid-cols-3",
           (() => {
             const n =
               2 +
               (isDashboardWidgetVisible("earnings") ? 1 : 0) +
               (isDashboardWidgetVisible("topPosition") ? 1 : 0) +
-              (isDashboardWidgetVisible("macroEvent") ? 1 : 0);
-            if (n >= 5) return "xl:grid-cols-5";
+              (isDashboardWidgetVisible("macroEvent") ? 1 : 0) +
+              (isDashboardWidgetVisible("ytdBenchmark") ? 1 : 0);
+            if (n >= 6) return "xl:grid-cols-6";
+            if (n === 5) return "xl:grid-cols-5";
             if (n === 4) return "xl:grid-cols-4";
-            if (n === 3) return "xl:grid-cols-3";
-            return "xl:grid-cols-2";
+            return "xl:grid-cols-3";
           })(),
         )}
       >
@@ -2791,6 +2792,65 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         )}
+
+        {isDashboardWidgetVisible("ytdBenchmark") && (
+          <Card className="h-full border-border bg-card shadow-sm" data-testid="card-ytd-benchmark">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-4 pb-1">
+              <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                <ArrowUpDown className="h-3.5 w-3.5" />
+                YTD vs S&amp;P 500
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-[300px]">
+                    <p className="font-semibold mb-1">Porovnanie od začiatku roka</p>
+                    <p className="text-xs">
+                      Porovnávame výkonnosť vášho portfólia voči S&amp;P 500 v rovnakom YTD intervale. Alpha je rozdiel
+                      portfólia mínus index.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 pt-1 space-y-1.5">
+              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                YTD {ytdComparison?.yearLabel ?? new Date().getFullYear()}
+              </div>
+              {ytdComparison ? (
+                <>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-xs text-muted-foreground truncate">Portfólio</span>
+                    <span className={`text-sm font-semibold tabular-nums ${getChangeColor(ytdComparison.portfolio)}`}>
+                      {formatPercent(ytdComparison.portfolio)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-xs text-muted-foreground truncate">S&amp;P 500</span>
+                    <span className={`text-sm font-semibold tabular-nums ${getChangeColor(ytdComparison.sp500)}`}>
+                      {formatPercent(ytdComparison.sp500)}
+                    </span>
+                  </div>
+                  <div
+                    className={`flex items-center justify-between gap-1 rounded-md border px-2 py-1.5 ${
+                      ytdComparison.alpha >= 0
+                        ? "border-emerald-500/40 bg-emerald-500/10"
+                        : "border-rose-500/40 bg-rose-500/10"
+                    }`}
+                    data-testid="text-ytd-alpha"
+                  >
+                    <span className="text-xs font-medium">Alpha</span>
+                    <span className={`text-sm font-bold tabular-nums ${getChangeColor(ytdComparison.alpha)}`}>
+                      {formatPercent(ytdComparison.alpha)}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">YTD dáta sa načítavajú…</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </div>
 
                   </>
@@ -2956,34 +3016,31 @@ export default function Dashboard() {
                   editing={dashboardEditing}
                   visible={visible}
                   onToggleVisible={() => toggleDashboardWidget(widgetId)}
+                  empty={!isMobileViewport}
+                  emptyHint="Na webe je v hornom riadku boxov"
                 >
-        <div className="bg-card rounded-lg border px-2.5 py-2 md:p-4" data-testid="card-ytd-benchmark">
-          <div className="hidden md:flex items-center gap-1 text-xs font-medium text-muted-foreground mb-2">
-            <ArrowUpDown className="h-3.5 w-3.5" />
-            YTD vs S&amp;P 500
-          </div>
-          <div className="flex items-center justify-between text-[10px] md:text-sm">
+      <div className="md:hidden">
+        <div className="bg-card rounded-lg border px-2.5 py-2" data-testid="card-ytd-benchmark-mobile">
+          <div className="flex items-center justify-between text-[10px]">
             <span className="text-muted-foreground">Moje YTD</span>
             <span className={`font-semibold tabular-nums ${getChangeColor(ytdComparison?.portfolio ?? 0)}`}>
               {ytdComparison ? formatPercent(ytdComparison.portfolio) : "—"}
             </span>
           </div>
-          <div className="mt-1 flex items-center justify-between text-[10px] md:text-sm">
+          <div className="mt-1 flex items-center justify-between text-[10px]">
             <span className="text-muted-foreground">S&amp;P 500 YTD</span>
             <span className={`font-semibold tabular-nums ${getChangeColor(ytdComparison?.sp500 ?? 0)}`}>
               {ytdComparison ? formatPercent(ytdComparison.sp500) : "—"}
             </span>
           </div>
-          <div className="mt-1.5 flex items-center justify-between text-[11px] md:text-sm border-t border-border/40 pt-1.5">
+          <div className="mt-1.5 flex items-center justify-between text-[11px] border-t border-border/40 pt-1.5">
             <span className="font-medium text-muted-foreground">Alpha</span>
-            <span
-              className={`font-bold tabular-nums ${getChangeColor(ytdComparison?.alpha ?? 0)}`}
-              data-testid="text-ytd-alpha"
-            >
+            <span className={`font-bold tabular-nums ${getChangeColor(ytdComparison?.alpha ?? 0)}`}>
               {ytdComparison ? formatPercent(ytdComparison.alpha) : "—"}
             </span>
           </div>
         </div>
+      </div>
 
                 </DashboardWidgetFrame>
               );
