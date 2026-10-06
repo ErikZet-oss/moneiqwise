@@ -101,7 +101,7 @@ function ActiveDonutShape(props: ActiveShapeProps) {
         startAngle={startAngle}
         endAngle={endAngle}
         fill={fill}
-        cornerRadius={10}
+        cornerRadius={4}
         style={{ filter: `drop-shadow(0 0 10px ${fill})` }}
       />
       <Sector
@@ -113,7 +113,7 @@ function ActiveDonutShape(props: ActiveShapeProps) {
         endAngle={endAngle}
         fill={fill}
         opacity={0.35}
-        cornerRadius={6}
+        cornerRadius={3}
       />
     </g>
   );
@@ -384,8 +384,8 @@ export function DashboardAllocationWidget({
                       cy="50%"
                       innerRadius="62%"
                       outerRadius="84%"
-                      paddingAngle={3.5}
-                      cornerRadius={12}
+                      paddingAngle={2.5}
+                      cornerRadius={4}
                       stroke="transparent"
                       strokeWidth={0}
                       isAnimationActive
