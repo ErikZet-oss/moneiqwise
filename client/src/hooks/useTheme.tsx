@@ -30,9 +30,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => getInitialTheme());
 
   useEffect(() => {
-    const body = document.body;
-    body.classList.toggle("dark", theme === "dark");
-    body.classList.toggle("light", theme === "light");
+    // Tailwind darkMode: class expects .dark on <html>, not only <body>.
+    const root = document.documentElement;
+    root.classList.toggle("dark", theme === "dark");
+    root.classList.toggle("light", theme === "light");
+    document.body.classList.toggle("dark", theme === "dark");
+    document.body.classList.toggle("light", theme === "light");
     try {
       window.localStorage.setItem(STORAGE_KEY, theme);
     } catch {

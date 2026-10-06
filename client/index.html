@@ -21,8 +21,10 @@
           var theme = stored === 'light' || stored === 'dark'
             ? stored
             : (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+          document.documentElement.classList.add(theme);
           document.body.classList.add(theme);
         } catch (e) {
+          document.documentElement.classList.add('dark');
           document.body.classList.add('dark');
         }
       })();

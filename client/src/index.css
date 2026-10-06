@@ -89,86 +89,73 @@
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 }
 
-/* DARK MODE — pure black canvas, solid dark cards, pastel accents */
+/* DARK MODE - Financial app dark theme */
 .dark {
   --button-outline: rgba(255,255,255, .10);
   --badge-outline: rgba(255,255,255, .05);
 
   --opaque-button-border-intensity: 9;
 
-  --elevate-1: rgba(255,255,255, .035);
-  --elevate-2: rgba(255,255,255, .08);
+  --elevate-1: rgba(255,255,255, .04);
+  --elevate-2: rgba(255,255,255, .09);
 
-  /* Pure black page background */
-  --background: 0 0% 0%;
-  --foreground: 210 16% 96%;
-  --border: 0 0% 14%;
+  --background: 222 47% 8%;
+  --foreground: 210 20% 95%;
+  --border: 220 25% 18%;
 
-  /* Solid dark cards (no pale lift) */
-  --card: 0 0% 6%;
-  --card-foreground: 210 16% 96%;
-  --card-border: 0 0% 12%;
+  --card: 222 47% 11%;
+  --card-foreground: 210 20% 95%;
+  --card-border: 220 25% 18%;
 
-  --sidebar: 0 0% 2%;
-  --sidebar-foreground: 210 14% 88%;
-  --sidebar-border: 0 0% 12%;
-  --sidebar-primary: 168 70% 52%;
-  --sidebar-primary-foreground: 0 0% 4%;
-  --sidebar-accent: 0 0% 10%;
-  --sidebar-accent-foreground: 210 16% 95%;
-  --sidebar-ring: 168 70% 52%;
+  --sidebar: 222 47% 6%;
+  --sidebar-foreground: 210 20% 90%;
+  --sidebar-border: 220 25% 15%;
+  --sidebar-primary: 142 76% 42%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 222 47% 14%;
+  --sidebar-accent-foreground: 210 20% 95%;
+  --sidebar-ring: 142 76% 42%;
 
-  --popover: 0 0% 7%;
-  --popover-foreground: 210 16% 96%;
-  --popover-border: 0 0% 14%;
+  --popover: 222 47% 11%;
+  --popover-foreground: 210 20% 95%;
+  --popover-border: 220 25% 20%;
 
-  /* Pastel teal primary */
-  --primary: 168 70% 52%;
-  --primary-foreground: 0 0% 4%;
+  --primary: 142 76% 42%;
+  --primary-foreground: 0 0% 100%;
 
-  --secondary: 0 0% 10%;
-  --secondary-foreground: 210 14% 90%;
+  --secondary: 222 47% 16%;
+  --secondary-foreground: 210 20% 90%;
 
-  --muted: 0 0% 9%;
-  --muted-foreground: 220 8% 58%;
+  --muted: 222 30% 18%;
+  --muted-foreground: 220 10% 55%;
 
-  --accent: 0 0% 10%;
-  --accent-foreground: 210 16% 95%;
+  --accent: 222 47% 16%;
+  --accent-foreground: 210 20% 95%;
 
-  /* Soft coral destructive / loss */
-  --destructive: 350 65% 62%;
+  --destructive: 0 62% 55%;
   --destructive-foreground: 0 0% 100%;
 
-  --input: 0 0% 14%;
-  --ring: 168 70% 52%;
+  --input: 220 25% 22%;
+  --ring: 142 76% 42%;
 
-  /* Pastel chart palette: teal, coral, sky, lavender, soft yellow */
-  --chart-1: 168 72% 52%;
-  --chart-2: 350 65% 68%;
-  --chart-3: 210 80% 68%;
-  --chart-4: 280 55% 72%;
-  --chart-5: 45 80% 65%;
+  --chart-1: 142 76% 42%;
+  --chart-2: 0 62% 55%;
+  --chart-3: 220 70% 55%;
+  --chart-4: 280 65% 60%;
+  --chart-5: 30 85% 55%;
 
-  --shadow-2xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.00);
-  --shadow-xs: 0px 2px 0px 0px hsl(0 0% 0% / 0.00);
-  --shadow-sm: 0px 2px 0px 0px hsl(0 0% 0% / 0.00), 0px 1px 2px -1px hsl(0 0% 0% / 0.00);
-  --shadow: 0px 2px 0px 0px hsl(0 0% 0% / 0.00), 0px 1px 2px -1px hsl(0 0% 0% / 0.00);
-  --shadow-md: 0px 2px 0px 0px hsl(0 0% 0% / 0.00), 0px 2px 4px -1px hsl(0 0% 0% / 0.00);
-  --shadow-lg: 0px 2px 0px 0px hsl(0 0% 0% / 0.00), 0px 4px 6px -1px hsl(0 0% 0% / 0.00);
-  --shadow-xl: 0px 2px 0px 0px hsl(0 0% 0% / 0.00), 0px 8px 10px -1px hsl(0 0% 0% / 0.00);
-  --shadow-2xl: 0px 2px 0px 0px hsl(0 0% 0% / 0.00);
+  --shadow-2xs: 0px 2px 0px 0px hsl(220 25% 10% / 0.00);
+  --shadow-xs: 0px 2px 0px 0px hsl(220 25% 10% / 0.00);
+  --shadow-sm: 0px 2px 0px 0px hsl(220 25% 10% / 0.00), 0px 1px 2px -1px hsl(220 25% 10% / 0.00);
+  --shadow: 0px 2px 0px 0px hsl(220 25% 10% / 0.00), 0px 1px 2px -1px hsl(220 25% 10% / 0.00);
+  --shadow-md: 0px 2px 0px 0px hsl(220 25% 10% / 0.00), 0px 2px 4px -1px hsl(220 25% 10% / 0.00);
+  --shadow-lg: 0px 2px 0px 0px hsl(220 25% 10% / 0.00), 0px 4px 6px -1px hsl(220 25% 10% / 0.00);
+  --shadow-xl: 0px 2px 0px 0px hsl(220 25% 10% / 0.00), 0px 8px 10px -1px hsl(220 25% 10% / 0.00);
+  --shadow-2xl: 0px 2px 0px 0px hsl(220 25% 10% / 0.00);
 }
 
-/* Dark cards: flat, solid — no pale gradient lift */
-.dark .shadcn-card {
-  background-color: hsl(var(--card));
-  background-image: none;
-  border-color: hsl(0 0% 100% / 0.06);
-  box-shadow: none;
-}
-
-/* Light cards: soft lift off cool canvas (never on login landing) */
-:root:not(.dark) .shadcn-card {
+/* Light cards only when NOT in dark mode (theme class lives on <html>) */
+html:not(.dark) .shadcn-card {
   background-color: hsl(var(--card));
   background-image: linear-gradient(
     180deg,
@@ -189,7 +176,7 @@
   color-scheme: dark;
 }
 
-:root:not(.dark) .landing-page .shadcn-card,
+html:not(.dark) .landing-page .shadcn-card,
 .dark .landing-page .shadcn-card {
   background-color: rgb(255 255 255 / 0.06);
   background-image: none;
@@ -199,8 +186,6 @@
     0 24px 60px -20px rgb(0 0 0 / 0.65),
     0 0 48px -12px rgb(52 211 153 / 0.28);
 }
-
-/* Soft popovers stay slightly above pure black via --popover tokens */
 
 @layer base {
   * {
