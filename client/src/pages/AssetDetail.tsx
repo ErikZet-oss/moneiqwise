@@ -27,6 +27,7 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { useChartSettings } from "@/hooks/useChartSettings";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { HelpTip } from "@/components/HelpTip";
+import { AnalystRatingsCard } from "@/components/AnalystRatingsCard";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Switch } from "@/components/ui/switch";
 import type { BrokerCode, Currency, Transaction } from "@shared/schema";
@@ -701,6 +702,13 @@ export default function AssetDetail() {
           </div>
         </CardContent>
       </Card>
+
+      {data.ticker !== "CASH" && !isPokemonTicker(data.ticker) && (
+        <AnalystRatingsCard
+          ticker={data.ticker}
+          formatPrice={(amount) => mask(formatQuoteAmount(amount))}
+        />
+      )}
 
       {data.ticker !== "CASH" && (
         <Card data-testid="asset-earnings-history">

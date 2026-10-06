@@ -70,6 +70,7 @@ import {
   type WatchlistStockSection,
 } from "./watchlistStockInfo";
 import { fetchEarningsHistoryForAsset } from "./earningsHistory";
+import { fetchAnalystRatingsForAsset } from "./analystRatings";
 import { db } from "./db";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 
@@ -3910,6 +3911,51 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching earnings history:", error);
       res.status(500).json({ message: "Nepodarilo sa načítať históriu earnings." });
+    }
+  });
+
+  /** Analyst ratings / price targets (Yahoo) — pre detail držaného aktíva. */
+  app.get("/api/assets/:ticker/analyst-ratings", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      let rawTicker = req.params.ticker as string;
+      try {
+        rawTicker = decodeURIComponent(rawTicker);
+      } catch {
+        // keep raw
+      }
+
+      const holdingRows = await storage.getHoldingsForTickerAcrossPortfolios(userId, rawTicker);
+      const txRows = await storage.getTransactionsForTickerAcrossPortfolios(userId, rawTicker);
+      if (holdingRows.length === 0 && txRows.length === 0) {
+        return res.status(404).json({ message: "Pre toto aktívum nemáte žiadne dáta." });
+      }
+
+      const displayTicker = holdingRows[0]?.ticker ?? txRows[0]?.ticker ?? rawTicker;
+      if (displayTicker.toUpperCase() === "CASH") {
+        return res.json({
+          ticker: displayTicker,
+          currency: null,
+          currentPrice: null,
+          targetMean: null,
+          targetMedian: null,
+          targetHigh: null,
+          targetLow: null,
+          upsidePercent: null,
+          recommendationKey: null,
+          recommendationMean: null,
+          numberOfAnalystOpinions: null,
+          recommendationTrend: null,
+          history: [],
+          source: null,
+        });
+      }
+
+      const ratings = await fetchAnalystRatingsForAsset(displayTicker);
+      res.json(ratings);
+    } catch (error) {
+      console.error("Error fetching analyst ratings:", error);
+      res.status(500).json({ message: "Nepodarilo sa načítať analyst ratings." });
     }
   });
 
