@@ -2,13 +2,30 @@
 export const DASHBOARD_WIDGET_IDS = [
   "summary",
   "chart",
-  "insights",
+  "realizedGain",
+  "dividends",
+  "ytdBenchmark",
+  "earnings",
+  "topPosition",
+  "macroEvent",
+  "optionsInsight",
   "news",
   "dailyMovers",
   "holdings",
 ] as const;
 
 export type DashboardWidgetId = (typeof DASHBOARD_WIDGET_IDS)[number];
+
+/** Starý monolitický Insights → tieto widgety. */
+export const INSIGHT_WIDGET_IDS = [
+  "realizedGain",
+  "dividends",
+  "ytdBenchmark",
+  "earnings",
+  "topPosition",
+  "macroEvent",
+  "optionsInsight",
+] as const satisfies readonly DashboardWidgetId[];
 
 export type DashboardLayout = {
   order: DashboardWidgetId[];
@@ -21,7 +38,13 @@ export const DASHBOARD_WIDGET_META: Record<
 > = {
   summary: { label: "Súhrn", required: true },
   chart: { label: "Graf", required: false },
-  insights: { label: "Insights", required: false },
+  realizedGain: { label: "Realizovaný zisk", required: false },
+  dividends: { label: "Dividendy", required: false },
+  ytdBenchmark: { label: "YTD vs S&P", required: false },
+  earnings: { label: "Earnings", required: false },
+  topPosition: { label: "Top pozícia", required: false },
+  macroEvent: { label: "Makro udalosť", required: false },
+  optionsInsight: { label: "Opcie", required: false },
   news: { label: "Novinky", required: false },
   dailyMovers: { label: "Najlepšie / najhoršie", required: false },
   holdings: { label: "Prehľad aktív", required: false },
@@ -32,7 +55,13 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = {
   visible: {
     summary: true,
     chart: true,
-    insights: true,
+    realizedGain: true,
+    dividends: true,
+    ytdBenchmark: true,
+    earnings: true,
+    topPosition: true,
+    macroEvent: true,
+    optionsInsight: true,
     news: true,
     dailyMovers: true,
     holdings: true,
@@ -46,21 +75,29 @@ export function isDashboardWidgetId(value: unknown): value is DashboardWidgetId 
   );
 }
 
+function expandOrderItem(item: unknown): DashboardWidgetId[] {
+  if (item === "insights") return [...INSIGHT_WIDGET_IDS];
+  if (isDashboardWidgetId(item)) return [item];
+  return [];
+}
+
 export function normalizeDashboardLayout(
   raw: unknown,
   seed?: Partial<Record<"news" | "dailyMovers" | "chart", boolean>>,
 ): DashboardLayout {
   const base = DEFAULT_DASHBOARD_LAYOUT;
   const parsed =
-    raw && typeof raw === "object" ? (raw as Partial<DashboardLayout>) : {};
+    raw && typeof raw === "object" ? (raw as Partial<DashboardLayout> & { visible?: Record<string, unknown> }) : {};
 
   const seen = new Set<DashboardWidgetId>();
   const order: DashboardWidgetId[] = [];
   const rawOrder = Array.isArray(parsed.order) ? parsed.order : [];
   for (const item of rawOrder) {
-    if (!isDashboardWidgetId(item) || seen.has(item)) continue;
-    seen.add(item);
-    order.push(item);
+    for (const id of expandOrderItem(item)) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      order.push(id);
+    }
   }
   for (const id of DASHBOARD_WIDGET_IDS) {
     if (!seen.has(id)) order.push(id);
@@ -68,10 +105,15 @@ export function normalizeDashboardLayout(
 
   const rawVisible =
     parsed.visible && typeof parsed.visible === "object" ? parsed.visible : {};
+  const legacyInsights =
+    typeof rawVisible.insights === "boolean" ? rawVisible.insights : true;
+
   const visible = { ...base.visible };
   for (const id of DASHBOARD_WIDGET_IDS) {
-    if (typeof (rawVisible as Record<string, unknown>)[id] === "boolean") {
-      visible[id] = (rawVisible as Record<string, boolean>)[id]!;
+    if (typeof rawVisible[id] === "boolean") {
+      visible[id] = rawVisible[id] as boolean;
+    } else if ((INSIGHT_WIDGET_IDS as readonly string[]).includes(id)) {
+      visible[id] = legacyInsights;
     } else if (id === "news" && typeof seed?.news === "boolean") {
       visible[id] = seed.news;
     } else if (id === "dailyMovers" && typeof seed?.dailyMovers === "boolean") {

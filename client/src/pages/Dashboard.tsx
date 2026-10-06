@@ -801,6 +801,7 @@ export default function Dashboard() {
   } = useChartSettings();
   const {
     order: dashboardOrder,
+    visible: dashboardVisible,
     editing: dashboardEditing,
     setEditing: setDashboardEditing,
     isVisible: isDashboardWidgetVisible,
@@ -1415,6 +1416,17 @@ export default function Dashboard() {
     currentMobileTopPosition && mobileTopPositionsTotalValue > 0
       ? (currentMobileTopPosition.value / mobileTopPositionsTotalValue) * 100
       : 0;
+  const desktopInsightSlides = useMemo(() => {
+    const slides: Array<"earnings" | "macro" | "top"> = [];
+    if (dashboardVisible.earnings !== false) slides.push("earnings");
+    if (dashboardVisible.macroEvent !== false) slides.push("macro");
+    if (dashboardVisible.topPosition !== false) slides.push("top");
+    return slides;
+  }, [dashboardVisible.earnings, dashboardVisible.macroEvent, dashboardVisible.topPosition]);
+  const desktopInsightSlideCount = desktopInsightSlides.length;
+  const safeDesktopInsightIndex =
+    desktopInsightSlideCount > 0 ? desktopInsightIndex % desktopInsightSlideCount : 0;
+  const activeDesktopInsightSlide = desktopInsightSlides[safeDesktopInsightIndex] ?? null;
   const mobileMacroEvents = upcomingMacroEvents?.all ?? [];
   const currentMobileMacroEvent =
     mobileMacroEvents.length > 0
@@ -2428,6 +2440,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
+        {dashboardVisible.ytdBenchmark !== false && (
         <Card className="h-full border-border/70 bg-card/95 shadow-sm" data-testid="card-ytd-benchmark">
           <CardHeader className="flex min-h-[68px] flex-row items-center justify-between gap-2 border-b border-border/40 p-4 pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">
@@ -2484,7 +2497,9 @@ export default function Dashboard() {
             )}
           </CardContent>
         </Card>
+        )}
 
+        {desktopInsightSlideCount > 0 && (
         <Card className="h-full border-border/70 bg-card/95 shadow-sm" data-testid="card-desktop-insights-carousel">
           <CardHeader className="min-h-[68px] border-b border-border/40 p-4 pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-1">
@@ -2505,17 +2520,22 @@ export default function Dashboard() {
           <CardContent className="space-y-3 p-4 pt-3">
             <div className="flex items-center justify-between gap-2">
               <div className="text-[11px] text-muted-foreground">
-                {desktopInsightIndex === 0 && "Najbližší earnings"}
-                {desktopInsightIndex === 1 && "Najbližšia makro udalosť"}
-                {desktopInsightIndex === 2 && "Najväčšie zastúpenie aktíva"}
+                {activeDesktopInsightSlide === "earnings" && "Najbližší earnings"}
+                {activeDesktopInsightSlide === "macro" && "Najbližšia makro udalosť"}
+                {activeDesktopInsightSlide === "top" && "Najväčšie zastúpenie aktíva"}
               </div>
+              {desktopInsightSlideCount > 1 && (
               <div className="flex items-center gap-1">
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
                   className="h-6 w-6"
-                  onClick={() => setDesktopInsightIndex((v) => (v + 2) % 3)}
+                  onClick={() =>
+                    setDesktopInsightIndex(
+                      (v) => (v + desktopInsightSlideCount - 1) % desktopInsightSlideCount,
+                    )
+                  }
                   data-testid="button-desktop-insight-prev"
                 >
                   <ChevronRight className="h-3.5 w-3.5 rotate-180" />
@@ -2525,15 +2545,18 @@ export default function Dashboard() {
                   variant="ghost"
                   size="icon"
                   className="h-6 w-6"
-                  onClick={() => setDesktopInsightIndex((v) => (v + 1) % 3)}
+                  onClick={() =>
+                    setDesktopInsightIndex((v) => (v + 1) % desktopInsightSlideCount)
+                  }
                   data-testid="button-desktop-insight-next"
                 >
                   <ChevronRight className="h-3.5 w-3.5" />
                 </Button>
               </div>
+              )}
             </div>
 
-            {desktopInsightIndex === 0 && (
+            {activeDesktopInsightSlide === "earnings" && (
               currentMobileEarnings ? (
                 <button
                   type="button"
@@ -2557,7 +2580,7 @@ export default function Dashboard() {
               )
             )}
 
-            {desktopInsightIndex === 1 && (
+            {activeDesktopInsightSlide === "macro" && (
               currentMobileMacroEvent ? (
                 <div className="w-full rounded-lg border border-orange-500/25 bg-orange-500/[0.08] p-3" data-testid="card-desktop-next-macro">
                   <p className="text-sm font-semibold">{currentMobileMacroEvent.shortLabel}</p>
@@ -2571,7 +2594,7 @@ export default function Dashboard() {
               )
             )}
 
-            {desktopInsightIndex === 2 && (
+            {activeDesktopInsightSlide === "top" && (
               currentMobileTopPosition ? (
                 <button
                   type="button"
@@ -2593,16 +2616,19 @@ export default function Dashboard() {
               )
             )}
 
+            {desktopInsightSlideCount > 1 && (
             <div className="flex items-center justify-center gap-1 pt-1">
-              {[0, 1, 2].map((idx) => (
+              {desktopInsightSlides.map((slideId, idx) => (
                 <span
-                  key={idx}
-                  className={`h-1.5 w-1.5 rounded-full ${desktopInsightIndex === idx ? "bg-primary" : "bg-muted-foreground/40"}`}
+                  key={slideId}
+                  className={`h-1.5 w-1.5 rounded-full ${safeDesktopInsightIndex === idx ? "bg-primary" : "bg-muted-foreground/40"}`}
                 />
               ))}
             </div>
+            )}
           </CardContent>
         </Card>
+        )}
       </div>
 
                   </>
@@ -2630,7 +2656,7 @@ export default function Dashboard() {
                 </DashboardWidgetFrame>
               );
             }
-            if (widgetId === "insights") {
+            if (widgetId === "realizedGain") {
               return (
                 <DashboardWidgetFrame
                   key={widgetId}
@@ -2639,10 +2665,9 @@ export default function Dashboard() {
                   visible={visible}
                   onToggleVisible={() => toggleDashboardWidget(widgetId)}
                   empty={!isMobileViewport}
-                  emptyHint="Insights karty sú na mobile; na desktope sú v súhrne"
+                  emptyHint="Tento box je na mobile"
                 >
-      <div className="md:hidden space-y-1.5 -mt-1">
-        <div className="grid gap-1.5 grid-cols-2">
+      <div className="md:hidden">
           <div className="bg-card rounded-lg p-2.5 border">
             <div className="flex items-center justify-between gap-1">
               <div className="text-[10px] text-muted-foreground flex items-center gap-1 min-w-0">
@@ -2670,6 +2695,23 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+      </div>
+
+                </DashboardWidgetFrame>
+              );
+            }
+            if (widgetId === "dividends") {
+              return (
+                <DashboardWidgetFrame
+                  key={widgetId}
+                  id={widgetId}
+                  editing={dashboardEditing}
+                  visible={visible}
+                  onToggleVisible={() => toggleDashboardWidget(widgetId)}
+                  empty={!isMobileViewport}
+                  emptyHint="Tento box je na mobile"
+                >
+      <div className="md:hidden">
           <Popover>
             <PopoverTrigger asChild>
               <button
@@ -2714,8 +2756,23 @@ export default function Dashboard() {
               </div>
             </PopoverContent>
           </Popover>
-        </div>
+      </div>
 
+                </DashboardWidgetFrame>
+              );
+            }
+            if (widgetId === "ytdBenchmark") {
+              return (
+                <DashboardWidgetFrame
+                  key={widgetId}
+                  id={widgetId}
+                  editing={dashboardEditing}
+                  visible={visible}
+                  onToggleVisible={() => toggleDashboardWidget(widgetId)}
+                  empty={!isMobileViewport}
+                  emptyHint="Na desktope je YTD karta v súhrne — oko ju ovláda aj tam"
+                >
+      <div className="md:hidden">
         <div className="bg-card rounded-lg border px-2.5 py-2">
           <div className="flex items-center justify-between text-[10px]">
             <span className="text-muted-foreground">Moje YTD</span>
@@ -2736,8 +2793,25 @@ export default function Dashboard() {
             </span>
           </div>
         </div>
+      </div>
 
-        {currentMobileEarnings && (
+                </DashboardWidgetFrame>
+              );
+            }
+            if (widgetId === "earnings") {
+              return (
+                <DashboardWidgetFrame
+                  key={widgetId}
+                  id={widgetId}
+                  editing={dashboardEditing}
+                  visible={visible}
+                  onToggleVisible={() => toggleDashboardWidget(widgetId)}
+                  empty={!isMobileViewport}
+                  emptyHint="Na desktope je v karusele Rýchly prehľad"
+                >
+      <div className="md:hidden">
+        {(currentMobileEarnings || dashboardEditing) ? (
+          currentMobileEarnings ? (
           <div
             className="w-full flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.07] px-2.5 py-1.5 text-left transition-colors hover:bg-amber-500/12 dark:border-amber-500/25 dark:bg-amber-500/10 dark:hover:bg-amber-500/[0.14]"
             data-testid="row-mobile-next-earnings"
@@ -2786,9 +2860,31 @@ export default function Dashboard() {
               </button>
             )}
           </div>
-        )}
+          ) : (
+            <div className="bg-card rounded-lg border px-2.5 py-2 text-[11px] text-muted-foreground">
+              Žiadny najbližší earnings
+            </div>
+          )
+        ) : null}
+      </div>
 
-        {currentMobileTopPosition && (
+                </DashboardWidgetFrame>
+              );
+            }
+            if (widgetId === "topPosition") {
+              return (
+                <DashboardWidgetFrame
+                  key={widgetId}
+                  id={widgetId}
+                  editing={dashboardEditing}
+                  visible={visible}
+                  onToggleVisible={() => toggleDashboardWidget(widgetId)}
+                  empty={!isMobileViewport}
+                  emptyHint="Na desktope je v karusele Rýchly prehľad"
+                >
+      <div className="md:hidden">
+        {(currentMobileTopPosition || dashboardEditing) ? (
+          currentMobileTopPosition ? (
           <div
             className="w-full flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/[0.06] px-2.5 py-1.5 text-left transition-colors hover:bg-primary/[0.1] dark:border-primary/30 dark:bg-primary/10 dark:hover:bg-primary/[0.16]"
             data-testid="row-mobile-top-position"
@@ -2832,9 +2928,31 @@ export default function Dashboard() {
               </button>
             )}
           </div>
-        )}
+          ) : (
+            <div className="bg-card rounded-lg border px-2.5 py-2 text-[11px] text-muted-foreground">
+              Žiadna top pozícia
+            </div>
+          )
+        ) : null}
+      </div>
 
-        {currentMobileMacroEvent && (
+                </DashboardWidgetFrame>
+              );
+            }
+            if (widgetId === "macroEvent") {
+              return (
+                <DashboardWidgetFrame
+                  key={widgetId}
+                  id={widgetId}
+                  editing={dashboardEditing}
+                  visible={visible}
+                  onToggleVisible={() => toggleDashboardWidget(widgetId)}
+                  empty={!isMobileViewport}
+                  emptyHint="Na desktope je v karusele Rýchly prehľad"
+                >
+      <div className="md:hidden">
+        {(currentMobileMacroEvent || dashboardEditing) ? (
+          currentMobileMacroEvent ? (
           <div
             className="w-full flex items-center gap-2 rounded-lg border border-sky-500/25 bg-sky-500/[0.08] px-2.5 py-1.5 text-left transition-colors hover:bg-sky-500/[0.13] dark:border-sky-500/35 dark:bg-sky-500/10 dark:hover:bg-sky-500/[0.16]"
             data-testid="row-mobile-next-macro-event"
@@ -2869,9 +2987,31 @@ export default function Dashboard() {
               </button>
             )}
           </div>
-        )}
+          ) : (
+            <div className="bg-card rounded-lg border px-2.5 py-2 text-[11px] text-muted-foreground">
+              Žiadna makro udalosť
+            </div>
+          )
+        ) : null}
+      </div>
 
-        {metrics.optionsIncluded && (
+                </DashboardWidgetFrame>
+              );
+            }
+            if (widgetId === "optionsInsight") {
+              return (
+                <DashboardWidgetFrame
+                  key={widgetId}
+                  id={widgetId}
+                  editing={dashboardEditing}
+                  visible={visible}
+                  onToggleVisible={() => toggleDashboardWidget(widgetId)}
+                  empty={!isMobileViewport}
+                  emptyHint="Tento box je na mobile"
+                >
+      <div className="md:hidden">
+        {(metrics.optionsIncluded || dashboardEditing) ? (
+          metrics.optionsIncluded ? (
           <div className="bg-card rounded-lg p-2.5 border flex items-center justify-between">
             <span className="text-[10px] text-muted-foreground">
               Opcie zahrnuté
@@ -2883,7 +3023,12 @@ export default function Dashboard() {
               Realizované: <span className="font-semibold">{maskAmount(formatCurrency(metrics.optionsRealizedGain))}</span>
             </span>
           </div>
-        )}
+          ) : (
+            <div className="bg-card rounded-lg border px-2.5 py-2 text-[11px] text-muted-foreground">
+              Opcie nie sú v portfóliu
+            </div>
+          )
+        ) : null}
       </div>
 
                 </DashboardWidgetFrame>
