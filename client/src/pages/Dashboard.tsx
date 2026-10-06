@@ -2510,7 +2510,7 @@ export default function Dashboard() {
 
       <div
         className={cn(
-          "hidden md:grid gap-4 md:grid-cols-2 lg:grid-cols-3",
+          "hidden md:grid gap-3 md:grid-cols-2 lg:grid-cols-3",
           (() => {
             const n =
               2 +
@@ -2525,18 +2525,36 @@ export default function Dashboard() {
           })(),
         )}
       >
-        <Card className="h-full border-border bg-card shadow-sm" data-testid="card-total-value">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-4 pb-1">
-            <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+        {(() => {
+          const boxClass =
+            "h-full min-h-[148px] border-border bg-card shadow-sm flex flex-col overflow-hidden";
+          const headClass =
+            "flex flex-row items-center justify-between gap-2 space-y-0 px-3 py-2.5 min-h-[44px] shrink-0";
+          const titleClass =
+            "text-xs font-medium text-muted-foreground truncate min-w-0 flex items-center gap-1";
+          const actionClass =
+            "h-7 w-7 shrink-0 inline-flex items-center justify-center text-muted-foreground";
+          const bodyClass =
+            "flex flex-1 flex-col justify-between gap-2 px-3 pb-3 pt-0 min-h-0";
+          const primaryClass =
+            "text-xl font-semibold leading-tight tracking-tight tabular-nums truncate";
+          const metaClass = "text-xs text-muted-foreground truncate";
+          const footClass = "space-y-0.5 min-w-0";
+
+          return (
+            <>
+        <Card className={boxClass} data-testid="card-total-value">
+          <CardHeader className={headClass}>
+            <CardTitle className={titleClass}>
               Celková hodnota
               {metrics.optionsIncluded && (
-                <Badge variant="outline" className="ml-1 text-[10px] px-1.5 py-0">
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">
                   + opcie
                 </Badge>
               )}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                  <HelpCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground cursor-help" />
                 </TooltipTrigger>
                 <TooltipContent className="max-w-[280px]">
                   <p className="font-semibold mb-1">Celková hodnota portfólia</p>
@@ -2544,66 +2562,72 @@ export default function Dashboard() {
                 </TooltipContent>
               </Tooltip>
             </CardTitle>
-            {holdings && holdings.length > 0 && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 shrink-0"
-                disabled={quotesFetching}
-                onClick={() => refreshDashboardQuotes()}
-                aria-label="Obnoviť ceny a dennú zmenu"
-                data-testid="button-dashboard-refresh-quotes"
-              >
-                {quotesFetching ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-3.5 w-3.5" />
-                )}
-              </Button>
-            )}
-          </CardHeader>
-          <CardContent className="p-4 pt-1">
-            <div className="text-2xl xl:text-3xl font-semibold leading-tight tracking-tight truncate" data-testid="text-total-value">
-              {maskAmount(formatCurrency(metrics.totalValue))}
+            <div className={actionClass}>
+              {holdings && holdings.length > 0 ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  disabled={quotesFetching}
+                  onClick={() => refreshDashboardQuotes()}
+                  aria-label="Obnoviť ceny a dennú zmenu"
+                  data-testid="button-dashboard-refresh-quotes"
+                >
+                  {quotesFetching ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  )}
+                </Button>
+              ) : null}
             </div>
-            <p className={`text-xs mt-1.5 tabular-nums ${getChangeColor(displayedDailyChange)}`}>
-              Dnes {displayedDailyChange >= 0 ? "+" : ""}
-              {maskAmount(formatCurrency(displayedDailyChange))}
-              <span className="ml-1">({formatPercent(displayedDailyChangePercent)})</span>
-            </p>
-            <p className="text-xs text-muted-foreground truncate mt-0.5">
-              Investované: {maskAmount(formatCurrency(metrics.totalInvested))}
-            </p>
-            {shouldUseExtendedQuotes(usSessionState) && (
-              <p className="text-xs text-muted-foreground truncate mt-0.5 inline-flex items-center gap-1" data-testid="text-pre-open-preview">
-                <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
-                {getExtendedSessionLabel(usSessionState)}{" "}
-                {preOpenPreview.available ? (
-                  <>
-                    <span className={getChangeColor(preOpenPreview.amount)}>
-                      {preOpenPreview.amount >= 0 ? "+" : ""}
-                      {maskAmount(formatCurrency(preOpenPreview.amount))}
-                    </span>
-                    <span className={`ml-1 ${getChangeColor(preOpenPreview.percent)}`}>
-                      ({formatPercent(preOpenPreview.percent)})
-                    </span>
-                  </>
-                ) : (
-                  "bez dát"
-                )}
+          </CardHeader>
+          <CardContent className={bodyClass}>
+            <div className="min-w-0 space-y-0.5">
+              <div className={primaryClass} data-testid="text-total-value">
+                {maskAmount(formatCurrency(metrics.totalValue))}
+              </div>
+              <p className={`${metaClass} tabular-nums ${getChangeColor(displayedDailyChange)}`}>
+                Dnes {displayedDailyChange >= 0 ? "+" : ""}
+                {maskAmount(formatCurrency(displayedDailyChange))}
+                <span className="ml-1">({formatPercent(displayedDailyChangePercent)})</span>
               </p>
-            )}
+            </div>
+            <div className={footClass}>
+              <p className={metaClass}>
+                Investované: {maskAmount(formatCurrency(metrics.totalInvested))}
+              </p>
+              {shouldUseExtendedQuotes(usSessionState) && (
+                <p className={`${metaClass} inline-flex items-center gap-1`} data-testid="text-pre-open-preview">
+                  <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
+                  {getExtendedSessionLabel(usSessionState)}{" "}
+                  {preOpenPreview.available ? (
+                    <>
+                      <span className={getChangeColor(preOpenPreview.amount)}>
+                        {preOpenPreview.amount >= 0 ? "+" : ""}
+                        {maskAmount(formatCurrency(preOpenPreview.amount))}
+                      </span>
+                      <span className={`ml-1 ${getChangeColor(preOpenPreview.percent)}`}>
+                        ({formatPercent(preOpenPreview.percent)})
+                      </span>
+                    </>
+                  ) : (
+                    "bez dát"
+                  )}
+                </p>
+              )}
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="h-full border-border bg-card shadow-sm" data-testid="card-total-profit">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-4 pb-1">
-            <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+        <Card className={boxClass} data-testid="card-total-profit">
+          <CardHeader className={headClass}>
+            <CardTitle className={titleClass}>
               Celkový profit
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                  <HelpCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground cursor-help" />
                 </TooltipTrigger>
                 <TooltipContent className="max-w-[300px]">
                   <p className="font-semibold mb-1">Celkový profit (P&L)</p>
@@ -2613,51 +2637,54 @@ export default function Dashboard() {
                 </TooltipContent>
               </Tooltip>
             </CardTitle>
-            {getChangeIcon(metrics.totalProfit)}
+            <div className={actionClass}>{getChangeIcon(metrics.totalProfit)}</div>
           </CardHeader>
-          <CardContent className="p-4 pt-1">
-            <div className="flex items-baseline gap-2 min-w-0">
-              <span className={`text-2xl xl:text-3xl font-semibold leading-tight tracking-tight truncate ${getChangeColor(metrics.totalProfit)}`} data-testid="text-total-profit">
-                {maskAmount(formatCurrency(metrics.totalProfit))}
-              </span>
-              <span className={`text-sm font-medium shrink-0 ${getChangeColor(metrics.totalProfitPercent || 0)}`} data-testid="text-total-profit-percent">
-                {formatPercent(metrics.totalProfitPercent || 0)}
-              </span>
+          <CardContent className={bodyClass}>
+            <div className="min-w-0 space-y-0.5">
+              <div className="flex items-baseline gap-1.5 min-w-0">
+                <span className={`${primaryClass} ${getChangeColor(metrics.totalProfit)}`} data-testid="text-total-profit">
+                  {maskAmount(formatCurrency(metrics.totalProfit))}
+                </span>
+                <span className={`text-xs font-medium shrink-0 tabular-nums ${getChangeColor(metrics.totalProfitPercent || 0)}`} data-testid="text-total-profit-percent">
+                  {formatPercent(metrics.totalProfitPercent || 0)}
+                </span>
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground mt-1.5 truncate">
-              Nerealizovaný {maskAmount(formatCurrency(metrics.unrealizedGain))}
-            </p>
+            <div className={footClass}>
+              <p className={metaClass}>
+                Nerealizovaný {maskAmount(formatCurrency(metrics.unrealizedGain))}
+              </p>
+            </div>
           </CardContent>
         </Card>
 
         {isDashboardWidgetVisible("earnings") && (
-          <Card className="h-full border-border bg-card shadow-sm" data-testid="card-desktop-next-earnings">
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-4 pb-1">
-              <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                <Calendar className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                Earnings
-              </CardTitle>
-              {mobileEarningsItems.length > 1 && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 shrink-0"
-                  aria-label="Ďalší earnings"
-                  onClick={() =>
-                    setMobileEarningsIndex((prev) => (prev + 1) % mobileEarningsItems.length)
-                  }
-                  data-testid="button-desktop-next-earnings-next"
-                >
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </Button>
-              )}
+          <Card className={boxClass} data-testid="card-desktop-next-earnings">
+            <CardHeader className={headClass}>
+              <CardTitle className={titleClass}>Earnings</CardTitle>
+              <div className={actionClass}>
+                {mobileEarningsItems.length > 1 ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    aria-label="Ďalší earnings"
+                    onClick={() =>
+                      setMobileEarningsIndex((prev) => (prev + 1) % mobileEarningsItems.length)
+                    }
+                    data-testid="button-desktop-next-earnings-next"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Button>
+                ) : null}
+              </div>
             </CardHeader>
-            <CardContent className="p-4 pt-1">
+            <CardContent className={bodyClass}>
               {currentMobileEarnings ? (
                 <button
                   type="button"
-                  className="w-full text-left min-w-0"
+                  className="flex flex-1 flex-col justify-between gap-2 w-full text-left min-w-0"
                   onClick={() =>
                     setLocation(`/asset/${encodeURIComponent(currentMobileEarnings.ticker)}`)
                   }
@@ -2669,19 +2696,19 @@ export default function Dashboard() {
                       size="sm"
                     />
                     <div className="min-w-0">
-                      <p className="text-lg font-semibold truncate">{currentMobileEarnings.ticker}</p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {currentMobileEarnings.companyName}
-                      </p>
+                      <p className={`${primaryClass} text-lg`}>{currentMobileEarnings.ticker}</p>
+                      <p className={metaClass}>{currentMobileEarnings.companyName}</p>
                     </div>
                   </div>
-                  <p className="mt-2 text-sm font-medium tabular-nums">
-                    {format(
-                      parse(currentMobileEarnings.date, "yyyy-MM-dd", new Date()),
-                      "d. MMM yyyy",
-                      { locale: sk },
-                    )}
-                  </p>
+                  <div className={footClass}>
+                    <p className="text-xs font-medium tabular-nums truncate">
+                      {format(
+                        parse(currentMobileEarnings.date, "yyyy-MM-dd", new Date()),
+                        "d. MMM yyyy",
+                        { locale: sk },
+                      )}
+                    </p>
+                  </div>
                 </button>
               ) : (
                 <p className="text-sm text-muted-foreground">Žiadny najbližší earnings</p>
@@ -2691,32 +2718,32 @@ export default function Dashboard() {
         )}
 
         {isDashboardWidgetVisible("topPosition") && (
-          <Card className="h-full border-border bg-card shadow-sm" data-testid="card-desktop-top-position">
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-4 pb-1">
-              <CardTitle className="text-xs font-medium text-muted-foreground">
-                Top pozícia
-              </CardTitle>
-              {mobileTopPositions.length > 1 && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 shrink-0"
-                  aria-label="Ďalšia pozícia"
-                  onClick={() =>
-                    setMobileTopPositionIndex((prev) => (prev + 1) % mobileTopPositions.length)
-                  }
-                  data-testid="button-desktop-top-position-next"
-                >
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </Button>
-              )}
+          <Card className={boxClass} data-testid="card-desktop-top-position">
+            <CardHeader className={headClass}>
+              <CardTitle className={titleClass}>Top pozícia</CardTitle>
+              <div className={actionClass}>
+                {mobileTopPositions.length > 1 ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    aria-label="Ďalšia pozícia"
+                    onClick={() =>
+                      setMobileTopPositionIndex((prev) => (prev + 1) % mobileTopPositions.length)
+                    }
+                    data-testid="button-desktop-top-position-next"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Button>
+                ) : null}
+              </div>
             </CardHeader>
-            <CardContent className="p-4 pt-1">
+            <CardContent className={bodyClass}>
               {currentMobileTopPosition ? (
                 <button
                   type="button"
-                  className="w-full text-left min-w-0"
+                  className="flex flex-1 flex-col justify-between gap-2 w-full text-left min-w-0"
                   onClick={() =>
                     setLocation(`/asset/${encodeURIComponent(currentMobileTopPosition.ticker)}`)
                   }
@@ -2728,18 +2755,20 @@ export default function Dashboard() {
                       size="sm"
                     />
                     <div className="min-w-0">
-                      <p className="text-lg font-semibold truncate">{currentMobileTopPosition.ticker}</p>
-                      <p className="text-xs text-muted-foreground truncate">
+                      <p className={`${primaryClass} text-lg`}>{currentMobileTopPosition.ticker}</p>
+                      <p className={metaClass}>
                         {currentMobileTopPosition.companyName || "Bez názvu"}
                       </p>
                     </div>
                   </div>
-                  <p className="mt-2 text-sm font-semibold tabular-nums text-primary">
-                    {currentMobileTopPositionPct.toFixed(1)}%
-                    <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                      {maskAmount(formatCurrency(currentMobileTopPosition.value))}
-                    </span>
-                  </p>
+                  <div className={footClass}>
+                    <p className="text-xs font-semibold tabular-nums text-primary truncate">
+                      {currentMobileTopPositionPct.toFixed(1)}%
+                      <span className="ml-1.5 font-normal text-muted-foreground">
+                        {maskAmount(formatCurrency(currentMobileTopPosition.value))}
+                      </span>
+                    </p>
+                  </div>
                 </button>
               ) : (
                 <p className="text-sm text-muted-foreground">Žiadna top pozícia</p>
@@ -2749,43 +2778,44 @@ export default function Dashboard() {
         )}
 
         {isDashboardWidgetVisible("macroEvent") && (
-          <Card className="h-full border-border bg-card shadow-sm" data-testid="card-desktop-next-macro">
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-4 pb-1">
-              <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                <Calendar className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
-                Udalosť
-              </CardTitle>
-              {mobileMacroEvents.length > 1 && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 shrink-0"
-                  aria-label="Ďalšia makro udalosť"
-                  onClick={() =>
-                    setMobileMacroEventIndex((prev) => (prev + 1) % mobileMacroEvents.length)
-                  }
-                  data-testid="button-desktop-next-macro-event-next"
-                >
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </Button>
-              )}
+          <Card className={boxClass} data-testid="card-desktop-next-macro">
+            <CardHeader className={headClass}>
+              <CardTitle className={titleClass}>Udalosť</CardTitle>
+              <div className={actionClass}>
+                {mobileMacroEvents.length > 1 ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    aria-label="Ďalšia makro udalosť"
+                    onClick={() =>
+                      setMobileMacroEventIndex((prev) => (prev + 1) % mobileMacroEvents.length)
+                    }
+                    data-testid="button-desktop-next-macro-event-next"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </Button>
+                ) : null}
+              </div>
             </CardHeader>
-            <CardContent className="p-4 pt-1">
+            <CardContent className={bodyClass}>
               {currentMobileMacroEvent ? (
-                <div className="min-w-0">
-                  <p className="text-lg font-semibold truncate">{currentMobileMacroEvent.shortLabel}</p>
-                  <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
-                    {currentMobileMacroEvent.title}
-                  </p>
-                  <p className="mt-2 text-sm font-medium tabular-nums">
-                    {format(
-                      parse(currentMobileMacroEvent.date, "yyyy-MM-dd", new Date()),
-                      "d. MMM yyyy",
-                      { locale: sk },
-                    )}
-                  </p>
-                </div>
+                <>
+                  <div className="min-w-0 space-y-0.5">
+                    <p className={`${primaryClass} text-lg`}>{currentMobileMacroEvent.shortLabel}</p>
+                    <p className={`${metaClass} line-clamp-2`}>{currentMobileMacroEvent.title}</p>
+                  </div>
+                  <div className={footClass}>
+                    <p className="text-xs font-medium tabular-nums truncate">
+                      {format(
+                        parse(currentMobileMacroEvent.date, "yyyy-MM-dd", new Date()),
+                        "d. MMM yyyy",
+                        { locale: sk },
+                      )}
+                    </p>
+                  </div>
+                </>
               ) : (
                 <p className="text-sm text-muted-foreground">Žiadna makro udalosť</p>
               )}
@@ -2794,14 +2824,13 @@ export default function Dashboard() {
         )}
 
         {isDashboardWidgetVisible("ytdBenchmark") && (
-          <Card className="h-full border-border bg-card shadow-sm" data-testid="card-ytd-benchmark">
-            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-4 pb-1">
-              <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                <ArrowUpDown className="h-3.5 w-3.5" />
+          <Card className={boxClass} data-testid="card-ytd-benchmark">
+            <CardHeader className={headClass}>
+              <CardTitle className={titleClass}>
                 YTD vs S&amp;P 500
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                    <HelpCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent className="max-w-[300px]">
                     <p className="font-semibold mb-1">Porovnanie od začiatku roka</p>
@@ -2812,45 +2841,55 @@ export default function Dashboard() {
                   </TooltipContent>
                 </Tooltip>
               </CardTitle>
+              <div className={actionClass} aria-hidden />
             </CardHeader>
-            <CardContent className="p-4 pt-1 space-y-1.5">
-              <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                YTD {ytdComparison?.yearLabel ?? new Date().getFullYear()}
-              </div>
+            <CardContent className={bodyClass}>
               {ytdComparison ? (
                 <>
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-xs text-muted-foreground truncate">Portfólio</span>
-                    <span className={`text-sm font-semibold tabular-nums ${getChangeColor(ytdComparison.portfolio)}`}>
-                      {formatPercent(ytdComparison.portfolio)}
-                    </span>
+                  <div className="min-w-0 space-y-0.5">
+                    <div className="flex items-baseline gap-1.5 min-w-0">
+                      <span
+                        className={`${primaryClass} ${getChangeColor(ytdComparison.alpha)}`}
+                        data-testid="text-ytd-alpha"
+                      >
+                        {formatPercent(ytdComparison.alpha)}
+                      </span>
+                      <span className="text-xs text-muted-foreground shrink-0">Alpha</span>
+                    </div>
+                    <p className={metaClass}>
+                      YTD {ytdComparison.yearLabel ?? new Date().getFullYear()}
+                    </p>
                   </div>
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-xs text-muted-foreground truncate">S&amp;P 500</span>
-                    <span className={`text-sm font-semibold tabular-nums ${getChangeColor(ytdComparison.sp500)}`}>
-                      {formatPercent(ytdComparison.sp500)}
-                    </span>
-                  </div>
-                  <div
-                    className={`flex items-center justify-between gap-1 rounded-md border px-2 py-1.5 ${
-                      ytdComparison.alpha >= 0
-                        ? "border-emerald-500/40 bg-emerald-500/10"
-                        : "border-rose-500/40 bg-rose-500/10"
-                    }`}
-                    data-testid="text-ytd-alpha"
-                  >
-                    <span className="text-xs font-medium">Alpha</span>
-                    <span className={`text-sm font-bold tabular-nums ${getChangeColor(ytdComparison.alpha)}`}>
-                      {formatPercent(ytdComparison.alpha)}
-                    </span>
+                  <div className={footClass}>
+                    <p className="flex items-center justify-between gap-2 text-xs">
+                      <span className="text-muted-foreground truncate">Portfólio</span>
+                      <span className={`font-semibold tabular-nums shrink-0 ${getChangeColor(ytdComparison.portfolio)}`}>
+                        {formatPercent(ytdComparison.portfolio)}
+                      </span>
+                    </p>
+                    <p className="flex items-center justify-between gap-2 text-xs">
+                      <span className="text-muted-foreground truncate">S&amp;P 500</span>
+                      <span className={`font-semibold tabular-nums shrink-0 ${getChangeColor(ytdComparison.sp500)}`}>
+                        {formatPercent(ytdComparison.sp500)}
+                      </span>
+                    </p>
                   </div>
                 </>
               ) : (
-                <p className="text-xs text-muted-foreground">YTD dáta sa načítavajú…</p>
+                <>
+                  <div className="min-w-0">
+                    <p className={`${primaryClass} text-muted-foreground`}>—</p>
+                    <p className={metaClass}>YTD {new Date().getFullYear()}</p>
+                  </div>
+                  <p className={metaClass}>YTD dáta sa načítavajú…</p>
+                </>
               )}
             </CardContent>
           </Card>
         )}
+            </>
+          );
+        })()}
       </div>
 
                   </>
