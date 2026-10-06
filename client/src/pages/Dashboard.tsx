@@ -3042,7 +3042,7 @@ export default function Dashboard() {
                 </DashboardWidgetFrame>
               );
             }
-            if (widgetId === "dailyMovers") {
+            if (widgetId === "dailyGainers") {
               return (
                 <DashboardWidgetFrame
                   key={widgetId}
@@ -3052,149 +3052,158 @@ export default function Dashboard() {
                   onToggleVisible={() => toggleDashboardWidget(widgetId)}
                 >
                   {(portfolios.length > 0 && moversTickers.length > 0) || dashboardEditing ? (
-                    <>
-<div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
-          <Card data-testid="dashboard-daily-gainers">
-            <CardHeader className="p-2.5 md:p-6">
-              <CardTitle className="text-base md:text-lg flex items-center gap-2 flex-wrap">
-                <TrendingUp className="h-4 w-4 text-green-500" />
-                Najlepšie (%)
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      className="inline-flex items-center rounded-sm p-0.5 text-muted-foreground hover:bg-muted"
-                      aria-label="Info: denné najsilnejšie"
-                    >
-                      <HelpCircle className="h-3.5 w-3.5" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-[300px]">
-                    <p className="text-xs">{moversContextText}</p>
-                  </TooltipContent>
-                </Tooltip>
-                {moversUseExtendedQuotes && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span
-                        className="inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-400"
-                        aria-label="Mimo hlavnej relácie"
-                      >
-                        <Moon className={`h-3.5 w-3.5 ${premarketMoonClass}`} />
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-[260px]">
-                      <p className="text-xs">
-                        Počas hlavnej relácie US (15:30–22:00 SEČ v pracovný deň) je rebríček z{" "}
-                        <span className="font-medium">dennej zmeny RTH</span>. Mimo toho sa použije predobchodná alebo
-                        poobchodná zmena oproti záverečnej cene RTH, ak ju máme v kotácii.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-              </CardTitle>
-              <CardDescription className="text-xs md:text-sm">
-                Zmena podľa režimu trhu (RTH vs pre/post market).
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-2.5 pt-0 md:p-6 md:pt-0">
-              {quotesFetching && !quotesData ? (
-                <>
-                  {Array.from({ length: dailyMoversCount }, (_, i) => (
-                    <Skeleton key={i} className="h-9 md:h-10 w-full" />
-                  ))}
-                </>
-              ) : dailyMovers.gainers.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-2">
-                  {moversUseExtendedQuotes
-                    ? "Žiadna držaná akcia nemá v pluse pred/po-obchodný pohyb (alebo kotácia neposiela údaje)."
-                    : "Žiadna z držaných akcií v hlavnej relácii dnes nebola v pluse."}
-                </p>
-              ) : (
-                dailyMovers.gainers.map((row, idx) =>
-                  renderDailyMoverRow(
-                    row,
-                    idx,
-                    "text-green-500",
-                    `dashboard-gainer-${idx}`,
-                    `dashboard-gainer-value-${idx}`,
-                  ),
-                )
-              )}
-            </CardContent>
-          </Card>
-
-          <Card data-testid="dashboard-daily-losers">
-            <CardHeader className="p-2.5 md:p-6">
-              <CardTitle className="text-base md:text-lg flex items-center gap-2 flex-wrap">
-                <TrendingDown className="h-4 w-4 text-red-500" />
-                Najhoršie (%)
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      className="inline-flex items-center rounded-sm p-0.5 text-muted-foreground hover:bg-muted"
-                      aria-label="Info: denné najslabšie"
-                    >
-                      <HelpCircle className="h-3.5 w-3.5" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-[300px]">
-                    <p className="text-xs">{moversContextText}</p>
-                  </TooltipContent>
-                </Tooltip>
-                {moversUseExtendedQuotes && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span
-                        className="inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-400"
-                        aria-label="Mimo hlavnej relácie"
-                      >
-                        <Moon className={`h-3.5 w-3.5 ${premarketMoonClass}`} />
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-[260px]">
-                      <p className="text-xs">
-                        Počas hlavnej relácie US (15:30–22:00 SEČ v pracovný deň) je rebríček z{" "}
-                        <span className="font-medium">dennej zmeny RTH</span>. Mimo toho sa použije predobchodná alebo
-                        poobchodná zmena oproti záverečnej cene RTH, ak ju máme v kotácii.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                )}
-              </CardTitle>
-              <CardDescription className="text-xs md:text-sm">
-                Zmena podľa režimu trhu (RTH vs pre/post market).
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-2.5 pt-0 md:p-6 md:pt-0">
-              {quotesFetching && !quotesData ? (
-                <>
-                  {Array.from({ length: dailyMoversCount }, (_, i) => (
-                    <Skeleton key={i} className="h-9 md:h-10 w-full" />
-                  ))}
-                </>
-              ) : dailyMovers.losers.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-2">
-                  {moversUseExtendedQuotes
-                    ? "Žiadna držaná akcia nemá v mínuse pred/po-obchodný pohyb (alebo kotácia neposiela údaje)."
-                    : "Žiadna z držaných akcií v hlavnej relácii dnes nebola v mínuse."}
-                </p>
-              ) : (
-                dailyMovers.losers.map((row, idx) =>
-                  renderDailyMoverRow(
-                    row,
-                    idx,
-                    "text-red-500",
-                    `dashboard-loser-${idx}`,
-                    `dashboard-loser-value-${idx}`,
-                  ),
-                )
-              )}
-            </CardContent>
-          </Card>
-        </div>
-                    </>
+                    <Card data-testid="dashboard-daily-gainers">
+                      <CardHeader className="p-2.5 md:p-6">
+                        <CardTitle className="text-base md:text-lg flex items-center gap-2 flex-wrap">
+                          <TrendingUp className="h-4 w-4 text-green-500" />
+                          Najlepšie (%)
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                className="inline-flex items-center rounded-sm p-0.5 text-muted-foreground hover:bg-muted"
+                                aria-label="Info: denné najsilnejšie"
+                              >
+                                <HelpCircle className="h-3.5 w-3.5" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-[300px]">
+                              <p className="text-xs">{moversContextText}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                          {moversUseExtendedQuotes && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span
+                                  className="inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-400"
+                                  aria-label="Mimo hlavnej relácie"
+                                >
+                                  <Moon className={`h-3.5 w-3.5 ${premarketMoonClass}`} />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-[260px]">
+                                <p className="text-xs">
+                                  Počas hlavnej relácie US (15:30–22:00 SEČ v pracovný deň) je rebríček z{" "}
+                                  <span className="font-medium">dennej zmeny RTH</span>. Mimo toho sa použije predobchodná alebo
+                                  poobchodná zmena oproti záverečnej cene RTH, ak ju máme v kotácii.
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                        </CardTitle>
+                        <CardDescription className="text-xs md:text-sm">
+                          Zmena podľa režimu trhu (RTH vs pre/post market).
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="p-2.5 pt-0 md:p-6 md:pt-0">
+                        {quotesFetching && !quotesData ? (
+                          <>
+                            {Array.from({ length: dailyMoversCount }, (_, i) => (
+                              <Skeleton key={i} className="h-9 md:h-10 w-full" />
+                            ))}
+                          </>
+                        ) : dailyMovers.gainers.length === 0 ? (
+                          <p className="text-sm text-muted-foreground py-2">
+                            {moversUseExtendedQuotes
+                              ? "Žiadna držaná akcia nemá v pluse pred/po-obchodný pohyb (alebo kotácia neposiela údaje)."
+                              : "Žiadna z držaných akcií v hlavnej relácii dnes nebola v pluse."}
+                          </p>
+                        ) : (
+                          dailyMovers.gainers.map((row, idx) =>
+                            renderDailyMoverRow(
+                              row,
+                              idx,
+                              "text-green-500",
+                              `dashboard-gainer-${idx}`,
+                              `dashboard-gainer-value-${idx}`,
+                            ),
+                          )
+                        )}
+                      </CardContent>
+                    </Card>
+                  ) : null}
+                </DashboardWidgetFrame>
+              );
+            }
+            if (widgetId === "dailyLosers") {
+              return (
+                <DashboardWidgetFrame
+                  key={widgetId}
+                  id={widgetId}
+                  editing={dashboardEditing}
+                  visible={visible}
+                  onToggleVisible={() => toggleDashboardWidget(widgetId)}
+                >
+                  {(portfolios.length > 0 && moversTickers.length > 0) || dashboardEditing ? (
+                    <Card data-testid="dashboard-daily-losers">
+                      <CardHeader className="p-2.5 md:p-6">
+                        <CardTitle className="text-base md:text-lg flex items-center gap-2 flex-wrap">
+                          <TrendingDown className="h-4 w-4 text-red-500" />
+                          Najhoršie (%)
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <button
+                                type="button"
+                                className="inline-flex items-center rounded-sm p-0.5 text-muted-foreground hover:bg-muted"
+                                aria-label="Info: denné najslabšie"
+                              >
+                                <HelpCircle className="h-3.5 w-3.5" />
+                              </button>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-[300px]">
+                              <p className="text-xs">{moversContextText}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                          {moversUseExtendedQuotes && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span
+                                  className="inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-400"
+                                  aria-label="Mimo hlavnej relácie"
+                                >
+                                  <Moon className={`h-3.5 w-3.5 ${premarketMoonClass}`} />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-[260px]">
+                                <p className="text-xs">
+                                  Počas hlavnej relácie US (15:30–22:00 SEČ v pracovný deň) je rebríček z{" "}
+                                  <span className="font-medium">dennej zmeny RTH</span>. Mimo toho sa použije predobchodná alebo
+                                  poobchodná zmena oproti záverečnej cene RTH, ak ju máme v kotácii.
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                        </CardTitle>
+                        <CardDescription className="text-xs md:text-sm">
+                          Zmena podľa režimu trhu (RTH vs pre/post market).
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="p-2.5 pt-0 md:p-6 md:pt-0">
+                        {quotesFetching && !quotesData ? (
+                          <>
+                            {Array.from({ length: dailyMoversCount }, (_, i) => (
+                              <Skeleton key={i} className="h-9 md:h-10 w-full" />
+                            ))}
+                          </>
+                        ) : dailyMovers.losers.length === 0 ? (
+                          <p className="text-sm text-muted-foreground py-2">
+                            {moversUseExtendedQuotes
+                              ? "Žiadna držaná akcia nemá v mínuse pred/po-obchodný pohyb (alebo kotácia neposiela údaje)."
+                              : "Žiadna z držaných akcií v hlavnej relácii dnes nebola v mínuse."}
+                          </p>
+                        ) : (
+                          dailyMovers.losers.map((row, idx) =>
+                            renderDailyMoverRow(
+                              row,
+                              idx,
+                              "text-red-500",
+                              `dashboard-loser-${idx}`,
+                              `dashboard-loser-value-${idx}`,
+                            ),
+                          )
+                        )}
+                      </CardContent>
+                    </Card>
                   ) : null}
                 </DashboardWidgetFrame>
               );

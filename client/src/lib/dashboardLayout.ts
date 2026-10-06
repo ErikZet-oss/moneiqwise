@@ -9,7 +9,8 @@ export const DASHBOARD_WIDGET_IDS = [
   "macroEvent",
   "optionsInsight",
   "news",
-  "dailyMovers",
+  "dailyGainers",
+  "dailyLosers",
   "holdings",
 ] as const;
 
@@ -43,7 +44,8 @@ export const DASHBOARD_WIDGET_META: Record<
   macroEvent: { label: "Makro udalosť", required: false },
   optionsInsight: { label: "Opcie", required: false },
   news: { label: "Novinky", required: false },
-  dailyMovers: { label: "Najlepšie / najhoršie", required: false },
+  dailyGainers: { label: "Najlepšie (%)", required: false },
+  dailyLosers: { label: "Najhoršie (%)", required: false },
   holdings: { label: "Prehľad aktív", required: false },
 };
 
@@ -59,7 +61,8 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = {
     macroEvent: true,
     optionsInsight: true,
     news: true,
-    dailyMovers: true,
+    dailyGainers: true,
+    dailyLosers: true,
     holdings: true,
   },
 };
@@ -73,8 +76,8 @@ export function isDashboardWidgetId(value: unknown): value is DashboardWidgetId 
 
 function expandOrderItem(item: unknown): DashboardWidgetId[] {
   if (item === "insights") return [...INSIGHT_WIDGET_IDS];
-  // Staršie rozdelené boxy → jeden spoločný widget
   if (item === "realizedGain" || item === "dividends") return ["realizedDividends"];
+  if (item === "dailyMovers") return ["dailyGainers", "dailyLosers"];
   if (isDashboardWidgetId(item)) return [item];
   return [];
 }
@@ -105,6 +108,12 @@ export function normalizeDashboardLayout(
     parsed.visible && typeof parsed.visible === "object" ? parsed.visible : {};
   const legacyInsights =
     typeof rawVisible.insights === "boolean" ? rawVisible.insights : true;
+  const legacyMovers =
+    typeof rawVisible.dailyMovers === "boolean"
+      ? rawVisible.dailyMovers
+      : typeof seed?.dailyMovers === "boolean"
+        ? seed.dailyMovers
+        : true;
 
   const visible = { ...base.visible };
   for (const id of DASHBOARD_WIDGET_IDS) {
@@ -114,17 +123,16 @@ export function normalizeDashboardLayout(
       const rg = rawVisible.realizedGain;
       const dv = rawVisible.dividends;
       if (typeof rg === "boolean" || typeof dv === "boolean") {
-        // Skryť len ak boli oba staré boxy vypnuté
         visible[id] = !(rg === false && dv === false);
       } else {
         visible[id] = legacyInsights;
       }
+    } else if (id === "dailyGainers" || id === "dailyLosers") {
+      visible[id] = legacyMovers;
     } else if ((INSIGHT_WIDGET_IDS as readonly string[]).includes(id)) {
       visible[id] = legacyInsights;
     } else if (id === "news" && typeof seed?.news === "boolean") {
       visible[id] = seed.news;
-    } else if (id === "dailyMovers" && typeof seed?.dailyMovers === "boolean") {
-      visible[id] = seed.dailyMovers;
     } else if (id === "chart" && typeof seed?.chart === "boolean") {
       visible[id] = seed.chart;
     }

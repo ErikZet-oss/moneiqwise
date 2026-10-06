@@ -24,7 +24,8 @@ import {
 export const DASHBOARD_WIDGETS_WITH_SETTINGS = new Set<DashboardWidgetId>([
   "summary",
   "chart",
-  "dailyMovers",
+  "dailyGainers",
+  "dailyLosers",
   "holdings",
 ]);
 
@@ -108,12 +109,12 @@ export function DashboardWidgetSettingsButton({ id }: Props) {
           </div>
         )}
 
-        {id === "dailyMovers" && (
+        {(id === "dailyGainers" || id === "dailyLosers") && (
           <div className="space-y-2">
             <div className="space-y-0.5">
               <Label className="text-sm font-medium">Počet pozícií v rebríčku</Label>
               <p className="text-[11px] text-muted-foreground leading-snug">
-                Koľko titulov v najsilnejších a najslabších
+                Platí pre najsilnejšie aj najslabšie
               </p>
             </div>
             <Select

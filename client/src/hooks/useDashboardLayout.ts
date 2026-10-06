@@ -68,7 +68,8 @@ function syncChartSettingsVisibility(layout: DashboardLayout) {
       mobileAssetsView: "detailed",
       ...prev,
       showNews: layout.visible.news,
-      showDailyMovers: layout.visible.dailyMovers,
+      showDailyMovers:
+        layout.visible.dailyGainers !== false || layout.visible.dailyLosers !== false,
       showChart: layout.visible.chart,
     };
     localStorage.setItem("portfolio-chart-settings", JSON.stringify(next));
@@ -94,17 +95,22 @@ export function useDashboardLayout() {
             ...prev.visible,
             summary: true,
             news: typeof d.showNews === "boolean" ? d.showNews : prev.visible.news,
-            dailyMovers:
+            dailyGainers:
               typeof d.showDailyMovers === "boolean"
                 ? d.showDailyMovers
-                : prev.visible.dailyMovers,
+                : prev.visible.dailyGainers,
+            dailyLosers:
+              typeof d.showDailyMovers === "boolean"
+                ? d.showDailyMovers
+                : prev.visible.dailyLosers,
             chart: typeof d.showChart === "boolean" ? d.showChart : prev.visible.chart,
           },
         };
         // Avoid loop: only persist if visibility actually changed
         if (
           next.visible.news === prev.visible.news &&
-          next.visible.dailyMovers === prev.visible.dailyMovers &&
+          next.visible.dailyGainers === prev.visible.dailyGainers &&
+          next.visible.dailyLosers === prev.visible.dailyLosers &&
           next.visible.chart === prev.visible.chart
         ) {
           return prev;
@@ -150,7 +156,13 @@ export function useDashboardLayout() {
         ...layout,
         visible: { ...layout.visible, [id]: !layout.visible[id], summary: true },
       };
-      commit(next, id === "news" || id === "dailyMovers" || id === "chart");
+      commit(
+        next,
+        id === "news" ||
+          id === "dailyGainers" ||
+          id === "dailyLosers" ||
+          id === "chart",
+      );
     },
     [layout, commit],
   );
