@@ -99,8 +99,8 @@ function ActiveDonutShape(props: ActiveShapeProps) {
       <Sector
         cx={cx}
         cy={cy}
-        innerRadius={innerRadius - 2}
-        outerRadius={outerRadius + 8}
+        innerRadius={innerRadius - 1}
+        outerRadius={outerRadius + 5}
         startAngle={startAngle}
         endAngle={endAngle}
         fill={fill}
@@ -110,8 +110,8 @@ function ActiveDonutShape(props: ActiveShapeProps) {
       <Sector
         cx={cx}
         cy={cy}
-        innerRadius={outerRadius + 10}
-        outerRadius={outerRadius + 14}
+        innerRadius={outerRadius + 7}
+        outerRadius={outerRadius + 10}
         startAngle={startAngle}
         endAngle={endAngle}
         fill={fill}
@@ -120,6 +120,19 @@ function ActiveDonutShape(props: ActiveShapeProps) {
       />
     </g>
   );
+}
+
+/** Desktop hover only — touch + synthetic mouseenter would toggle selection off. */
+function useFineHover() {
+  const [fineHover, setFineHover] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(hover: hover) and (pointer: fine)");
+    const sync = () => setFineHover(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+  return fineHover;
 }
 
 type Props = {
@@ -145,6 +158,16 @@ export function DashboardAllocationWidget({
   const [tab, setTab] = useState<AllocationTab>("type");
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [chartReady, setChartReady] = useState(false);
+  const fineHover = useFineHover();
+  const lastSelectAt = useRef(0);
+
+  const selectSlice = (index: number) => {
+    const now = Date.now();
+    // Ignore synthetic duplicate click after touch (would toggle selection off).
+    if (now - lastSelectAt.current < 320) return;
+    lastSelectAt.current = now;
+    setActiveIndex((prev) => (prev === index ? null : index));
+  };
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setChartReady(true));
@@ -323,7 +346,7 @@ export function DashboardAllocationWidget({
           <ExternalLink className="h-3 w-3" />
         </button>
       </CardHeader>
-      <CardContent className="p-4 pt-1 space-y-3">
+      <CardContent className="px-3 pb-3 pt-1 space-y-2">
         <div
           className="flex gap-1 overflow-x-auto pb-0.5 -mx-0.5 px-0.5 scrollbar-none"
           role="tablist"
@@ -350,8 +373,8 @@ export function DashboardAllocationWidget({
         </div>
 
         {loading ? (
-          <div className="flex items-center gap-3 py-2">
-            <Skeleton className="h-[168px] w-[168px] shrink-0 rounded-full" />
+          <div className="flex items-center gap-2 py-1">
+            <Skeleton className="h-[196px] w-[196px] shrink-0 rounded-full" />
             <div className="flex-1 space-y-2">
               {Array.from({ length: 6 }).map((_, i) => (
                 <Skeleton key={i} className="h-5 w-full" />
@@ -359,12 +382,12 @@ export function DashboardAllocationWidget({
             </div>
           </div>
         ) : chartData.length === 0 ? (
-          <div className="flex h-[180px] items-center justify-center text-sm text-muted-foreground">
+          <div className="flex h-[196px] items-center justify-center text-sm text-muted-foreground">
             Zatiaľ nie sú dáta na alokáciu
           </div>
         ) : (
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="relative h-[168px] w-[168px] shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 -ml-1">
+            <div className="relative h-[196px] w-[196px] shrink-0 -my-1">
               {!chartReady ? (
                 <div className="h-full w-full rounded-full bg-muted/30 animate-pulse" />
               ) : (
@@ -391,9 +414,9 @@ export function DashboardAllocationWidget({
                       nameKey="name"
                       cx="50%"
                       cy="50%"
-                      innerRadius="58%"
-                      outerRadius="82%"
-                      paddingAngle={2.5}
+                      innerRadius="56%"
+                      outerRadius="92%"
+                      paddingAngle={2}
                       cornerRadius={4}
                       stroke="transparent"
                       strokeWidth={0}
@@ -401,18 +424,21 @@ export function DashboardAllocationWidget({
                       animationDuration={650}
                       activeIndex={activeIndex ?? undefined}
                       activeShape={ActiveDonutShape}
-                      onMouseEnter={(_, index) => setActiveIndex(index)}
-                      onMouseLeave={() => setActiveIndex(null)}
-                      onClick={(_, index) =>
-                        setActiveIndex((prev) => (prev === index ? null : index))
+                      onMouseEnter={
+                        fineHover ? (_, index) => setActiveIndex(index) : undefined
                       }
-                      style={{ cursor: "pointer", outline: "none" }}
+                      onMouseLeave={fineHover ? () => setActiveIndex(null) : undefined}
+                      onClick={(_, index, e) => {
+                        e?.stopPropagation?.();
+                        selectSlice(index);
+                      }}
+                      style={{ cursor: "pointer", outline: "none", touchAction: "manipulation" }}
                     >
                       {chartData.map((_, i) => (
                         <Cell
                           key={`cell-${i}`}
                           fill={`url(#alloc-grad-${i})`}
-                          className="outline-none transition-opacity"
+                          className="outline-none"
                           style={{
                             opacity:
                               activeIndex == null || activeIndex === i ? 1 : 0.35,
@@ -420,6 +446,7 @@ export function DashboardAllocationWidget({
                               activeIndex === i
                                 ? undefined
                                 : "drop-shadow(0 2px 6px rgba(0,0,0,0.35))",
+                            cursor: "pointer",
                           }}
                         />
                       ))}
@@ -430,10 +457,10 @@ export function DashboardAllocationWidget({
 
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center px-3">
                 <div className="rounded-full bg-background/40 dark:bg-black/35 backdrop-blur-[2px] px-2.5 py-2 min-w-[5.5rem]">
-                  <p className="text-[9px] uppercase tracking-wide text-muted-foreground leading-tight truncate max-w-[88px]">
+                  <p className="text-[9px] uppercase tracking-wide text-muted-foreground leading-tight truncate max-w-[96px]">
                     {active ? active.name : "Celkom"}
                   </p>
-                  <p className="text-sm font-semibold tabular-nums tracking-tight mt-0.5 truncate max-w-[96px]">
+                  <p className="text-sm font-semibold tabular-nums tracking-tight mt-0.5 truncate max-w-[108px]">
                     {mask(formatCurrency(active ? active.value : total))}
                   </p>
                   {activePct != null && (
@@ -445,7 +472,7 @@ export function DashboardAllocationWidget({
               </div>
             </div>
 
-            <div className="min-w-0 flex-1 flex flex-col justify-center gap-0.5">
+            <div className="min-w-0 flex-1 flex flex-col justify-center gap-0.5 pr-0.5">
               <ul className="space-y-0.5" data-testid="list-allocation-legend">
                 {chartData.map((slice, i) => {
                   const pct = total > 0 ? (slice.value / total) * 100 : 0;
@@ -458,9 +485,9 @@ export function DashboardAllocationWidget({
                           "w-full flex items-center gap-1.5 rounded-md px-1.5 py-1 text-left transition-colors",
                           isActive ? "bg-white/10" : "hover:bg-white/5",
                         )}
-                        onMouseEnter={() => setActiveIndex(i)}
-                        onMouseLeave={() => setActiveIndex(null)}
-                        onClick={() => setActiveIndex((prev) => (prev === i ? null : i))}
+                        onMouseEnter={fineHover ? () => setActiveIndex(i) : undefined}
+                        onMouseLeave={fineHover ? () => setActiveIndex(null) : undefined}
+                        onClick={() => selectSlice(i)}
                       >
                         <span
                           className="h-2 w-2 shrink-0 rounded-sm shadow-[0_0_6px_currentColor]"
