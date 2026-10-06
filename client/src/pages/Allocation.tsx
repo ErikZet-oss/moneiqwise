@@ -431,14 +431,14 @@ export default function Allocation() {
     cashValueConv <= 0;
 
   return (
-    <div className="flex flex-col gap-3 md:gap-6 max-w-7xl mx-auto pb-10 -mx-2 px-0 md:mx-auto md:px-0">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-2.5 md:px-0">
-        <div>
-          <h1 className="text-lg font-semibold flex items-center gap-2">
-            <PieChartIcon className="h-6 w-6 md:h-7 md:w-7 text-primary" />
+    <div className="flex flex-col gap-3 md:gap-5 pb-10">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between min-w-0">
+        <div className="min-w-0">
+          <h1 className="text-lg md:text-xl font-semibold text-foreground flex items-center gap-2 truncate">
+            <PieChartIcon className="h-5 w-5 md:h-6 md:w-6 text-primary shrink-0" />
             Rozloženie portfólia
           </h1>
-          <p className="text-muted-foreground text-xs mt-1">
+          <p className="text-xs text-muted-foreground mt-0.5">
             Podľa tickerov, sektorov, krajín a typu aktíva. Sektor/krajina/typ vieš manuálne prepísať
             nižšie pre presnejšie koláče.
           </p>
@@ -451,37 +451,37 @@ export default function Allocation() {
           }}
           className="justify-start shrink-0"
         >
-          <ToggleGroupItem value="percent" aria-label="Percentá">
+          <ToggleGroupItem value="percent" aria-label="Percentá" className="text-xs">
             Percentá
           </ToggleGroupItem>
-          <ToggleGroupItem value="value" aria-label="Hodnoty">
+          <ToggleGroupItem value="value" aria-label="Hodnoty" className="text-xs">
             Hodnoty ({currency})
           </ToggleGroupItem>
         </ToggleGroup>
       </div>
 
       {loading ? (
-        <div className="grid gap-3 md:gap-6 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 md:gap-5 md:grid-cols-2 xl:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
-            <Card key={i}>
-              <CardHeader className="p-2.5 md:p-4">
-                <Skeleton className="h-5 w-40" />
-                <Skeleton className="h-4 w-full mt-2" />
+            <Card key={i} className="border-border bg-card shadow-sm">
+              <CardHeader className="px-3 py-2.5 md:px-4 md:py-3">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-3 w-full mt-2" />
               </CardHeader>
-              <CardContent className="p-2.5 pt-0 md:p-4 md:pt-0">
-                <Skeleton className="h-[280px] w-full rounded-lg" />
+              <CardContent className="px-3 pb-3 pt-0 md:px-4 md:pb-4">
+                <Skeleton className="h-[240px] w-full rounded-lg" />
               </CardContent>
             </Card>
           ))}
         </div>
       ) : empty ? (
-        <Card>
-          <CardContent className="py-8 md:py-12 px-2.5 md:px-6 text-center text-muted-foreground">
+        <Card className="border-border bg-card shadow-sm">
+          <CardContent className="py-8 md:py-12 px-3 md:px-6 text-center text-muted-foreground text-sm">
             Žiadne pozície ani hotovosť na zobrazenie rozloženia.
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-3 md:gap-6 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 md:gap-5 md:grid-cols-2 xl:grid-cols-4">
           <AllocationPieCard
             title="Podľa akcií"
             description="Každý ticker + hotovosť"
@@ -530,14 +530,14 @@ export default function Allocation() {
         </div>
       )}
 
-      <Card>
-        <CardHeader className="p-2.5 md:p-4">
-          <CardTitle className="text-sm font-medium">Manuálne metadáta aktív</CardTitle>
-          <CardDescription className="text-xs md:text-sm">
+      <Card className="border-border bg-card shadow-sm">
+        <CardHeader className="px-3 py-2.5 md:px-4 md:py-3 space-y-1">
+          <CardTitle className="text-sm md:text-base font-semibold">Manuálne metadáta aktív</CardTitle>
+          <CardDescription className="text-xs">
             Prepíše sektor, krajinu a typ z Yahoo pre vybraný ticker (necháš prázdne = použije sa Yahoo).
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3 p-2.5 pt-0 md:p-4 md:pt-0">
+        <CardContent className="space-y-3 px-3 pb-3 pt-0 md:px-4 md:pb-4">
           {metadataLoading && equityTickers.length > 0 ? (
             <Skeleton className="h-24 w-full" />
           ) : equityTickers.length === 0 ? (
@@ -557,9 +557,9 @@ export default function Allocation() {
                 return (
                   <div
                     key={ticker}
-                    className="grid gap-2 rounded-md border p-2.5 md:p-3 sm:grid-cols-[120px_1fr_1fr_170px] sm:items-center"
+                    className="grid gap-2 rounded-lg border border-border/70 p-2.5 md:p-3 sm:grid-cols-[120px_1fr_1fr_170px] sm:items-center"
                   >
-                    <div className="font-medium">{ticker}</div>
+                    <div className="font-medium text-sm">{ticker}</div>
                     <Select
                       value={row.sector || "none"}
                       onValueChange={(v) =>
@@ -675,39 +675,38 @@ function AllocationPieCard({
   return (
     <Card
       className={cn(
-        "flex flex-col overflow-hidden border-border/80 shadow-sm",
-        "bg-card/80 backdrop-blur-[2px]"
+        "flex flex-col overflow-hidden border-border bg-card shadow-sm",
       )}
     >
-      <CardHeader className="p-2 md:p-4 pb-1.5 space-y-0.5">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <CardDescription className="text-[11px] md:text-sm leading-snug">{description}</CardDescription>
+      <CardHeader className="px-3 py-2.5 md:px-4 md:py-3 space-y-0.5">
+        <CardTitle className="text-xs font-medium text-muted-foreground">{title}</CardTitle>
+        <CardDescription className="text-[11px] md:text-xs leading-snug">{description}</CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-2 md:gap-4 p-2 pt-0 md:p-4 md:pt-0 pb-3 md:pb-6">
+      <CardContent className="flex flex-col gap-2.5 md:gap-3 px-3 pb-3 pt-0 md:px-4 md:pb-4">
         {chartData.length === 0 ? (
           <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
             Nedostatok dát
           </div>
         ) : (
           <>
-            <div className="text-center">
-              <span className="text-[10px] md:text-[11px] uppercase tracking-wide text-muted-foreground">
+            <div className="min-w-0">
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
                 Celkom
               </span>
-              <div className="text-base md:text-2xl font-semibold tabular-nums leading-tight tracking-tight">
+              <div className="text-xl md:text-2xl font-semibold tabular-nums leading-tight tracking-tight truncate">
                 {mask(formatCurrency(total))}
               </div>
             </div>
 
-            <div className="flex justify-center w-full min-w-0 -mx-0.5">
+            <div className="flex justify-center w-full min-w-0">
               <div
                 className={cn(
-                  "w-full aspect-square max-h-[min(68vw,240px)] sm:max-w-[320px] sm:max-h-[300px]",
+                  "w-full aspect-square max-h-[min(72vw,280px)] md:max-h-[260px] xl:max-h-[300px]",
                   !chartReady && "opacity-0 pointer-events-none"
                 )}
               >
                 {chartReady ? (
-                  <ResponsiveContainer width="100%" height="100%" minWidth={160} minHeight={160}>
+                  <ResponsiveContainer width="100%" height="100%" minWidth={140} minHeight={140}>
                     <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
                       <Pie
                         data={chartData}

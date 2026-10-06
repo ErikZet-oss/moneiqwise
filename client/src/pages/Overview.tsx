@@ -783,12 +783,15 @@ export default function Overview() {
   }
 
   return (
-    <div className="flex flex-col gap-3 md:gap-6 max-w-6xl mx-auto">
-      <div>
-        <h1 className="text-lg font-semibold" data-testid="text-overview-title">
+    <div className="flex flex-col gap-3 md:gap-5 pb-6 md:pb-0">
+      <div className="min-w-0">
+        <h1
+          className="text-lg md:text-xl font-semibold text-foreground truncate"
+          data-testid="text-overview-title"
+        >
           Prehľad portfólií
         </h1>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground mt-0.5">
           Rýchly prehľad výkonnosti všetkých vašich portfólií.
         </p>
       </div>
@@ -800,16 +803,18 @@ export default function Overview() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           <Card
-            className="md:col-span-2 border-border/70 bg-card/95 shadow-sm"
+            className="md:col-span-2 xl:col-span-3 border-border bg-card shadow-sm"
             data-testid="overview-card-total"
           >
-            <CardContent className="p-3 md:p-4 space-y-2.5">
+            <CardContent className="p-3 md:px-4 md:py-4 space-y-2.5">
               <div className="flex items-center justify-between gap-2 min-w-0">
                 <div className="flex items-center gap-2 min-w-0">
                   <Briefcase className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span className="font-semibold text-sm truncate">Celková hodnota</span>
+                  <span className="text-xs font-medium text-muted-foreground truncate">
+                    Celková hodnota
+                  </span>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   {renderYtdBadge(ytdAllPortfolios, "overview-ytd-all")}
@@ -843,12 +848,12 @@ export default function Overview() {
                 <>
                   <div>
                     <div
-                      className="text-2xl font-semibold leading-tight tracking-tight tabular-nums"
+                      className="text-xl md:text-2xl font-semibold leading-tight tracking-tight tabular-nums"
                       data-testid="text-overview-grand-total"
                     >
                       {maskAmount(formatCurrency(aggregatedMetrics.totalValue))}
                     </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground">
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
                       <span>
                         Investované: {maskAmount(formatCurrency(aggregatedMetrics.totalInvested))}
                       </span>
@@ -884,7 +889,7 @@ export default function Overview() {
             return (
               <Card
                 key={portfolio.id}
-                className="hover-elevate cursor-pointer border-border/70 bg-card/95 shadow-sm"
+                className="hover-elevate cursor-pointer border-border bg-card shadow-sm"
                 onClick={() => handleOpen(portfolio.id)}
                 role="button"
                 tabIndex={0}
@@ -896,7 +901,7 @@ export default function Overview() {
                 }}
                 data-testid={`overview-card-${portfolio.id}`}
               >
-                <CardContent className="p-3 md:p-4 space-y-2.5">
+                <CardContent className="p-3 md:px-4 md:py-4 space-y-2.5">
                   <div className="flex items-center justify-between gap-2 min-w-0">
                     <div className="flex items-center gap-2 min-w-0">
                       {portfolio.brokerCode ? (
@@ -904,7 +909,7 @@ export default function Overview() {
                       ) : (
                         <Briefcase className="h-4 w-4 text-muted-foreground shrink-0" />
                       )}
-                      <span className="font-semibold text-sm truncate">
+                      <span className="text-sm font-semibold truncate text-foreground">
                         {portfolio.name}
                       </span>
                     </div>
@@ -939,12 +944,12 @@ export default function Overview() {
                   ) : (
                     <div>
                       <div
-                        className="text-2xl font-semibold leading-tight tracking-tight tabular-nums"
+                        className="text-xl md:text-2xl font-semibold leading-tight tracking-tight tabular-nums"
                         data-testid={`overview-value-${portfolio.id}`}
                       >
                         {maskAmount(formatCurrency(m.totalValue))}
                       </div>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground">
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
                         <span>
                           Investované: {maskAmount(formatCurrency(m.totalInvested))}
                         </span>
