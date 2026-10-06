@@ -160,43 +160,45 @@ export function DesktopPortfolioChart({
   }
 
   return (
-    <Card className="hidden md:block" data-testid="desktop-portfolio-chart">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg">Vývoj portfólia</CardTitle>
-          <div className="flex items-center gap-2" data-testid="desktop-period-gain">
-            <span className="text-xs text-muted-foreground">
-              {periodLabel[selectedPeriod]} zisk/strata:
-            </span>
-            <span className={`text-sm font-medium ${isPositive ? "text-green-500" : "text-red-500"}`}>
-              {isPositive ? "+" : ""}{formatCurrency(periodGainLoss.amount)}
-            </span>
-            <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
-              isPositive ? "bg-green-500/20 text-green-500" : "bg-red-500/20 text-red-500"
-            }`}>
-              {isPositive ? "+" : ""}{periodGainLoss.percent.toFixed(2)}%
-            </span>
+    <Card className="hidden md:block h-full" data-testid="desktop-portfolio-chart">
+      <CardHeader className="pb-2 space-y-2">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <CardTitle className="text-base font-semibold">Vývoj portfólia</CardTitle>
+            <div className="flex items-center gap-2 mt-1" data-testid="desktop-period-gain">
+              <span className="text-xs text-muted-foreground">
+                {periodLabel[selectedPeriod]} zisk/strata:
+              </span>
+              <span className={`text-sm font-medium ${isPositive ? "text-green-500" : "text-red-500"}`}>
+                {isPositive ? "+" : ""}{formatCurrency(periodGainLoss.amount)}
+              </span>
+              <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                isPositive ? "bg-green-500/20 text-green-500" : "bg-red-500/20 text-red-500"
+              }`}>
+                {isPositive ? "+" : ""}{periodGainLoss.percent.toFixed(2)}%
+              </span>
+            </div>
           </div>
-        </div>
-        <div className="flex gap-1 mt-2">
-          {periods.map((period) => (
-            <button
-              key={period}
-              onClick={() => setSelectedPeriod(period)}
-              className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                selectedPeriod === period
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:text-foreground"
-              }`}
-              data-testid={`button-desktop-period-${period}`}
-            >
-              {period === "ALL" ? "Vše" : period}
-            </button>
-          ))}
+          <div className="flex gap-1 shrink-0">
+            {periods.map((period) => (
+              <button
+                key={period}
+                onClick={() => setSelectedPeriod(period)}
+                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                  selectedPeriod === period
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:text-foreground"
+                }`}
+                data-testid={`button-desktop-period-${period}`}
+              >
+                {period === "ALL" ? "Vše" : period}
+              </button>
+            ))}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="pt-0">
-        <div className="h-[250px] w-full min-w-0" data-testid="chart-desktop-portfolio-performance">
+        <div className="h-[220px] w-full min-w-0" data-testid="chart-desktop-portfolio-performance">
           {chartData.length > 1 ? (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 10 }}>

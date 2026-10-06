@@ -1995,6 +1995,161 @@ export default function Dashboard() {
     return "text-muted-foreground";
   };
 
+  const renderGainersCard = () => (
+    <Card data-testid="dashboard-daily-gainers">
+      <CardHeader className="p-2.5 md:p-6">
+        <CardTitle className="text-base md:text-lg flex items-center gap-2 flex-wrap">
+          <TrendingUp className="h-4 w-4 text-green-500" />
+          Najlepšie (%)
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex items-center rounded-sm p-0.5 text-muted-foreground hover:bg-muted"
+                aria-label="Info: denné najsilnejšie"
+              >
+                <HelpCircle className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-[300px]">
+              <p className="text-xs">{moversContextText}</p>
+            </TooltipContent>
+          </Tooltip>
+          {moversUseExtendedQuotes && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className="inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-400"
+                  aria-label="Mimo hlavnej relácie"
+                >
+                  <Moon className={`h-3.5 w-3.5 ${premarketMoonClass}`} />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[260px]">
+                <p className="text-xs">
+                  Počas hlavnej relácie US (15:30–22:00 SEČ v pracovný deň) je rebríček z{" "}
+                  <span className="font-medium">dennej zmeny RTH</span>. Mimo toho sa použije predobchodná alebo
+                  poobchodná zmena oproti záverečnej cene RTH, ak ju máme v kotácii.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </CardTitle>
+        <CardDescription className="text-xs md:text-sm">
+          Zmena podľa režimu trhu (RTH vs pre/post market).
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="p-2.5 pt-0 md:p-6 md:pt-0">
+        {quotesFetching && !quotesData ? (
+          <>
+            {Array.from({ length: dailyMoversCount }, (_, i) => (
+              <Skeleton key={i} className="h-9 md:h-10 w-full" />
+            ))}
+          </>
+        ) : dailyMovers.gainers.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-2">
+            {moversUseExtendedQuotes
+              ? "Žiadna držaná akcia nemá v pluse pred/po-obchodný pohyb (alebo kotácia neposiela údaje)."
+              : "Žiadna z držaných akcií v hlavnej relácii dnes nebola v pluse."}
+          </p>
+        ) : (
+          dailyMovers.gainers.map((row, idx) =>
+            renderDailyMoverRow(
+              row,
+              idx,
+              "text-green-500",
+              `dashboard-gainer-${idx}`,
+              `dashboard-gainer-value-${idx}`,
+            ),
+          )
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  const renderLosersCard = () => (
+    <Card data-testid="dashboard-daily-losers">
+      <CardHeader className="p-2.5 md:p-6">
+        <CardTitle className="text-base md:text-lg flex items-center gap-2 flex-wrap">
+          <TrendingDown className="h-4 w-4 text-red-500" />
+          Najhoršie (%)
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex items-center rounded-sm p-0.5 text-muted-foreground hover:bg-muted"
+                aria-label="Info: denné najslabšie"
+              >
+                <HelpCircle className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-[300px]">
+              <p className="text-xs">{moversContextText}</p>
+            </TooltipContent>
+          </Tooltip>
+          {moversUseExtendedQuotes && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  className="inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-400"
+                  aria-label="Mimo hlavnej relácie"
+                >
+                  <Moon className={`h-3.5 w-3.5 ${premarketMoonClass}`} />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[260px]">
+                <p className="text-xs">
+                  Počas hlavnej relácie US (15:30–22:00 SEČ v pracovný deň) je rebríček z{" "}
+                  <span className="font-medium">dennej zmeny RTH</span>. Mimo toho sa použije predobchodná alebo
+                  poobchodná zmena oproti záverečnej cene RTH, ak ju máme v kotácii.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </CardTitle>
+        <CardDescription className="text-xs md:text-sm">
+          Zmena podľa režimu trhu (RTH vs pre/post market).
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="p-2.5 pt-0 md:p-6 md:pt-0">
+        {quotesFetching && !quotesData ? (
+          <>
+            {Array.from({ length: dailyMoversCount }, (_, i) => (
+              <Skeleton key={i} className="h-9 md:h-10 w-full" />
+            ))}
+          </>
+        ) : dailyMovers.losers.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-2">
+            {moversUseExtendedQuotes
+              ? "Žiadna držaná akcia nemá v mínuse pred/po-obchodný pohyb (alebo kotácia neposiela údaje)."
+              : "Žiadna z držaných akcií v hlavnej relácii dnes nebola v mínuse."}
+          </p>
+        ) : (
+          dailyMovers.losers.map((row, idx) =>
+            renderDailyMoverRow(
+              row,
+              idx,
+              "text-red-500",
+              `dashboard-loser-${idx}`,
+              `dashboard-loser-value-${idx}`,
+            ),
+          )
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  const pairMoversDesktop =
+    isDashboardWidgetVisible("dailyGainers") &&
+    isDashboardWidgetVisible("dailyLosers") &&
+    !dashboardEditing;
+  const moversFirstId =
+    dashboardOrder.indexOf("dailyGainers") <= dashboardOrder.indexOf("dailyLosers")
+      ? "dailyGainers"
+      : "dailyLosers";
+  const moversHasContent =
+    (portfolios.length > 0 && moversTickers.length > 0) || dashboardEditing;
+
   if (holdingsLoading) {
     return (
       <div className="space-y-6">
@@ -2023,11 +2178,11 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="flex flex-col gap-3 md:gap-6">
+    <div className="flex flex-col gap-3 md:gap-5">
       <div className="hidden md:flex items-center gap-2 min-w-0" data-testid="desktop-portfolio-header">
         {!isAllPortfolios && <BrokerLogo brokerCode={selectedPortfolio?.brokerCode} size="sm" />}
         <h1
-          className="text-lg font-semibold text-foreground truncate min-w-0"
+          className="text-lg md:text-xl font-semibold text-foreground truncate min-w-0"
           data-testid="text-desktop-portfolio-name"
         >
           {dashboardPortfolioLabel}
@@ -2187,10 +2342,10 @@ export default function Dashboard() {
         athCelebrationActive={athForCurrentSelection}
       />
 
-      <div className="hidden md:grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-        <Card className="h-full border-border/70 bg-card/95 shadow-sm" data-testid="card-total-value">
-          <CardHeader className="flex min-h-[68px] flex-row items-center justify-between gap-2 border-b border-border/40 p-4 pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-1">
+      <div className="hidden md:grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Card className="h-full border-border bg-card shadow-sm" data-testid="card-total-value">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-4 pb-1">
+            <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1">
               Celková hodnota
               {metrics.optionsIncluded && (
                 <Badge variant="outline" className="ml-1 text-[10px] px-1.5 py-0">
@@ -2226,11 +2381,11 @@ export default function Dashboard() {
               </Button>
             )}
           </CardHeader>
-          <CardContent className="p-4 pt-3">
-            <div className="text-2xl font-semibold leading-tight tracking-tight truncate" data-testid="text-total-value">
+          <CardContent className="p-4 pt-1">
+            <div className="text-3xl font-semibold leading-tight tracking-tight truncate" data-testid="text-total-value">
               {maskAmount(formatCurrency(metrics.totalValue))}
             </div>
-            <p className="text-xs text-muted-foreground truncate mt-1">
+            <p className="text-xs text-muted-foreground truncate mt-1.5">
               Investované: {maskAmount(formatCurrency(metrics.totalInvested))}
               {metrics.optionsIncluded && metrics.openOptionsCount > 0 && (
                 <span className="ml-1">({metrics.openOptionsCount} otvorených opcií)</span>
@@ -2263,9 +2418,9 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="h-full border-border/70 bg-card/95 shadow-sm" data-testid="card-total-profit">
-          <CardHeader className="flex min-h-[68px] flex-row items-center justify-between gap-2 border-b border-border/40 p-4 pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-1">
+        <Card className="h-full border-border bg-card shadow-sm" data-testid="card-total-profit">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-4 pb-1">
+            <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1">
               Celkový profit
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -2281,9 +2436,9 @@ export default function Dashboard() {
             </CardTitle>
             {getChangeIcon(metrics.totalProfit)}
           </CardHeader>
-          <CardContent className="p-4 pt-3">
+          <CardContent className="p-4 pt-1">
             <div className="flex items-baseline gap-2">
-              <span className={`text-2xl font-semibold leading-tight tracking-tight truncate ${getChangeColor(metrics.totalProfit)}`} data-testid="text-total-profit">
+              <span className={`text-3xl font-semibold leading-tight tracking-tight truncate ${getChangeColor(metrics.totalProfit)}`} data-testid="text-total-profit">
                 {maskAmount(formatCurrency(metrics.totalProfit))}
               </span>
               <span className={`text-sm font-medium ${getChangeColor(metrics.totalProfitPercent || 0)}`} data-testid="text-total-profit-percent">
@@ -2355,9 +2510,9 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="h-full border-border/70 bg-card/95 shadow-sm" data-testid="card-daily-change">
-          <CardHeader className="flex min-h-[68px] flex-row items-center justify-between gap-2 border-b border-border/40 p-4 pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-1">
+        <Card className="h-full border-border bg-card shadow-sm" data-testid="card-daily-change">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-4 pb-1">
+            <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1">
               Denná zmena
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -2371,11 +2526,11 @@ export default function Dashboard() {
             </CardTitle>
             {getChangeIcon(metrics.dailyChange)}
           </CardHeader>
-          <CardContent className="p-4 pt-3">
-            <div className={`text-2xl font-semibold leading-tight tracking-tight truncate ${getChangeColor(displayedDailyChange)}`} data-testid="text-daily-change">
+          <CardContent className="p-4 pt-1">
+            <div className={`text-3xl font-semibold leading-tight tracking-tight truncate ${getChangeColor(displayedDailyChange)}`} data-testid="text-daily-change">
               {maskAmount(formatCurrency(displayedDailyChange))}
             </div>
-            <p className={`text-xs mt-1 ${getChangeColor(displayedDailyChangePercent)}`}>
+            <p className={`text-xs mt-1.5 ${getChangeColor(displayedDailyChangePercent)}`}>
               {formatPercent(displayedDailyChangePercent)}
             </p>
             {usSessionState !== "LIVE" && (
@@ -2390,10 +2545,10 @@ export default function Dashboard() {
         </Card>
 
         {dashboardVisible.ytdBenchmark !== false && (
-        <Card className="h-full border-border/70 bg-card/95 shadow-sm" data-testid="card-ytd-benchmark">
-          <CardHeader className="flex min-h-[68px] flex-row items-center justify-between gap-2 border-b border-border/40 p-4 pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-1">
-              <ArrowUpDown className="h-4 w-4" />
+        <Card className="h-full border-border bg-card shadow-sm" data-testid="card-ytd-benchmark">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-4 pb-1">
+            <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+              <ArrowUpDown className="h-3.5 w-3.5" />
               YTD vs S&P 500
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -2409,7 +2564,7 @@ export default function Dashboard() {
               </Tooltip>
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-4 pt-3 space-y-2">
+          <CardContent className="p-4 pt-1 space-y-2">
             <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
               YTD {ytdComparison?.yearLabel ?? new Date().getFullYear()}
             </div>
@@ -2447,137 +2602,6 @@ export default function Dashboard() {
           </CardContent>
         </Card>
         )}
-
-        {desktopInsightSlideCount > 0 && (
-        <Card className="h-full border-border/70 bg-card/95 shadow-sm" data-testid="card-desktop-insights-carousel">
-          <CardHeader className="min-h-[68px] border-b border-border/40 p-4 pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-1">
-              Rýchly prehľad
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent className="max-w-[300px]">
-                  <p className="font-semibold mb-1">Desktop quick slider</p>
-                  <p className="text-xs">
-                    Posuvný prehľad: najbližší earnings, najbližšia ekonomická udalosť a najväčšie zastúpenie aktíva.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 p-4 pt-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-[11px] text-muted-foreground">
-                {activeDesktopInsightSlide === "earnings" && "Najbližší earnings"}
-                {activeDesktopInsightSlide === "macro" && "Najbližšia makro udalosť"}
-                {activeDesktopInsightSlide === "top" && "Najväčšie zastúpenie aktíva"}
-              </div>
-              {desktopInsightSlideCount > 1 && (
-              <div className="flex items-center gap-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={() =>
-                    setDesktopInsightIndex(
-                      (v) => (v + desktopInsightSlideCount - 1) % desktopInsightSlideCount,
-                    )
-                  }
-                  data-testid="button-desktop-insight-prev"
-                >
-                  <ChevronRight className="h-3.5 w-3.5 rotate-180" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={() =>
-                    setDesktopInsightIndex((v) => (v + 1) % desktopInsightSlideCount)
-                  }
-                  data-testid="button-desktop-insight-next"
-                >
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-              )}
-            </div>
-
-            {activeDesktopInsightSlide === "earnings" && (
-              currentMobileEarnings ? (
-                <button
-                  type="button"
-                  className="w-full rounded-lg border border-amber-500/25 bg-amber-500/[0.08] p-3 text-left hover:bg-amber-500/[0.12]"
-                  onClick={() => setLocation(`/asset/${encodeURIComponent(currentMobileEarnings.ticker)}`)}
-                  data-testid="card-desktop-next-earnings"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <CompanyLogo ticker={currentMobileEarnings.ticker} companyName={currentMobileEarnings.companyName} size="sm" />
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold truncate">{currentMobileEarnings.ticker}</p>
-                      <p className="text-xs text-muted-foreground truncate">{currentMobileEarnings.companyName}</p>
-                    </div>
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {new Date(currentMobileEarnings.date).toLocaleDateString("sk-SK")}
-                  </p>
-                </button>
-              ) : (
-                <p className="text-xs text-muted-foreground">Žiadny najbližší earnings pre zvolený výber.</p>
-              )
-            )}
-
-            {activeDesktopInsightSlide === "macro" && (
-              currentMobileMacroEvent ? (
-                <div className="w-full rounded-lg border border-orange-500/25 bg-orange-500/[0.08] p-3" data-testid="card-desktop-next-macro">
-                  <p className="text-sm font-semibold">{currentMobileMacroEvent.shortLabel}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{currentMobileMacroEvent.title}</p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {new Date(currentMobileMacroEvent.date).toLocaleDateString("sk-SK")}
-                  </p>
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">Žiadna najbližšia makro udalosť.</p>
-              )
-            )}
-
-            {activeDesktopInsightSlide === "top" && (
-              currentMobileTopPosition ? (
-                <button
-                  type="button"
-                  className="w-full rounded-lg border border-primary/25 bg-primary/[0.06] p-3 text-left hover:bg-primary/[0.1]"
-                  onClick={() => setLocation(`/asset/${encodeURIComponent(currentMobileTopPosition.ticker)}`)}
-                  data-testid="card-desktop-top-position"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold truncate">{currentMobileTopPosition.ticker}</p>
-                    <span className="text-xs font-medium text-primary">{currentMobileTopPositionPct.toFixed(1)}%</span>
-                  </div>
-                  <p className="mt-0.5 text-xs text-muted-foreground truncate">{currentMobileTopPosition.companyName || "Bez názvu"}</p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Hodnota: {maskAmount(formatCurrency(currentMobileTopPosition.value))}
-                  </p>
-                </button>
-              ) : (
-                <p className="text-xs text-muted-foreground">Nie je dostupná žiadna top pozícia.</p>
-              )
-            )}
-
-            {desktopInsightSlideCount > 1 && (
-            <div className="flex items-center justify-center gap-1 pt-1">
-              {desktopInsightSlides.map((slideId, idx) => (
-                <span
-                  key={slideId}
-                  className={`h-1.5 w-1.5 rounded-full ${safeDesktopInsightIndex === idx ? "bg-primary" : "bg-muted-foreground/40"}`}
-                />
-              ))}
-            </div>
-            )}
-          </CardContent>
-        </Card>
-        )}
       </div>
 
                   </>
@@ -2595,13 +2619,152 @@ export default function Dashboard() {
                   empty={isMobileViewport}
                   emptyHint="Na mobile je graf v súhrne — oko ho zapína/vypína"
                 >
-      <DesktopPortfolioChart 
-        totalValue={metrics.totalValue}
-        totalInvested={metrics.totalInvested}
-        totalProfit={metrics.totalProfit}
-        totalProfitPercent={metrics.totalProfitPercent}
-      />
-      
+      <div
+        className={`hidden md:grid gap-4 ${
+          desktopInsightSlideCount > 0 ? "lg:grid-cols-3" : ""
+        }`}
+      >
+        <div className={desktopInsightSlideCount > 0 ? "lg:col-span-2 min-w-0" : "min-w-0"}>
+          <DesktopPortfolioChart
+            totalValue={metrics.totalValue}
+            totalInvested={metrics.totalInvested}
+            totalProfit={metrics.totalProfit}
+            totalProfitPercent={metrics.totalProfitPercent}
+          />
+        </div>
+        {desktopInsightSlideCount > 0 && (
+          <div className="lg:col-span-1 min-w-0">
+            <Card className="h-full border-border bg-card shadow-sm" data-testid="card-desktop-insights-carousel">
+              <CardHeader className="space-y-0 p-4 pb-1">
+                <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                  Rýchly prehľad
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-[300px]">
+                      <p className="font-semibold mb-1">Desktop quick slider</p>
+                      <p className="text-xs">
+                        Posuvný prehľad: najbližší earnings, najbližšia ekonomická udalosť a najväčšie zastúpenie aktíva.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 p-4 pt-1">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[11px] text-muted-foreground">
+                    {activeDesktopInsightSlide === "earnings" && "Najbližší earnings"}
+                    {activeDesktopInsightSlide === "macro" && "Najbližšia makro udalosť"}
+                    {activeDesktopInsightSlide === "top" && "Najväčšie zastúpenie aktíva"}
+                  </div>
+                  {desktopInsightSlideCount > 1 && (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() =>
+                        setDesktopInsightIndex(
+                          (v) => (v + desktopInsightSlideCount - 1) % desktopInsightSlideCount,
+                        )
+                      }
+                      data-testid="button-desktop-insight-prev"
+                    >
+                      <ChevronRight className="h-3.5 w-3.5 rotate-180" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() =>
+                        setDesktopInsightIndex((v) => (v + 1) % desktopInsightSlideCount)
+                      }
+                      data-testid="button-desktop-insight-next"
+                    >
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                  )}
+                </div>
+
+                {activeDesktopInsightSlide === "earnings" && (
+                  currentMobileEarnings ? (
+                    <button
+                      type="button"
+                      className="w-full rounded-lg border border-amber-500/25 bg-amber-500/[0.08] p-3 text-left hover:bg-amber-500/[0.12]"
+                      onClick={() => setLocation(`/asset/${encodeURIComponent(currentMobileEarnings.ticker)}`)}
+                      data-testid="card-desktop-next-earnings"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <CompanyLogo ticker={currentMobileEarnings.ticker} companyName={currentMobileEarnings.companyName} size="sm" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold truncate">{currentMobileEarnings.ticker}</p>
+                          <p className="text-xs text-muted-foreground truncate">{currentMobileEarnings.companyName}</p>
+                        </div>
+                      </div>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {new Date(currentMobileEarnings.date).toLocaleDateString("sk-SK")}
+                      </p>
+                    </button>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Žiadny najbližší earnings pre zvolený výber.</p>
+                  )
+                )}
+
+                {activeDesktopInsightSlide === "macro" && (
+                  currentMobileMacroEvent ? (
+                    <div className="w-full rounded-lg border border-orange-500/25 bg-orange-500/[0.08] p-3" data-testid="card-desktop-next-macro">
+                      <p className="text-sm font-semibold">{currentMobileMacroEvent.shortLabel}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{currentMobileMacroEvent.title}</p>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {new Date(currentMobileMacroEvent.date).toLocaleDateString("sk-SK")}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Žiadna najbližšia makro udalosť.</p>
+                  )
+                )}
+
+                {activeDesktopInsightSlide === "top" && (
+                  currentMobileTopPosition ? (
+                    <button
+                      type="button"
+                      className="w-full rounded-lg border border-primary/25 bg-primary/[0.06] p-3 text-left hover:bg-primary/[0.1]"
+                      onClick={() => setLocation(`/asset/${encodeURIComponent(currentMobileTopPosition.ticker)}`)}
+                      data-testid="card-desktop-top-position"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold truncate">{currentMobileTopPosition.ticker}</p>
+                        <span className="text-xs font-medium text-primary">{currentMobileTopPositionPct.toFixed(1)}%</span>
+                      </div>
+                      <p className="mt-0.5 text-xs text-muted-foreground truncate">{currentMobileTopPosition.companyName || "Bez názvu"}</p>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Hodnota: {maskAmount(formatCurrency(currentMobileTopPosition.value))}
+                      </p>
+                    </button>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Nie je dostupná žiadna top pozícia.</p>
+                  )
+                )}
+
+                {desktopInsightSlideCount > 1 && (
+                <div className="flex items-center justify-center gap-1 pt-1">
+                  {desktopInsightSlides.map((slideId, idx) => (
+                    <span
+                      key={slideId}
+                      className={`h-1.5 w-1.5 rounded-full ${safeDesktopInsightIndex === idx ? "bg-primary" : "bg-muted-foreground/40"}`}
+                    />
+                  ))}
+                </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </div>
                 </DashboardWidgetFrame>
               );
             }
@@ -3043,6 +3206,8 @@ export default function Dashboard() {
               );
             }
             if (widgetId === "dailyGainers") {
+              const isFirstInPair = moversFirstId === "dailyGainers";
+              const skipDesktopPaired = pairMoversDesktop && !isFirstInPair;
               return (
                 <DashboardWidgetFrame
                   key={widgetId}
@@ -3050,82 +3215,29 @@ export default function Dashboard() {
                   editing={dashboardEditing}
                   visible={visible}
                   onToggleVisible={() => toggleDashboardWidget(widgetId)}
+                  empty={skipDesktopPaired && !isMobileViewport}
+                  emptyHint="Na desktope v páre s Najhoršie"
                 >
-                  {(portfolios.length > 0 && moversTickers.length > 0) || dashboardEditing ? (
-                    <Card data-testid="dashboard-daily-gainers">
-                      <CardHeader className="p-2.5 md:p-6">
-                        <CardTitle className="text-base md:text-lg flex items-center gap-2 flex-wrap">
-                          <TrendingUp className="h-4 w-4 text-green-500" />
-                          Najlepšie (%)
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button
-                                type="button"
-                                className="inline-flex items-center rounded-sm p-0.5 text-muted-foreground hover:bg-muted"
-                                aria-label="Info: denné najsilnejšie"
-                              >
-                                <HelpCircle className="h-3.5 w-3.5" />
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-[300px]">
-                              <p className="text-xs">{moversContextText}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                          {moversUseExtendedQuotes && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span
-                                  className="inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-400"
-                                  aria-label="Mimo hlavnej relácie"
-                                >
-                                  <Moon className={`h-3.5 w-3.5 ${premarketMoonClass}`} />
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent className="max-w-[260px]">
-                                <p className="text-xs">
-                                  Počas hlavnej relácie US (15:30–22:00 SEČ v pracovný deň) je rebríček z{" "}
-                                  <span className="font-medium">dennej zmeny RTH</span>. Mimo toho sa použije predobchodná alebo
-                                  poobchodná zmena oproti záverečnej cene RTH, ak ju máme v kotácii.
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          )}
-                        </CardTitle>
-                        <CardDescription className="text-xs md:text-sm">
-                          Zmena podľa režimu trhu (RTH vs pre/post market).
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="p-2.5 pt-0 md:p-6 md:pt-0">
-                        {quotesFetching && !quotesData ? (
-                          <>
-                            {Array.from({ length: dailyMoversCount }, (_, i) => (
-                              <Skeleton key={i} className="h-9 md:h-10 w-full" />
-                            ))}
-                          </>
-                        ) : dailyMovers.gainers.length === 0 ? (
-                          <p className="text-sm text-muted-foreground py-2">
-                            {moversUseExtendedQuotes
-                              ? "Žiadna držaná akcia nemá v pluse pred/po-obchodný pohyb (alebo kotácia neposiela údaje)."
-                              : "Žiadna z držaných akcií v hlavnej relácii dnes nebola v pluse."}
-                          </p>
-                        ) : (
-                          dailyMovers.gainers.map((row, idx) =>
-                            renderDailyMoverRow(
-                              row,
-                              idx,
-                              "text-green-500",
-                              `dashboard-gainer-${idx}`,
-                              `dashboard-gainer-value-${idx}`,
-                            ),
-                          )
-                        )}
-                      </CardContent>
-                    </Card>
+                  {moversHasContent ? (
+                    pairMoversDesktop ? (
+                      isFirstInPair ? (
+                        <div className="grid gap-4 md:grid-cols-2">
+                          {renderGainersCard()}
+                          <div className="hidden md:block">{renderLosersCard()}</div>
+                        </div>
+                      ) : (
+                        <div className="md:hidden">{renderGainersCard()}</div>
+                      )
+                    ) : (
+                      renderGainersCard()
+                    )
                   ) : null}
                 </DashboardWidgetFrame>
               );
             }
             if (widgetId === "dailyLosers") {
+              const isFirstInPair = moversFirstId === "dailyLosers";
+              const skipDesktopPaired = pairMoversDesktop && !isFirstInPair;
               return (
                 <DashboardWidgetFrame
                   key={widgetId}
@@ -3133,77 +3245,22 @@ export default function Dashboard() {
                   editing={dashboardEditing}
                   visible={visible}
                   onToggleVisible={() => toggleDashboardWidget(widgetId)}
+                  empty={skipDesktopPaired && !isMobileViewport}
+                  emptyHint="Na desktope v páre s Najlepšie"
                 >
-                  {(portfolios.length > 0 && moversTickers.length > 0) || dashboardEditing ? (
-                    <Card data-testid="dashboard-daily-losers">
-                      <CardHeader className="p-2.5 md:p-6">
-                        <CardTitle className="text-base md:text-lg flex items-center gap-2 flex-wrap">
-                          <TrendingDown className="h-4 w-4 text-red-500" />
-                          Najhoršie (%)
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button
-                                type="button"
-                                className="inline-flex items-center rounded-sm p-0.5 text-muted-foreground hover:bg-muted"
-                                aria-label="Info: denné najslabšie"
-                              >
-                                <HelpCircle className="h-3.5 w-3.5" />
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-[300px]">
-                              <p className="text-xs">{moversContextText}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                          {moversUseExtendedQuotes && (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span
-                                  className="inline-flex items-center rounded-full bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-400"
-                                  aria-label="Mimo hlavnej relácie"
-                                >
-                                  <Moon className={`h-3.5 w-3.5 ${premarketMoonClass}`} />
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent className="max-w-[260px]">
-                                <p className="text-xs">
-                                  Počas hlavnej relácie US (15:30–22:00 SEČ v pracovný deň) je rebríček z{" "}
-                                  <span className="font-medium">dennej zmeny RTH</span>. Mimo toho sa použije predobchodná alebo
-                                  poobchodná zmena oproti záverečnej cene RTH, ak ju máme v kotácii.
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          )}
-                        </CardTitle>
-                        <CardDescription className="text-xs md:text-sm">
-                          Zmena podľa režimu trhu (RTH vs pre/post market).
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="p-2.5 pt-0 md:p-6 md:pt-0">
-                        {quotesFetching && !quotesData ? (
-                          <>
-                            {Array.from({ length: dailyMoversCount }, (_, i) => (
-                              <Skeleton key={i} className="h-9 md:h-10 w-full" />
-                            ))}
-                          </>
-                        ) : dailyMovers.losers.length === 0 ? (
-                          <p className="text-sm text-muted-foreground py-2">
-                            {moversUseExtendedQuotes
-                              ? "Žiadna držaná akcia nemá v mínuse pred/po-obchodný pohyb (alebo kotácia neposiela údaje)."
-                              : "Žiadna z držaných akcií v hlavnej relácii dnes nebola v mínuse."}
-                          </p>
-                        ) : (
-                          dailyMovers.losers.map((row, idx) =>
-                            renderDailyMoverRow(
-                              row,
-                              idx,
-                              "text-red-500",
-                              `dashboard-loser-${idx}`,
-                              `dashboard-loser-value-${idx}`,
-                            ),
-                          )
-                        )}
-                      </CardContent>
-                    </Card>
+                  {moversHasContent ? (
+                    pairMoversDesktop ? (
+                      isFirstInPair ? (
+                        <div className="grid gap-4 md:grid-cols-2">
+                          {renderLosersCard()}
+                          <div className="hidden md:block">{renderGainersCard()}</div>
+                        </div>
+                      ) : (
+                        <div className="md:hidden">{renderLosersCard()}</div>
+                      )
+                    ) : (
+                      renderLosersCard()
+                    )
                   ) : null}
                 </DashboardWidgetFrame>
               );
