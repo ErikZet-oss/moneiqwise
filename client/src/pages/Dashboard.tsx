@@ -17,6 +17,7 @@ import {
 import { format, parse, parseISO, startOfDay } from "date-fns";
 import { sk } from "date-fns/locale";
 import { queryClient } from "@/lib/queryClient";
+import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -2507,7 +2508,22 @@ export default function Dashboard() {
         athCelebrationActive={athForCurrentSelection}
       />
 
-      <div className="hidden md:grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div
+        className={cn(
+          "hidden md:grid gap-4 md:grid-cols-2",
+          (() => {
+            const n =
+              2 +
+              (isDashboardWidgetVisible("earnings") ? 1 : 0) +
+              (isDashboardWidgetVisible("topPosition") ? 1 : 0) +
+              (isDashboardWidgetVisible("macroEvent") ? 1 : 0);
+            if (n >= 5) return "xl:grid-cols-5";
+            if (n === 4) return "xl:grid-cols-4";
+            if (n === 3) return "xl:grid-cols-3";
+            return "xl:grid-cols-2";
+          })(),
+        )}
+      >
         <Card className="h-full border-border bg-card shadow-sm" data-testid="card-total-value">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-4 pb-1">
             <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1">
@@ -2547,20 +2563,17 @@ export default function Dashboard() {
             )}
           </CardHeader>
           <CardContent className="p-4 pt-1">
-            <div className="text-3xl font-semibold leading-tight tracking-tight truncate" data-testid="text-total-value">
+            <div className="text-2xl xl:text-3xl font-semibold leading-tight tracking-tight truncate" data-testid="text-total-value">
               {maskAmount(formatCurrency(metrics.totalValue))}
             </div>
-            <p className="text-xs text-muted-foreground truncate mt-1.5">
-              Investované: {maskAmount(formatCurrency(metrics.totalInvested))}
-              {metrics.optionsIncluded && metrics.openOptionsCount > 0 && (
-                <span className="ml-1">({metrics.openOptionsCount} otvorených opcií)</span>
-              )}
+            <p className={`text-xs mt-1.5 tabular-nums ${getChangeColor(displayedDailyChange)}`}>
+              Dnes {displayedDailyChange >= 0 ? "+" : ""}
+              {maskAmount(formatCurrency(displayedDailyChange))}
+              <span className="ml-1">({formatPercent(displayedDailyChangePercent)})</span>
             </p>
-            {metrics.cashValue !== 0 && (
-              <p className="text-xs text-muted-foreground truncate mt-0.5">
-                Z toho hotovosť / margin: {maskAmount(formatCurrency(metrics.cashValue))}
-              </p>
-            )}
+            <p className="text-xs text-muted-foreground truncate mt-0.5">
+              Investované: {maskAmount(formatCurrency(metrics.totalInvested))}
+            </p>
             {shouldUseExtendedQuotes(usSessionState) && (
               <p className="text-xs text-muted-foreground truncate mt-0.5 inline-flex items-center gap-1" data-testid="text-pre-open-preview">
                 <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
@@ -2602,170 +2615,181 @@ export default function Dashboard() {
             {getChangeIcon(metrics.totalProfit)}
           </CardHeader>
           <CardContent className="p-4 pt-1">
-            <div className="flex items-baseline gap-2">
-              <span className={`text-3xl font-semibold leading-tight tracking-tight truncate ${getChangeColor(metrics.totalProfit)}`} data-testid="text-total-profit">
+            <div className="flex items-baseline gap-2 min-w-0">
+              <span className={`text-2xl xl:text-3xl font-semibold leading-tight tracking-tight truncate ${getChangeColor(metrics.totalProfit)}`} data-testid="text-total-profit">
                 {maskAmount(formatCurrency(metrics.totalProfit))}
               </span>
-              <span className={`text-sm font-medium ${getChangeColor(metrics.totalProfitPercent || 0)}`} data-testid="text-total-profit-percent">
+              <span className={`text-sm font-medium shrink-0 ${getChangeColor(metrics.totalProfitPercent || 0)}`} data-testid="text-total-profit-percent">
                 {formatPercent(metrics.totalProfitPercent || 0)}
               </span>
             </div>
-            <div className="text-[10px] text-muted-foreground space-y-1 mt-1.5">
-              {pnlBreakdown ? (
-                <>
-                  <div className="flex justify-between gap-1">
-                    <span
-                      className="truncate"
-                      title="Akcie: ako v „Uzavreté“ (FIFO + XTB close trade). Opcie: realizovaný zisk z uzavretých opcií, ak sú v celku."
-                    >
-                      Realizovaný:
-                    </span>
-                    <span
-                      className={getChangeColor(
-                        metrics.stockRealizedGain + metrics.optionsRealizedGain,
-                      )}
-                    >
-                      {maskAmount(
-                        formatCurrency(
-                          metrics.stockRealizedGain + metrics.optionsRealizedGain,
-                        ),
-                      )}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-1">
-                    <span
-                      className="truncate"
-                      title="Presne: Celkový profit vyššie mínus realizovaný mínus dividendy (mark-to-market pozícií vrátane otvorených opcií v celkovej hodnote)."
-                    >
-                      Nerealizovaný:
-                    </span>
-                    <span className={getChangeColor(metrics.unrealizedGain)}>
-                      {maskAmount(formatCurrency(metrics.unrealizedGain))}
-                    </span>
-                  </div>
-                  {pnlBreakdown.projectedDividendNext12m != null && pnlBreakdown.projectedDividendNext12m > 0 && (
-                    <div className="flex justify-between gap-1">
-                      <span
-                        className="truncate"
-                        title="Odhad: čisté dividendy z posledných 12 mesiacov ako bežiaca ročná miera"
-                      >
-                        Očakávané (12 m):
-                      </span>
-                      <span className="text-blue-500/90">
-                        +{maskAmount(formatCurrency(pnlBreakdown.projectedDividendNext12m))}
-                      </span>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  <div className="flex justify-between">
-                    <span>Nerealizovaný:</span>
-                    <span className={getChangeColor(metrics.unrealizedGain)}>{maskAmount(formatCurrency(metrics.unrealizedGain))}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Realizovaný:</span>
-                    <span className={getChangeColor(metrics.stockRealizedGain + metrics.optionsRealizedGain)}>
-                      {maskAmount(formatCurrency(metrics.stockRealizedGain + metrics.optionsRealizedGain))}
-                    </span>
-                  </div>
-                </>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="h-full border-border bg-card shadow-sm" data-testid="card-daily-change">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-4 pb-1">
-            <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-              Denná zmena
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent className="max-w-[280px]">
-                  <p className="font-semibold mb-1">Denná zmena</p>
-                  <p className="text-xs">Zmena hodnoty portfólia za dnešný obchodný deň. Počíta sa ako súčet denných zmien všetkých pozícií na základe aktuálnych trhových cien.</p>
-                </TooltipContent>
-              </Tooltip>
-            </CardTitle>
-            {getChangeIcon(metrics.dailyChange)}
-          </CardHeader>
-          <CardContent className="p-4 pt-1">
-            <div className={`text-3xl font-semibold leading-tight tracking-tight truncate ${getChangeColor(displayedDailyChange)}`} data-testid="text-daily-change">
-              {maskAmount(formatCurrency(displayedDailyChange))}
-            </div>
-            <p className={`text-xs mt-1.5 ${getChangeColor(displayedDailyChangePercent)}`}>
-              {formatPercent(displayedDailyChangePercent)}
+            <p className="text-xs text-muted-foreground mt-1.5 truncate">
+              Nerealizovaný {maskAmount(formatCurrency(metrics.unrealizedGain))}
             </p>
-            {usSessionState !== "LIVE" && (
-              <p className="text-[11px] text-muted-foreground mt-1">Trh uzatvorený</p>
-            )}
-            {dataUpdatedAt && (
-              <p className="text-xs text-muted-foreground mt-0.5" data-testid="text-last-updated">
-                {formatLastUpdated(dataUpdatedAt)}
-              </p>
-            )}
           </CardContent>
         </Card>
 
-        {dashboardVisible.ytdBenchmark !== false && (
-        <Card className="h-full border-border bg-card shadow-sm" data-testid="card-ytd-benchmark">
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-4 pb-1">
-            <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-              <ArrowUpDown className="h-3.5 w-3.5" />
-              YTD vs S&P 500
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent className="max-w-[300px]">
-                  <p className="font-semibold mb-1">Porovnanie od začiatku roka</p>
-                  <p className="text-xs">
-                    Porovnávame výkonnosť vášho portfólia voči S&amp;P 500 v rovnakom YTD intervale. Alpha je rozdiel portfólia
-                    mínus index.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-1 space-y-2">
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              YTD {ytdComparison?.yearLabel ?? new Date().getFullYear()}
-            </div>
-            {ytdComparison ? (
-              <>
-                <div className="flex items-center justify-between rounded-md border border-border/50 bg-muted/20 px-2.5 py-2">
-                  <span className="text-xs text-muted-foreground">Moje portfólio (YTD)</span>
-                  <span className={`text-sm font-semibold tabular-nums ${getChangeColor(ytdComparison.portfolio)}`}>
-                    {formatPercent(ytdComparison.portfolio)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between rounded-md border border-border/50 bg-muted/20 px-2.5 py-2">
-                  <span className="text-xs text-muted-foreground">S&amp;P 500 (YTD)</span>
-                  <span className={`text-sm font-semibold tabular-nums ${getChangeColor(ytdComparison.sp500)}`}>
-                    {formatPercent(ytdComparison.sp500)}
-                  </span>
-                </div>
-                <div
-                  className={`flex items-center justify-between rounded-md border px-2.5 py-2 ${
-                    ytdComparison.alpha >= 0
-                      ? "border-emerald-500/40 bg-emerald-500/10"
-                      : "border-rose-500/40 bg-rose-500/10"
-                  }`}
-                  data-testid="text-ytd-alpha"
+        {isDashboardWidgetVisible("earnings") && (
+          <Card className="h-full border-border bg-card shadow-sm" data-testid="card-desktop-next-earnings">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-4 pb-1">
+              <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                <Calendar className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                Earnings
+              </CardTitle>
+              {mobileEarningsItems.length > 1 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 shrink-0"
+                  aria-label="Ďalší earnings"
+                  onClick={() =>
+                    setMobileEarningsIndex((prev) => (prev + 1) % mobileEarningsItems.length)
+                  }
+                  data-testid="button-desktop-next-earnings-next"
                 >
-                  <span className="text-xs font-medium">Nadvynos (Alpha)</span>
-                  <span className={`text-sm font-bold tabular-nums ${getChangeColor(ytdComparison.alpha)}`}>
-                    {formatPercent(ytdComparison.alpha)}
-                  </span>
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent className="p-4 pt-1">
+              {currentMobileEarnings ? (
+                <button
+                  type="button"
+                  className="w-full text-left min-w-0"
+                  onClick={() =>
+                    setLocation(`/asset/${encodeURIComponent(currentMobileEarnings.ticker)}`)
+                  }
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <CompanyLogo
+                      ticker={currentMobileEarnings.ticker}
+                      companyName={currentMobileEarnings.companyName}
+                      size="sm"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-lg font-semibold truncate">{currentMobileEarnings.ticker}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {currentMobileEarnings.companyName}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-sm font-medium tabular-nums">
+                    {format(
+                      parse(currentMobileEarnings.date, "yyyy-MM-dd", new Date()),
+                      "d. MMM yyyy",
+                      { locale: sk },
+                    )}
+                  </p>
+                </button>
+              ) : (
+                <p className="text-sm text-muted-foreground">Žiadny najbližší earnings</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {isDashboardWidgetVisible("topPosition") && (
+          <Card className="h-full border-border bg-card shadow-sm" data-testid="card-desktop-top-position">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-4 pb-1">
+              <CardTitle className="text-xs font-medium text-muted-foreground">
+                Top pozícia
+              </CardTitle>
+              {mobileTopPositions.length > 1 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 shrink-0"
+                  aria-label="Ďalšia pozícia"
+                  onClick={() =>
+                    setMobileTopPositionIndex((prev) => (prev + 1) % mobileTopPositions.length)
+                  }
+                  data-testid="button-desktop-top-position-next"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent className="p-4 pt-1">
+              {currentMobileTopPosition ? (
+                <button
+                  type="button"
+                  className="w-full text-left min-w-0"
+                  onClick={() =>
+                    setLocation(`/asset/${encodeURIComponent(currentMobileTopPosition.ticker)}`)
+                  }
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <CompanyLogo
+                      ticker={currentMobileTopPosition.ticker}
+                      companyName={currentMobileTopPosition.companyName}
+                      size="sm"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-lg font-semibold truncate">{currentMobileTopPosition.ticker}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {currentMobileTopPosition.companyName || "Bez názvu"}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-sm font-semibold tabular-nums text-primary">
+                    {currentMobileTopPositionPct.toFixed(1)}%
+                    <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                      {maskAmount(formatCurrency(currentMobileTopPosition.value))}
+                    </span>
+                  </p>
+                </button>
+              ) : (
+                <p className="text-sm text-muted-foreground">Žiadna top pozícia</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {isDashboardWidgetVisible("macroEvent") && (
+          <Card className="h-full border-border bg-card shadow-sm" data-testid="card-desktop-next-macro">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-4 pb-1">
+              <CardTitle className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                <Calendar className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
+                Udalosť
+              </CardTitle>
+              {mobileMacroEvents.length > 1 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 shrink-0"
+                  aria-label="Ďalšia makro udalosť"
+                  onClick={() =>
+                    setMobileMacroEventIndex((prev) => (prev + 1) % mobileMacroEvents.length)
+                  }
+                  data-testid="button-desktop-next-macro-event-next"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent className="p-4 pt-1">
+              {currentMobileMacroEvent ? (
+                <div className="min-w-0">
+                  <p className="text-lg font-semibold truncate">{currentMobileMacroEvent.shortLabel}</p>
+                  <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                    {currentMobileMacroEvent.title}
+                  </p>
+                  <p className="mt-2 text-sm font-medium tabular-nums">
+                    {format(
+                      parse(currentMobileMacroEvent.date, "yyyy-MM-dd", new Date()),
+                      "d. MMM yyyy",
+                      { locale: sk },
+                    )}
+                  </p>
                 </div>
-              </>
-            ) : (
-              <p className="text-xs text-muted-foreground">YTD porovnanie sa zobrazi po nacitani historickych dat.</p>
-            )}
-          </CardContent>
-        </Card>
+              ) : (
+                <p className="text-sm text-muted-foreground">Žiadna makro udalosť</p>
+              )}
+            </CardContent>
+          </Card>
         )}
       </div>
 
@@ -2932,31 +2956,34 @@ export default function Dashboard() {
                   editing={dashboardEditing}
                   visible={visible}
                   onToggleVisible={() => toggleDashboardWidget(widgetId)}
-                  empty={!isMobileViewport}
-                  emptyHint="Na desktope je YTD karta v súhrne — oko ju ovláda aj tam"
                 >
-      <div className="md:hidden">
-        <div className="bg-card rounded-lg border px-2.5 py-2">
-          <div className="flex items-center justify-between text-[10px]">
+        <div className="bg-card rounded-lg border px-2.5 py-2 md:p-4" data-testid="card-ytd-benchmark">
+          <div className="hidden md:flex items-center gap-1 text-xs font-medium text-muted-foreground mb-2">
+            <ArrowUpDown className="h-3.5 w-3.5" />
+            YTD vs S&amp;P 500
+          </div>
+          <div className="flex items-center justify-between text-[10px] md:text-sm">
             <span className="text-muted-foreground">Moje YTD</span>
             <span className={`font-semibold tabular-nums ${getChangeColor(ytdComparison?.portfolio ?? 0)}`}>
               {ytdComparison ? formatPercent(ytdComparison.portfolio) : "—"}
             </span>
           </div>
-          <div className="mt-1 flex items-center justify-between text-[10px]">
+          <div className="mt-1 flex items-center justify-between text-[10px] md:text-sm">
             <span className="text-muted-foreground">S&amp;P 500 YTD</span>
             <span className={`font-semibold tabular-nums ${getChangeColor(ytdComparison?.sp500 ?? 0)}`}>
               {ytdComparison ? formatPercent(ytdComparison.sp500) : "—"}
             </span>
           </div>
-          <div className="mt-1.5 flex items-center justify-between text-[11px] border-t border-border/40 pt-1.5">
+          <div className="mt-1.5 flex items-center justify-between text-[11px] md:text-sm border-t border-border/40 pt-1.5">
             <span className="font-medium text-muted-foreground">Alpha</span>
-            <span className={`font-bold tabular-nums ${getChangeColor(ytdComparison?.alpha ?? 0)}`}>
+            <span
+              className={`font-bold tabular-nums ${getChangeColor(ytdComparison?.alpha ?? 0)}`}
+              data-testid="text-ytd-alpha"
+            >
               {ytdComparison ? formatPercent(ytdComparison.alpha) : "—"}
             </span>
           </div>
         </div>
-      </div>
 
                 </DashboardWidgetFrame>
               );
@@ -2969,11 +2996,14 @@ export default function Dashboard() {
                   editing={dashboardEditing}
                   visible={visible}
                   onToggleVisible={() => toggleDashboardWidget(widgetId)}
+                  empty={!isMobileViewport}
+                  emptyHint="Na webe je v hornom riadku boxov"
                 >
+      <div className="md:hidden">
         {(currentMobileEarnings || dashboardEditing) ? (
           currentMobileEarnings ? (
           <div
-            className="w-full flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.07] px-2.5 py-1.5 md:px-3 md:py-2.5 text-left transition-colors hover:bg-amber-500/12 dark:border-amber-500/25 dark:bg-amber-500/10 dark:hover:bg-amber-500/[0.14]"
+            className="w-full flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.07] px-2.5 py-1.5 text-left transition-colors hover:bg-amber-500/12 dark:border-amber-500/25 dark:bg-amber-500/10 dark:hover:bg-amber-500/[0.14]"
             data-testid="row-mobile-next-earnings"
           >
             <button
@@ -2994,14 +3024,11 @@ export default function Dashboard() {
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wide shrink-0">
                   Earnings
                 </span>
-                <span className="text-[11px] md:text-sm font-medium truncate min-w-0 text-foreground/90">
+                <span className="text-[11px] font-medium truncate min-w-0 text-foreground/90">
                   {currentMobileEarnings.ticker}
                 </span>
-                <span className="hidden md:inline text-xs text-muted-foreground truncate min-w-0">
-                  {currentMobileEarnings.companyName}
-                </span>
               </div>
-              <span className="text-[11px] md:text-sm font-semibold tabular-nums text-amber-950 dark:text-amber-100 shrink-0">
+              <span className="text-[11px] font-semibold tabular-nums text-amber-950 dark:text-amber-100 shrink-0">
                 {format(
                   parse(currentMobileEarnings.date, "yyyy-MM-dd", new Date()),
                   "d. MMM yyyy",
@@ -3029,6 +3056,7 @@ export default function Dashboard() {
             </div>
           )
         ) : null}
+      </div>
 
                 </DashboardWidgetFrame>
               );
@@ -3041,11 +3069,14 @@ export default function Dashboard() {
                   editing={dashboardEditing}
                   visible={visible}
                   onToggleVisible={() => toggleDashboardWidget(widgetId)}
+                  empty={!isMobileViewport}
+                  emptyHint="Na webe je v hornom riadku boxov"
                 >
+      <div className="md:hidden">
         {(currentMobileTopPosition || dashboardEditing) ? (
           currentMobileTopPosition ? (
           <div
-            className="w-full flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/[0.06] px-2.5 py-1.5 md:px-3 md:py-2.5 text-left transition-colors hover:bg-primary/[0.1] dark:border-primary/30 dark:bg-primary/10 dark:hover:bg-primary/[0.16]"
+            className="w-full flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/[0.06] px-2.5 py-1.5 text-left transition-colors hover:bg-primary/[0.1] dark:border-primary/30 dark:bg-primary/10 dark:hover:bg-primary/[0.16]"
             data-testid="row-mobile-top-position"
           >
             <button
@@ -3065,18 +3096,12 @@ export default function Dashboard() {
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wide shrink-0">
                   Pozícia
                 </span>
-                <span className="text-[11px] md:text-sm font-medium truncate min-w-0 text-foreground/90">
+                <span className="text-[11px] font-medium truncate min-w-0 text-foreground/90">
                   {currentMobileTopPosition.ticker}
                 </span>
-                <span className="hidden md:inline text-xs text-muted-foreground truncate min-w-0">
-                  {currentMobileTopPosition.companyName || "Bez názvu"}
-                </span>
               </div>
-              <span className="text-[11px] md:text-sm font-semibold tabular-nums text-foreground shrink-0">
+              <span className="text-[11px] font-semibold tabular-nums text-foreground shrink-0">
                 {currentMobileTopPositionPct.toFixed(2)}%
-              </span>
-              <span className="hidden md:inline text-xs text-muted-foreground shrink-0">
-                {maskAmount(formatCurrency(currentMobileTopPosition.value))}
               </span>
             </button>
             {mobileTopPositions.length > 1 && (
@@ -3099,6 +3124,7 @@ export default function Dashboard() {
             </div>
           )
         ) : null}
+      </div>
 
                 </DashboardWidgetFrame>
               );
@@ -3111,11 +3137,14 @@ export default function Dashboard() {
                   editing={dashboardEditing}
                   visible={visible}
                   onToggleVisible={() => toggleDashboardWidget(widgetId)}
+                  empty={!isMobileViewport}
+                  emptyHint="Na webe je v hornom riadku boxov"
                 >
+      <div className="md:hidden">
         {(currentMobileMacroEvent || dashboardEditing) ? (
           currentMobileMacroEvent ? (
           <div
-            className="w-full flex items-center gap-2 rounded-lg border border-sky-500/25 bg-sky-500/[0.08] px-2.5 py-1.5 md:px-3 md:py-2.5 text-left transition-colors hover:bg-sky-500/[0.13] dark:border-sky-500/35 dark:bg-sky-500/10 dark:hover:bg-sky-500/[0.16]"
+            className="w-full flex items-center gap-2 rounded-lg border border-sky-500/25 bg-sky-500/[0.08] px-2.5 py-1.5 text-left transition-colors hover:bg-sky-500/[0.13] dark:border-sky-500/35 dark:bg-sky-500/10 dark:hover:bg-sky-500/[0.16]"
             data-testid="row-mobile-next-macro-event"
           >
             <div className="min-w-0 flex-1 flex items-center gap-1.5">
@@ -3123,14 +3152,11 @@ export default function Dashboard() {
               <span className="text-[10px] text-muted-foreground uppercase tracking-wide shrink-0">
                 Udalosť
               </span>
-              <span className="text-[11px] md:text-sm font-medium truncate min-w-0 text-foreground/90">
+              <span className="text-[11px] font-medium truncate min-w-0 text-foreground/90">
                 {currentMobileMacroEvent.shortLabel}
               </span>
-              <span className="hidden md:inline text-xs text-muted-foreground truncate min-w-0">
-                {currentMobileMacroEvent.title}
-              </span>
             </div>
-            <span className="text-[11px] md:text-sm font-semibold tabular-nums text-sky-950 dark:text-sky-100 shrink-0">
+            <span className="text-[11px] font-semibold tabular-nums text-sky-950 dark:text-sky-100 shrink-0">
               {format(
                 parse(currentMobileMacroEvent.date, "yyyy-MM-dd", new Date()),
                 "d. MMM yyyy",
@@ -3157,6 +3183,7 @@ export default function Dashboard() {
             </div>
           )
         ) : null}
+      </div>
 
                 </DashboardWidgetFrame>
               );
