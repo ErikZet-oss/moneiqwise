@@ -455,7 +455,7 @@ export default function AssetDetail() {
 
   if (!ticker) {
     return (
-      <div className="max-w-4xl mx-auto">
+      <div className="w-full">
         <p className="text-muted-foreground">Neplatný ticker.</p>
         <Button variant="outline" className="mt-4" onClick={() => setLocation("/")}>
           Späť na prehľad
@@ -466,7 +466,7 @@ export default function AssetDetail() {
 
   if (isLoading) {
     return (
-      <div className="max-w-4xl mx-auto space-y-4">
+      <div className="w-full space-y-4">
         <Skeleton className="h-10 w-64" />
         <Skeleton className="h-48 w-full" />
         <Skeleton className="h-64 w-full" />
@@ -476,7 +476,7 @@ export default function AssetDetail() {
 
   if (error instanceof Error && error.message === "NOT_FOUND") {
     return (
-      <div className="max-w-4xl mx-auto space-y-4">
+      <div className="w-full space-y-4">
         <p className="text-muted-foreground">Pre tento ticker nemáte v aplikácii žiadne dáta.</p>
         <Button variant="outline" onClick={() => setLocation("/")}>
           Späť na prehľad
@@ -487,7 +487,7 @@ export default function AssetDetail() {
 
   if (error) {
     return (
-      <div className="max-w-4xl mx-auto space-y-4">
+      <div className="w-full space-y-4">
         <p className="text-destructive">Nepodarilo sa načítať detail aktíva.</p>
         <Button variant="outline" onClick={() => setLocation("/")}>
           Späť na prehľad
@@ -513,22 +513,31 @@ export default function AssetDetail() {
   const formatRoiPct = (p: number | null) =>
     p == null || !Number.isFinite(p) ? "—" : `${p >= 0 ? "+" : ""}${p.toFixed(2)}%`;
 
+  const investedPref = convertPrice(data.totals.totalInvested, costCurrency);
+  const holdingValuePref =
+    quote != null && Number.isFinite(quote.price) && data.totals.shares > 0
+      ? convertPrice(quote.price * data.totals.shares, quoteCurrency)
+      : null;
+  const totalReturnPref =
+    holdingValuePref != null ? holdingValuePref - investedPref : null;
+
+
   return (
-    <div className="max-w-4xl mx-auto flex flex-col gap-3 md:gap-6 pb-10">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        <div className="space-y-2 min-w-0">
-          <Button variant="ghost" size="sm" className="gap-2 -ml-2 w-fit" onClick={() => setLocation("/")}>
-            <ArrowLeft className="h-4 w-4" />
-            Späť na prehľad
-          </Button>
-          <div className="flex items-start gap-3">
-            {data.imageUrl && isPokemonTicker(data.ticker) ? (
-              <img
-                src={data.imageUrl}
-                alt={data.companyName}
-                className="h-16 w-16 shrink-0 rounded-md object-contain bg-muted"
-              />
-            ) : (
+    <div className="flex flex-col gap-3 md:gap-5 pb-10">
+      {/* Mobile header */}
+      <div className="md:hidden space-y-2 min-w-0">
+        <Button variant="ghost" size="sm" className="gap-2 -ml-2 w-fit" onClick={() => setLocation("/")}>
+          <ArrowLeft className="h-4 w-4" />
+          Späť na prehľad
+        </Button>
+        <div className="flex items-start gap-3">
+          {data.imageUrl && isPokemonTicker(data.ticker) ? (
+            <img
+              src={data.imageUrl}
+              alt={data.companyName}
+              className="h-14 w-14 shrink-0 rounded-md object-contain bg-muted"
+            />
+          ) : (
             <CompanyLogo
               ticker={data.ticker}
               companyName={data.companyName}
@@ -536,185 +545,898 @@ export default function AssetDetail() {
               size="lg"
               className="shrink-0"
             />
-            )}
-            <div className="min-w-0">
-              <h1 className="text-lg font-semibold truncate" data-testid="asset-detail-title">
-                {data.companyName}
-              </h1>
-              <div className="flex flex-wrap items-center gap-2 text-muted-foreground text-sm">
-                {isPokemonTicker(data.ticker) ? (
-                  <span>{data.priceNote || "Pokémon TCG"}</span>
-                ) : (
-                  <>
-                <span className="font-mono">{data.ticker}</span>
-                <a
-                  href={`https://finance.yahoo.com/quote/${encodeURIComponent(data.ticker)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                >
-                  Yahoo Finance
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-                  </>
-                )}
-              </div>
+          )}
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold truncate" data-testid="asset-detail-title">
+              {data.companyName}
+            </h1>
+            <div className="flex flex-wrap items-center gap-2 text-muted-foreground text-sm">
+              {isPokemonTicker(data.ticker) ? (
+                <span>{data.priceNote || "Pokémon TCG"}</span>
+              ) : (
+                <>
+                  <span className="font-mono">{data.ticker}</span>
+                  <a
+                    href={`https://finance.yahoo.com/quote/${encodeURIComponent(data.ticker)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-primary hover:underline"
+                  >
+                    Yahoo Finance
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                </>
+              )}
             </div>
           </div>
-        </div>
-
-        <div className="flex w-full flex-col gap-3 sm:w-auto sm:max-w-full sm:flex-row sm:items-stretch sm:gap-3">
-          {data.ticker !== "CASH" && (
-            <>
-              <Card className="shrink-0 w-full sm:w-auto sm:min-w-[280px]">
-                <CardContent className="p-4 pt-3">
-                  {quote ? (
-                    <>
-                      <div className="text-xs text-muted-foreground uppercase tracking-wide">Aktuálna cena</div>
-                      <div className="text-2xl font-semibold leading-tight tracking-tight">
-                        {mask(formatQuoteAmount(quote.price))}
-                      </div>
-                      <div
-                        className={`text-sm flex items-center gap-1 ${changePositive ? "text-green-500" : "text-red-500"}`}
-                      >
-                        {changePositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                        {mask(formatQuoteAmount(quote.change))}{" "}
-                        <span className="text-xs">
-                          ({changePositive ? "+" : ""}
-                          {(quote.changePercent ?? 0).toFixed(2)}%)
-                        </span>
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1">
-                        <span>Menovka kotácie: {quoteCurrency}</span>
-                        {canToggleQuoteCurrency ? (
-                          <>
-                            <span aria-hidden>·</span>
-                            <span className="inline-flex items-center gap-1.5">
-                              <span>zobrazenie:</span>
-                              <span
-                                className={cn(
-                                  "font-medium tabular-nums",
-                                  !quoteInPreferredCurrency && "text-foreground",
-                                )}
-                              >
-                                {quoteCurrency}
-                              </span>
-                              <Switch
-                                checked={quoteInPreferredCurrency}
-                                onCheckedChange={(checked) =>
-                                  setQuoteInPreferredCurrency(checked === true)
-                                }
-                                className="scale-[0.72] origin-center"
-                                aria-label={
-                                  quoteInPreferredCurrency
-                                    ? `Zobraziť cenu v ${quoteCurrency}`
-                                    : `Zobraziť cenu v ${currency}`
-                                }
-                                data-testid="switch-quote-display-currency"
-                              />
-                              <span
-                                className={cn(
-                                  "font-medium tabular-nums",
-                                  quoteInPreferredCurrency && "text-foreground",
-                                )}
-                              >
-                                {currency}
-                              </span>
-                            </span>
-                          </>
-                        ) : (
-                          <span>· zobrazenie: {currency}</span>
-                        )}
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="text-xs text-muted-foreground uppercase tracking-wide">Aktuálna cena</div>
-                      <div className="text-sm text-muted-foreground mt-1">Kotácia momentálne nedostupná.</div>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-
-              {data.nextEarnings ? (
-                <Card
-                  className="shrink-0 w-full border-amber-500/25 bg-amber-500/[0.06] dark:bg-amber-500/10 sm:w-auto sm:min-w-[220px]"
-                  title="Očakávaný dátum (Yahoo alebo Finnhub), môže sa zmeniť."
-                >
-                  <CardContent className="p-4 pt-3">
-                    <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wide">
-                      <Calendar className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                      Najbližšie earnings
-                    </div>
-                    <div className="text-base sm:text-lg font-semibold mt-1 tabular-nums">
-                      {format(parse(data.nextEarnings.date, "yyyy-MM-dd", new Date()), "d. MMMM yyyy", {
-                        locale: sk,
-                      })}
-                    </div>
-                    <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 leading-snug">
-                      Očakávaný dátum, môže sa zmeniť.
-                    </p>
-                  </CardContent>
-                </Card>
-              ) : (
-                <Card
-                  className="shrink-0 w-full border-dashed border-muted-foreground/25 sm:w-auto sm:min-w-[220px]"
-                  title="Yahoo často blokuje API; so FINNHUB_API_KEY na serveri sa použije záložný kalendár Finnhub."
-                >
-                  <CardContent className="p-4 pt-3">
-                    <div className="flex items-start gap-2 text-[10px] sm:text-xs text-muted-foreground leading-snug">
-                      <Calendar className="h-3.5 w-3.5 shrink-0 mt-0.5 opacity-70" />
-                      <span>
-                        Najbližšie earnings sa nepodarilo načítať. Yahoo často blokuje API; so{" "}
-                        <span className="font-mono">FINNHUB_API_KEY</span> na serveri sa použije záložný kalendár
-                        Finnhub.
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </>
-          )}
         </div>
       </div>
 
-      <Card>
-        <CardHeader className="p-4 pb-2">
-          <CardTitle className="text-sm font-medium">Súhrn pozície</CardTitle>
-          <CardDescription>Celkom naprieč viditeľnými portfóliami</CardDescription>
-        </CardHeader>
-        <CardContent className="p-4 pt-3 grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <div className="text-xs text-muted-foreground">Počet kusov</div>
-            <div className="text-lg font-semibold">{formatShareQuantity(data.totals.shares)}</div>
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Priemerná nákupná cena (vážená)</div>
-            <div className="text-lg font-semibold">
-              {mask(formatAverageCostCurrency(convertAverageCostPrice(data.totals.averageCost, costCurrency)))}
+      {/* Desktop header */}
+      <div className="hidden md:flex items-center justify-between gap-3 min-w-0" data-testid="desktop-asset-header">
+        <div className="min-w-0 space-y-1">
+          <Button variant="ghost" size="sm" className="gap-2 -ml-2 h-8 w-fit px-2" onClick={() => setLocation("/")}>
+            <ArrowLeft className="h-4 w-4" />
+            Portfólio
+          </Button>
+          <h1 className="text-lg md:text-xl font-semibold text-foreground truncate" data-testid="asset-detail-title-desktop">
+            Detail aktíva
+          </h1>
+        </div>
+      </div>
+
+      {/* Hero summary */}
+      <Card className="border-border bg-card shadow-sm" data-testid="asset-hero-summary">
+        <CardContent className="p-4 md:p-5">
+          <div className="flex flex-col gap-4 md:gap-5">
+            <div className="hidden md:flex items-start gap-3 min-w-0">
+              {data.imageUrl && isPokemonTicker(data.ticker) ? (
+                <img
+                  src={data.imageUrl}
+                  alt={data.companyName}
+                  className="h-14 w-14 shrink-0 rounded-md object-contain bg-muted"
+                />
+              ) : (
+                <CompanyLogo
+                  ticker={data.ticker}
+                  companyName={data.companyName}
+                  imageUrl={data.imageUrl}
+                  size="lg"
+                  className="shrink-0"
+                />
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="text-base md:text-lg font-semibold truncate">{data.companyName}</div>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                  {isPokemonTicker(data.ticker) ? (
+                    <span>{data.priceNote || "Pokémon TCG"}</span>
+                  ) : (
+                    <>
+                      <span className="font-mono">{data.ticker}</span>
+                      <a
+                        href={`https://finance.yahoo.com/quote/${encodeURIComponent(data.ticker)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-primary hover:underline"
+                      >
+                        Yahoo Finance
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </>
+                  )}
+                </div>
+              </div>
+              {data.ticker !== "CASH" && canToggleQuoteCurrency && (
+                <div className="shrink-0 flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <span className={cn("font-medium tabular-nums", !quoteInPreferredCurrency && "text-foreground")}>
+                    {quoteCurrency}
+                  </span>
+                  <Switch
+                    checked={quoteInPreferredCurrency}
+                    onCheckedChange={(checked) => setQuoteInPreferredCurrency(checked === true)}
+                    className="scale-[0.72] origin-center"
+                    aria-label={
+                      quoteInPreferredCurrency
+                        ? `Zobraziť cenu v ${quoteCurrency}`
+                        : `Zobraziť cenu v ${currency}`
+                    }
+                    data-testid="switch-quote-display-currency"
+                  />
+                  <span className={cn("font-medium tabular-nums", quoteInPreferredCurrency && "text-foreground")}>
+                    {currency}
+                  </span>
+                </div>
+              )}
             </div>
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Celkom investované</div>
-            <div className="text-lg font-semibold">
-              {mask(formatCurrency(convertPrice(data.totals.totalInvested, costCurrency)))}
-            </div>
+
+            {data.ticker !== "CASH" && canToggleQuoteCurrency && (
+              <div className="md:hidden flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
+                <span className={cn("font-medium tabular-nums", !quoteInPreferredCurrency && "text-foreground")}>
+                  {quoteCurrency}
+                </span>
+                <Switch
+                  checked={quoteInPreferredCurrency}
+                  onCheckedChange={(checked) => setQuoteInPreferredCurrency(checked === true)}
+                  className="scale-[0.72] origin-center"
+                  aria-label={
+                    quoteInPreferredCurrency
+                      ? `Zobraziť cenu v ${quoteCurrency}`
+                      : `Zobraziť cenu v ${currency}`
+                  }
+                  data-testid="switch-quote-display-currency-mobile"
+                />
+                <span className={cn("font-medium tabular-nums", quoteInPreferredCurrency && "text-foreground")}>
+                  {currency}
+                </span>
+              </div>
+            )}
+
+            {data.ticker !== "CASH" ? (
+              <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
+                <div className="min-w-0">
+                  <div className="text-xs font-medium text-muted-foreground">Aktuálna cena</div>
+                  {quote ? (
+                    <div className="text-xl md:text-3xl font-semibold leading-tight tracking-tight truncate mt-1">
+                      {mask(formatQuoteAmount(quote.price))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground mt-1">Kotácia nedostupná</div>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-medium text-muted-foreground">Dnes</div>
+                  {quote ? (
+                    <div
+                      className={`text-xl md:text-3xl font-semibold leading-tight tracking-tight mt-1 flex items-baseline gap-1.5 flex-wrap ${
+                        changePositive ? "text-green-500" : "text-red-500"
+                      }`}
+                    >
+                      <span className="inline-flex items-center gap-1 min-w-0">
+                        {changePositive ? (
+                          <TrendingUp className="h-5 w-5 shrink-0" />
+                        ) : (
+                          <TrendingDown className="h-5 w-5 shrink-0" />
+                        )}
+                        <span className="truncate">{mask(formatQuoteAmount(quote.change))}</span>
+                      </span>
+                      <span className="text-sm md:text-base font-medium">
+                        ({changePositive ? "+" : ""}
+                        {(quote.changePercent ?? 0).toFixed(2)}%)
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground mt-1">—</div>
+                  )}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-medium text-muted-foreground">Vaša pozícia</div>
+                  <div className="text-xl md:text-3xl font-semibold leading-tight tracking-tight truncate mt-1">
+                    {holdingValuePref == null ? "—" : mask(formatCurrency(holdingValuePref))}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1 truncate">
+                    {formatShareQuantity(data.totals.shares)} ks
+                  </p>
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs font-medium text-muted-foreground">Celkový výnos</div>
+                  <div
+                    className={`text-xl md:text-3xl font-semibold leading-tight tracking-tight mt-1 flex flex-wrap items-baseline gap-x-1.5 ${
+                      totalReturnPref == null
+                        ? "text-muted-foreground"
+                        : totalReturnPref >= 0
+                          ? "text-green-500"
+                          : "text-red-500"
+                    }`}
+                  >
+                    <span className="truncate">
+                      {totalReturnPref == null
+                        ? "—"
+                        : mask(
+                            `${totalReturnPref >= 0 ? "+" : "-"}${formatCurrency(Math.abs(totalReturnPref))}`,
+                          )}
+                    </span>
+                    {positionRoiPct != null && (
+                      <span className="text-sm md:text-base font-medium">
+                        · {mask(formatRoiPct(positionRoiPct))}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1 truncate">
+                    Investované: {mask(formatCurrency(investedPref))}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
+                <div>
+                  <div className="text-xs font-medium text-muted-foreground">Počet kusov</div>
+                  <div className="text-xl md:text-3xl font-semibold mt-1">
+                    {formatShareQuantity(data.totals.shares)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs font-medium text-muted-foreground">Celkom investované</div>
+                  <div className="text-xl md:text-3xl font-semibold mt-1">
+                    {mask(formatCurrency(convertPrice(data.totals.totalInvested, costCurrency)))}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
 
+      {/* Chart + position details */}
+      <div className="grid gap-3 md:gap-4 lg:grid-cols-3 items-start">
+        <div className="lg:col-span-2 min-w-0">
+      <Card>
+        <CardHeader className="p-4 pb-2">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="space-y-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <CardTitle className="text-base md:text-lg font-semibold">Vývoj ceny a obchody</CardTitle>
+                <HelpTip title="Návratnosť a graf">
+                  <p>
+                    <strong>ROI pozície</strong> je pomer aktuálnej kotácie k váženému priemernému nákupu (v mene
+                    titulu). Nezahŕňa dividendy ani realizované zisky z predajov.
+                  </p>
+                  <p>
+                    <strong>Zmena v období</strong> je čistá zmena uzatváracej ceny od prvého po posledný deň v grafe
+                    pre zvolené obdobie — teda vývoj ceny akcie, nie vášho portfólia.
+                  </p>
+                  <p>Čiaru „Priem. nákup“ vidíte len pri otvorenej pozícii.</p>
+                </HelpTip>
+              </div>
+              <CardDescription className="text-xs md:text-sm">
+                {data.totals.shares > 0 && data.totals.averageCost > 0 ? (
+                  <>
+                    Priemerná nákupná cena{" "}
+                    {mask(
+                      formatAverageCostCurrency(
+                        convertAverageCostPrice(data.totals.averageCost, costCurrency),
+                      ),
+                    )}
+                    {" · "}
+                  </>
+                ) : null}
+                Zelené body: nákup, červené: predaj.
+              </CardDescription>
+            </div>
+            <div className="w-full sm:w-auto">
+              <label
+                htmlFor="asset-trade-portfolio-filter"
+                className="block text-[11px] text-muted-foreground mb-1"
+              >
+                Obchody podľa portfólia
+              </label>
+              <select
+                id="asset-trade-portfolio-filter"
+                value={tradePortfolioFilter}
+                onChange={(e) => setTradePortfolioFilter(e.target.value)}
+                className="h-8 w-full sm:w-[220px] rounded-md border bg-background px-2 text-xs"
+                data-testid="select-asset-trade-portfolio-filter"
+              >
+                <option value="all">Všetky portfóliá</option>
+                {tradePortfolioOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-4 pt-3 space-y-4">
+          {chartData.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">
+              Historické ceny nie sú k dispozícii (alebo ide o hotovosť).
+            </p>
+          ) : (
+            <>
+              <div
+                className={cn(
+                  "w-full min-w-0 overflow-x-auto overscroll-x-contain pb-0.5 sm:overflow-visible [-webkit-overflow-scrolling:touch]",
+                )}
+              >
+                <ToggleGroup
+                  type="single"
+                  value={priceChartRange}
+                  onValueChange={(v) => v && setPriceChartRange(v as PriceChartRange)}
+                  className="flex w-max min-w-full flex-nowrap justify-start gap-1 sm:w-full sm:flex-wrap"
+                >
+                  {PRICE_CHART_RANGE_OPTIONS.map((o) => (
+                    <ToggleGroupItem
+                      key={o.v}
+                      value={o.v}
+                      className="shrink-0 text-xs px-2.5 data-[state=on]:z-10"
+                    >
+                      {o.label}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              </div>
+
+              {data.ticker !== "CASH" && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:hidden">
+                  <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
+                    <div className="text-[11px] text-muted-foreground uppercase tracking-wide">
+                      ROI pozície (vs. priem. nákup)
+                    </div>
+                    <div
+                      className={cn(
+                        "text-xl font-semibold tabular-nums",
+                        positionRoiPct == null
+                          ? "text-muted-foreground"
+                          : positionRoiPct >= 0
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-red-500",
+                      )}
+                    >
+                      {data.totals.shares <= 0 ? (
+                        <span className="text-sm font-normal text-muted-foreground">Bez otvorenej pozície</span>
+                      ) : positionRoiPct == null ? (
+                        <span className="text-sm font-normal text-muted-foreground">Kotácia nedostupná</span>
+                      ) : (
+                        mask(formatRoiPct(positionRoiPct))
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
+                    <div className="text-[11px] text-muted-foreground uppercase tracking-wide">
+                      Zmena ceny v období (graf)
+                    </div>
+                    <div
+                      className={cn(
+                        "text-xl font-semibold tabular-nums",
+                        periodPriceReturnPct == null
+                          ? "text-muted-foreground"
+                          : periodPriceReturnPct >= 0
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-red-500",
+                      )}
+                    >
+                      {mask(formatRoiPct(periodPriceReturnPct))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {filteredChartData.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-6 text-center">
+                  Pre zvolené obdobie nie sú dáta — skráťte rozsah alebo zvoľte „Všetko“.
+                </p>
+              ) : (
+                <div
+                  className={cn("w-full", isMobile ? "h-[260px]" : "h-[360px]")}
+                  data-testid="asset-price-chart"
+                >
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart
+                      data={filteredChartData}
+                      margin={{
+                        top: 8,
+                        right: isMobile ? 4 : 12,
+                        left: isMobile ? -6 : 0,
+                        bottom: 0,
+                      }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fontSize: 10 }}
+                        minTickGap={isMobile ? 20 : 28}
+                        tickFormatter={(v) => {
+                          try {
+                            return format(parseISO(v as string), "MMM yy", { locale: sk });
+                          } catch {
+                            return String(v);
+                          }
+                        }}
+                      />
+                      <YAxis
+                        domain={["auto", "auto"]}
+                        tick={{ fontSize: 10 }}
+                        width={isMobile ? 44 : 56}
+                        tickFormatter={(v) => Number(v).toFixed(0)}
+                      />
+                      <RechartsTooltip
+                        content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null;
+                          const row = payload[0].payload as { date: string; price: number };
+                          return (
+                            <div className="rounded-md border bg-background px-3 py-2 text-xs shadow-md max-w-[220px]">
+                              <div className="font-medium">
+                                {format(parseISO(row.date), "d. MMM yyyy", { locale: sk })}
+                              </div>
+                              <div className="text-muted-foreground text-[10px]">{row.date}</div>
+                              <div className="mt-1 font-medium">
+                                {mask(formatQuoteAmount(row.price))}
+                              </div>
+                            </div>
+                          );
+                        }}
+                      />
+                      {data.totals.shares > 0 && data.totals.averageCost > 0 && (
+                        <ReferenceLine
+                          y={data.totals.averageCost}
+                          stroke="hsl(var(--muted-foreground))"
+                          strokeDasharray="6 4"
+                          label={{
+                            value: "Priem. nákup",
+                            position: "insideTopRight",
+                            fill: "hsl(var(--muted-foreground))",
+                            fontSize: 10,
+                          }}
+                        />
+                      )}
+                      <Line
+                        type="monotone"
+                        dataKey="price"
+                        stroke="hsl(var(--primary))"
+                        dot={false}
+                        strokeWidth={2}
+                        isAnimationActive={!isMobile}
+                      />
+                      {tradeMarkersInRange.map((m) => (
+                        <ReferenceDot
+                          key={m.key}
+                          x={m.date}
+                          y={m.price}
+                          r={isMobile ? 4 : 5}
+                          fill={m.kind === "BUY" ? "#22c55e" : "#ef4444"}
+                          stroke="#fff"
+                          strokeWidth={1}
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+        </div>
+        <div className="flex flex-col gap-3 md:gap-4 min-w-0">
+          <Card className="border-border bg-card shadow-sm" data-testid="asset-position-details">
+            <CardHeader className="p-4 pb-2">
+              <CardTitle className="text-base md:text-lg font-semibold">Detail pozície</CardTitle>
+              <CardDescription className="text-xs md:text-sm">
+                Celkom naprieč viditeľnými portfóliami
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 pt-2 space-y-3">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-xs text-muted-foreground">Počet kusov</span>
+                <span className="font-semibold tabular-nums">
+                  {formatShareQuantity(data.totals.shares)}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-xs text-muted-foreground">Priemerná nákupná cena</span>
+                <span className="font-semibold tabular-nums">
+                  {mask(
+                    formatAverageCostCurrency(
+                      convertAverageCostPrice(data.totals.averageCost, costCurrency),
+                    ),
+                  )}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-xs text-muted-foreground">Nákladová báza</span>
+                <span className="font-semibold tabular-nums">
+                  {mask(formatCurrency(convertPrice(data.totals.totalInvested, costCurrency)))}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="text-xs text-muted-foreground">ROI pozície</span>
+                <span
+                  className={cn(
+                    "font-semibold tabular-nums",
+                    positionRoiPct == null
+                      ? "text-muted-foreground"
+                      : positionRoiPct >= 0
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-red-500",
+                  )}
+                >
+                  {data.totals.shares <= 0
+                    ? "—"
+                    : positionRoiPct == null
+                      ? "—"
+                      : mask(formatRoiPct(positionRoiPct))}
+                </span>
+              </div>
+              {periodPriceReturnPct != null && (
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="text-xs text-muted-foreground">Zmena ceny v období</span>
+                  <span
+                    className={cn(
+                      "font-semibold tabular-nums",
+                      periodPriceReturnPct >= 0
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-red-500",
+                    )}
+                  >
+                    {mask(formatRoiPct(periodPriceReturnPct))}
+                  </span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {data.ticker !== "CASH" &&
+            (data.nextEarnings ? (
+              <Card
+                className="border-amber-500/25 bg-amber-500/[0.06] dark:bg-amber-500/10"
+                title="Očakávaný dátum (Yahoo alebo Finnhub), môže sa zmeniť."
+              >
+                <CardContent className="p-4 pt-3">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground uppercase tracking-wide">
+                    <Calendar className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                    Najbližšie earnings
+                  </div>
+                  <div className="text-base md:text-lg font-semibold mt-1 tabular-nums">
+                    {format(parse(data.nextEarnings.date, "yyyy-MM-dd", new Date()), "d. MMMM yyyy", {
+                      locale: sk,
+                    })}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1 leading-snug">
+                    Očakávaný dátum, môže sa zmeniť.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card
+                className="border-dashed border-muted-foreground/25"
+                title="Yahoo často blokuje API; so FINNHUB_API_KEY na serveri sa použije záložný kalendár Finnhub."
+              >
+                <CardContent className="p-4 pt-3">
+                  <div className="flex items-start gap-2 text-xs text-muted-foreground leading-snug">
+                    <Calendar className="h-3.5 w-3.5 shrink-0 mt-0.5 opacity-70" />
+                    <span>
+                      Najbližšie earnings sa nepodarilo načítať. So{" "}
+                      <span className="font-mono">FINNHUB_API_KEY</span> na serveri sa použije záložný
+                      kalendár Finnhub.
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+        </div>
+      </div>
+
+      {/* Portfolios + analyst */}
+      <div
+        className={cn(
+          "grid gap-3 md:gap-4 items-start",
+          data.ticker !== "CASH" && !isPokemonTicker(data.ticker) && "lg:grid-cols-3",
+        )}
+      >
+        <div
+          className={cn(
+            "min-w-0",
+            data.ticker !== "CASH" && !isPokemonTicker(data.ticker) && "lg:col-span-2",
+          )}
+        >
+      <Card>
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="text-base md:text-lg font-semibold">Podľa portfólia</CardTitle>
+          <CardDescription className="text-xs md:text-sm">Držané množstvo a priemerná nákupná cena v každom portfóliu</CardDescription>
+        </CardHeader>
+        <CardContent className="p-4 pt-3">
+          {data.positions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Momentálne nemáte otvorenú pozíciu (všetko predané).</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Portfólio</TableHead>
+                  <TableHead className="text-right">Kusy</TableHead>
+                  <TableHead className="text-right">Priem. nákup</TableHead>
+                  <TableHead className="text-right">Investované</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.positions.map((p) => {
+                  const positionCostCurrency = p.costCurrency ?? costCurrency;
+                  return (
+                  <TableRow key={p.portfolioId ?? "none"}>
+                    <TableCell>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <BrokerLogo brokerCode={p.brokerCode as BrokerCode | null} size="xs" />
+                        <span className="truncate">{p.portfolioName}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-mono">{formatShareQuantity(p.shares)}</TableCell>
+                    <TableCell className="text-right">
+                      {mask(formatAverageCostCurrency(convertAverageCostPrice(p.averageCost, positionCostCurrency)))}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {mask(formatCurrency(convertPrice(p.totalInvested, positionCostCurrency)))}
+                    </TableCell>
+                  </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+        </div>
+        <div className="min-w-0">
       {data.ticker !== "CASH" && !isPokemonTicker(data.ticker) && (
         <AnalystRatingsCard
           ticker={data.ticker}
           formatPrice={(amount) => mask(formatQuoteAmount(amount))}
         />
       )}
+        </div>
+      </div>
+
+      {data.ticker !== "CASH" && data.positions.length > 0 && (
+        <Card>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-base md:text-lg font-semibold">Otvorené pozície (FIFO loty)</CardTitle>
+            <CardDescription className="text-xs md:text-sm">
+              Nákupné dávky v poradí FIFO; PnL je nerealizovaný podľa aktuálnej kotácie a kurzov. Oslobodenie: orient. 365 dní
+              držby.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 pt-3">
+            {anyLotsLoading && fifoLotRows.length === 0 ? (
+              <Skeleton className="h-32 w-full" />
+            ) : lotsError ? (
+              <p className="text-sm text-destructive">Loty sa nepodarilo načítať.</p>
+            ) : fifoLotRows.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Žiadne otvorené nákupné dávky (všetko môže byť predané, alebo chýba cena z trhu).
+              </p>
+            ) : (
+              <div className="space-y-2">
+                <div className="md:hidden space-y-2">
+                  {fifoLotRows.map((row, idx) => {
+                    const pnlClass =
+                      !row.currentPriceAvailable
+                        ? "text-muted-foreground"
+                        : row.currentPnl > 0
+                          ? "text-emerald-600"
+                          : row.currentPnl < 0
+                            ? "text-red-500"
+                            : "";
+                    return (
+                      <div
+                        key={`${row.portfolioId ?? "n"}-${row.acquiredAt}-${idx}-${row.remainingShares}-mobile`}
+                        className="rounded-lg border p-2.5"
+                      >
+                        <div className="grid grid-cols-3 gap-2 text-[11px]">
+                          <div className="min-w-0 col-span-1">
+                            <div className="text-[10px] text-muted-foreground">Portfólio</div>
+                            <div className="font-medium truncate">{row.portfolioName}</div>
+                            <div className="text-[10px] text-muted-foreground mt-1">Nákup</div>
+                            <div>
+                              {format(parseISO(row.acquiredAt + "T12:00:00Z"), "d. M. yyyy", {
+                                locale: sk,
+                              })}
+                            </div>
+                          </div>
+
+                          <div className="col-span-1 text-right">
+                            <div className="text-[10px] text-muted-foreground">Kusy</div>
+                            <div className="font-mono">{formatShareQuantity(row.remainingShares)}</div>
+                            <div className="text-[10px] text-muted-foreground mt-1">Nákup / ks</div>
+                            <div>
+                              {mask(
+                                formatAverageCostCurrency(
+                                  convertAverageCostPrice(
+                                    row.pricePerShareLocal,
+                                    codeToCurrency(row.purchaseCurrency),
+                                  ),
+                                ),
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="col-span-1 text-right">
+                            <div className="text-[10px] text-muted-foreground">Aktuálny PnL</div>
+                            <div className={`font-medium ${pnlClass}`}>
+                              {!row.currentPriceAvailable ? "—" : mask(formatCurrency(row.currentPnl))}
+                            </div>
+                            <div className="text-[10px] text-muted-foreground mt-1">Kurz EUR</div>
+                            <div className="font-mono text-[10px] text-muted-foreground">
+                              {row.eurPerUnitAtPurchase.toFixed(5)}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="pt-1.5 mt-1.5 border-t border-border/60">
+                          {row.taxFree ? (
+                            <div className="inline-flex items-center gap-1 flex-wrap">
+                              <Badge
+                                className="bg-emerald-600/90 text-white hover:bg-emerald-600 border-0"
+                                title="Orientačný časový test (1 rok) — detail u daňového poradcu"
+                              >
+                                <Shield className="h-3 w-3 mr-0.5 inline" />
+                                Tax free
+                              </Badge>
+                            </div>
+                          ) : row.inTaxFreeCountdown && row.daysToTaxFree != null ? (
+                            <div
+                              className="inline-flex items-center gap-1 text-amber-600"
+                              title={`Cca ${row.daysToTaxFree} d. do 365 dní držby`}
+                            >
+                              <Clock className="h-4 w-4 shrink-0 motion-safe:animate-pulse" aria-hidden />
+                              <span className="text-xs">o {row.daysToTaxFree} d.</span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground" title="Držba v dňoch (orient.)">
+                              ⏳ {Math.floor(row.daysHeld)} d.
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="hidden md:block overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Portfólio</TableHead>
+                        <TableHead>Dátum nákupu</TableHead>
+                        <TableHead className="text-right">Kusy</TableHead>
+                        <TableHead className="text-right">Nákup / ks</TableHead>
+                        <TableHead className="text-right">Kurz nákupu (EUR/1)</TableHead>
+                        <TableHead className="text-right">Aktuálny PnL</TableHead>
+                        <TableHead>Stav</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {fifoLotRows.map((row, idx) => {
+                        const pnlClass =
+                          !row.currentPriceAvailable
+                            ? "text-muted-foreground"
+                            : row.currentPnl > 0
+                              ? "text-emerald-600"
+                              : row.currentPnl < 0
+                                ? "text-red-500"
+                                : "";
+                        return (
+                          <TableRow
+                            key={`${row.portfolioId ?? "n"}-${row.acquiredAt}-${idx}-${row.remainingShares}`}
+                          >
+                            <TableCell className="max-w-[140px] truncate">{row.portfolioName}</TableCell>
+                            <TableCell>
+                              {format(
+                                parseISO(row.acquiredAt + "T12:00:00Z"),
+                                "d. M. yyyy",
+                                { locale: sk },
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm">
+                              {formatShareQuantity(row.remainingShares)}
+                            </TableCell>
+                            <TableCell className="text-right text-sm">
+                              {mask(
+                                formatAverageCostCurrency(
+                                  convertAverageCostPrice(
+                                    row.pricePerShareLocal,
+                                    codeToCurrency(row.purchaseCurrency),
+                                  ),
+                                ),
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right text-xs font-mono text-muted-foreground">
+                              {row.eurPerUnitAtPurchase.toFixed(5)}
+                            </TableCell>
+                            <TableCell className={`text-right text-sm font-medium ${pnlClass}`}>
+                              {!row.currentPriceAvailable
+                                ? "—"
+                                : mask(formatCurrency(row.currentPnl))}
+                            </TableCell>
+                            <TableCell>
+                              {row.taxFree ? (
+                                <div className="inline-flex items-center gap-1 flex-wrap">
+                                  <Badge
+                                    className="bg-emerald-600/90 text-white hover:bg-emerald-600 border-0"
+                                    title="Orientačný časový test (1 rok) — detail u daňového poradcu"
+                                  >
+                                    <Shield className="h-3 w-3 mr-0.5 inline" />
+                                    Tax free
+                                  </Badge>
+                                </div>
+                              ) : row.inTaxFreeCountdown && row.daysToTaxFree != null ? (
+                                <div
+                                  className="inline-flex items-center gap-1 text-amber-600"
+                                  title={`Cca ${row.daysToTaxFree} d. do 365 dní držby`}
+                                >
+                                  <Clock
+                                    className="h-4 w-4 shrink-0 motion-safe:animate-pulse"
+                                    aria-hidden
+                                  />
+                                  <span className="text-xs">
+                                    o {row.daysToTaxFree} d.
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground" title="Držba v dňoch (orient.)">
+                                  ⏳ {Math.floor(row.daysHeld)} d.
+                                </span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {data.dividends.paymentCount > 0 && (
+        <Card>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-base md:text-lg font-semibold">Dividendy</CardTitle>
+            <CardDescription className="text-xs md:text-sm">Čo ste od tohto aktíva dostali (viditeľné portfóliá)</CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 pt-3 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+              <div>
+                <div className="text-muted-foreground">Hrubá suma ({currency})</div>
+                <div className="font-semibold">{mask(formatCurrency(data.dividends.totalGross))}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Zrážky / daň ({currency})</div>
+                <div className="font-semibold">{mask(formatCurrency(data.dividends.totalTax))}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Čistá suma ({currency})</div>
+                <div className="font-semibold text-green-600 dark:text-green-400">
+                  {mask(formatCurrency(data.dividends.totalNet))}
+                </div>
+              </div>
+            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Dátum</TableHead>
+                  <TableHead>Portfólio</TableHead>
+                  <TableHead className="text-right">Hrubá</TableHead>
+                  <TableHead className="text-right">Čistá</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.dividendPayments.map((row) => (
+                  <TableRow key={row.id}>
+                    <TableCell>
+                      {format(parseISO(typeof row.date === "string" ? row.date : String(row.date)), "d. MMM yyyy", {
+                        locale: sk,
+                      })}
+                    </TableCell>
+                    <TableCell className="truncate max-w-[180px]">{row.portfolioName}</TableCell>
+                    <TableCell className="text-right">
+                      {mask(formatCurrency(convertPrice(row.gross, codeToCurrency(row.currency))))}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {mask(formatCurrency(convertPrice(row.net, codeToCurrency(row.currency))))}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       {data.ticker !== "CASH" && (
         <Card data-testid="asset-earnings-history">
           <CardHeader className="p-4 pb-2">
-            <CardTitle className="text-sm font-medium">Výsledky (earnings)</CardTitle>
-            <CardDescription>
+            <CardTitle className="text-base md:text-lg font-semibold">Výsledky (earnings)</CardTitle>
+            <CardDescription className="text-xs md:text-sm">
               EPS a finančné ukazovatele podľa rokov a kvartálov. Otvorte rok a potom kvartál.
             </CardDescription>
           </CardHeader>
@@ -918,528 +1640,8 @@ export default function AssetDetail() {
 
       <Card>
         <CardHeader className="p-4 pb-2">
-          <CardTitle className="text-sm font-medium">Podľa portfólia</CardTitle>
-          <CardDescription>Držané množstvo a priemerná nákupná cena v každom portfóliu</CardDescription>
-        </CardHeader>
-        <CardContent className="p-4 pt-3">
-          {data.positions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Momentálne nemáte otvorenú pozíciu (všetko predané).</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Portfólio</TableHead>
-                  <TableHead className="text-right">Kusy</TableHead>
-                  <TableHead className="text-right">Priem. nákup</TableHead>
-                  <TableHead className="text-right">Investované</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.positions.map((p) => {
-                  const positionCostCurrency = p.costCurrency ?? costCurrency;
-                  return (
-                  <TableRow key={p.portfolioId ?? "none"}>
-                    <TableCell>
-                      <div className="flex items-center gap-2 min-w-0">
-                        <BrokerLogo brokerCode={p.brokerCode as BrokerCode | null} size="xs" />
-                        <span className="truncate">{p.portfolioName}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right font-mono">{formatShareQuantity(p.shares)}</TableCell>
-                    <TableCell className="text-right">
-                      {mask(formatAverageCostCurrency(convertAverageCostPrice(p.averageCost, positionCostCurrency)))}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {mask(formatCurrency(convertPrice(p.totalInvested, positionCostCurrency)))}
-                    </TableCell>
-                  </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      {data.ticker !== "CASH" && data.positions.length > 0 && (
-        <Card>
-          <CardHeader className="p-4 pb-2">
-            <CardTitle className="text-sm font-medium">Otvorené pozície (FIFO loty)</CardTitle>
-            <CardDescription>
-              Nákupné dávky v poradí FIFO; PnL je nerealizovaný podľa aktuálnej kotácie a kurzov. Oslobodenie: orient. 365 dní
-              držby.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-4 pt-3">
-            {anyLotsLoading && fifoLotRows.length === 0 ? (
-              <Skeleton className="h-32 w-full" />
-            ) : lotsError ? (
-              <p className="text-sm text-destructive">Loty sa nepodarilo načítať.</p>
-            ) : fifoLotRows.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Žiadne otvorené nákupné dávky (všetko môže byť predané, alebo chýba cena z trhu).
-              </p>
-            ) : (
-              <div className="space-y-2">
-                <div className="md:hidden space-y-2">
-                  {fifoLotRows.map((row, idx) => {
-                    const pnlClass =
-                      !row.currentPriceAvailable
-                        ? "text-muted-foreground"
-                        : row.currentPnl > 0
-                          ? "text-emerald-600"
-                          : row.currentPnl < 0
-                            ? "text-red-500"
-                            : "";
-                    return (
-                      <div
-                        key={`${row.portfolioId ?? "n"}-${row.acquiredAt}-${idx}-${row.remainingShares}-mobile`}
-                        className="rounded-lg border p-2.5"
-                      >
-                        <div className="grid grid-cols-3 gap-2 text-[11px]">
-                          <div className="min-w-0 col-span-1">
-                            <div className="text-[10px] text-muted-foreground">Portfólio</div>
-                            <div className="font-medium truncate">{row.portfolioName}</div>
-                            <div className="text-[10px] text-muted-foreground mt-1">Nákup</div>
-                            <div>
-                              {format(parseISO(row.acquiredAt + "T12:00:00Z"), "d. M. yyyy", {
-                                locale: sk,
-                              })}
-                            </div>
-                          </div>
-
-                          <div className="col-span-1 text-right">
-                            <div className="text-[10px] text-muted-foreground">Kusy</div>
-                            <div className="font-mono">{formatShareQuantity(row.remainingShares)}</div>
-                            <div className="text-[10px] text-muted-foreground mt-1">Nákup / ks</div>
-                            <div>
-                              {mask(
-                                formatAverageCostCurrency(
-                                  convertAverageCostPrice(
-                                    row.pricePerShareLocal,
-                                    codeToCurrency(row.purchaseCurrency),
-                                  ),
-                                ),
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="col-span-1 text-right">
-                            <div className="text-[10px] text-muted-foreground">Aktuálny PnL</div>
-                            <div className={`font-medium ${pnlClass}`}>
-                              {!row.currentPriceAvailable ? "—" : mask(formatCurrency(row.currentPnl))}
-                            </div>
-                            <div className="text-[10px] text-muted-foreground mt-1">Kurz EUR</div>
-                            <div className="font-mono text-[10px] text-muted-foreground">
-                              {row.eurPerUnitAtPurchase.toFixed(5)}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="pt-1.5 mt-1.5 border-t border-border/60">
-                          {row.taxFree ? (
-                            <div className="inline-flex items-center gap-1 flex-wrap">
-                              <Badge
-                                className="bg-emerald-600/90 text-white hover:bg-emerald-600 border-0"
-                                title="Orientačný časový test (1 rok) — detail u daňového poradcu"
-                              >
-                                <Shield className="h-3 w-3 mr-0.5 inline" />
-                                Tax free
-                              </Badge>
-                            </div>
-                          ) : row.inTaxFreeCountdown && row.daysToTaxFree != null ? (
-                            <div
-                              className="inline-flex items-center gap-1 text-amber-600"
-                              title={`Cca ${row.daysToTaxFree} d. do 365 dní držby`}
-                            >
-                              <Clock className="h-4 w-4 shrink-0 motion-safe:animate-pulse" aria-hidden />
-                              <span className="text-xs">o {row.daysToTaxFree} d.</span>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground" title="Držba v dňoch (orient.)">
-                              ⏳ {Math.floor(row.daysHeld)} d.
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="hidden md:block overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Portfólio</TableHead>
-                        <TableHead>Dátum nákupu</TableHead>
-                        <TableHead className="text-right">Kusy</TableHead>
-                        <TableHead className="text-right">Nákup / ks</TableHead>
-                        <TableHead className="text-right">Kurz nákupu (EUR/1)</TableHead>
-                        <TableHead className="text-right">Aktuálny PnL</TableHead>
-                        <TableHead>Stav</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {fifoLotRows.map((row, idx) => {
-                        const pnlClass =
-                          !row.currentPriceAvailable
-                            ? "text-muted-foreground"
-                            : row.currentPnl > 0
-                              ? "text-emerald-600"
-                              : row.currentPnl < 0
-                                ? "text-red-500"
-                                : "";
-                        return (
-                          <TableRow
-                            key={`${row.portfolioId ?? "n"}-${row.acquiredAt}-${idx}-${row.remainingShares}`}
-                          >
-                            <TableCell className="max-w-[140px] truncate">{row.portfolioName}</TableCell>
-                            <TableCell>
-                              {format(
-                                parseISO(row.acquiredAt + "T12:00:00Z"),
-                                "d. M. yyyy",
-                                { locale: sk },
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right font-mono text-sm">
-                              {formatShareQuantity(row.remainingShares)}
-                            </TableCell>
-                            <TableCell className="text-right text-sm">
-                              {mask(
-                                formatAverageCostCurrency(
-                                  convertAverageCostPrice(
-                                    row.pricePerShareLocal,
-                                    codeToCurrency(row.purchaseCurrency),
-                                  ),
-                                ),
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right text-xs font-mono text-muted-foreground">
-                              {row.eurPerUnitAtPurchase.toFixed(5)}
-                            </TableCell>
-                            <TableCell className={`text-right text-sm font-medium ${pnlClass}`}>
-                              {!row.currentPriceAvailable
-                                ? "—"
-                                : mask(formatCurrency(row.currentPnl))}
-                            </TableCell>
-                            <TableCell>
-                              {row.taxFree ? (
-                                <div className="inline-flex items-center gap-1 flex-wrap">
-                                  <Badge
-                                    className="bg-emerald-600/90 text-white hover:bg-emerald-600 border-0"
-                                    title="Orientačný časový test (1 rok) — detail u daňového poradcu"
-                                  >
-                                    <Shield className="h-3 w-3 mr-0.5 inline" />
-                                    Tax free
-                                  </Badge>
-                                </div>
-                              ) : row.inTaxFreeCountdown && row.daysToTaxFree != null ? (
-                                <div
-                                  className="inline-flex items-center gap-1 text-amber-600"
-                                  title={`Cca ${row.daysToTaxFree} d. do 365 dní držby`}
-                                >
-                                  <Clock
-                                    className="h-4 w-4 shrink-0 motion-safe:animate-pulse"
-                                    aria-hidden
-                                  />
-                                  <span className="text-xs">
-                                    o {row.daysToTaxFree} d.
-                                  </span>
-                                </div>
-                              ) : (
-                                <span className="text-xs text-muted-foreground" title="Držba v dňoch (orient.)">
-                                  ⏳ {Math.floor(row.daysHeld)} d.
-                                </span>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {data.dividends.paymentCount > 0 && (
-        <Card>
-          <CardHeader className="p-4 pb-2">
-            <CardTitle className="text-sm font-medium">Dividendy</CardTitle>
-            <CardDescription>Čo ste od tohto aktíva dostali (viditeľné portfóliá)</CardDescription>
-          </CardHeader>
-          <CardContent className="p-4 pt-3 space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
-              <div>
-                <div className="text-muted-foreground">Hrubá suma ({currency})</div>
-                <div className="font-semibold">{mask(formatCurrency(data.dividends.totalGross))}</div>
-              </div>
-              <div>
-                <div className="text-muted-foreground">Zrážky / daň ({currency})</div>
-                <div className="font-semibold">{mask(formatCurrency(data.dividends.totalTax))}</div>
-              </div>
-              <div>
-                <div className="text-muted-foreground">Čistá suma ({currency})</div>
-                <div className="font-semibold text-green-600 dark:text-green-400">
-                  {mask(formatCurrency(data.dividends.totalNet))}
-                </div>
-              </div>
-            </div>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Dátum</TableHead>
-                  <TableHead>Portfólio</TableHead>
-                  <TableHead className="text-right">Hrubá</TableHead>
-                  <TableHead className="text-right">Čistá</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.dividendPayments.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell>
-                      {format(parseISO(typeof row.date === "string" ? row.date : String(row.date)), "d. MMM yyyy", {
-                        locale: sk,
-                      })}
-                    </TableCell>
-                    <TableCell className="truncate max-w-[180px]">{row.portfolioName}</TableCell>
-                    <TableCell className="text-right">
-                      {mask(formatCurrency(convertPrice(row.gross, codeToCurrency(row.currency))))}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {mask(formatCurrency(convertPrice(row.net, codeToCurrency(row.currency))))}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader className="p-4 pb-2">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div className="space-y-1 min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <CardTitle className="text-sm font-medium">Vývoj ceny a obchody</CardTitle>
-                <HelpTip title="Návratnosť a graf">
-                  <p>
-                    <strong>ROI pozície</strong> je pomer aktuálnej kotácie k váženému priemernému nákupu (v mene
-                    titulu). Nezahŕňa dividendy ani realizované zisky z predajov.
-                  </p>
-                  <p>
-                    <strong>Zmena v období</strong> je čistá zmena uzatváracej ceny od prvého po posledný deň v grafe
-                    pre zvolené obdobie — teda vývoj ceny akcie, nie vášho portfólia.
-                  </p>
-                  <p>Čiaru „Priem. nákup“ vidíte len pri otvorenej pozícii.</p>
-                </HelpTip>
-              </div>
-              <CardDescription>
-                Interaktívny výber obdobia; zelené body: nákup, červené: predaj (deň obchodu).
-              </CardDescription>
-            </div>
-            <div className="w-full sm:w-auto">
-              <label
-                htmlFor="asset-trade-portfolio-filter"
-                className="block text-[11px] text-muted-foreground mb-1"
-              >
-                Obchody podľa portfólia
-              </label>
-              <select
-                id="asset-trade-portfolio-filter"
-                value={tradePortfolioFilter}
-                onChange={(e) => setTradePortfolioFilter(e.target.value)}
-                className="h-8 w-full sm:w-[220px] rounded-md border bg-background px-2 text-xs"
-                data-testid="select-asset-trade-portfolio-filter"
-              >
-                <option value="all">Všetky portfóliá</option>
-                {tradePortfolioOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="p-4 pt-3 space-y-4">
-          {chartData.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">
-              Historické ceny nie sú k dispozícii (alebo ide o hotovosť).
-            </p>
-          ) : (
-            <>
-              <div
-                className={cn(
-                  "w-full min-w-0 overflow-x-auto overscroll-x-contain pb-0.5 sm:overflow-visible [-webkit-overflow-scrolling:touch]",
-                )}
-              >
-                <ToggleGroup
-                  type="single"
-                  value={priceChartRange}
-                  onValueChange={(v) => v && setPriceChartRange(v as PriceChartRange)}
-                  className="flex w-max min-w-full flex-nowrap justify-start gap-1 sm:w-full sm:flex-wrap"
-                >
-                  {PRICE_CHART_RANGE_OPTIONS.map((o) => (
-                    <ToggleGroupItem
-                      key={o.v}
-                      value={o.v}
-                      className="shrink-0 text-xs px-2.5 data-[state=on]:z-10"
-                    >
-                      {o.label}
-                    </ToggleGroupItem>
-                  ))}
-                </ToggleGroup>
-              </div>
-
-              {data.ticker !== "CASH" && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
-                    <div className="text-[11px] text-muted-foreground uppercase tracking-wide">
-                      ROI pozície (vs. priem. nákup)
-                    </div>
-                    <div
-                      className={cn(
-                        "text-xl font-semibold tabular-nums",
-                        positionRoiPct == null
-                          ? "text-muted-foreground"
-                          : positionRoiPct >= 0
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : "text-red-500",
-                      )}
-                    >
-                      {data.totals.shares <= 0 ? (
-                        <span className="text-sm font-normal text-muted-foreground">Bez otvorenej pozície</span>
-                      ) : positionRoiPct == null ? (
-                        <span className="text-sm font-normal text-muted-foreground">Kotácia nedostupná</span>
-                      ) : (
-                        mask(formatRoiPct(positionRoiPct))
-                      )}
-                    </div>
-                  </div>
-                  <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
-                    <div className="text-[11px] text-muted-foreground uppercase tracking-wide">
-                      Zmena ceny v období (graf)
-                    </div>
-                    <div
-                      className={cn(
-                        "text-xl font-semibold tabular-nums",
-                        periodPriceReturnPct == null
-                          ? "text-muted-foreground"
-                          : periodPriceReturnPct >= 0
-                            ? "text-emerald-600 dark:text-emerald-400"
-                            : "text-red-500",
-                      )}
-                    >
-                      {mask(formatRoiPct(periodPriceReturnPct))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {filteredChartData.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-6 text-center">
-                  Pre zvolené obdobie nie sú dáta — skráťte rozsah alebo zvoľte „Všetko“.
-                </p>
-              ) : (
-                <div
-                  className={cn("w-full", isMobile ? "h-[260px]" : "h-[320px]")}
-                  data-testid="asset-price-chart"
-                >
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart
-                      data={filteredChartData}
-                      margin={{
-                        top: 8,
-                        right: isMobile ? 4 : 12,
-                        left: isMobile ? -6 : 0,
-                        bottom: 0,
-                      }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                      <XAxis
-                        dataKey="date"
-                        tick={{ fontSize: 10 }}
-                        minTickGap={isMobile ? 20 : 28}
-                        tickFormatter={(v) => {
-                          try {
-                            return format(parseISO(v as string), "MMM yy", { locale: sk });
-                          } catch {
-                            return String(v);
-                          }
-                        }}
-                      />
-                      <YAxis
-                        domain={["auto", "auto"]}
-                        tick={{ fontSize: 10 }}
-                        width={isMobile ? 44 : 56}
-                        tickFormatter={(v) => Number(v).toFixed(0)}
-                      />
-                      <RechartsTooltip
-                        content={({ active, payload }) => {
-                          if (!active || !payload?.length) return null;
-                          const row = payload[0].payload as { date: string; price: number };
-                          return (
-                            <div className="rounded-md border bg-background px-3 py-2 text-xs shadow-md max-w-[220px]">
-                              <div className="font-medium">
-                                {format(parseISO(row.date), "d. MMM yyyy", { locale: sk })}
-                              </div>
-                              <div className="text-muted-foreground text-[10px]">{row.date}</div>
-                              <div className="mt-1 font-medium">
-                                {mask(formatQuoteAmount(row.price))}
-                              </div>
-                            </div>
-                          );
-                        }}
-                      />
-                      {data.totals.shares > 0 && data.totals.averageCost > 0 && (
-                        <ReferenceLine
-                          y={data.totals.averageCost}
-                          stroke="hsl(var(--muted-foreground))"
-                          strokeDasharray="6 4"
-                          label={{
-                            value: "Priem. nákup",
-                            position: "insideTopRight",
-                            fill: "hsl(var(--muted-foreground))",
-                            fontSize: 10,
-                          }}
-                        />
-                      )}
-                      <Line
-                        type="monotone"
-                        dataKey="price"
-                        stroke="hsl(var(--primary))"
-                        dot={false}
-                        strokeWidth={2}
-                        isAnimationActive={!isMobile}
-                      />
-                      {tradeMarkersInRange.map((m) => (
-                        <ReferenceDot
-                          key={m.key}
-                          x={m.date}
-                          y={m.price}
-                          r={isMobile ? 4 : 5}
-                          fill={m.kind === "BUY" ? "#22c55e" : "#ef4444"}
-                          stroke="#fff"
-                          strokeWidth={1}
-                        />
-                      ))}
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="p-4 pb-2">
-          <CardTitle className="text-sm font-medium">História transakcií</CardTitle>
-          <CardDescription>Všetky záznamy pre tento ticker</CardDescription>
+          <CardTitle className="text-base md:text-lg font-semibold">História transakcií</CardTitle>
+          <CardDescription className="text-xs md:text-sm">Všetky záznamy pre tento ticker</CardDescription>
         </CardHeader>
         <CardContent className="p-4 pt-3 overflow-x-auto">
           <Table>
