@@ -2,6 +2,7 @@
 export const DASHBOARD_WIDGET_IDS = [
   "summary",
   "chart",
+  "allocation",
   "realizedDividends",
   "ytdBenchmark",
   "earnings",
@@ -37,6 +38,7 @@ export const DASHBOARD_WIDGET_META: Record<
 > = {
   summary: { label: "Súhrn", required: true },
   chart: { label: "Graf", required: false },
+  allocation: { label: "Alokácia", required: false },
   realizedDividends: { label: "Zisk a dividendy", required: false },
   ytdBenchmark: { label: "YTD vs S&P", required: false },
   earnings: { label: "Earnings", required: false },
@@ -54,6 +56,7 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = {
   visible: {
     summary: true,
     chart: true,
+    allocation: true,
     realizedDividends: true,
     ytdBenchmark: true,
     earnings: true,

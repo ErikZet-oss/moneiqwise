@@ -73,6 +73,7 @@ import { AssetThumb } from "@/components/AssetThumb";
 import { BrokerLogo } from "@/components/BrokerLogo";
 import { MobilePortfolioChart } from "@/components/MobilePortfolioChart";
 import { DesktopPortfolioChart } from "@/components/DesktopPortfolioChart";
+import { DashboardAllocationWidget } from "@/components/DashboardAllocationWidget";
 import { DashboardWidgetFrame } from "@/components/DashboardWidgetFrame";
 import type { HoldingWithCostCurrency } from "@shared/holdingCostCurrency";
 import { isPhysicalSilverTicker } from "@shared/physicalMetal";
@@ -2785,6 +2786,8 @@ export default function Dashboard() {
               );
             }
             if (widgetId === "chart") {
+              const allocationVisible = isDashboardWidgetVisible("allocation");
+              const sidePanel = allocationVisible || desktopInsightSlideCount > 0;
               return (
                 <DashboardWidgetFrame
                   key={widgetId}
@@ -2797,10 +2800,10 @@ export default function Dashboard() {
                 >
       <div
         className={`hidden md:grid gap-4 ${
-          desktopInsightSlideCount > 0 ? "lg:grid-cols-3" : ""
+          sidePanel ? "lg:grid-cols-3" : ""
         }`}
       >
-        <div className={desktopInsightSlideCount > 0 ? "lg:col-span-2 min-w-0" : "min-w-0"}>
+        <div className={sidePanel ? "lg:col-span-2 min-w-0" : "min-w-0"}>
           <DesktopPortfolioChart
             totalValue={metrics.totalValue}
             totalInvested={metrics.totalInvested}
@@ -2808,7 +2811,17 @@ export default function Dashboard() {
             totalProfitPercent={metrics.totalProfitPercent}
           />
         </div>
-        {desktopInsightSlideCount > 0 && (
+        {allocationVisible ? (
+          <div className="lg:col-span-1 min-w-0">
+            <DashboardAllocationWidget
+              holdings={holdings}
+              quotes={quotes}
+              cashValue={metrics.cashValue}
+              holdingsLoading={holdingsLoading}
+              isAllPortfolios={isAllPortfolios}
+            />
+          </div>
+        ) : desktopInsightSlideCount > 0 && (
           <div className="lg:col-span-1 min-w-0">
             <Card className="h-full border-border bg-card shadow-sm" data-testid="card-desktop-insights-carousel">
               <CardHeader className="space-y-0 p-4 pb-1">
@@ -2939,8 +2952,32 @@ export default function Dashboard() {
               </CardContent>
             </Card>
           </div>
-        )}
+        ) : null}
       </div>
+                </DashboardWidgetFrame>
+              );
+            }
+            if (widgetId === "allocation") {
+              const chartAlsoVisible = isDashboardWidgetVisible("chart");
+              return (
+                <DashboardWidgetFrame
+                  key={widgetId}
+                  id={widgetId}
+                  editing={dashboardEditing}
+                  visible={visible}
+                  onToggleVisible={() => toggleDashboardWidget(widgetId)}
+                  empty={chartAlsoVisible && !isMobileViewport}
+                  emptyHint="Na webe je alokácia vedľa grafu"
+                >
+                  <div className={chartAlsoVisible ? "md:hidden" : undefined}>
+                    <DashboardAllocationWidget
+                      holdings={holdings}
+                      quotes={quotes}
+                      cashValue={metrics.cashValue}
+                      holdingsLoading={holdingsLoading}
+                      isAllPortfolios={isAllPortfolios}
+                    />
+                  </div>
                 </DashboardWidgetFrame>
               );
             }
