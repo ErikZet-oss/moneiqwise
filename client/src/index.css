@@ -154,6 +154,21 @@
   --shadow-2xl: 0px 2px 0px 0px hsl(220 25% 10% / 0.00);
 }
 
+/* Dark cards: subtle gradient lift, stays in the dark palette */
+.dark .shadcn-card {
+  background-color: hsl(var(--card));
+  background-image: linear-gradient(
+    165deg,
+    hsl(222 40% 14%) 0%,
+    hsl(222 47% 11%) 45%,
+    hsl(222 47% 9%) 100%
+  );
+  border-color: hsl(220 25% 18%);
+  box-shadow:
+    inset 0 1px 0 0 hsl(0 0% 100% / 0.04),
+    0 8px 24px -14px hsl(222 47% 4% / 0.55);
+}
+
 /* Light cards only when NOT in dark mode (theme class lives on <html>) */
 html:not(.dark) .shadcn-card {
   background-color: hsl(var(--card));
