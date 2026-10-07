@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useMemo, useState, useId, type FormEvent } from "react";
+import { startAuthentication } from "@simplewebauthn/browser";
 import {
   TrendingUp,
   BarChart3,
@@ -16,6 +17,7 @@ import {
   LineChart,
   CalendarClock,
   Target,
+  KeyRound,
   type LucideIcon,
 } from "lucide-react";
 
@@ -136,6 +138,7 @@ function LandingAmbientLine() {
 export default function Landing() {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPasskeySubmitting, setIsPasskeySubmitting] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginRememberMe, setLoginRememberMe] = useState(true);
@@ -176,6 +179,53 @@ export default function Landing() {
       });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const submitPasskeyLogin = async () => {
+    if (typeof window === "undefined" || !("PublicKeyCredential" in window)) {
+      toast({
+        title: "Passkey nie je podporovaný",
+        description: "Tento prehliadač alebo zariadenie nepodporuje WebAuthn.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsPasskeySubmitting(true);
+    try {
+      const optionsResponse = await apiRequest(
+        "POST",
+        "/api/auth/passkeys/options/login",
+        { email: loginEmail.trim() || undefined },
+      );
+      const optionsPayload = (await optionsResponse.json()) as {
+        options?: Parameters<typeof startAuthentication>[0]["optionsJSON"];
+      };
+      if (!optionsPayload.options) {
+        throw new Error("Server nevrátil passkey challenge.");
+      }
+
+      const passkeyResponse = await startAuthentication({
+        optionsJSON: optionsPayload.options,
+      });
+      await apiRequest("POST", "/api/auth/passkeys/verify/login", {
+        response: passkeyResponse,
+        rememberMe: loginRememberMe,
+      });
+
+      await refreshAuth();
+      toast({ title: "Prihlásenie úspešné", description: "Vitaj späť." });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Passkey prihlásenie zlyhalo.";
+      toast({
+        title: "Passkey prihlásenie zlyhalo",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsPasskeySubmitting(false);
     }
   };
 
@@ -406,10 +456,35 @@ export default function Landing() {
                     <Button
                       className="w-full h-11 text-sm font-semibold shadow-[0_0_24px_-4px_rgba(52,211,153,0.55)]"
                       type="submit"
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || isPasskeySubmitting}
                       data-testid="button-login-submit"
                     >
                       {isSubmitting ? "Prihlasujem..." : "Prihlasit sa"}
+                    </Button>
+                    <div className="relative py-1">
+                      <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t border-white/10" />
+                      </div>
+                      <div className="relative flex justify-center text-[11px] uppercase tracking-wide text-white/45">
+                        <span className="bg-transparent px-2">alebo</span>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full h-11 border-white/15 bg-transparent text-white hover:bg-white/5"
+                      onClick={submitPasskeyLogin}
+                      disabled={isSubmitting || isPasskeySubmitting}
+                      data-testid="button-login-passkey"
+                    >
+                      {isPasskeySubmitting ? (
+                        "Overujem passkey..."
+                      ) : (
+                        <span className="inline-flex items-center gap-2">
+                          <KeyRound className="h-4 w-4" />
+                          Prihlásiť cez passkey
+                        </span>
+                      )}
                     </Button>
                   </form>
                 </TabsContent>
