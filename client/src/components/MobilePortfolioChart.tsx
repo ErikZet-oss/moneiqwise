@@ -332,6 +332,18 @@ export function MobilePortfolioChart({
 
   const benchColor = chartBenchmarkStroke(theme === "dark" ? "dark" : "light");
   const benchLabel = chartBenchmarkLabel(chartBenchmarkId);
+  const benchPeriodReturn = useMemo(() => {
+    if (!showBenchLine || chartData.length === 0) return null;
+    for (let i = chartData.length - 1; i >= 0; i--) {
+      const pct = chartData[i]!.benchmarkPct;
+      if (pct != null && Number.isFinite(pct)) return pct;
+    }
+    return null;
+  }, [chartData, showBenchLine]);
+  const benchLabelWithReturn =
+    benchPeriodReturn == null
+      ? benchLabel
+      : `${benchLabel} ${benchPeriodReturn >= 0 ? "+" : ""}${benchPeriodReturn.toFixed(1)}%`;
 
   const isPositive = periodChange.amount >= 0;
   // Light: match text-green-500 / text-red-500; dark: keep existing pastel strokes
@@ -607,7 +619,7 @@ export function MobilePortfolioChart({
                 style={{ color: benchColor }}
                 data-testid="mobile-chart-benchmark-label"
               >
-                {benchLabel}
+                {benchLabelWithReturn}
               </div>
             )}
             {chartData.length > 1 ? (

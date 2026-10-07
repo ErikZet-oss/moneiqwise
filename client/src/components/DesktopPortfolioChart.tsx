@@ -252,6 +252,18 @@ export function DesktopPortfolioChart({
       : "hsl(0 84% 60%)";
   const benchColor = chartBenchmarkStroke(theme === "dark" ? "dark" : "light");
   const benchLabel = chartBenchmarkLabel(chartBenchmarkId);
+  const benchPeriodReturn = useMemo(() => {
+    if (!showBenchLine || chartData.length === 0) return null;
+    for (let i = chartData.length - 1; i >= 0; i--) {
+      const pct = chartData[i]!.benchmarkPct;
+      if (pct != null && Number.isFinite(pct)) return pct;
+    }
+    return null;
+  }, [chartData, showBenchLine]);
+  const benchLabelWithReturn =
+    benchPeriodReturn == null
+      ? benchLabel
+      : `${benchLabel} ${benchPeriodReturn >= 0 ? "+" : ""}${benchPeriodReturn.toFixed(1)}%`;
 
   if (!showChart) {
     return null;
@@ -293,7 +305,7 @@ export function DesktopPortfolioChart({
               style={{ color: benchColor }}
               data-testid="desktop-chart-benchmark-label"
             >
-              {benchLabel}
+              {benchLabelWithReturn}
             </div>
           )}
           {chartData.length > 1 ? (
