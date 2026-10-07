@@ -198,13 +198,13 @@ export function AnalystRatingsCard({ ticker, enabled = true, formatPrice }: Prop
         ) : (
           <>
             <div className="grid grid-cols-3 gap-1.5 md:gap-2">
-              <div className="rounded-md border border-border/70 bg-muted/20 px-2 py-1.5 md:px-2.5 md:py-2 min-w-0">
+              <div className="rounded-md border border-border/70 bg-muted/20 px-2 py-1.5 md:px-2.5 md:py-2 min-w-0 min-h-[78px] md:min-h-[88px] flex flex-col justify-between">
                 <div className="flex items-center gap-1 text-[10px] md:text-[11px] font-medium text-muted-foreground">
                   <Target className="h-3 w-3 md:h-3.5 md:w-3.5 text-sky-600 dark:text-sky-400 shrink-0" />
                   Target (mean)
                 </div>
                 <div
-                  className="mt-0.5 text-sm md:text-xl font-semibold tabular-nums truncate"
+                  className="mt-0.5 text-[13px] sm:text-sm md:text-xl font-semibold tabular-nums truncate leading-tight"
                   data-testid="analyst-target-mean"
                 >
                   {data.targetMean != null ? formatPrice(data.targetMean) : "—"}
@@ -216,7 +216,7 @@ export function AnalystRatingsCard({ ticker, enabled = true, formatPrice }: Prop
                 </p>
               </div>
 
-              <div className="rounded-md border border-border/70 bg-muted/20 px-2 py-1.5 md:px-2.5 md:py-2 min-w-0">
+              <div className="rounded-md border border-border/70 bg-muted/20 px-2 py-1.5 md:px-2.5 md:py-2 min-w-0 min-h-[78px] md:min-h-[88px] flex flex-col justify-between">
                 <div className="flex items-center gap-1 text-[10px] md:text-[11px] font-medium text-muted-foreground">
                   {upsidePositive ? (
                     <ArrowUpRight className="h-3 w-3 md:h-3.5 md:w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
@@ -227,7 +227,7 @@ export function AnalystRatingsCard({ ticker, enabled = true, formatPrice }: Prop
                 </div>
                 <div
                   className={cn(
-                    "mt-0.5 text-sm md:text-xl font-semibold tabular-nums truncate",
+                    "mt-0.5 text-[13px] sm:text-sm md:text-xl font-semibold tabular-nums truncate leading-tight",
                     upside == null
                       ? "text-muted-foreground"
                       : upsidePositive
@@ -245,12 +245,12 @@ export function AnalystRatingsCard({ ticker, enabled = true, formatPrice }: Prop
                 </p>
               </div>
 
-              <div className="rounded-md border border-border/70 bg-muted/20 px-2 py-1.5 md:px-2.5 md:py-2 min-w-0">
+              <div className="rounded-md border border-border/70 bg-muted/20 px-2 py-1.5 md:px-2.5 md:py-2 min-w-0 min-h-[78px] md:min-h-[88px] flex flex-col justify-between">
                 <div className="flex items-center gap-1 text-[10px] md:text-[11px] font-medium text-muted-foreground">
                   <Crosshair className="h-3 w-3 md:h-3.5 md:w-3.5 text-violet-600 dark:text-violet-400 shrink-0" />
                   Rozpätie targetov
                 </div>
-                <div className="mt-0.5 text-xs md:text-sm font-semibold tabular-nums leading-snug">
+                <div className="mt-0.5 text-[11px] md:text-sm font-semibold tabular-nums leading-snug">
                   <span className="block truncate">
                     {data.targetLow != null ? formatPrice(data.targetLow) : "—"}
                     <span className="text-muted-foreground font-normal"> — </span>

@@ -525,8 +525,13 @@ export default function AssetDetail() {
   return (
     <div className="flex flex-col gap-3 pb-8">
       {/* Mobile header */}
-      <div className="md:hidden space-y-1.5 min-w-0">
-        <Button variant="ghost" size="sm" className="gap-2 -ml-2 h-8 w-fit" onClick={() => setLocation("/")}>
+      <div className="md:hidden space-y-2 min-w-0">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-2 -ml-2 h-8 w-fit text-xs text-muted-foreground"
+          onClick={() => setLocation("/")}
+        >
           <ArrowLeft className="h-4 w-4" />
           Späť na prehľad
         </Button>
@@ -570,7 +575,7 @@ export default function AssetDetail() {
             </div>
           </div>
           {data.ticker !== "CASH" && canToggleQuoteCurrency && (
-            <div className="shrink-0 ml-auto inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/20 px-2 py-1 text-[11px] text-muted-foreground">
+            <div className="shrink-0 ml-auto inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/20 px-2 py-1 text-[11px] text-muted-foreground shadow-sm">
               <span className={cn("font-medium tabular-nums", !quoteInPreferredCurrency && "text-foreground")}>
                 {quoteCurrency}
               </span>
@@ -675,8 +680,8 @@ export default function AssetDetail() {
             </div>
 
             {data.ticker !== "CASH" ? (
-              <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5 md:gap-3">
-                <div className="min-w-0 rounded-md bg-muted/25 px-2.5 py-2">
+              <div className="grid grid-cols-2 xl:grid-cols-4 gap-2 md:gap-3">
+                <div className="min-w-0 rounded-lg border border-border/60 bg-muted/30 px-2.5 py-2.5 min-h-[86px] flex flex-col justify-between shadow-sm">
                   <div className="text-[11px] font-medium text-muted-foreground">Aktuálna cena</div>
                   {quote ? (
                     <div className="text-lg md:text-2xl font-semibold leading-tight tracking-tight truncate mt-0.5">
@@ -686,7 +691,7 @@ export default function AssetDetail() {
                     <div className="text-xs text-muted-foreground mt-0.5">Kotácia nedostupná</div>
                   )}
                 </div>
-                <div className="min-w-0 rounded-md bg-muted/25 px-2.5 py-2">
+                <div className="min-w-0 rounded-lg border border-border/60 bg-muted/30 px-2.5 py-2.5 min-h-[86px] flex flex-col justify-between shadow-sm">
                   <div className="text-[11px] font-medium text-muted-foreground">Dnes</div>
                   {quote ? (
                     <div
@@ -702,7 +707,7 @@ export default function AssetDetail() {
                         )}
                         <span className="truncate">{mask(formatQuoteAmount(quote.change))}</span>
                       </span>
-                      <span className="text-xs md:text-sm font-medium">
+                      <span className="text-[11px] md:text-sm font-medium">
                         ({changePositive ? "+" : ""}
                         {(quote.changePercent ?? 0).toFixed(2)}%)
                       </span>
@@ -711,7 +716,7 @@ export default function AssetDetail() {
                     <div className="text-xs text-muted-foreground mt-0.5">—</div>
                   )}
                 </div>
-                <div className="min-w-0 rounded-md bg-muted/25 px-2.5 py-2">
+                <div className="min-w-0 rounded-lg border border-border/60 bg-muted/30 px-2.5 py-2.5 min-h-[86px] flex flex-col justify-between shadow-sm">
                   <div className="text-[11px] font-medium text-muted-foreground">Vaša pozícia</div>
                   <div className="text-lg md:text-2xl font-semibold leading-tight tracking-tight truncate mt-0.5">
                     {holdingValuePref == null ? "—" : mask(formatCurrency(holdingValuePref))}
@@ -720,7 +725,7 @@ export default function AssetDetail() {
                     {formatShareQuantity(data.totals.shares)} ks
                   </p>
                 </div>
-                <div className="min-w-0 rounded-md bg-muted/25 px-2.5 py-2">
+                <div className="min-w-0 rounded-lg border border-border/60 bg-muted/30 px-2.5 py-2.5 min-h-[86px] flex flex-col justify-between shadow-sm">
                   <div className="text-[11px] font-medium text-muted-foreground">Celkový výnos</div>
                   <div
                     className={`text-lg md:text-2xl font-semibold leading-tight tracking-tight mt-0.5 flex flex-wrap items-baseline gap-x-1 ${
@@ -739,7 +744,7 @@ export default function AssetDetail() {
                           )}
                     </span>
                     {positionRoiPct != null && (
-                      <span className="text-xs md:text-sm font-medium">
+                      <span className="text-[11px] md:text-sm font-medium">
                         · {mask(formatRoiPct(positionRoiPct))}
                       </span>
                     )}
@@ -750,14 +755,14 @@ export default function AssetDetail() {
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 md:gap-3">
-                <div className="rounded-md bg-muted/25 px-2.5 py-2">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3">
+                <div className="rounded-lg border border-border/60 bg-muted/30 px-2.5 py-2.5 min-h-[86px] flex flex-col justify-between shadow-sm">
                   <div className="text-[11px] font-medium text-muted-foreground">Počet kusov</div>
                   <div className="text-lg md:text-2xl font-semibold mt-0.5">
                     {formatShareQuantity(data.totals.shares)}
                   </div>
                 </div>
-                <div className="rounded-md bg-muted/25 px-2.5 py-2">
+                <div className="rounded-lg border border-border/60 bg-muted/30 px-2.5 py-2.5 min-h-[86px] flex flex-col justify-between shadow-sm">
                   <div className="text-[11px] font-medium text-muted-foreground">Celkom investované</div>
                   <div className="text-lg md:text-2xl font-semibold mt-0.5">
                     {mask(formatCurrency(convertPrice(data.totals.totalInvested, costCurrency)))}
@@ -853,14 +858,14 @@ export default function AssetDetail() {
               </div>
 
               {data.ticker !== "CASH" && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:hidden">
-                  <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 md:hidden">
+                  <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5 min-h-[78px]">
                     <div className="text-[11px] text-muted-foreground uppercase tracking-wide">
                       ROI pozície (vs. priem. nákup)
                     </div>
                     <div
                       className={cn(
-                        "text-xl font-semibold tabular-nums",
+                        "mt-0.5 text-lg font-semibold tabular-nums",
                         positionRoiPct == null
                           ? "text-muted-foreground"
                           : positionRoiPct >= 0
@@ -877,13 +882,13 @@ export default function AssetDetail() {
                       )}
                     </div>
                   </div>
-                  <div className="rounded-lg border bg-muted/30 px-3 py-2.5">
+                  <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5 min-h-[78px]">
                     <div className="text-[11px] text-muted-foreground uppercase tracking-wide">
                       Zmena ceny v období (graf)
                     </div>
                     <div
                       className={cn(
-                        "text-xl font-semibold tabular-nums",
+                        "mt-0.5 text-lg font-semibold tabular-nums",
                         periodPriceReturnPct == null
                           ? "text-muted-foreground"
                           : periodPriceReturnPct >= 0
