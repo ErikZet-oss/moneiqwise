@@ -30,10 +30,9 @@ import {
   type PortfolioChartPeriodSelection,
 } from "@/components/PortfolioChartPeriodPicker";
 import {
-  benchmarkCumulativePct,
+  buildComparisonPctSeries,
   chartBenchmarkLabel,
   chartBenchmarkStroke,
-  portfolioCumulativePctSeries,
   type BenchmarkHistoryRes,
 } from "@/lib/chartBenchmarks";
 
@@ -241,16 +240,19 @@ export function MobilePortfolioChart({
       for (const pt of benchmarkHistory.points) {
         if (Number.isFinite(pt.close) && pt.close > 0) closes.set(pt.date, pt.close);
       }
-      const portfolioPct = portfolioCumulativePctSeries(values, invested);
-      const benchPct = benchmarkCumulativePct(dates, closes);
-      return dates.map((date, i) => ({
-        date,
-        displayDate: displayDates[i]!,
-        value: values[i]!,
-        invested: invested[i]!,
-        portfolioPct: portfolioPct[i]!,
-        benchmarkPct: benchPct[i] ?? null,
-      }));
+      const comparison = buildComparisonPctSeries(dates, values, invested, closes);
+      const from = comparison.startIndex;
+      return dates.slice(from).map((date, j) => {
+        const i = from + j;
+        return {
+          date,
+          displayDate: displayDates[i]!,
+          value: values[i]!,
+          invested: invested[i]!,
+          portfolioPct: comparison.points[i]!.portfolioPct,
+          benchmarkPct: comparison.points[i]!.benchmarkPct,
+        };
+      });
     }
 
     return dates.map((date, i) => ({

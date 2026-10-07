@@ -52,73 +52,123 @@ export type BenchmarkHistoryRes = {
   points: BenchmarkHistoryPoint[];
 };
 
-function lookupCloseOnOrBefore(
+/**
+ * Najbližšia uzávierka ≤ iso (binárne hľadanie).
+ * Dôležité pre „Vše“ (vzorkovanie každých ~30 dní) — krátky lookback 14 dní nestačí.
+ */
+export function lookupCloseOnOrBefore(
   closesByDate: Map<string, number>,
   iso: string,
+  sortedKeys?: string[],
 ): number | null {
-  if (closesByDate.has(iso)) return closesByDate.get(iso)!;
-  // Lookback cez víkendy / sviatky (max 14 dní).
-  const d = new Date(`${iso}T12:00:00.000Z`);
-  for (let i = 1; i <= 14; i++) {
-    d.setUTCDate(d.getUTCDate() - 1);
-    const key = d.toISOString().slice(0, 10);
-    if (closesByDate.has(key)) return closesByDate.get(key)!;
+  if (closesByDate.has(iso)) {
+    const v = closesByDate.get(iso)!;
+    return Number.isFinite(v) && v > 0 ? v : null;
   }
-  return null;
+  const keys =
+    sortedKeys ??
+    Array.from(closesByDate.keys())
+      .filter((k) => {
+        const v = closesByDate.get(k);
+        return v != null && Number.isFinite(v) && v > 0;
+      })
+      .sort();
+  if (keys.length === 0) return null;
+
+  let lo = 0;
+  let hi = keys.length - 1;
+  let best: string | null = null;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const k = keys[mid]!;
+    if (k <= iso) {
+      best = k;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  if (best == null) return null;
+  const v = closesByDate.get(best);
+  return v != null && Number.isFinite(v) && v > 0 ? v : null;
 }
 
+export type ComparisonPctPoint = {
+  portfolioPct: number;
+  benchmarkPct: number | null;
+};
+
+export type ComparisonPctSeries = {
+  /** Index prvého dňa so spoločnými dátami (orezať graf odtiaľ). */
+  startIndex: number;
+  points: ComparisonPctPoint[];
+};
+
 /**
- * Kumulatívny % výnos indexu od prvého dňa rozsahu: (close_t / close_0 − 1) × 100.
- * Rovnaká logika ako na stránke Grafy — obe krivky sú porovnateľné.
+ * Spoločný % graf portfólio vs. index od prvého dňa, kde už má zmysel porovnávať
+ * (hodnota portfólia > 0 a existuje uzávierka indexu).
+ *
+ * Portfólio: gain po odpoč. vkladov / baseline (max hodnota, investované).
+ * Index: (close_t / close_0 − 1) × 100.
+ *
+ * Pri „Vše“: (1) binárny lookback namiesto 14 dní (Yahoo pri dlhom rozsahu môže mať
+ * redšie body), (2) baseline max(value, invested), inak zelená vystrelí a oranžová
+ * vyzerá rovná.
  */
-export function benchmarkCumulativePct(
+export function buildComparisonPctSeries(
   dates: string[],
-  closesByDate: Map<string, number>,
-): (number | null)[] {
-  if (dates.length === 0) return [];
-  const base = lookupCloseOnOrBefore(closesByDate, dates[0]!);
-  if (base == null || !(base > 0)) {
-    return dates.map(() => null);
-  }
-  return dates.map((iso) => {
-    const c = lookupCloseOnOrBefore(closesByDate, iso);
-    if (c == null || !(c > 0)) return null;
-    return (c / base - 1) * 100;
-  });
-}
-
-/**
- * Kumulatívny % výnos portfólia v rozsahu po odpočítaní čistých vkladov:
- *   gain_t = value_t − value_0 − (invested_t − invested_0)
- *   pct_t  = gain_t / value_0 × 100
- * (na t=0 je 0 %). Bez tohto by vklady „nafúkli“ zelenú krivku oproti indexu.
- */
-export function portfolioCumulativePctSeries(
   values: number[],
   invested: number[],
-): number[] {
-  if (values.length === 0) return [];
-  const v0 = values[0]!;
-  const i0 = invested[0] ?? 0;
-  if (!(v0 > 0)) return values.map(() => 0);
-  return values.map((v, idx) => {
+  closesByDate: Map<string, number>,
+): ComparisonPctSeries {
+  const n = dates.length;
+  if (n === 0) return { startIndex: 0, points: [] };
+
+  const sortedKeys = Array.from(closesByDate.keys())
+    .filter((k) => {
+      const v = closesByDate.get(k);
+      return v != null && Number.isFinite(v) && v > 0;
+    })
+    .sort();
+
+  let start = -1;
+  for (let i = 0; i < n; i++) {
+    const v = values[i] ?? 0;
+    const c = lookupCloseOnOrBefore(closesByDate, dates[i]!, sortedKeys);
+    if (v > 1e-6 && c != null) {
+      start = i;
+      break;
+    }
+  }
+
+  if (start < 0) {
+    return {
+      startIndex: 0,
+      points: dates.map(() => ({ portfolioPct: 0, benchmarkPct: null })),
+    };
+  }
+
+  const v0 = values[start]!;
+  const i0 = invested[start] ?? 0;
+  const baseline = Math.max(Math.abs(v0), Math.abs(i0), 1);
+  const c0 = lookupCloseOnOrBefore(closesByDate, dates[start]!, sortedKeys)!;
+
+  const points = dates.map((iso, idx) => {
+    if (idx < start) {
+      return { portfolioPct: 0, benchmarkPct: null };
+    }
+    const v = values[idx]!;
     const inv = invested[idx] ?? i0;
     const netInflow = inv - i0;
     const gain = v - v0 - netInflow;
-    return (gain / v0) * 100;
-  });
-}
+    const portfolioPct = (gain / baseline) * 100;
 
-/**
- * @deprecated Použi `benchmarkCumulativePct` — abs. rebase vyzerá na grafe ako rovná čiara,
- * keď portfólio rastie hlavne vkladmi.
- */
-export function rebaseBenchmarkToStart(
-  dates: string[],
-  closesByDate: Map<string, number>,
-  startValue: number,
-): (number | null)[] {
-  const pct = benchmarkCumulativePct(dates, closesByDate);
-  if (!(startValue > 0)) return dates.map(() => null);
-  return pct.map((p) => (p == null ? null : startValue * (1 + p / 100)));
+    const c = lookupCloseOnOrBefore(closesByDate, iso, sortedKeys);
+    const benchmarkPct =
+      c != null && c0 > 0 ? (c / c0 - 1) * 100 : null;
+
+    return { portfolioPct, benchmarkPct };
+  });
+
+  return { startIndex: start, points };
 }

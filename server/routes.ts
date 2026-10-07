@@ -6178,8 +6178,10 @@ export async function registerRoutes(
           if (endIso && d > endIso) return false;
           // Malý buffer pred `from` kvôli lookbacku cez víkendy.
           if (fromIso) {
+            // Väčší buffer pred `from` — pri „Vše“ / redšom Yahoo intervale treba
+            // staršie uzávierky na lookback (binárne hľadanie na klientovi).
             const buf = new Date(`${fromIso}T12:00:00.000Z`);
-            buf.setUTCDate(buf.getUTCDate() - 14);
+            buf.setUTCDate(buf.getUTCDate() - 120);
             const bufIso = buf.toISOString().slice(0, 10);
             if (d < bufIso) return false;
           }
