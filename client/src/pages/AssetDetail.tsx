@@ -530,7 +530,7 @@ export default function AssetDetail() {
           <ArrowLeft className="h-4 w-4" />
           Späť na prehľad
         </Button>
-        <div className="flex items-start gap-2.5">
+        <div className="flex items-start gap-2.5 min-w-0">
           {data.imageUrl && isPokemonTicker(data.ticker) ? (
             <img
               src={data.imageUrl}
@@ -546,7 +546,7 @@ export default function AssetDetail() {
               className="shrink-0"
             />
           )}
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h1 className="text-base font-semibold truncate" data-testid="asset-detail-title">
               {data.companyName}
             </h1>
@@ -569,6 +569,27 @@ export default function AssetDetail() {
               )}
             </div>
           </div>
+          {data.ticker !== "CASH" && canToggleQuoteCurrency && (
+            <div className="shrink-0 ml-auto inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/20 px-2 py-1 text-[11px] text-muted-foreground">
+              <span className={cn("font-medium tabular-nums", !quoteInPreferredCurrency && "text-foreground")}>
+                {quoteCurrency}
+              </span>
+              <Switch
+                checked={quoteInPreferredCurrency}
+                onCheckedChange={(checked) => setQuoteInPreferredCurrency(checked === true)}
+                className="scale-[0.72] origin-center"
+                aria-label={
+                  quoteInPreferredCurrency
+                    ? `Zobraziť cenu v ${quoteCurrency}`
+                    : `Zobraziť cenu v ${currency}`
+                }
+                data-testid="switch-quote-display-currency-mobile"
+              />
+              <span className={cn("font-medium tabular-nums", quoteInPreferredCurrency && "text-foreground")}>
+                {currency}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -652,28 +673,6 @@ export default function AssetDetail() {
                 </div>
               )}
             </div>
-
-            {data.ticker !== "CASH" && canToggleQuoteCurrency && (
-              <div className="md:hidden flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
-                <span className={cn("font-medium tabular-nums", !quoteInPreferredCurrency && "text-foreground")}>
-                  {quoteCurrency}
-                </span>
-                <Switch
-                  checked={quoteInPreferredCurrency}
-                  onCheckedChange={(checked) => setQuoteInPreferredCurrency(checked === true)}
-                  className="scale-[0.72] origin-center"
-                  aria-label={
-                    quoteInPreferredCurrency
-                      ? `Zobraziť cenu v ${quoteCurrency}`
-                      : `Zobraziť cenu v ${currency}`
-                  }
-                  data-testid="switch-quote-display-currency-mobile"
-                />
-                <span className={cn("font-medium tabular-nums", quoteInPreferredCurrency && "text-foreground")}>
-                  {currency}
-                </span>
-              </div>
-            )}
 
             {data.ticker !== "CASH" ? (
               <div className="grid grid-cols-2 xl:grid-cols-4 gap-2.5 md:gap-3">
