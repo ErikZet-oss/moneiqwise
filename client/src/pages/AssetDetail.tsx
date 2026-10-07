@@ -858,14 +858,15 @@ export default function AssetDetail() {
               </div>
 
               {data.ticker !== "CASH" && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 md:hidden">
-                  <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5 min-h-[78px]">
-                    <div className="text-[11px] text-muted-foreground uppercase tracking-wide">
-                      ROI pozície (vs. priem. nákup)
+                <div className="grid grid-cols-2 gap-2 md:hidden">
+                  <div className="rounded-lg border border-border/60 bg-muted/30 px-2.5 py-2 min-h-[72px]">
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-wide leading-tight">
+                      ROI pozície
                     </div>
+                    <div className="text-[10px] text-muted-foreground leading-tight">vs. priem. nákup</div>
                     <div
                       className={cn(
-                        "mt-0.5 text-lg font-semibold tabular-nums",
+                        "mt-0.5 text-base font-semibold tabular-nums",
                         positionRoiPct == null
                           ? "text-muted-foreground"
                           : positionRoiPct >= 0
@@ -874,21 +875,22 @@ export default function AssetDetail() {
                       )}
                     >
                       {data.totals.shares <= 0 ? (
-                        <span className="text-sm font-normal text-muted-foreground">Bez otvorenej pozície</span>
+                        <span className="text-xs font-normal text-muted-foreground">Bez pozície</span>
                       ) : positionRoiPct == null ? (
-                        <span className="text-sm font-normal text-muted-foreground">Kotácia nedostupná</span>
+                        <span className="text-xs font-normal text-muted-foreground">Bez kotácie</span>
                       ) : (
                         mask(formatRoiPct(positionRoiPct))
                       )}
                     </div>
                   </div>
-                  <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5 min-h-[78px]">
-                    <div className="text-[11px] text-muted-foreground uppercase tracking-wide">
-                      Zmena ceny v období (graf)
+                  <div className="rounded-lg border border-border/60 bg-muted/30 px-2.5 py-2 min-h-[72px]">
+                    <div className="text-[10px] text-muted-foreground uppercase tracking-wide leading-tight">
+                      Zmena ceny
                     </div>
+                    <div className="text-[10px] text-muted-foreground leading-tight">v období (graf)</div>
                     <div
                       className={cn(
-                        "mt-0.5 text-lg font-semibold tabular-nums",
+                        "mt-0.5 text-base font-semibold tabular-nums",
                         periodPriceReturnPct == null
                           ? "text-muted-foreground"
                           : periodPriceReturnPct >= 0
