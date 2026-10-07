@@ -252,10 +252,10 @@ DÁTA:
 ${JSON.stringify(userPayload)}`;
 
   try {
+    // Newer Claude models reject `temperature` ("temp is deprecated for this model").
     const msg = await client.messages.create({
       model: AI_AUDITOR_MODEL,
       max_tokens: 4096,
-      temperature: 0.3,
       system,
       messages: [{ role: "user", content: user }],
     });
