@@ -16,9 +16,10 @@ import { isPokemonPortfolio } from "@shared/pokemonTcg";
 import { getExtendedSessionLabel, getQuoteRefreshIntervalMs, getQuoteStaleTimeMs, getUsMarketSessionState, shouldShowExtendedQuote, shouldUseExtendedQuotes } from "@/lib/usMarketSession";
 import {
   PortfolioChartPeriodPicker,
-  portfolioChartPeriodMobileGainLabel,
-  portfolioChartPeriodToRange,
-  type PortfolioChartPeriod,
+  buildPortfolioHistorySearchParams,
+  chartPeriodGainLabel,
+  portfolioHistoryQueryKeyPart,
+  type PortfolioChartPeriodSelection,
 } from "@/components/PortfolioChartPeriodPicker";
 
 interface StockQuote {
@@ -70,7 +71,8 @@ export function MobilePortfolioChart({
   athCelebrationActive = false,
 }: MobilePortfolioChartProps) {
   const premarketMoonClass = "text-amber-600 dark:text-amber-400";
-  const [selectedPeriod, setSelectedPeriod] = useState<PortfolioChartPeriod>("ALL");
+  const [periodSelection, setPeriodSelection] =
+    useState<PortfolioChartPeriodSelection>({ type: "preset", period: "ALL" });
   /** Odloží ťažké dotazy (história, eur map) až po idle — rýchlejší prvý render dashboardu. */
   const [chartDataIdle, setChartDataIdle] = useState(false);
   useEffect(() => {
@@ -143,13 +145,11 @@ export function MobilePortfolioChart({
   });
 
   const { data: history } = useQuery<SnapshotHistoryRes>({
-    queryKey: ["/api/portfolio/history", portfolioParam, portfolioChartPeriodToRange[selectedPeriod]],
+    queryKey: ["/api/portfolio/history", portfolioParam, portfolioHistoryQueryKeyPart(periodSelection)],
     enabled: chartQueriesEnabled,
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      const p = new URLSearchParams();
-      p.set("portfolio", portfolioParam);
-      p.set("range", portfolioChartPeriodToRange[selectedPeriod]);
+      const p = buildPortfolioHistorySearchParams(portfolioParam, periodSelection);
       const res = await fetch(`/api/portfolio/history?${p.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch portfolio history snapshots");
       return res.json();
@@ -189,7 +189,7 @@ export function MobilePortfolioChart({
   //   periodGain = lastValue − firstValue − (buys − sells inside window)
   // For "ALL" the formula naturally collapses to totalValue − totalInvested.
   const periodChange = useMemo(() => {
-    if (selectedPeriod === "ALL") {
+    if (periodSelection.type === "preset" && periodSelection.period === "ALL") {
       return { amount: totalProfit, percent: totalProfitPercent };
     }
     if (chartData.length < 2) {
@@ -211,7 +211,7 @@ export function MobilePortfolioChart({
     return { amount: change, percent };
   }, [
     chartData,
-    selectedPeriod,
+    periodSelection,
     totalProfit,
     totalProfitPercent,
     totalValue,
@@ -557,8 +557,10 @@ export function MobilePortfolioChart({
             className="flex items-center justify-between mt-2 px-1"
             data-testid="mobile-period-gain"
           >
-            <span className="text-[11px] text-muted-foreground">
-              Za {portfolioChartPeriodMobileGainLabel[selectedPeriod]}:
+            <span className="text-[11px] text-muted-foreground truncate max-w-[55%]">
+              {periodSelection.type === "custom"
+                ? chartPeriodGainLabel(periodSelection, true)
+                : `Za ${chartPeriodGainLabel(periodSelection, true)}`}:
             </span>
             <div className="flex items-center gap-1.5">
               <span
@@ -584,8 +586,8 @@ export function MobilePortfolioChart({
 
           <PortfolioChartPeriodPicker
             layout="mobile"
-            value={selectedPeriod}
-            onChange={setSelectedPeriod}
+            value={periodSelection}
+            onChange={setPeriodSelection}
           />
         </>
       )}

@@ -61,6 +61,19 @@ export function stepDaysForHistoryRange(range: PortfolioHistoryRange): number {
   return 5;
 }
 
+/** Sampling step for an arbitrary ISO date span (dashboard custom range). */
+export function stepDaysForIsoSpan(startIso: string, endIso: string): number {
+  const a = new Date(`${startIso}T12:00:00.000Z`);
+  const b = new Date(`${endIso}T12:00:00.000Z`);
+  const days = Math.max(
+    1,
+    Math.round((b.getTime() - a.getTime()) / (24 * 60 * 60 * 1000)),
+  );
+  if (days <= 45) return 1;
+  if (days <= 400) return 5;
+  return 30;
+}
+
 /** Dátumy od start do end s pevným krokom (vždy vrátane začiatku a konca). */
 export function dateRangeWithStep(
   startIso: string,

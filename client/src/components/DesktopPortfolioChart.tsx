@@ -10,9 +10,10 @@ import { useTheme } from "@/hooks/useTheme";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   PortfolioChartPeriodPicker,
-  portfolioChartPeriodGainLabel,
-  portfolioChartPeriodToRange,
-  type PortfolioChartPeriod,
+  buildPortfolioHistorySearchParams,
+  chartPeriodGainLabel,
+  portfolioHistoryQueryKeyPart,
+  type PortfolioChartPeriodSelection,
 } from "@/components/PortfolioChartPeriodPicker";
 
 interface SnapshotPoint {
@@ -39,7 +40,8 @@ export function DesktopPortfolioChart({
   totalProfit,
   totalProfitPercent,
 }: DesktopPortfolioChartProps) {
-  const [selectedPeriod, setSelectedPeriod] = useState<PortfolioChartPeriod>("ALL");
+  const [periodSelection, setPeriodSelection] =
+    useState<PortfolioChartPeriodSelection>({ type: "preset", period: "ALL" });
   const [chartDataIdle, setChartDataIdle] = useState(false);
   useEffect(() => {
     let cancelled = false;
@@ -69,13 +71,11 @@ export function DesktopPortfolioChart({
   const chartQueriesEnabled = showChart && chartDataIdle;
 
   const { data: history } = useQuery<SnapshotHistoryRes>({
-    queryKey: ["/api/portfolio/history", portfolioParam, portfolioChartPeriodToRange[selectedPeriod]],
+    queryKey: ["/api/portfolio/history", portfolioParam, portfolioHistoryQueryKeyPart(periodSelection)],
     enabled: chartQueriesEnabled,
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
-      const p = new URLSearchParams();
-      p.set("portfolio", portfolioParam);
-      p.set("range", portfolioChartPeriodToRange[selectedPeriod]);
+      const p = buildPortfolioHistorySearchParams(portfolioParam, periodSelection);
       const res = await fetch(`/api/portfolio/history?${p.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch portfolio history snapshots");
       return res.json();
@@ -102,7 +102,7 @@ export function DesktopPortfolioChart({
   //   periodGain = value_now − value_at_period_start − (buys − sells in period)
   // For "ALL" the formula naturally collapses to totalValue − totalInvested.
   const periodGainLoss = useMemo(() => {
-    if (selectedPeriod === "ALL") {
+    if (periodSelection.type === "preset" && periodSelection.period === "ALL") {
       return { amount: totalProfit, percent: totalProfitPercent };
     }
     if (chartData.length < 2) {
@@ -124,7 +124,7 @@ export function DesktopPortfolioChart({
     return { amount: change, percent };
   }, [
     chartData,
-    selectedPeriod,
+    periodSelection,
     totalProfit,
     totalProfitPercent,
     totalValue,
@@ -163,7 +163,7 @@ export function DesktopPortfolioChart({
             <CardTitle className="text-base font-semibold">Vývoj portfólia</CardTitle>
             <div className="flex items-center gap-2 mt-1" data-testid="desktop-period-gain">
               <span className="text-xs text-muted-foreground">
-                {portfolioChartPeriodGainLabel[selectedPeriod]} zisk/strata:
+                {chartPeriodGainLabel(periodSelection)} zisk/strata:
               </span>
               <span className={`text-sm font-medium ${isPositive ? "text-green-500" : "text-red-500"}`}>
                 {isPositive ? "+" : ""}{formatCurrency(periodGainLoss.amount)}
@@ -177,8 +177,8 @@ export function DesktopPortfolioChart({
           </div>
           <PortfolioChartPeriodPicker
             layout="desktop"
-            value={selectedPeriod}
-            onChange={setSelectedPeriod}
+            value={periodSelection}
+            onChange={setPeriodSelection}
           />
         </div>
       </CardHeader>

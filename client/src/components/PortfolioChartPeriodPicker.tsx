@@ -1,6 +1,10 @@
-import { useState } from "react";
-import { CalendarDays, Check } from "lucide-react";
+import { useEffect, useState } from "react";
+import { format, parseISO } from "date-fns";
+import { sk } from "date-fns/locale";
+import { CalendarDays } from "lucide-react";
+import type { DateRange } from "react-day-picker";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
   PopoverContent,
@@ -9,6 +13,10 @@ import {
 import { cn } from "@/lib/utils";
 
 export type PortfolioChartPeriod = "1M" | "3M" | "6M" | "YTD" | "ALL";
+
+export type PortfolioChartPeriodSelection =
+  | { type: "preset"; period: PortfolioChartPeriod }
+  | { type: "custom"; from: string; to: string };
 
 export const PORTFOLIO_CHART_PERIODS: PortfolioChartPeriod[] = [
   "1M",
@@ -37,7 +45,6 @@ export const portfolioChartPeriodGainLabel: Record<PortfolioChartPeriod, string>
   ALL: "Celkový",
 };
 
-/** Mobile P&L row under the chart (shorter wording). */
 export const portfolioChartPeriodMobileGainLabel: Record<PortfolioChartPeriod, string> = {
   "1M": "1M",
   "3M": "3M",
@@ -46,21 +53,56 @@ export const portfolioChartPeriodMobileGainLabel: Record<PortfolioChartPeriod, s
   ALL: "celé obdobie",
 };
 
-const PERIOD_MENU: { id: PortfolioChartPeriod; title: string; hint: string }[] = [
-  { id: "1M", title: "1 mesiac", hint: "Posledných ~30 dní" },
-  { id: "3M", title: "3 mesiace", hint: "Posledné štvrťročie" },
-  { id: "6M", title: "6 mesiacov", hint: "Pol roka späť" },
-  { id: "YTD", title: "YTD", hint: "Od začiatku roka" },
-  { id: "ALL", title: "Celé obdobie", hint: "Všetky dostupné dáta" },
-];
+export function portfolioHistoryQueryKeyPart(
+  selection: PortfolioChartPeriodSelection,
+): string {
+  if (selection.type === "custom") {
+    return `custom:${selection.from}:${selection.to}`;
+  }
+  return portfolioChartPeriodToRange[selection.period];
+}
+
+export function buildPortfolioHistorySearchParams(
+  portfolioParam: string,
+  selection: PortfolioChartPeriodSelection,
+): URLSearchParams {
+  const p = new URLSearchParams();
+  p.set("portfolio", portfolioParam);
+  if (selection.type === "custom") {
+    p.set("from", selection.from);
+    p.set("to", selection.to);
+  } else {
+    p.set("range", portfolioChartPeriodToRange[selection.period]);
+  }
+  return p;
+}
+
+export function chartPeriodGainLabel(
+  selection: PortfolioChartPeriodSelection,
+  mobile = false,
+): string {
+  if (selection.type === "custom") {
+    if (mobile) return "vlastné obdobie";
+    const from = format(parseISO(selection.from), "d. M. yyyy", { locale: sk });
+    const to = format(parseISO(selection.to), "d. M. yyyy", { locale: sk });
+    return `${from} – ${to}`;
+  }
+  return mobile
+    ? portfolioChartPeriodMobileGainLabel[selection.period]
+    : portfolioChartPeriodGainLabel[selection.period];
+}
 
 function periodButtonLabel(period: PortfolioChartPeriod): string {
   return period === "ALL" ? "Vše" : period;
 }
 
+function isoFromDate(d: Date): string {
+  return format(d, "yyyy-MM-dd");
+}
+
 type PortfolioChartPeriodPickerProps = {
-  value: PortfolioChartPeriod;
-  onChange: (period: PortfolioChartPeriod) => void;
+  value: PortfolioChartPeriodSelection;
+  onChange: (selection: PortfolioChartPeriodSelection) => void;
   layout: "desktop" | "mobile";
   className?: string;
 };
@@ -72,12 +114,49 @@ export function PortfolioChartPeriodPicker({
   className,
 }: PortfolioChartPeriodPickerProps) {
   const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<DateRange | undefined>();
   const isDesktop = layout === "desktop";
 
-  const pick = (period: PortfolioChartPeriod) => {
-    onChange(period);
+  useEffect(() => {
+    if (!open) return;
+    if (value.type === "custom") {
+      setDraft({
+        from: parseISO(value.from),
+        to: parseISO(value.to),
+      });
+    } else {
+      setDraft(undefined);
+    }
+  }, [open, value]);
+
+  const chipBase = isDesktop
+    ? "px-2.5 py-1 text-xs rounded-md font-medium transition-colors inline-flex items-center justify-center"
+    : "px-2.5 py-1.5 text-xs rounded-full font-medium transition-colors inline-flex items-center justify-center";
+
+  const chipActive = isDesktop
+    ? "bg-primary text-primary-foreground"
+    : "bg-muted text-foreground";
+
+  const chipIdle = isDesktop
+    ? "bg-muted text-muted-foreground hover:text-foreground"
+    : "text-muted-foreground hover:text-foreground";
+
+  const customActive = value.type === "custom";
+
+  const applyCustomRange = () => {
+    if (!draft?.from || !draft?.to) return;
+    let from = draft.from;
+    let to = draft.to;
+    if (from > to) {
+      const t = from;
+      from = to;
+      to = t;
+    }
+    onChange({ type: "custom", from: isoFromDate(from), to: isoFromDate(to) });
     setOpen(false);
   };
+
+  const today = new Date();
 
   return (
     <div
@@ -89,101 +168,90 @@ export function PortfolioChartPeriodPicker({
     >
       <div
         className={cn(
-          "flex gap-1",
+          "flex items-center gap-1",
           layout === "mobile" && "flex-1 justify-between min-w-0",
         )}
       >
-        {PORTFOLIO_CHART_PERIODS.map((period) => (
-          <button
-            key={period}
-            type="button"
-            onClick={() => onChange(period)}
-            className={cn(
-              "font-medium transition-colors",
-              isDesktop
-                ? cn(
-                    "px-2.5 py-1 text-xs rounded-md",
-                    value === period
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground hover:text-foreground",
-                  )
-                : cn(
-                    "px-3 py-1.5 text-xs rounded-full",
-                    value === period
-                      ? "bg-muted text-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  ),
-            )}
-            data-testid={
-              isDesktop
-                ? `button-desktop-period-${period}`
-                : `button-period-${period}`
-            }
-          >
-            {periodButtonLabel(period)}
-          </button>
-        ))}
-      </div>
+        {PORTFOLIO_CHART_PERIODS.map((period) => {
+          const active =
+            value.type === "preset" && value.period === period;
+          return (
+            <button
+              key={period}
+              type="button"
+              onClick={() => onChange({ type: "preset", period })}
+              className={cn(chipBase, active ? chipActive : chipIdle)}
+              data-testid={
+                isDesktop
+                  ? `button-desktop-period-${period}`
+                  : `button-period-${period}`
+              }
+            >
+              {periodButtonLabel(period)}
+            </button>
+          );
+        })}
 
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            type="button"
-            size="icon"
-            variant={open ? "default" : "outline"}
-            className={cn(
-              "shrink-0",
-              isDesktop ? "h-8 w-8" : "h-9 w-9 touch-manipulation",
-            )}
-            aria-label="Vybrať obdobie grafu"
-            data-testid={
-              isDesktop
-                ? "button-desktop-chart-period-calendar"
-                : "button-mobile-chart-period-calendar"
-            }
-          >
-            <CalendarDays className="h-4 w-4" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-56 p-2" align="end">
-          <p className="px-2 py-1.5 text-xs font-semibold text-foreground">
-            Obdobie grafu
-          </p>
-          <ul className="space-y-0.5">
-            {PERIOD_MENU.map((item) => {
-              const active = value === item.id;
-              return (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    onClick={() => pick(item.id)}
-                    className={cn(
-                      "flex w-full items-start gap-2 rounded-md px-2 py-2 text-left transition-colors",
-                      active
-                        ? "bg-primary/10 text-foreground"
-                        : "hover:bg-muted/80 text-foreground",
-                    )}
-                  >
-                    <span className="mt-0.5 shrink-0 w-4">
-                      {active ? (
-                        <Check className="h-4 w-4 text-primary" aria-hidden />
-                      ) : null}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-medium leading-tight">
-                        {item.title}
-                      </span>
-                      <span className="block text-[11px] text-muted-foreground leading-snug mt-0.5">
-                        {item.hint}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </PopoverContent>
-      </Popover>
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                chipBase,
+                customActive || open ? chipActive : chipIdle,
+                "px-2 min-w-[2rem]",
+              )}
+              aria-label="Vybrať vlastné obdobie v kalendári"
+              data-testid={
+                isDesktop
+                  ? "button-desktop-chart-period-calendar"
+                  : "button-mobile-chart-period-calendar"
+              }
+            >
+              <CalendarDays className="h-3.5 w-3.5" aria-hidden />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="end">
+            <div className="px-3 pt-3 pb-1">
+              <p className="text-xs font-semibold">Vlastné obdobie</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Vyber dátum od a do
+              </p>
+            </div>
+            <Calendar
+              mode="range"
+              locale={sk}
+              selected={draft}
+              onSelect={setDraft}
+              disabled={{ after: today }}
+              numberOfMonths={isDesktop ? 2 : 1}
+              defaultMonth={draft?.from ?? today}
+              initialFocus
+            />
+            <div className="flex items-center justify-end gap-2 border-t border-border p-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => setOpen(false)}
+              >
+                Zrušiť
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 text-xs"
+                disabled={!draft?.from || !draft?.to}
+                onClick={applyCustomRange}
+                data-testid="button-chart-period-apply"
+              >
+                Použiť
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
     </div>
   );
 }

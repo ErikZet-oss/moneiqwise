@@ -57,6 +57,7 @@ import {
   computeSp500PercentForRange,
   hybridSnapshotDates,
   stepDaysForHistoryRange,
+  stepDaysForIsoSpan,
   subsampleRowsByStepDays,
   dateRangeWithStep,
   type PortfolioHistoryRange,
@@ -5952,20 +5953,53 @@ export async function registerRoutes(
     return out;
   }
 
+  function parseHistoryIsoDate(q: unknown): string | null {
+    if (typeof q !== "string") return null;
+    const s = q.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+    return s;
+  }
+
   app.get("/api/portfolio/history", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const portfolioParam = (req.query.portfolio as string) || "all";
       const scopeKey = portfolioParam === "all" ? "all" : portfolioParam;
       const range = parseSnapshotRange(req.query.range as string | undefined);
+      const fromIsoQ = parseHistoryIsoDate(req.query.from);
+      const toIsoQ = parseHistoryIsoDate(req.query.to);
+      const customRange = !!(fromIsoQ && toIsoQ);
       const todayIso = new Date().toISOString().slice(0, 10);
-      const stepDays = stepDaysForHistoryRange(range);
+
+      const resolveHistoryWindow = (firstIso: string) => {
+        if (customRange) {
+          let startIso = fromIsoQ! <= toIsoQ! ? fromIsoQ! : toIsoQ!;
+          let endIso = fromIsoQ! <= toIsoQ! ? toIsoQ! : fromIsoQ!;
+          if (endIso > todayIso) endIso = todayIso;
+          if (startIso > endIso) {
+            const t = startIso;
+            startIso = endIso;
+            endIso = t;
+          }
+          if (startIso < firstIso) startIso = firstIso;
+          return {
+            startIso,
+            endIso,
+            stepDays: stepDaysForIsoSpan(startIso, endIso),
+          };
+        }
+        return {
+          startIso: rangeStartIsoFromEnd(range, todayIso, firstIso),
+          endIso: todayIso,
+          stepDays: stepDaysForHistoryRange(range),
+        };
+      };
 
       const respondFromLiveFallback = async () => {
         const out = await computeSnapshotSeriesForScope(userId, portfolioParam);
         const firstIso = out.points[0]?.date ?? todayIso;
-        const startIso = rangeStartIsoFromEnd(range, todayIso, firstIso);
-        const liveRows = out.points.filter((p) => p.date >= startIso && p.date <= todayIso);
+        const { startIso, endIso, stepDays } = resolveHistoryWindow(firstIso);
+        const liveRows = out.points.filter((p) => p.date >= startIso && p.date <= endIso);
         const sampled = subsampleRowsByStepDays(liveRows, stepDays);
         return res.json({
           points: sampled.map((p, i) => ({
@@ -5975,13 +6009,14 @@ export async function registerRoutes(
             dailyProfitEur:
               i === 0 ? 0 : Number(p.totalValue) - Number(sampled[i - 1]!.totalValue),
           })),
-          range,
+          range: customRange ? "custom" : range,
           portfolio: portfolioParam,
           currency: "EUR",
           source: "live-fallback",
           stepDays,
           startIso,
-          endIso: todayIso,
+          endIso,
+          ...(customRange ? { from: startIso, to: endIso } : {}),
         });
       };
 
@@ -5996,13 +6031,18 @@ export async function registerRoutes(
           }
         }
         if (!last) {
+          const firstIso = todayIso;
+          const { startIso, endIso, stepDays } = resolveHistoryWindow(firstIso);
           return res.json({
             points: [],
-            range,
+            range: customRange ? "custom" : range,
             portfolio: portfolioParam,
             currency: "EUR",
             source: "snapshots",
             stepDays,
+            startIso,
+            endIso,
+            ...(customRange ? { from: startIso, to: endIso } : {}),
           });
         }
 
@@ -6048,8 +6088,8 @@ export async function registerRoutes(
 
         const allRows = await storage.getPortfolioSnapshots(userId, scopeKey);
         const firstIso = allRows[0]?.date ?? last.date;
-        const startIso = rangeStartIsoFromEnd(range, todayIso, firstIso);
-        const rows = await storage.getPortfolioSnapshots(userId, scopeKey, startIso, todayIso);
+        const { startIso, endIso, stepDays } = resolveHistoryWindow(firstIso);
+        const rows = await storage.getPortfolioSnapshots(userId, scopeKey, startIso, endIso);
         const sampled = subsampleRowsByStepDays(rows, stepDays);
 
         return res.json({
@@ -6059,13 +6099,14 @@ export async function registerRoutes(
             investedAmountEur: Number(r.investedAmountEur),
             dailyProfitEur: Number(r.dailyProfitEur),
           })),
-          range,
+          range: customRange ? "custom" : range,
           portfolio: portfolioParam,
           currency: "EUR",
           source: "snapshots",
           stepDays,
           startIso,
-          endIso: todayIso,
+          endIso,
+          ...(customRange ? { from: startIso, to: endIso } : {}),
         });
       } catch {
         return await respondFromLiveFallback();
