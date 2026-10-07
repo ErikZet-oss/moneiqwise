@@ -1,12 +1,14 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { useAuth } from "@/hooks/useAuth";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { PortfolioProvider } from "@/hooks/usePortfolio";
 import { ThemeProvider } from "@/hooks/useTheme";
 import NotFound from "@/pages/not-found";
@@ -34,7 +36,14 @@ import { MarketQuoteTicker } from "@/components/MarketQuoteTicker";
 import { QuickNavFab, QUICK_NAV_CONTENT_PAD } from "@/components/QuickNavFab";
 import { DashboardEditHeaderButton } from "@/components/DashboardEditHeaderButton";
 import { useQuickNavFab } from "@/hooks/useQuickNavFab";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { startAuthentication } from "@simplewebauthn/browser";
+import { KeyRound } from "lucide-react";
+
+type PasskeysPayload = {
+  passkeys: Array<{ id: string }>;
+};
 
 function QuickNavFabGate() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -64,6 +73,141 @@ function RedirectToAiAgentBot() {
     setLocation("/ai-agent/bot");
   }, [setLocation]);
   return null;
+}
+
+function AppUnlockGate({ children }: { children: ReactNode }) {
+  const { user, isAuthenticated, isLoading } = useAuth();
+  const { toast } = useToast();
+  const [isUnlocking, setIsUnlocking] = useState(false);
+  const [isUnlocked, setIsUnlocked] = useState(false);
+  const hadUnauthenticatedState = useRef(false);
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      hadUnauthenticatedState.current = true;
+      setIsUnlocked(false);
+    }
+  }, [isLoading, isAuthenticated]);
+
+  const startupWithActiveSession =
+    isAuthenticated && !hadUnauthenticatedState.current;
+
+  const passkeysQuery = useQuery<PasskeysPayload>({
+    queryKey: ["/api/auth/passkeys"],
+    enabled: startupWithActiveSession,
+  });
+
+  const hasPasskeys = (passkeysQuery.data?.passkeys?.length || 0) > 0;
+  const shouldRequireUnlock =
+    startupWithActiveSession && hasPasskeys && !isUnlocked;
+
+  const handleUnlock = async () => {
+    if (typeof window === "undefined" || !("PublicKeyCredential" in window)) {
+      toast({
+        title: "Passkey nie je podporovaný",
+        description: "Tento prehliadač alebo zariadenie nepodporuje WebAuthn.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsUnlocking(true);
+    try {
+      const optionsResponse = await apiRequest(
+        "POST",
+        "/api/auth/passkeys/options/login",
+        { email: user?.email || undefined },
+      );
+      const optionsPayload = (await optionsResponse.json()) as {
+        options?: Parameters<typeof startAuthentication>[0]["optionsJSON"];
+      };
+      if (!optionsPayload.options) {
+        throw new Error("Server nevrátil unlock challenge.");
+      }
+
+      const passkeyResponse = await startAuthentication({
+        optionsJSON: optionsPayload.options,
+      });
+      await apiRequest("POST", "/api/auth/passkeys/verify/login", {
+        response: passkeyResponse,
+        rememberMe: true,
+      });
+
+      setIsUnlocked(true);
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      toast({
+        title: "Aplikácia odomknutá",
+        description: "Overenie passkey prebehlo úspešne.",
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Odomknutie passkey zlyhalo.";
+      toast({
+        title: "Aplikáciu sa nepodarilo odomknúť",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setIsUnlocking(false);
+    }
+  };
+
+  if (startupWithActiveSession && passkeysQuery.isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-muted-foreground">Overujem zabezpečenie...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (startupWithActiveSession && passkeysQuery.isError) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <div className="w-full max-w-md rounded-xl border bg-card p-5 text-center space-y-3">
+          <h2 className="text-base font-semibold">Nepodarilo sa overiť passkeys</h2>
+          <p className="text-sm text-muted-foreground">
+            Skús obnoviť stránku alebo odhlásiť/prihlásiť sa znova.
+          </p>
+          <Button
+            onClick={() => passkeysQuery.refetch()}
+            disabled={passkeysQuery.isFetching}
+            data-testid="button-passkey-unlock-retry"
+          >
+            {passkeysQuery.isFetching ? "Skúšam znova..." : "Skúsiť znova"}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (shouldRequireUnlock) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <div className="w-full max-w-md rounded-xl border bg-card p-5 text-center space-y-3">
+          <div className="mx-auto w-fit rounded-full border p-3">
+            <KeyRound className="h-5 w-5 text-primary" />
+          </div>
+          <h2 className="text-base font-semibold">Odomkni aplikáciu</h2>
+          <p className="text-sm text-muted-foreground">
+            Pred pokračovaním over svoju identitu cez passkey (odtlačok, Face ID alebo PIN zariadenia).
+          </p>
+          <Button
+            onClick={handleUnlock}
+            disabled={isUnlocking}
+            className="w-full"
+            data-testid="button-passkey-unlock"
+          >
+            {isUnlocking ? "Overujem..." : "Odomknúť cez passkey"}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
 }
 
 function Router() {
@@ -131,29 +275,31 @@ function AuthenticatedLayout() {
 
   return (
     <PortfolioProvider>
-      <SidebarProvider style={style as React.CSSProperties}>
-        <div className="flex h-screen w-full flex-col">
-          <MarketQuoteTicker />
-          <div className="flex min-h-0 flex-1 w-full">
-            <AppSidebar />
-            <div className="flex flex-col flex-1 overflow-hidden">
-              <header className="flex items-center gap-1.5 px-3 py-2 md:gap-2 md:p-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                <SidebarTrigger data-testid="button-sidebar-toggle" />
-                <div className="flex-1" />
-                <DashboardEditHeaderButton />
-              </header>
-              <main
-                className={cn(
-                  "flex-1 overflow-auto p-2 md:p-6",
-                  quickNavEnabled && QUICK_NAV_CONTENT_PAD,
-                )}
-              >
-                <Router />
-              </main>
+      <AppUnlockGate>
+        <SidebarProvider style={style as CSSProperties}>
+          <div className="flex h-screen w-full flex-col">
+            <MarketQuoteTicker />
+            <div className="flex min-h-0 flex-1 w-full">
+              <AppSidebar />
+              <div className="flex flex-col flex-1 overflow-hidden">
+                <header className="flex items-center gap-1.5 px-3 py-2 md:gap-2 md:p-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+                  <SidebarTrigger data-testid="button-sidebar-toggle" />
+                  <div className="flex-1" />
+                  <DashboardEditHeaderButton />
+                </header>
+                <main
+                  className={cn(
+                    "flex-1 overflow-auto p-2 md:p-6",
+                    quickNavEnabled && QUICK_NAV_CONTENT_PAD,
+                  )}
+                >
+                  <Router />
+                </main>
+              </div>
             </div>
           </div>
-        </div>
-      </SidebarProvider>
+        </SidebarProvider>
+      </AppUnlockGate>
     </PortfolioProvider>
   );
 }
