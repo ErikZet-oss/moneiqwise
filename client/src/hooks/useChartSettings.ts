@@ -1,4 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
+import {
+  DEFAULT_CHART_BENCHMARK,
+  isChartBenchmarkId,
+  type ChartBenchmarkId,
+} from "@/lib/chartBenchmarks";
 
 /** Počet riadkov v rebríčkoch „Najlepšie / Najhoršie“ na Dashboarde. */
 export type DailyMoversDisplayCount = 1 | 3 | 5;
@@ -9,9 +14,14 @@ export type MobileAssetsSortBy = "name" | "value" | "netProfit" | "gainPercent";
 /** Mobilný „Prehľad aktív“ — podrobný zoznam vs. jednoduchý (dva riadky ako XTB). */
 export type MobileAssetsView = "detailed" | "simple";
 
+export type { ChartBenchmarkId };
+
 interface ChartSettings {
   showChart: boolean;
   showTooltip: boolean;
+  /** Porovnať vývoj portfólia s indexom na dashboarde. */
+  showChartBenchmark: boolean;
+  chartBenchmarkId: ChartBenchmarkId;
   hideAmounts: boolean;
   showNews: boolean;
   /** Najsilnejšie / najslabšie dnes na hlavnom Prehľade (Dashboard `/`), nie na „Všetky portfóliá“. */
@@ -33,6 +43,8 @@ const STORAGE_KEY = "portfolio-chart-settings";
 const defaultSettings: ChartSettings = {
   showChart: true,
   showTooltip: false,
+  showChartBenchmark: false,
+  chartBenchmarkId: DEFAULT_CHART_BENCHMARK,
   hideAmounts: false,
   showNews: true,
   showDailyMovers: true,
@@ -66,6 +78,10 @@ function normalizeMobileAssetsView(raw: unknown): MobileAssetsView {
   return defaultSettings.mobileAssetsView;
 }
 
+function normalizeChartBenchmarkId(raw: unknown): ChartBenchmarkId {
+  return isChartBenchmarkId(raw) ? raw : defaultSettings.chartBenchmarkId;
+}
+
 function loadSettings(): ChartSettings {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -74,6 +90,8 @@ function loadSettings(): ChartSettings {
       return {
         ...defaultSettings,
         ...parsed,
+        showChartBenchmark: parsed.showChartBenchmark === true,
+        chartBenchmarkId: normalizeChartBenchmarkId(parsed.chartBenchmarkId),
         dailyMoversCount: normalizeDailyMoversCount(parsed.dailyMoversCount),
         mobileAssetsSortBy: normalizeMobileAssetsSortBy(parsed.mobileAssetsSortBy),
         mobileAssetsSortOrder: normalizeMobileAssetsSortOrder(parsed.mobileAssetsSortOrder),
@@ -122,6 +140,8 @@ export function useChartSettings() {
   return {
     showChart: settings.showChart,
     showTooltip: settings.showTooltip,
+    showChartBenchmark: settings.showChartBenchmark === true,
+    chartBenchmarkId: normalizeChartBenchmarkId(settings.chartBenchmarkId),
     hideAmounts: settings.hideAmounts,
     showNews: settings.showNews,
     showDailyMovers: settings.showDailyMovers !== false,
@@ -134,6 +154,10 @@ export function useChartSettings() {
     mobileAssetsView: normalizeMobileAssetsView(settings.mobileAssetsView),
     setShowChart: (value: boolean) => updateSettings({ showChart: value }),
     setShowTooltip: (value: boolean) => updateSettings({ showTooltip: value }),
+    setShowChartBenchmark: (value: boolean) =>
+      updateSettings({ showChartBenchmark: value }),
+    setChartBenchmarkId: (value: ChartBenchmarkId) =>
+      updateSettings({ chartBenchmarkId: normalizeChartBenchmarkId(value) }),
     setHideAmounts: (value: boolean) => updateSettings({ hideAmounts: value }),
     setShowNews: (value: boolean) => updateSettings({ showNews: value }),
     setShowDailyMovers: (value: boolean) => updateSettings({ showDailyMovers: value }),

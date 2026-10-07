@@ -12,9 +12,11 @@ import {
 import { Switch } from "@/components/ui/switch";
 import {
   useChartSettings,
+  type ChartBenchmarkId,
   type DailyMoversDisplayCount,
   type MobileAssetsView,
 } from "@/hooks/useChartSettings";
+import { CHART_BENCHMARK_OPTIONS } from "@/lib/chartBenchmarks";
 import {
   DASHBOARD_WIDGET_META,
   type DashboardWidgetId,
@@ -42,6 +44,10 @@ export function DashboardWidgetSettingsButton({ id }: Props) {
     setHideAmounts,
     showTooltip,
     setShowTooltip,
+    showChartBenchmark,
+    setShowChartBenchmark,
+    chartBenchmarkId,
+    setChartBenchmarkId,
     dailyMoversCount,
     setDailyMoversCount,
     mobileAssetsView,
@@ -91,22 +97,65 @@ export function DashboardWidgetSettingsButton({ id }: Props) {
         )}
 
         {id === "chart" && (
-          <div className="flex items-center justify-between gap-3">
-            <div className="space-y-0.5 min-w-0">
-              <Label htmlFor={`dash-tooltip-${id}`} className="text-sm font-medium">
-                Interakcia s grafom
-              </Label>
-              <p className="text-[11px] text-muted-foreground leading-snug">
-                Zobraziť hodnotu pri dotyku / kliknutí
-              </p>
+          <>
+            <div className="flex items-center justify-between gap-3">
+              <div className="space-y-0.5 min-w-0">
+                <Label htmlFor={`dash-tooltip-${id}`} className="text-sm font-medium">
+                  Interakcia s grafom
+                </Label>
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Zobraziť hodnotu pri dotyku / kliknutí
+                </p>
+              </div>
+              <Switch
+                id={`dash-tooltip-${id}`}
+                checked={showTooltip}
+                onCheckedChange={setShowTooltip}
+                data-testid="dashboard-setting-chart-tooltip"
+              />
             </div>
-            <Switch
-              id={`dash-tooltip-${id}`}
-              checked={showTooltip}
-              onCheckedChange={setShowTooltip}
-              data-testid="dashboard-setting-chart-tooltip"
-            />
-          </div>
+
+            <div className="flex items-center justify-between gap-3 pt-1 border-t border-border">
+              <div className="space-y-0.5 min-w-0">
+                <Label htmlFor={`dash-benchmark-${id}`} className="text-sm font-medium">
+                  Porovnanie s indexom
+                </Label>
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Oranžová krivka vs. tvoj vývoj
+                </p>
+              </div>
+              <Switch
+                id={`dash-benchmark-${id}`}
+                checked={showChartBenchmark}
+                onCheckedChange={setShowChartBenchmark}
+                data-testid="dashboard-setting-chart-benchmark"
+              />
+            </div>
+
+            {showChartBenchmark && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Porovnať s</Label>
+                <Select
+                  value={chartBenchmarkId}
+                  onValueChange={(v) => setChartBenchmarkId(v as ChartBenchmarkId)}
+                >
+                  <SelectTrigger
+                    className="w-full"
+                    data-testid="dashboard-setting-chart-benchmark-id"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CHART_BENCHMARK_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.id} value={opt.id}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </>
         )}
 
         {(id === "dailyGainers" || id === "dailyLosers") && (

@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { usePortfolio } from "@/hooks/usePortfolio";
-import { useChartSettings } from "@/hooks/useChartSettings";
+import { useChartSettings, type ChartBenchmarkId } from "@/hooks/useChartSettings";
+import { CHART_BENCHMARK_OPTIONS } from "@/lib/chartBenchmarks";
 import { useQuickNavFab } from "@/hooks/useQuickNavFab";
 import { MAX_QUICK_NAV_ITEMS, QUICK_NAV_SECTIONS } from "@/lib/quickNavSections";
 import { Loader2, Eye, EyeOff, Coins, Calculator, RefreshCw, Briefcase, Plus, Pencil, Trash2, LineChart, Newspaper, AlertTriangle, ChevronUp, ChevronDown, Eraser, TrendingUp, Code2, Download, MousePointerClick, X } from "lucide-react";
@@ -48,6 +49,8 @@ export default function Settings() {
   const {
     showChart,
     showTooltip,
+    showChartBenchmark,
+    chartBenchmarkId,
     hideAmounts,
     showNews,
     showDailyMovers,
@@ -57,6 +60,8 @@ export default function Settings() {
     showAnalystRatingPopup,
     setShowChart,
     setShowTooltip,
+    setShowChartBenchmark,
+    setChartBenchmarkId,
     setHideAmounts,
     setShowNews,
     setShowDailyMovers,
@@ -922,19 +927,56 @@ export default function Settings() {
           </div>
           
           {showChart && (
-            <div className="flex items-center justify-between pt-2 border-t">
-              <div className="space-y-0.5">
-                <div className="text-sm font-medium">Interakcia s grafom</div>
-                <div className="text-xs text-muted-foreground">
-                  Zobraziť hodnotu pri dotyku/kliknutí na graf
+            <>
+              <div className="flex items-center justify-between pt-2 border-t">
+                <div className="space-y-0.5">
+                  <div className="text-sm font-medium">Interakcia s grafom</div>
+                  <div className="text-xs text-muted-foreground">
+                    Zobraziť hodnotu pri dotyku/kliknutí na graf
+                  </div>
                 </div>
+                <Switch
+                  checked={showTooltip}
+                  onCheckedChange={setShowTooltip}
+                  data-testid="switch-show-tooltip"
+                />
               </div>
-              <Switch
-                checked={showTooltip}
-                onCheckedChange={setShowTooltip}
-                data-testid="switch-show-tooltip"
-              />
-            </div>
+
+              <div className="flex items-center justify-between pt-2 border-t">
+                <div className="space-y-0.5">
+                  <div className="text-sm font-medium">Porovnanie s indexom</div>
+                  <div className="text-xs text-muted-foreground">
+                    Oranžová krivka: vývoj zvoleného indexu oproti portfóliu
+                  </div>
+                </div>
+                <Switch
+                  checked={showChartBenchmark}
+                  onCheckedChange={setShowChartBenchmark}
+                  data-testid="switch-show-chart-benchmark"
+                />
+              </div>
+
+              {showChartBenchmark && (
+                <div className="space-y-2 pt-1">
+                  <div className="text-sm font-medium">Porovnať s</div>
+                  <Select
+                    value={chartBenchmarkId}
+                    onValueChange={(v) => setChartBenchmarkId(v as ChartBenchmarkId)}
+                  >
+                    <SelectTrigger data-testid="select-chart-benchmark">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CHART_BENCHMARK_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.id} value={opt.id}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </>
           )}
 
           <div className="flex items-center justify-between pt-2 border-t">

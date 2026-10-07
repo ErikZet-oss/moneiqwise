@@ -1,6 +1,14 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip } from "recharts";
+import {
+  ComposedChart,
+  Area,
+  Line,
+  XAxis,
+  YAxis,
+  ResponsiveContainer,
+  Tooltip as RechartsTooltip,
+} from "recharts";
 import { format, parse, subHours, eachHourOfInterval } from "date-fns";
 import { sk } from "date-fns/locale";
 import { useCurrency } from "@/hooks/useCurrency";
@@ -21,6 +29,12 @@ import {
   portfolioHistoryQueryKeyPart,
   type PortfolioChartPeriodSelection,
 } from "@/components/PortfolioChartPeriodPicker";
+import {
+  chartBenchmarkLabel,
+  chartBenchmarkStroke,
+  rebaseBenchmarkToStart,
+  type BenchmarkHistoryRes,
+} from "@/lib/chartBenchmarks";
 
 interface StockQuote {
   ticker: string;
@@ -97,7 +111,14 @@ export function MobilePortfolioChart({
   const { currency, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
   const { getQueryParam, selectedPortfolio, selectedPortfolioId, isAllPortfolios } = usePortfolio();
   const hideCash = !isAllPortfolios && isPokemonPortfolio(selectedPortfolio?.brokerCode);
-  const { showChart, showTooltip, hideAmounts, toggleHideAmounts } = useChartSettings();
+  const {
+    showChart,
+    showTooltip,
+    showChartBenchmark,
+    chartBenchmarkId,
+    hideAmounts,
+    toggleHideAmounts,
+  } = useChartSettings();
   const { theme } = useTheme();
   
   const maskAmount = (amount: string) => hideAmounts ? "••••••" : amount;
@@ -156,6 +177,32 @@ export function MobilePortfolioChart({
     },
   });
 
+  const historyPoints = history?.points ?? [];
+  const benchFrom = historyPoints[0]?.date;
+  const benchTo = historyPoints[historyPoints.length - 1]?.date;
+
+  const { data: benchmarkHistory } = useQuery<BenchmarkHistoryRes>({
+    queryKey: ["/api/benchmark/history", chartBenchmarkId, benchFrom, benchTo],
+    enabled:
+      chartQueriesEnabled &&
+      showChartBenchmark &&
+      !!benchFrom &&
+      !!benchTo &&
+      historyPoints.length > 1,
+    staleTime: 30 * 60 * 1000,
+    queryFn: async () => {
+      const p = new URLSearchParams();
+      p.set("id", chartBenchmarkId);
+      if (benchFrom) p.set("from", benchFrom);
+      if (benchTo) p.set("to", benchTo);
+      const res = await fetch(`/api/benchmark/history?${p.toString()}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch benchmark history");
+      return res.json();
+    },
+  });
+
   const getCurrentPrice = (ticker: string): number | null => {
     const upperTicker = ticker.toUpperCase();
     const tickerCurrency = getTickerCurrency(ticker);
@@ -171,17 +218,34 @@ export function MobilePortfolioChart({
   };
 
   const chartData = useMemo(() => {
-    const points = history?.points ?? [];
+    const points = historyPoints;
     if (points.length === 0) {
       return [];
     }
-    return points.map((p) => ({
+    const baseRows = points.map((p) => ({
       date: p.date,
       displayDate: format(parse(p.date, "yyyy-MM-dd", new Date()), "d. MMM", { locale: sk }),
       value: convertPrice(p.totalValueEur, "EUR"),
       invested: convertPrice(p.investedAmountEur, "EUR"),
+      benchmark: null as number | null,
     }));
-  }, [history?.points, convertPrice]);
+
+    if (!showChartBenchmark || !benchmarkHistory?.points?.length) {
+      return baseRows;
+    }
+
+    const closes = new Map<string, number>();
+    for (const pt of benchmarkHistory.points) {
+      if (Number.isFinite(pt.close) && pt.close > 0) closes.set(pt.date, pt.close);
+    }
+    const dates = baseRows.map((r) => r.date);
+    const startValue = baseRows[0]!.value;
+    const rebased = rebaseBenchmarkToStart(dates, closes, startValue);
+    return baseRows.map((row, i) => ({
+      ...row,
+      benchmark: rebased[i] ?? null,
+    }));
+  }, [historyPoints, convertPrice, showChartBenchmark, benchmarkHistory?.points]);
 
   // P&L for the selected range. The chart line jumps whenever there's a BUY
   // or SELL inside the window, so to get an honest gain we subtract the net
@@ -218,15 +282,27 @@ export function MobilePortfolioChart({
     totalInvested,
   ]);
 
+  const showBenchLine =
+    showChartBenchmark && chartData.some((d) => d.benchmark != null);
+
   const minValue = useMemo(() => {
     if (chartData.length === 0) return 0;
-    return Math.min(...chartData.map(d => d.value)) * 0.995;
+    const vals = chartData.flatMap((d) =>
+      [d.value, d.benchmark].filter((v): v is number => v != null && Number.isFinite(v)),
+    );
+    return Math.min(...vals) * 0.995;
   }, [chartData]);
 
   const maxValue = useMemo(() => {
     if (chartData.length === 0) return 0;
-    return Math.max(...chartData.map(d => d.value)) * 1.005;
+    const vals = chartData.flatMap((d) =>
+      [d.value, d.benchmark].filter((v): v is number => v != null && Number.isFinite(v)),
+    );
+    return Math.max(...vals) * 1.005;
   }, [chartData]);
+
+  const benchColor = chartBenchmarkStroke(theme === "dark" ? "dark" : "light");
+  const benchLabel = chartBenchmarkLabel(chartBenchmarkId);
 
   const isPositive = periodChange.amount >= 0;
   // Light: match text-green-500 / text-red-500; dark: keep existing pastel strokes
@@ -496,9 +572,18 @@ export function MobilePortfolioChart({
         <>
           <div className="relative h-[180px] -mx-4 overflow-hidden" data-testid="chart-portfolio-performance">
             <div className="chart-fade-grid" aria-hidden />
+            {showBenchLine && (
+              <div
+                className="pointer-events-none absolute left-3 top-1.5 z-10 text-[10px] font-medium tracking-wide"
+                style={{ color: benchColor }}
+                data-testid="mobile-chart-benchmark-label"
+              >
+                {benchLabel}
+              </div>
+            )}
             {chartData.length > 1 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 5, right: 0, left: 0, bottom: 5 }}>
+                <ComposedChart data={chartData} margin={{ top: 5, right: 0, left: 0, bottom: 5 }}>
                   <defs>
                     <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor={chartColor} stopOpacity={0.35} />
@@ -524,11 +609,18 @@ export function MobilePortfolioChart({
                     <RechartsTooltip 
                       content={({ active, payload }) => {
                         if (active && payload && payload.length) {
-                          const data = payload[0].payload;
+                          const data = payload[0].payload as (typeof chartData)[number];
                           return (
                             <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg">
                               <div className="text-xs text-muted-foreground">{data.displayDate}</div>
-                              <div className="text-sm font-semibold">{formatCurrency(data.value)}</div>
+                              <div className="text-sm font-semibold">
+                                {maskAmount(formatCurrency(data.value))}
+                              </div>
+                              {data.benchmark != null && (
+                                <div className="text-xs mt-0.5" style={{ color: benchColor }}>
+                                  {benchLabel}: {maskAmount(formatCurrency(data.benchmark))}
+                                </div>
+                              )}
                             </div>
                           );
                         }
@@ -544,7 +636,18 @@ export function MobilePortfolioChart({
                     fill="url(#colorValue)"
                     style={{ filter: "url(#chartLineGlowMobile)" }}
                   />
-                </AreaChart>
+                  {showBenchLine && (
+                    <Line
+                      type="monotone"
+                      dataKey="benchmark"
+                      stroke={benchColor}
+                      strokeWidth={1.75}
+                      dot={false}
+                      connectNulls
+                      isAnimationActive={false}
+                    />
+                  )}
+                </ComposedChart>
               </ResponsiveContainer>
             ) : (
               <div className="h-full flex items-center justify-center text-muted-foreground text-sm">

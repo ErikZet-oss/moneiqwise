@@ -1,6 +1,14 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from "recharts";
+import {
+  ComposedChart,
+  Area,
+  Line,
+  XAxis,
+  YAxis,
+  ResponsiveContainer,
+  Tooltip,
+} from "recharts";
 import { format, parse } from "date-fns";
 import { sk } from "date-fns/locale";
 import { useCurrency } from "@/hooks/useCurrency";
@@ -15,6 +23,12 @@ import {
   portfolioHistoryQueryKeyPart,
   type PortfolioChartPeriodSelection,
 } from "@/components/PortfolioChartPeriodPicker";
+import {
+  chartBenchmarkLabel,
+  chartBenchmarkStroke,
+  rebaseBenchmarkToStart,
+  type BenchmarkHistoryRes,
+} from "@/lib/chartBenchmarks";
 
 interface SnapshotPoint {
   date: string;
@@ -64,7 +78,12 @@ export function DesktopPortfolioChart({
 
   const { formatCurrency, convertPrice } = useCurrency();
   const { getQueryParam } = usePortfolio();
-  const { showChart, showTooltip } = useChartSettings();
+  const {
+    showChart,
+    showTooltip,
+    showChartBenchmark,
+    chartBenchmarkId,
+  } = useChartSettings();
   const { theme } = useTheme();
   
   const portfolioParam = getQueryParam();
@@ -82,18 +101,62 @@ export function DesktopPortfolioChart({
     },
   });
 
+  const historyPoints = history?.points ?? [];
+  const benchFrom = historyPoints[0]?.date;
+  const benchTo = historyPoints[historyPoints.length - 1]?.date;
+
+  const { data: benchmarkHistory } = useQuery<BenchmarkHistoryRes>({
+    queryKey: ["/api/benchmark/history", chartBenchmarkId, benchFrom, benchTo],
+    enabled:
+      chartQueriesEnabled &&
+      showChartBenchmark &&
+      !!benchFrom &&
+      !!benchTo &&
+      historyPoints.length > 1,
+    staleTime: 30 * 60 * 1000,
+    queryFn: async () => {
+      const p = new URLSearchParams();
+      p.set("id", chartBenchmarkId);
+      if (benchFrom) p.set("from", benchFrom);
+      if (benchTo) p.set("to", benchTo);
+      const res = await fetch(`/api/benchmark/history?${p.toString()}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to fetch benchmark history");
+      return res.json();
+    },
+  });
+
   const chartData = useMemo(() => {
-    const points = history?.points ?? [];
+    const points = historyPoints;
     if (points.length === 0) {
       return [];
     }
-    return points.map((p) => ({
+
+    const baseRows = points.map((p) => ({
       date: p.date,
       displayDate: format(parse(p.date, "yyyy-MM-dd", new Date()), "d. MMM yyyy", { locale: sk }),
       value: convertPrice(p.totalValueEur, "EUR"),
       invested: convertPrice(p.investedAmountEur, "EUR"),
+      benchmark: null as number | null,
     }));
-  }, [history?.points, convertPrice]);
+
+    if (!showChartBenchmark || !benchmarkHistory?.points?.length) {
+      return baseRows;
+    }
+
+    const closes = new Map<string, number>();
+    for (const pt of benchmarkHistory.points) {
+      if (Number.isFinite(pt.close) && pt.close > 0) closes.set(pt.date, pt.close);
+    }
+    const dates = baseRows.map((r) => r.date);
+    const startValue = baseRows[0]!.value;
+    const rebased = rebaseBenchmarkToStart(dates, closes, startValue);
+    return baseRows.map((row, i) => ({
+      ...row,
+      benchmark: rebased[i] ?? null,
+    }));
+  }, [historyPoints, convertPrice, showChartBenchmark, benchmarkHistory?.points]);
 
   // P&L scoped to the selected time range. The chart itself plots raw
   // portfolio value over time, which will jump up/down whenever the user
@@ -131,14 +194,23 @@ export function DesktopPortfolioChart({
     totalInvested,
   ]);
 
+  const showBenchLine =
+    showChartBenchmark && chartData.some((d) => d.benchmark != null);
+
   const minValue = useMemo(() => {
     if (chartData.length === 0) return 0;
-    return Math.min(...chartData.map(d => d.value)) * 0.995;
+    const vals = chartData.flatMap((d) =>
+      [d.value, d.benchmark].filter((v): v is number => v != null && Number.isFinite(v)),
+    );
+    return Math.min(...vals) * 0.995;
   }, [chartData]);
 
   const maxValue = useMemo(() => {
     if (chartData.length === 0) return 0;
-    return Math.max(...chartData.map(d => d.value)) * 1.005;
+    const vals = chartData.flatMap((d) =>
+      [d.value, d.benchmark].filter((v): v is number => v != null && Number.isFinite(v)),
+    );
+    return Math.max(...vals) * 1.005;
   }, [chartData]);
 
   const isPositive = periodGainLoss.amount >= 0;
@@ -150,6 +222,8 @@ export function DesktopPortfolioChart({
     : theme === "dark"
       ? "hsl(350 65% 68%)"
       : "hsl(0 84% 60%)";
+  const benchColor = chartBenchmarkStroke(theme === "dark" ? "dark" : "light");
+  const benchLabel = chartBenchmarkLabel(chartBenchmarkId);
 
   if (!showChart) {
     return null;
@@ -185,9 +259,18 @@ export function DesktopPortfolioChart({
       <CardContent className="pt-0">
         <div className="relative h-[220px] w-full min-w-0 overflow-hidden rounded-lg" data-testid="chart-desktop-portfolio-performance">
           <div className="chart-fade-grid" aria-hidden />
+          {showBenchLine && (
+            <div
+              className="pointer-events-none absolute left-3 top-2 z-10 text-[10px] font-medium tracking-wide"
+              style={{ color: benchColor }}
+              data-testid="desktop-chart-benchmark-label"
+            >
+              {benchLabel}
+            </div>
+          )}
           {chartData.length > 1 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 10 }}>
+              <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 10, bottom: 10 }}>
                 <defs>
                   <linearGradient id="colorValueDesktop" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor={chartColor} stopOpacity={0.35} />
@@ -220,11 +303,16 @@ export function DesktopPortfolioChart({
                   <Tooltip 
                     content={({ active, payload }) => {
                       if (active && payload && payload.length) {
-                        const data = payload[0].payload;
+                        const data = payload[0].payload as (typeof chartData)[number];
                         return (
                           <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg">
                             <div className="text-xs text-muted-foreground">{data.displayDate}</div>
                             <div className="text-sm font-semibold">{formatCurrency(data.value)}</div>
+                            {data.benchmark != null && (
+                              <div className="text-xs mt-0.5" style={{ color: benchColor }}>
+                                {benchLabel}: {formatCurrency(data.benchmark)}
+                              </div>
+                            )}
                           </div>
                         );
                       }
@@ -240,7 +328,18 @@ export function DesktopPortfolioChart({
                   fill="url(#colorValueDesktop)"
                   style={{ filter: "url(#chartLineGlowDesktop)" }}
                 />
-              </AreaChart>
+                {showBenchLine && (
+                  <Line
+                    type="monotone"
+                    dataKey="benchmark"
+                    stroke={benchColor}
+                    strokeWidth={1.75}
+                    dot={false}
+                    connectNulls
+                    isAnimationActive={false}
+                  />
+                )}
+              </ComposedChart>
             </ResponsiveContainer>
           ) : (
             <div className="h-full flex items-center justify-center text-muted-foreground text-sm">

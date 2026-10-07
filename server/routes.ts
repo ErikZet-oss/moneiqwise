@@ -1895,16 +1895,42 @@ async function fetchYahooHistoricalPrices(ticker: string): Promise<Record<string
   }
 }
 
+type ChartBenchmarkId = "sp500" | "msciWorld" | "nasdaq";
+
+const CHART_BENCHMARK_DEFS: Record<
+  ChartBenchmarkId,
+  { label: string; symbols: string[]; cacheKey: string }
+> = {
+  sp500: { label: "S&P 500", symbols: ["^GSPC", "SPY"], cacheKey: "^GSPC:v4-spx-fast" },
+  msciWorld: {
+    label: "MSCI World",
+    symbols: ["URTH", "ACWI"],
+    cacheKey: "URTH:v1-msci-world",
+  },
+  nasdaq: {
+    label: "Nasdaq",
+    symbols: ["^IXIC", "QQQ"],
+    cacheKey: "^IXIC:v1-nasdaq",
+  },
+};
+
+function parseChartBenchmarkId(raw: unknown): ChartBenchmarkId | null {
+  if (raw === "sp500" || raw === "msciWorld" || raw === "nasdaq") return raw;
+  return null;
+}
+
 /**
- * Denná história S&P 500 pre benchmark.
- * Rýchla cesta: 1× ~10y (prípadne +1 staršie okno paralelne). SPY fallback.
- * (Skôr 4 sekvenčné dekády + retry spomalili celú sekciu Zisk.)
+ * Denná história indexu / ETF proxy (Yahoo chart windows ~20y).
+ * Používa sa pre S&P 500 aj pre dashboardové porovnanie (MSCI World, Nasdaq).
  */
-async function fetchSp500HistoricalPrices(): Promise<Record<string, number>> {
-  const cacheKey = `^GSPC:v4-spx-fast`;
+async function fetchIndexHistoricalPrices(
+  symbols: string[],
+  cacheKey: string,
+  label: string,
+): Promise<{ prices: Record<string, number>; symbol: string | null }> {
   const cached = historicalCache.get(cacheKey);
   if (cached && Date.now() - cached.timestamp < HISTORICAL_CACHE_TTL) {
-    return cached.data;
+    return { prices: cached.data, symbol: symbols[0] ?? null };
   }
 
   async function fetchWindow(
@@ -1935,38 +1961,51 @@ async function fetchSp500HistoricalPrices(): Promise<Record<string, number>> {
     return { ...prior, ...recent };
   }
 
-  for (const symbol of ["^GSPC", "SPY"] as const) {
+  for (const symbol of symbols) {
     try {
       const prices = await fetchRecentAndPrior(symbol);
       if (Object.keys(prices).length > 0) {
         console.log(
-          `S&P benchmark historical success via ${symbol}: ${Object.keys(prices).length} days`,
+          `${label} historical success via ${symbol}: ${Object.keys(prices).length} days`,
         );
         historicalCache.set(cacheKey, { data: prices, timestamp: Date.now() });
         scheduleCacheSave();
-        return prices;
+        return { prices, symbol };
       }
     } catch (err) {
-      console.warn(`S&P benchmark fetch failed for ${symbol}:`, err);
+      console.warn(`${label} fetch failed for ${symbol}:`, err);
     }
   }
 
-  try {
-    const fallback = await fetchYahooHistoricalPrices("^GSPC");
-    if (Object.keys(fallback).length > 0) {
-      historicalCache.set(cacheKey, { data: fallback, timestamp: Date.now() });
-      scheduleCacheSave();
-      return fallback;
+  const primary = symbols[0];
+  if (primary) {
+    try {
+      const fallback = await fetchYahooHistoricalPrices(primary);
+      if (Object.keys(fallback).length > 0) {
+        historicalCache.set(cacheKey, { data: fallback, timestamp: Date.now() });
+        scheduleCacheSave();
+        return { prices: fallback, symbol: primary };
+      }
+    } catch {
+      /* ignore */
     }
-  } catch {
-    /* ignore */
   }
 
   if (cached) {
-    console.log("Using expired S&P benchmark cache");
-    return cached.data;
+    console.log(`Using expired ${label} cache`);
+    return { prices: cached.data, symbol: symbols[0] ?? null };
   }
-  return {};
+  return { prices: {}, symbol: null };
+}
+
+/**
+ * Denná história S&P 500 pre benchmark (Profit / TWR / Grafy).
+ * Rýchla cesta: 1× ~10y (prípadne +1 staršie okno paralelne). SPY fallback.
+ */
+async function fetchSp500HistoricalPrices(): Promise<Record<string, number>> {
+  const def = CHART_BENCHMARK_DEFS.sp500;
+  const { prices } = await fetchIndexHistoricalPrices(def.symbols, def.cacheKey, def.label);
+  return prices;
 }
 
 // Fetch quote from Finnhub (backup API)
@@ -6114,6 +6153,49 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error reading portfolio snapshots:", error);
       res.status(500).json({ message: "Nepodarilo sa načítať históriu zo snapshotov." });
+    }
+  });
+
+  /** Denné uzávierky indexu pre porovnanie na dashboarde (S&P 500 / MSCI World / Nasdaq). */
+  app.get("/api/benchmark/history", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseChartBenchmarkId(req.query.id) ?? "sp500";
+      const def = CHART_BENCHMARK_DEFS[id];
+      const fromIso = parseHistoryIsoDate(req.query.from);
+      const toIso = parseHistoryIsoDate(req.query.to);
+      const todayIso = new Date().toISOString().slice(0, 10);
+      const endIso = toIso && toIso <= todayIso ? toIso : todayIso;
+
+      const { prices, symbol } = await fetchIndexHistoricalPrices(
+        def.symbols,
+        def.cacheKey,
+        def.label,
+      );
+
+      const dates = Object.keys(prices)
+        .filter((d) => {
+          if (!Number.isFinite(prices[d]!)) return false;
+          if (endIso && d > endIso) return false;
+          // Malý buffer pred `from` kvôli lookbacku cez víkendy.
+          if (fromIso) {
+            const buf = new Date(`${fromIso}T12:00:00.000Z`);
+            buf.setUTCDate(buf.getUTCDate() - 14);
+            const bufIso = buf.toISOString().slice(0, 10);
+            if (d < bufIso) return false;
+          }
+          return true;
+        })
+        .sort();
+
+      return res.json({
+        id,
+        label: def.label,
+        symbol,
+        points: dates.map((date) => ({ date, close: prices[date]! })),
+      });
+    } catch (error) {
+      console.error("Error fetching benchmark history:", error);
+      res.status(500).json({ message: "Nepodarilo sa načítať históriu benchmarku." });
     }
   });
 
