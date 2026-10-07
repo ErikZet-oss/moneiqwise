@@ -24,9 +24,10 @@ import {
   type PortfolioChartPeriodSelection,
 } from "@/components/PortfolioChartPeriodPicker";
 import {
+  benchmarkCumulativePct,
   chartBenchmarkLabel,
   chartBenchmarkStroke,
-  rebaseBenchmarkToStart,
+  portfolioCumulativePctSeries,
   type BenchmarkHistoryRes,
 } from "@/lib/chartBenchmarks";
 
@@ -127,36 +128,50 @@ export function DesktopPortfolioChart({
     },
   });
 
+  const showBenchLine =
+    showChartBenchmark &&
+    !!benchmarkHistory?.points?.length &&
+    historyPoints.length > 1;
+
   const chartData = useMemo(() => {
     const points = historyPoints;
     if (points.length === 0) {
       return [];
     }
 
-    const baseRows = points.map((p) => ({
-      date: p.date,
-      displayDate: format(parse(p.date, "yyyy-MM-dd", new Date()), "d. MMM yyyy", { locale: sk }),
-      value: convertPrice(p.totalValueEur, "EUR"),
-      invested: convertPrice(p.investedAmountEur, "EUR"),
-      benchmark: null as number | null,
-    }));
+    const values = points.map((p) => convertPrice(p.totalValueEur, "EUR"));
+    const invested = points.map((p) => convertPrice(p.investedAmountEur, "EUR"));
+    const dates = points.map((p) => p.date);
+    const displayDates = dates.map((d) =>
+      format(parse(d, "yyyy-MM-dd", new Date()), "d. MMM yyyy", { locale: sk }),
+    );
 
-    if (!showChartBenchmark || !benchmarkHistory?.points?.length) {
-      return baseRows;
+    if (showBenchLine && benchmarkHistory?.points?.length) {
+      const closes = new Map<string, number>();
+      for (const pt of benchmarkHistory.points) {
+        if (Number.isFinite(pt.close) && pt.close > 0) closes.set(pt.date, pt.close);
+      }
+      const portfolioPct = portfolioCumulativePctSeries(values, invested);
+      const benchPct = benchmarkCumulativePct(dates, closes);
+      return dates.map((date, i) => ({
+        date,
+        displayDate: displayDates[i]!,
+        value: values[i]!,
+        invested: invested[i]!,
+        portfolioPct: portfolioPct[i]!,
+        benchmarkPct: benchPct[i] ?? null,
+      }));
     }
 
-    const closes = new Map<string, number>();
-    for (const pt of benchmarkHistory.points) {
-      if (Number.isFinite(pt.close) && pt.close > 0) closes.set(pt.date, pt.close);
-    }
-    const dates = baseRows.map((r) => r.date);
-    const startValue = baseRows[0]!.value;
-    const rebased = rebaseBenchmarkToStart(dates, closes, startValue);
-    return baseRows.map((row, i) => ({
-      ...row,
-      benchmark: rebased[i] ?? null,
+    return dates.map((date, i) => ({
+      date,
+      displayDate: displayDates[i]!,
+      value: values[i]!,
+      invested: invested[i]!,
+      portfolioPct: 0,
+      benchmarkPct: null as number | null,
     }));
-  }, [historyPoints, convertPrice, showChartBenchmark, benchmarkHistory?.points]);
+  }, [historyPoints, convertPrice, showBenchLine, benchmarkHistory?.points]);
 
   // P&L scoped to the selected time range. The chart itself plots raw
   // portfolio value over time, which will jump up/down whenever the user
@@ -194,24 +209,35 @@ export function DesktopPortfolioChart({
     totalInvested,
   ]);
 
-  const showBenchLine =
-    showChartBenchmark && chartData.some((d) => d.benchmark != null);
-
   const minValue = useMemo(() => {
     if (chartData.length === 0) return 0;
-    const vals = chartData.flatMap((d) =>
-      [d.value, d.benchmark].filter((v): v is number => v != null && Number.isFinite(v)),
-    );
-    return Math.min(...vals) * 0.995;
-  }, [chartData]);
+    if (showBenchLine) {
+      const vals = chartData.flatMap((d) =>
+        [d.portfolioPct, d.benchmarkPct].filter(
+          (v): v is number => v != null && Number.isFinite(v),
+        ),
+      );
+      if (vals.length === 0) return 0;
+      const min = Math.min(...vals);
+      return min - Math.max(1, Math.abs(min) * 0.08);
+    }
+    return Math.min(...chartData.map((d) => d.value)) * 0.995;
+  }, [chartData, showBenchLine]);
 
   const maxValue = useMemo(() => {
     if (chartData.length === 0) return 0;
-    const vals = chartData.flatMap((d) =>
-      [d.value, d.benchmark].filter((v): v is number => v != null && Number.isFinite(v)),
-    );
-    return Math.max(...vals) * 1.005;
-  }, [chartData]);
+    if (showBenchLine) {
+      const vals = chartData.flatMap((d) =>
+        [d.portfolioPct, d.benchmarkPct].filter(
+          (v): v is number => v != null && Number.isFinite(v),
+        ),
+      );
+      if (vals.length === 0) return 1;
+      const max = Math.max(...vals);
+      return max + Math.max(1, Math.abs(max) * 0.08);
+    }
+    return Math.max(...chartData.map((d) => d.value)) * 1.005;
+  }, [chartData, showBenchLine]);
 
   const isPositive = periodGainLoss.amount >= 0;
   // Light: match text-green-500 / text-red-500; dark: keep existing pastel strokes
@@ -296,7 +322,11 @@ export function DesktopPortfolioChart({
                   axisLine={false}
                   tickLine={false}
                   tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                  tickFormatter={(value) => formatCurrency(value)}
+                  tickFormatter={(value) =>
+                    showBenchLine
+                      ? `${Number(value).toFixed(0)}%`
+                      : formatCurrency(value)
+                  }
                   width={80}
                 />
                 {showTooltip && (
@@ -307,11 +337,21 @@ export function DesktopPortfolioChart({
                         return (
                           <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg">
                             <div className="text-xs text-muted-foreground">{data.displayDate}</div>
-                            <div className="text-sm font-semibold">{formatCurrency(data.value)}</div>
-                            {data.benchmark != null && (
-                              <div className="text-xs mt-0.5" style={{ color: benchColor }}>
-                                {benchLabel}: {formatCurrency(data.benchmark)}
-                              </div>
+                            {showBenchLine ? (
+                              <>
+                                <div className="text-sm font-semibold">
+                                  Portfólio: {data.portfolioPct >= 0 ? "+" : ""}
+                                  {data.portfolioPct.toFixed(2)}%
+                                </div>
+                                {data.benchmarkPct != null && (
+                                  <div className="text-xs mt-0.5" style={{ color: benchColor }}>
+                                    {benchLabel}: {data.benchmarkPct >= 0 ? "+" : ""}
+                                    {data.benchmarkPct.toFixed(2)}%
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <div className="text-sm font-semibold">{formatCurrency(data.value)}</div>
                             )}
                           </div>
                         );
@@ -322,7 +362,7 @@ export function DesktopPortfolioChart({
                 )}
                 <Area
                   type="monotone"
-                  dataKey="value"
+                  dataKey={showBenchLine ? "portfolioPct" : "value"}
                   stroke={chartColor}
                   strokeWidth={2.25}
                   fill="url(#colorValueDesktop)"
@@ -331,7 +371,7 @@ export function DesktopPortfolioChart({
                 {showBenchLine && (
                   <Line
                     type="monotone"
-                    dataKey="benchmark"
+                    dataKey="benchmarkPct"
                     stroke={benchColor}
                     strokeWidth={1.75}
                     dot={false}

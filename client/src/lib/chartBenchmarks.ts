@@ -52,39 +52,73 @@ export type BenchmarkHistoryRes = {
   points: BenchmarkHistoryPoint[];
 };
 
+function lookupCloseOnOrBefore(
+  closesByDate: Map<string, number>,
+  iso: string,
+): number | null {
+  if (closesByDate.has(iso)) return closesByDate.get(iso)!;
+  // Lookback cez víkendy / sviatky (max 14 dní).
+  const d = new Date(`${iso}T12:00:00.000Z`);
+  for (let i = 1; i <= 14; i++) {
+    d.setUTCDate(d.getUTCDate() - 1);
+    const key = d.toISOString().slice(0, 10);
+    if (closesByDate.has(key)) return closesByDate.get(key)!;
+  }
+  return null;
+}
+
 /**
- * Prelož indexové uzávierky na „hypotetickú“ hodnotu portfólia:
- * na prvý deň = startValue, ďalej rastie/klesá rovnako ako index.
+ * Kumulatívny % výnos indexu od prvého dňa rozsahu: (close_t / close_0 − 1) × 100.
+ * Rovnaká logika ako na stránke Grafy — obe krivky sú porovnateľné.
+ */
+export function benchmarkCumulativePct(
+  dates: string[],
+  closesByDate: Map<string, number>,
+): (number | null)[] {
+  if (dates.length === 0) return [];
+  const base = lookupCloseOnOrBefore(closesByDate, dates[0]!);
+  if (base == null || !(base > 0)) {
+    return dates.map(() => null);
+  }
+  return dates.map((iso) => {
+    const c = lookupCloseOnOrBefore(closesByDate, iso);
+    if (c == null || !(c > 0)) return null;
+    return (c / base - 1) * 100;
+  });
+}
+
+/**
+ * Kumulatívny % výnos portfólia v rozsahu po odpočítaní čistých vkladov:
+ *   gain_t = value_t − value_0 − (invested_t − invested_0)
+ *   pct_t  = gain_t / value_0 × 100
+ * (na t=0 je 0 %). Bez tohto by vklady „nafúkli“ zelenú krivku oproti indexu.
+ */
+export function portfolioCumulativePctSeries(
+  values: number[],
+  invested: number[],
+): number[] {
+  if (values.length === 0) return [];
+  const v0 = values[0]!;
+  const i0 = invested[0] ?? 0;
+  if (!(v0 > 0)) return values.map(() => 0);
+  return values.map((v, idx) => {
+    const inv = invested[idx] ?? i0;
+    const netInflow = inv - i0;
+    const gain = v - v0 - netInflow;
+    return (gain / v0) * 100;
+  });
+}
+
+/**
+ * @deprecated Použi `benchmarkCumulativePct` — abs. rebase vyzerá na grafe ako rovná čiara,
+ * keď portfólio rastie hlavne vkladmi.
  */
 export function rebaseBenchmarkToStart(
   dates: string[],
   closesByDate: Map<string, number>,
   startValue: number,
 ): (number | null)[] {
-  if (dates.length === 0 || !(startValue > 0)) {
-    return dates.map(() => null);
-  }
-
-  const lookupClose = (iso: string): number | null => {
-    if (closesByDate.has(iso)) return closesByDate.get(iso)!;
-    // Lookback cez víkendy / sviatky (max 10 dní).
-    const d = new Date(`${iso}T12:00:00.000Z`);
-    for (let i = 1; i <= 10; i++) {
-      d.setUTCDate(d.getUTCDate() - 1);
-      const key = d.toISOString().slice(0, 10);
-      if (closesByDate.has(key)) return closesByDate.get(key)!;
-    }
-    return null;
-  };
-
-  const base = lookupClose(dates[0]!);
-  if (base == null || !(base > 0)) {
-    return dates.map(() => null);
-  }
-
-  return dates.map((iso) => {
-    const c = lookupClose(iso);
-    if (c == null || !(c > 0)) return null;
-    return startValue * (c / base);
-  });
+  const pct = benchmarkCumulativePct(dates, closesByDate);
+  if (!(startValue > 0)) return dates.map(() => null);
+  return pct.map((p) => (p == null ? null : startValue * (1 + p / 100)));
 }

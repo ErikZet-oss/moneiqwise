@@ -121,7 +121,7 @@ export function DashboardWidgetSettingsButton({ id }: Props) {
                   Porovnanie s indexom
                 </Label>
                 <p className="text-[11px] text-muted-foreground leading-snug">
-                  Oranžová krivka vs. tvoj vývoj
+                  Obidve krivky v % od začiatku obdobia
                 </p>
               </div>
               <Switch

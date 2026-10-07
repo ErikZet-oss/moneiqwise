@@ -946,7 +946,7 @@ export default function Settings() {
                 <div className="space-y-0.5">
                   <div className="text-sm font-medium">Porovnanie s indexom</div>
                   <div className="text-xs text-muted-foreground">
-                    Oranžová krivka: vývoj zvoleného indexu oproti portfóliu
+                    Oranžová krivka vs. portfólio — obidve v % od začiatku obdobia
                   </div>
                 </div>
                 <Switch
