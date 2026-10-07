@@ -105,15 +105,17 @@ export type ComparisonPctSeries = {
 };
 
 /**
- * Spoločný % graf portfólio vs. index od prvého dňa, kde už má zmysel porovnávať
- * (hodnota portfólia > 0 a existuje uzávierka indexu).
+ * Spoločný % graf portfólio vs. index.
  *
- * Portfólio: gain po odpoč. vkladov / baseline (max hodnota, investované).
- * Index: (close_t / close_0 − 1) × 100.
+ * Portfólio (rovnaká logika ako period gain na dashboarde):
+ *   gain = value_t − value_0 − (invested_t − invested_0)
+ *   denom = value_0 + max(invested_t − invested_0, 0)
+ *   pct = gain / denom × 100
  *
- * Pri „Vše“: (1) binárny lookback namiesto 14 dní (Yahoo pri dlhom rozsahu môže mať
- * redšie body), (2) baseline max(value, invested), inak zelená vystrelí a oranžová
- * vyzerá rovná.
+ * Delenie len pevným value_0 pri „Vše“ dáva tisíce % (malý štart + neskôr veľké
+ * vklady) a index na spoločnej osi vyzerá ako rovná čiara.
+ *
+ * Index: (close_t / close_0 − 1) × 100 od prvého spoločného dňa.
  */
 export function buildComparisonPctSeries(
   dates: string[],
@@ -131,13 +133,30 @@ export function buildComparisonPctSeries(
     })
     .sort();
 
+  const lastInvested = Math.abs(invested[n - 1] ?? 0);
+  // Preskoč „prvý drobný vklad“ — inak % od pár eur vyletí na tisíce.
+  const minCapital = Math.max(100, lastInvested * 0.02);
+
   let start = -1;
   for (let i = 0; i < n; i++) {
     const v = values[i] ?? 0;
+    const inv = invested[i] ?? 0;
     const c = lookupCloseOnOrBefore(closesByDate, dates[i]!, sortedKeys);
-    if (v > 1e-6 && c != null) {
+    if (Math.max(Math.abs(v), Math.abs(inv)) >= minCapital && c != null) {
       start = i;
       break;
+    }
+  }
+
+  // Fallback: prvý deň s hodnotou > 0 a indexom
+  if (start < 0) {
+    for (let i = 0; i < n; i++) {
+      const v = values[i] ?? 0;
+      const c = lookupCloseOnOrBefore(closesByDate, dates[i]!, sortedKeys);
+      if (v > 1e-6 && c != null) {
+        start = i;
+        break;
+      }
     }
   }
 
@@ -150,7 +169,6 @@ export function buildComparisonPctSeries(
 
   const v0 = values[start]!;
   const i0 = invested[start] ?? 0;
-  const baseline = Math.max(Math.abs(v0), Math.abs(i0), 1);
   const c0 = lookupCloseOnOrBefore(closesByDate, dates[start]!, sortedKeys)!;
 
   const points = dates.map((iso, idx) => {
@@ -161,7 +179,8 @@ export function buildComparisonPctSeries(
     const inv = invested[idx] ?? i0;
     const netInflow = inv - i0;
     const gain = v - v0 - netInflow;
-    const portfolioPct = (gain / baseline) * 100;
+    const denom = v0 + Math.max(netInflow, 0);
+    const portfolioPct = denom > 1e-9 ? (gain / denom) * 100 : 0;
 
     const c = lookupCloseOnOrBefore(closesByDate, iso, sortedKeys);
     const benchmarkPct =
