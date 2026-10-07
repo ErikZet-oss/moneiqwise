@@ -5,6 +5,7 @@ import { format, parse, parseISO, subMonths, subYears, startOfDay } from "date-f
 import { sk } from "date-fns/locale";
 import {
   LineChart,
+  Area,
   Line,
   XAxis,
   YAxis,
@@ -770,14 +771,14 @@ export default function AssetDetail() {
       </Card>
 
       {/* Chart + position details */}
-      <div className="grid gap-3 lg:grid-cols-3 items-start">
+      <div className="grid gap-3 md:gap-4 lg:grid-cols-3 items-start">
         <div className="lg:col-span-2 min-w-0">
       <Card>
-        <CardHeader className="p-3 pb-1.5 space-y-0">
+        <CardHeader className="p-4 pb-2 space-y-0">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-1.5">
-                <CardTitle className="text-sm md:text-base font-semibold">Vývoj ceny a obchody</CardTitle>
+                <CardTitle className="text-base font-semibold">Vývoj ceny a obchody</CardTitle>
                 <HelpTip title="Návratnosť a graf">
                   <p>
                     <strong>ROI pozície</strong> je pomer aktuálnej kotácie k váženému priemernému nákupu (v mene
@@ -822,7 +823,7 @@ export default function AssetDetail() {
             </select>
           </div>
         </CardHeader>
-        <CardContent className="p-3 pt-2 space-y-2.5">
+        <CardContent className="p-4 pt-1.5 space-y-3">
           {chartData.length === 0 ? (
             <p className="text-sm text-muted-foreground py-6 text-center">
               Historické ceny nie sú k dispozícii (alebo ide o hotovosť).
@@ -905,7 +906,7 @@ export default function AssetDetail() {
                 <div
                   className={cn(
                     "relative w-full overflow-hidden rounded-lg",
-                    isMobile ? "h-[240px]" : "h-[280px]",
+                    isMobile ? "h-[196px]" : "h-[280px]",
                   )}
                   data-testid="asset-price-chart"
                 >
@@ -934,7 +935,7 @@ export default function AssetDetail() {
                       />
                       <YAxis
                         domain={["auto", "auto"]}
-                        tick={{ fontSize: 10 }}
+                        tick={{ fontSize: isMobile ? 9 : 10 }}
                         width={isMobile ? 44 : 56}
                         tickFormatter={(v) => Number(v).toFixed(0)}
                       />
@@ -968,6 +969,19 @@ export default function AssetDetail() {
                           }}
                         />
                       )}
+                      <defs>
+                        <linearGradient id="assetPriceArea" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.28} />
+                          <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <Area
+                        type="monotone"
+                        dataKey="price"
+                        stroke="none"
+                        fill="url(#assetPriceArea)"
+                        isAnimationActive={!isMobile}
+                      />
                       <Line
                         type="monotone"
                         dataKey="price"
@@ -998,10 +1012,10 @@ export default function AssetDetail() {
         </div>
         <div className="min-w-0">
           <Card className="border-border bg-card shadow-sm" data-testid="asset-position-details">
-            <CardHeader className="p-3 pb-1.5">
-              <CardTitle className="text-sm md:text-base font-semibold">Detail pozície</CardTitle>
+            <CardHeader className="p-4 pb-2">
+              <CardTitle className="text-base font-semibold">Detail pozície</CardTitle>
             </CardHeader>
-            <CardContent className="p-3 pt-0 space-y-0">
+            <CardContent className="p-4 pt-0 space-y-0">
               <div className="divide-y divide-border/60">
                 <div className="flex items-center justify-between gap-3 py-1.5 text-sm">
                   <span className="text-xs text-muted-foreground">Kusy</span>
@@ -1112,53 +1126,105 @@ export default function AssetDetail() {
       >
         <div className="min-w-0">
           <Card className="h-full">
-            <CardHeader className="p-3 pb-1.5">
-              <CardTitle className="text-sm md:text-base font-semibold">Podľa portfólia</CardTitle>
+            <CardHeader className="p-4 pb-2">
+              <CardTitle className="text-base font-semibold">Podľa portfólia</CardTitle>
             </CardHeader>
-            <CardContent className="p-3 pt-1">
+            <CardContent className="p-4 pt-1">
               {data.positions.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   Momentálne nemáte otvorenú pozíciu (všetko predané).
                 </p>
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Portfólio</TableHead>
-                      <TableHead className="text-right">Kusy</TableHead>
-                      <TableHead className="text-right">Priem. nákup</TableHead>
-                      <TableHead className="text-right">Investované</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                <>
+                  <div className="md:hidden space-y-2">
                     {data.positions.map((p) => {
                       const positionCostCurrency = p.costCurrency ?? costCurrency;
                       return (
-                        <TableRow key={p.portfolioId ?? "none"}>
-                          <TableCell>
-                            <div className="flex items-center gap-2 min-w-0">
-                              <BrokerLogo brokerCode={p.brokerCode as BrokerCode | null} size="xs" />
-                              <span className="truncate">{p.portfolioName}</span>
+                        <div
+                          key={p.portfolioId ?? "none-mobile"}
+                          className="rounded-lg border bg-muted/20 px-3 py-2.5"
+                        >
+                          <div className="flex items-center gap-2 min-w-0 mb-2">
+                            <BrokerLogo brokerCode={p.brokerCode as BrokerCode | null} size="xs" />
+                            <span className="truncate text-sm font-medium">{p.portfolioName}</span>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 text-xs">
+                            <div>
+                              <div className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                                Kusy
+                              </div>
+                              <div className="font-semibold tabular-nums">
+                                {formatShareQuantity(p.shares)}
+                              </div>
                             </div>
-                          </TableCell>
-                          <TableCell className="text-right font-mono">
-                            {formatShareQuantity(p.shares)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {mask(
-                              formatAverageCostCurrency(
-                                convertAverageCostPrice(p.averageCost, positionCostCurrency),
-                              ),
-                            )}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {mask(formatCurrency(convertPrice(p.totalInvested, positionCostCurrency)))}
-                          </TableCell>
-                        </TableRow>
+                            <div className="text-right">
+                              <div className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                                Priem. nákup
+                              </div>
+                              <div className="font-semibold">
+                                {mask(
+                                  formatAverageCostCurrency(
+                                    convertAverageCostPrice(p.averageCost, positionCostCurrency),
+                                  ),
+                                )}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                                Investované
+                              </div>
+                              <div className="font-semibold">
+                                {mask(
+                                  formatCurrency(convertPrice(p.totalInvested, positionCostCurrency)),
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       );
                     })}
-                  </TableBody>
-                </Table>
+                  </div>
+                  <div className="hidden md:block">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Portfólio</TableHead>
+                          <TableHead className="text-right">Kusy</TableHead>
+                          <TableHead className="text-right">Priem. nákup</TableHead>
+                          <TableHead className="text-right">Investované</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {data.positions.map((p) => {
+                          const positionCostCurrency = p.costCurrency ?? costCurrency;
+                          return (
+                            <TableRow key={p.portfolioId ?? "none"}>
+                              <TableCell>
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <BrokerLogo brokerCode={p.brokerCode as BrokerCode | null} size="xs" />
+                                  <span className="truncate">{p.portfolioName}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-right font-mono">
+                                {formatShareQuantity(p.shares)}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {mask(
+                                  formatAverageCostCurrency(
+                                    convertAverageCostPrice(p.averageCost, positionCostCurrency),
+                                  ),
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {mask(formatCurrency(convertPrice(p.totalInvested, positionCostCurrency)))}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -1167,13 +1233,13 @@ export default function AssetDetail() {
         {data.ticker !== "CASH" && (
           <div className="min-w-0">
             <Card className="h-full" data-testid="asset-earnings-history">
-              <CardHeader className="p-3 pb-1.5">
-                <CardTitle className="text-sm md:text-base font-semibold">Výsledky (earnings)</CardTitle>
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="text-base font-semibold">Výsledky (earnings)</CardTitle>
                 <CardDescription className="text-[11px] md:text-xs">
                   EPS a ukazovatele podľa rokov / kvartálov
                 </CardDescription>
               </CardHeader>
-              <CardContent className="p-3 pt-0 max-h-[420px] overflow-y-auto">
+              <CardContent className="p-4 pt-0 max-h-[420px] overflow-y-auto">
                 {earningsHistoryLoading ? (
                   <Skeleton className="h-28 w-full" />
                 ) : earningsHistoryError ? (
@@ -1392,13 +1458,13 @@ export default function AssetDetail() {
 
       {data.ticker !== "CASH" && data.positions.length > 0 && (
         <Card>
-          <CardHeader className="p-3 pb-1.5">
-            <CardTitle className="text-sm md:text-base font-semibold">Otvorené pozície (FIFO loty)</CardTitle>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-base font-semibold">Otvorené pozície (FIFO loty)</CardTitle>
             <CardDescription className="text-[11px] md:text-xs">
               FIFO nákupné dávky · nerealizovaný PnL · oslobodenie orient. 365 dní
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-3 pt-1">
+          <CardContent className="p-4 pt-1">
             {anyLotsLoading && fifoLotRows.length === 0 ? (
               <Skeleton className="h-32 w-full" />
             ) : lotsError ? (
@@ -1594,10 +1660,10 @@ export default function AssetDetail() {
 
       {data.dividends.paymentCount > 0 && (
         <Card>
-          <CardHeader className="p-3 pb-1.5">
-            <CardTitle className="text-sm md:text-base font-semibold">Dividendy</CardTitle>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-base font-semibold">Dividendy</CardTitle>
           </CardHeader>
-          <CardContent className="p-3 pt-1 space-y-3">
+          <CardContent className="p-4 pt-1 space-y-3">
             <div className="grid grid-cols-3 gap-2 text-sm">
               <div className="rounded-md bg-muted/25 px-2.5 py-2 min-w-0">
                 <div className="text-[11px] text-muted-foreground">Hrubá ({currency})</div>
@@ -1614,89 +1680,168 @@ export default function AssetDetail() {
                 </div>
               </div>
             </div>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Dátum</TableHead>
-                  <TableHead>Portfólio</TableHead>
-                  <TableHead className="text-right">Hrubá</TableHead>
-                  <TableHead className="text-right">Čistá</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.dividendPayments.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell>
+            <div className="md:hidden space-y-2">
+              {data.dividendPayments.map((row) => (
+                <div key={`${row.id}-mobile`} className="rounded-lg border bg-muted/20 px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2 text-xs mb-1.5">
+                    <span className="font-medium">
                       {format(parseISO(typeof row.date === "string" ? row.date : String(row.date)), "d. MMM yyyy", {
                         locale: sk,
                       })}
-                    </TableCell>
-                    <TableCell className="truncate max-w-[180px]">{row.portfolioName}</TableCell>
-                    <TableCell className="text-right">
-                      {mask(formatCurrency(convertPrice(row.gross, codeToCurrency(row.currency))))}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {mask(formatCurrency(convertPrice(row.net, codeToCurrency(row.currency))))}
-                    </TableCell>
+                    </span>
+                    <span className="truncate text-muted-foreground">{row.portfolioName}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Hrubá</div>
+                      <div className="font-semibold">
+                        {mask(formatCurrency(convertPrice(row.gross, codeToCurrency(row.currency))))}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Čistá</div>
+                      <div className="font-semibold text-green-600 dark:text-green-400">
+                        {mask(formatCurrency(convertPrice(row.net, codeToCurrency(row.currency))))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Dátum</TableHead>
+                    <TableHead>Portfólio</TableHead>
+                    <TableHead className="text-right">Hrubá</TableHead>
+                    <TableHead className="text-right">Čistá</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {data.dividendPayments.map((row) => (
+                    <TableRow key={row.id}>
+                      <TableCell>
+                        {format(parseISO(typeof row.date === "string" ? row.date : String(row.date)), "d. MMM yyyy", {
+                          locale: sk,
+                        })}
+                      </TableCell>
+                      <TableCell className="truncate max-w-[180px]">{row.portfolioName}</TableCell>
+                      <TableCell className="text-right">
+                        {mask(formatCurrency(convertPrice(row.gross, codeToCurrency(row.currency))))}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {mask(formatCurrency(convertPrice(row.net, codeToCurrency(row.currency))))}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       )}
 
       <Card>
-        <CardHeader className="p-3 pb-1.5">
-          <CardTitle className="text-sm md:text-base font-semibold">História transakcií</CardTitle>
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="text-base font-semibold">História transakcií</CardTitle>
         </CardHeader>
-        <CardContent className="p-3 pt-1 overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Dátum</TableHead>
-                <TableHead>Typ</TableHead>
-                <TableHead>Portfólio</TableHead>
-                <TableHead className="text-right">Ks</TableHead>
-                <TableHead className="text-right">Cena / ks</TableHead>
-                <TableHead className="text-right">Suma</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sortedTxDesc.map((tx) => {
-                const pName = tx.portfolioId ? portfolioNameById.get(tx.portfolioId) ?? "—" : "—";
-                return (
-                  <TableRow key={tx.id}>
-                    <TableCell className="whitespace-nowrap">
+        <CardContent className="p-4 pt-1">
+          <div className="md:hidden space-y-2">
+            {sortedTxDesc.map((tx) => {
+              const pName = tx.portfolioId ? portfolioNameById.get(tx.portfolioId) ?? "—" : "—";
+              return (
+                <div key={`${tx.id}-mobile`} className="rounded-lg border bg-muted/20 px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="font-medium">
                       {format(
                         parseISO(typeof tx.transactionDate === "string" ? tx.transactionDate : String(tx.transactionDate)),
                         "d.M.yyyy",
                         { locale: sk }
                       )}
-                    </TableCell>
-                    <TableCell>
+                    </span>
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                       {typeLabel(tx.type)}
-                      {tx.tcgCertNumber ? (
-                        <div className="text-[10px] text-muted-foreground">Cert. {tx.tcgCertNumber}</div>
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="max-w-[140px] truncate">{pName}</TableCell>
-                    <TableCell className="text-right font-mono text-sm">
-                      {tx.type === "DIVIDEND" || tx.type === "TAX"
-                        ? "—"
-                        : formatShareQuantity(parseFloat(tx.shares))}
-                    </TableCell>
-                    <TableCell className="text-right text-sm">
-                      {tx.type === "TAX"
-                        ? "—"
-                        : mask(formatCurrency(convertPrice(parseFloat(tx.pricePerShare), txnCurrency(tx))))}
-                    </TableCell>
-                    <TableCell className="text-right">{formatTxnValue(tx)}</TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+                    </Badge>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-1 truncate">{pName}</div>
+                  {tx.tcgCertNumber ? (
+                    <div className="text-[10px] text-muted-foreground mt-0.5">Cert. {tx.tcgCertNumber}</div>
+                  ) : null}
+                  <div className="grid grid-cols-3 gap-2 text-xs mt-2">
+                    <div>
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Kusy</div>
+                      <div className="font-semibold tabular-nums">
+                        {tx.type === "DIVIDEND" || tx.type === "TAX"
+                          ? "—"
+                          : formatShareQuantity(parseFloat(tx.shares))}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Cena / ks</div>
+                      <div className="font-semibold">
+                        {tx.type === "TAX"
+                          ? "—"
+                          : mask(formatCurrency(convertPrice(parseFloat(tx.pricePerShare), txnCurrency(tx))))}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Suma</div>
+                      <div className="font-semibold">{formatTxnValue(tx)}</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="hidden md:block overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Dátum</TableHead>
+                  <TableHead>Typ</TableHead>
+                  <TableHead>Portfólio</TableHead>
+                  <TableHead className="text-right">Ks</TableHead>
+                  <TableHead className="text-right">Cena / ks</TableHead>
+                  <TableHead className="text-right">Suma</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sortedTxDesc.map((tx) => {
+                  const pName = tx.portfolioId ? portfolioNameById.get(tx.portfolioId) ?? "—" : "—";
+                  return (
+                    <TableRow key={tx.id}>
+                      <TableCell className="whitespace-nowrap">
+                        {format(
+                          parseISO(typeof tx.transactionDate === "string" ? tx.transactionDate : String(tx.transactionDate)),
+                          "d.M.yyyy",
+                          { locale: sk }
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {typeLabel(tx.type)}
+                        {tx.tcgCertNumber ? (
+                          <div className="text-[10px] text-muted-foreground">Cert. {tx.tcgCertNumber}</div>
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="max-w-[140px] truncate">{pName}</TableCell>
+                      <TableCell className="text-right font-mono text-sm">
+                        {tx.type === "DIVIDEND" || tx.type === "TAX"
+                          ? "—"
+                          : formatShareQuantity(parseFloat(tx.shares))}
+                      </TableCell>
+                      <TableCell className="text-right text-sm">
+                        {tx.type === "TAX"
+                          ? "—"
+                          : mask(formatCurrency(convertPrice(parseFloat(tx.pricePerShare), txnCurrency(tx))))}
+                      </TableCell>
+                      <TableCell className="text-right">{formatTxnValue(tx)}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
     </div>
