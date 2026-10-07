@@ -107,9 +107,10 @@ export default function AiMacroAudit() {
     onError: (err: Error) => {
       toast({
         title: "Nepodarilo sa spustiť audit",
-        description: err.message,
+        description: err.message || "Neznáma chyba servera. Skús znova o chvíľu.",
         variant: "destructive",
       });
+      // Refresh usage — failed runs no longer burn the daily quota.
       void queryClient.invalidateQueries({
         queryKey: ["/api/ai-auditor/latest", portfolioId],
       });

@@ -1,5 +1,5 @@
-import { storage } from "../storage";
 import { buildAiBotContext } from "../aiBot/contextBuilder";
+import { storage } from "../storage";
 import { runClaudeAiAuditorAnalysis, AI_AUDITOR_MODEL } from "./claudeAuditor";
 import {
   getAiAuditorUsage,
@@ -27,11 +27,11 @@ export async function runAiAuditorForUser(input: {
     input.portfolioId,
   );
 
-  const usageAfter = await tryConsumeAiAuditorQuota(input.userId, portfolioId);
-  if (!usageAfter) {
-    const usage = await getAiAuditorUsage(input.userId, portfolioId);
+  // Reconcile first so failed attempts from the old bug don't block the user.
+  const usageBefore = await getAiAuditorUsage(input.userId, portfolioId);
+  if (usageBefore.used >= usageBefore.limit) {
     const err = new Error("AI_AUDITOR_LIMIT");
-    (err as any).usage = usage;
+    (err as any).usage = usageBefore;
     throw err;
   }
 
@@ -41,8 +41,9 @@ export async function runAiAuditorForUser(input: {
     "Manuálny AI Macro Audit",
   );
 
+  let analysis;
   if (ctx.holdings.length === 0) {
-    const empty = {
+    analysis = {
       healthScore: 0,
       healthLabel: "Bez pozícií",
       summaryOneLiner:
@@ -73,17 +74,10 @@ export async function runAiAuditorForUser(input: {
       model: AI_AUDITOR_MODEL,
       sourcesUsed: ctx.sourcesUsed,
     };
-    const run = await insertAiAuditorRun({
-      userId: input.userId,
-      portfolioId,
-      portfolioLabel: ctx.portfolioLabel,
-      analysis: empty,
-      model: AI_AUDITOR_MODEL,
-    });
-    return { run, usage: usageAfter };
+  } else {
+    analysis = await runClaudeAiAuditorAnalysis(ctx);
   }
 
-  const analysis = await runClaudeAiAuditorAnalysis(ctx);
   const run = await insertAiAuditorRun({
     userId: input.userId,
     portfolioId,
@@ -91,5 +85,11 @@ export async function runAiAuditorForUser(input: {
     analysis,
     model: analysis.model,
   });
+
+  // Consume quota only after a successful saved run.
+  const usageAfter =
+    (await tryConsumeAiAuditorQuota(input.userId, portfolioId)) ??
+    (await getAiAuditorUsage(input.userId, portfolioId));
+
   return { run, usage: usageAfter };
 }

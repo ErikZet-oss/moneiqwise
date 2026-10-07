@@ -88,7 +88,12 @@ export function registerAiAuditorRoutes(app: Express, isAuthenticated: any) {
           usage: error.usage ?? null,
         });
       }
-      console.error("ai-auditor run:", error);
+      const cause = error?.cause;
+      console.error(
+        "ai-auditor run:",
+        error?.message || error,
+        cause ? `| cause: ${cause?.message || cause}` : "",
+      );
       const msg =
         error instanceof Error && error.message
           ? error.message

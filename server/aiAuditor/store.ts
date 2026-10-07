@@ -121,30 +121,59 @@ export async function insertAiAuditorRun(input: {
   return mapRun(row);
 }
 
-export async function getAiAuditorUsage(
+export async function countAiAuditorRunsToday(
+  userId: string,
+  portfolioId: string,
+): Promise<number> {
+  await ensureAiAuditorTables();
+  const dayKey = auditorDayKey();
+  const result = await db.execute(sql`
+    SELECT COUNT(*)::int AS c
+    FROM ai_auditor_runs
+    WHERE user_id = ${userId}
+      AND portfolio_id = ${portfolioId}
+      AND to_char(created_at AT TIME ZONE 'Europe/Bratislava', 'YYYY-MM-DD') = ${dayKey}
+  `);
+  return Math.max(0, Number(asRows<{ c?: number }>(result)[0]?.c) || 0);
+}
+
+/**
+ * Align usage with successful runs today.
+ * Fixes earlier bug where failed Claude calls still burned the daily quota.
+ */
+export async function reconcileAiAuditorUsage(
   userId: string,
   portfolioId: string,
 ): Promise<AiAuditorUsage> {
   await ensureAiAuditorTables();
   const dayKey = auditorDayKey();
-  const result = await db.execute(sql`
-    SELECT count FROM ai_auditor_usage
-    WHERE user_id = ${userId}
-      AND portfolio_id = ${portfolioId}
-      AND day_key = ${dayKey}
+  const successCount = await countAiAuditorRunsToday(userId, portfolioId);
+  const clamped = Math.min(AI_AUDITOR_DAILY_LIMIT, successCount);
+
+  await db.execute(sql`
+    INSERT INTO ai_auditor_usage (user_id, portfolio_id, day_key, count)
+    VALUES (${userId}, ${portfolioId}, ${dayKey}, ${clamped})
+    ON CONFLICT (user_id, portfolio_id, day_key) DO UPDATE
+      SET count = LEAST(ai_auditor_usage.count, ${clamped})
   `);
-  const row = asRows(result)[0] as { count?: number } | undefined;
-  const used = Math.min(AI_AUDITOR_DAILY_LIMIT, Math.max(0, Number(row?.count) || 0));
+
   return {
     portfolioId,
-    used,
+    used: clamped,
     limit: AI_AUDITOR_DAILY_LIMIT,
     resetsAt: auditorResetsAtIso(),
     dayKey,
   };
 }
 
-/** Atomically consume one run. Returns null if limit reached. */
+export async function getAiAuditorUsage(
+  userId: string,
+  portfolioId: string,
+): Promise<AiAuditorUsage> {
+  return reconcileAiAuditorUsage(userId, portfolioId);
+}
+
+/** Atomically consume one run after a successful analysis. Returns null if limit reached. */
 export async function tryConsumeAiAuditorQuota(
   userId: string,
   portfolioId: string,
