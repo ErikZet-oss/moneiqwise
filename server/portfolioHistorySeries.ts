@@ -3,7 +3,15 @@ import { mtmValueAtEod } from "./gipsMtmValue";
 import { sumCashFlowEurUpTo } from "@shared/cashFromTransactions";
 import { convertAmountBetween, type AllExchangeRates } from "./convertAmountBetween";
 
-export type PortfolioHistoryRange = "1m" | "3m" | "6m" | "ytd" | "1y" | "all";
+export type PortfolioHistoryRange =
+  | "1d"
+  | "1w"
+  | "1m"
+  | "3m"
+  | "6m"
+  | "ytd"
+  | "1y"
+  | "all";
 
 function addDaysIso(iso: string, n: number): string {
   const d = new Date(`${iso}T12:00:00.000Z`);
@@ -53,10 +61,10 @@ function toUserCcy(
 
 /**
  * Dashboard graf — hustota bodov podľa rozsahu:
- * 1M denne, 3M/6M/YTD/1Y každých 5 dní, Všetko každých 30 dní.
+ * 1D/1W/1M denne, 3M/6M/YTD/1Y každých 5 dní, Všetko každých 30 dní.
  */
 export function stepDaysForHistoryRange(range: PortfolioHistoryRange): number {
-  if (range === "1m") return 1;
+  if (range === "1d" || range === "1w" || range === "1m") return 1;
   if (range === "all") return 30;
   return 5;
 }
@@ -163,7 +171,11 @@ function rangeToStartIso(
 ): string {
   const end = new Date(`${endIso}T12:00:00.000Z`);
   const start = new Date(end);
-  if (range === "1m") {
+  if (range === "1d") {
+    start.setUTCDate(start.getUTCDate() - 1);
+  } else if (range === "1w") {
+    start.setUTCDate(start.getUTCDate() - 7);
+  } else if (range === "1m") {
     start.setUTCMonth(start.getUTCMonth() - 1);
   } else if (range === "3m") {
     start.setUTCMonth(start.getUTCMonth() - 3);

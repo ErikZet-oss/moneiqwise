@@ -12,13 +12,22 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-export type PortfolioChartPeriod = "1M" | "3M" | "6M" | "YTD" | "ALL";
+export type PortfolioChartPeriod =
+  | "1D"
+  | "1W"
+  | "1M"
+  | "3M"
+  | "6M"
+  | "YTD"
+  | "ALL";
 
 export type PortfolioChartPeriodSelection =
   | { type: "preset"; period: PortfolioChartPeriod }
   | { type: "custom"; from: string; to: string };
 
 export const PORTFOLIO_CHART_PERIODS: PortfolioChartPeriod[] = [
+  "1D",
+  "1W",
   "1M",
   "3M",
   "6M",
@@ -28,8 +37,10 @@ export const PORTFOLIO_CHART_PERIODS: PortfolioChartPeriod[] = [
 
 export const portfolioChartPeriodToRange: Record<
   PortfolioChartPeriod,
-  "1m" | "3m" | "6m" | "ytd" | "all"
+  "1d" | "1w" | "1m" | "3m" | "6m" | "ytd" | "all"
 > = {
+  "1D": "1d",
+  "1W": "1w",
   "1M": "1m",
   "3M": "3m",
   "6M": "6m",
@@ -38,6 +49,8 @@ export const portfolioChartPeriodToRange: Record<
 };
 
 export const portfolioChartPeriodGainLabel: Record<PortfolioChartPeriod, string> = {
+  "1D": "Za 1D",
+  "1W": "Za 1W",
   "1M": "Za 1M",
   "3M": "Za 3M",
   "6M": "Za 6M",
@@ -46,6 +59,8 @@ export const portfolioChartPeriodGainLabel: Record<PortfolioChartPeriod, string>
 };
 
 export const portfolioChartPeriodMobileGainLabel: Record<PortfolioChartPeriod, string> = {
+  "1D": "1D",
+  "1W": "1W",
   "1M": "1M",
   "3M": "3M",
   "6M": "6M",
@@ -130,8 +145,8 @@ export function PortfolioChartPeriodPicker({
   }, [open, value]);
 
   const chipBase = isDesktop
-    ? "px-2.5 py-1 text-xs rounded-md font-medium transition-colors inline-flex items-center justify-center"
-    : "px-2.5 py-1.5 text-xs rounded-full font-medium transition-colors inline-flex items-center justify-center";
+    ? "px-2 py-1 text-[11px] rounded-md font-medium transition-colors inline-flex items-center justify-center"
+    : "px-1.5 py-1 text-[11px] rounded-full font-medium transition-colors inline-flex items-center justify-center";
 
   const chipActive = isDesktop
     ? "bg-primary text-primary-foreground"

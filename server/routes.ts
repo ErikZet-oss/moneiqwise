@@ -5812,6 +5812,8 @@ export async function registerRoutes(
   /** Denné body: celková MTM + čisté vklady/výbery, kum. % (segment TWR) vs. S&amp;P 500. */
   function parsePortfolioHistoryRange(q: string | undefined): PortfolioHistoryRange {
     const u = (q || "1y").trim().toLowerCase();
+    if (u === "1d" || u === "d" || u === "day") return "1d";
+    if (u === "1w" || u === "w" || u === "week" || u === "7d") return "1w";
     if (u === "1m") return "1m";
     if (u === "3m") return "3m";
     if (u === "6m") return "6m";
@@ -5835,7 +5837,9 @@ export async function registerRoutes(
     if (range === "all") return firstIso;
     const end = new Date(`${endIso}T12:00:00.000Z`);
     const start = new Date(end);
-    if (range === "1m") start.setUTCMonth(start.getUTCMonth() - 1);
+    if (range === "1d") start.setUTCDate(start.getUTCDate() - 1);
+    else if (range === "1w") start.setUTCDate(start.getUTCDate() - 7);
+    else if (range === "1m") start.setUTCMonth(start.getUTCMonth() - 1);
     else if (range === "3m") start.setUTCMonth(start.getUTCMonth() - 3);
     else if (range === "6m") start.setUTCMonth(start.getUTCMonth() - 6);
     else if (range === "1y") start.setUTCFullYear(start.getUTCFullYear() - 1);
