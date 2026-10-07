@@ -45,6 +45,10 @@ type PasskeysPayload = {
   passkeys: Array<{ id: string }>;
 };
 
+type AppSettingsPayload = {
+  passkeyStartupLockEnabled?: boolean;
+};
+
 function QuickNavFabGate() {
   const { isAuthenticated, isLoading } = useAuth();
   if (isLoading || !isAuthenticated) return null;
@@ -80,7 +84,9 @@ function AppUnlockGate({ children }: { children: ReactNode }) {
   const { toast } = useToast();
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [isUnlocked, setIsUnlocked] = useState(false);
+  const [unlockError, setUnlockError] = useState<string | null>(null);
   const hadUnauthenticatedState = useRef(false);
+  const autoUnlockAttempted = useRef(false);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -97,20 +103,31 @@ function AppUnlockGate({ children }: { children: ReactNode }) {
     enabled: startupWithActiveSession,
   });
 
+  const settingsQuery = useQuery<AppSettingsPayload>({
+    queryKey: ["/api/settings"],
+    enabled: startupWithActiveSession,
+  });
+
+  const startupLockEnabled =
+    settingsQuery.data?.passkeyStartupLockEnabled !== false;
   const hasPasskeys = (passkeysQuery.data?.passkeys?.length || 0) > 0;
   const shouldRequireUnlock =
-    startupWithActiveSession && hasPasskeys && !isUnlocked;
+    startupWithActiveSession && startupLockEnabled && hasPasskeys && !isUnlocked;
 
-  const handleUnlock = async () => {
+  const handleUnlock = async (mode: "auto" | "manual") => {
     if (typeof window === "undefined" || !("PublicKeyCredential" in window)) {
-      toast({
-        title: "Passkey nie je podporovaný",
-        description: "Tento prehliadač alebo zariadenie nepodporuje WebAuthn.",
-        variant: "destructive",
-      });
+      if (mode === "manual") {
+        toast({
+          title: "Passkey nie je podporovaný",
+          description: "Tento prehliadač alebo zariadenie nepodporuje WebAuthn.",
+          variant: "destructive",
+        });
+      }
+      setUnlockError("Tento prehliadač alebo zariadenie nepodporuje WebAuthn.");
       return;
     }
 
+    setUnlockError(null);
     setIsUnlocking(true);
     try {
       const optionsResponse = await apiRequest(
@@ -135,24 +152,58 @@ function AppUnlockGate({ children }: { children: ReactNode }) {
 
       setIsUnlocked(true);
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      toast({
-        title: "Aplikácia odomknutá",
-        description: "Overenie passkey prebehlo úspešne.",
-      });
+      if (mode === "manual") {
+        toast({
+          title: "Aplikácia odomknutá",
+          description: "Overenie passkey prebehlo úspešne.",
+        });
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Odomknutie passkey zlyhalo.";
-      toast({
-        title: "Aplikáciu sa nepodarilo odomknúť",
-        description: message,
-        variant: "destructive",
-      });
+      const name = error instanceof Error ? error.name : "";
+      const normalized = message.toLowerCase();
+      const likelyDismissed =
+        name === "NotAllowedError" ||
+        normalized.includes("notallowederror") ||
+        normalized.includes("cancel") ||
+        normalized.includes("timed out");
+
+      if (mode === "auto") {
+        setUnlockError(
+          likelyDismissed
+            ? "Automatické overenie nebolo dokončené. Skús tlačidlo nižšie."
+            : "Automatické overenie zlyhalo. Skús tlačidlo nižšie.",
+        );
+        if (!likelyDismissed) {
+          toast({
+            title: "Automatické odomknutie zlyhalo",
+            description: message,
+            variant: "destructive",
+          });
+        }
+      } else {
+        setUnlockError(message);
+        toast({
+          title: "Aplikáciu sa nepodarilo odomknúť",
+          description: message,
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsUnlocking(false);
     }
   };
 
-  if (startupWithActiveSession && passkeysQuery.isLoading) {
+  useEffect(() => {
+    if (!shouldRequireUnlock) return;
+    if (isUnlocking || isUnlocked) return;
+    if (autoUnlockAttempted.current) return;
+    autoUnlockAttempted.current = true;
+    void handleUnlock("auto");
+  }, [shouldRequireUnlock, isUnlocking, isUnlocked]);
+
+  if (startupWithActiveSession && (passkeysQuery.isLoading || settingsQuery.isLoading)) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -194,8 +245,15 @@ function AppUnlockGate({ children }: { children: ReactNode }) {
           <p className="text-sm text-muted-foreground">
             Pred pokračovaním over svoju identitu cez passkey (odtlačok, Face ID alebo PIN zariadenia).
           </p>
+          {unlockError ? (
+            <p className="text-xs text-destructive">{unlockError}</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Overenie sa spúšťa automaticky. Ak sa dialóg nezobrazil, použi tlačidlo nižšie.
+            </p>
+          )}
           <Button
-            onClick={handleUnlock}
+            onClick={() => handleUnlock("manual")}
             disabled={isUnlocking}
             className="w-full"
             data-testid="button-passkey-unlock"

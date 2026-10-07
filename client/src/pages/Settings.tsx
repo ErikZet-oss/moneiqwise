@@ -23,6 +23,7 @@ import { HelpTip } from "@/components/HelpTip";
 interface ApiSettings {
   preferredCurrency: Currency;
   averageCostDisplayCurrency: Currency | null;
+  passkeyStartupLockEnabled: boolean;
 }
 
 interface ExchangeRate {
@@ -169,7 +170,11 @@ export default function Settings() {
   });
 
   const updateSettingsMutation = useMutation({
-    mutationFn: async (data: { preferredCurrency?: Currency; averageCostDisplayCurrency?: Currency | null }) => {
+    mutationFn: async (data: {
+      preferredCurrency?: Currency;
+      averageCostDisplayCurrency?: Currency | null;
+      passkeyStartupLockEnabled?: boolean;
+    }) => {
       return apiRequest("POST", "/api/settings", data);
     },
     onSuccess: () => {
@@ -252,6 +257,10 @@ export default function Settings() {
     } else if (value === "EUR" || value === "USD") {
       updateSettingsMutation.mutate({ averageCostDisplayCurrency: value });
     }
+  };
+
+  const handlePasskeyStartupLockChange = (checked: boolean) => {
+    updateSettingsMutation.mutate({ passkeyStartupLockEnabled: checked });
   };
 
   const wipeAllDataMutation = useMutation({
@@ -555,6 +564,20 @@ export default function Settings() {
               Tento prehliadač alebo zariadenie nepodporuje WebAuthn passkeys.
             </div>
           ) : null}
+          <div className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-muted/20 px-3 py-2">
+            <div className="space-y-0.5">
+              <div className="text-xs font-medium">Vyžadovať passkey pri štarte appky</div>
+              <div className="text-[11px] text-muted-foreground">
+                Po otvorení appky sa pred vstupom vyžiada odtlačok/Face ID/PIN.
+              </div>
+            </div>
+            <Switch
+              checked={settings?.passkeyStartupLockEnabled !== false}
+              onCheckedChange={(checked) => handlePasskeyStartupLockChange(checked === true)}
+              disabled={updateSettingsMutation.isPending}
+              data-testid="switch-passkey-startup-lock"
+            />
+          </div>
           <div className="flex items-center justify-between gap-3">
             <div className="text-xs text-muted-foreground">
               Registrované passkeys:{" "}

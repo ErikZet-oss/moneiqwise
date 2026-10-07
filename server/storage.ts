@@ -205,7 +205,11 @@ export interface IStorage {
   getUserSettings(userId: string): Promise<UserSettings | undefined>;
   upsertUserSettings(
     userId: string,
-    settings: { preferredCurrency?: string | null; averageCostDisplayCurrency?: string | null },
+    settings: {
+      preferredCurrency?: string | null;
+      averageCostDisplayCurrency?: string | null;
+      passkeyStartupLockEnabled?: boolean;
+    },
   ): Promise<UserSettings>;
   
   // Option trades operations
@@ -1683,7 +1687,11 @@ export class DatabaseStorage implements IStorage {
 
   async upsertUserSettings(
     userId: string,
-    settings: { preferredCurrency?: string | null; averageCostDisplayCurrency?: string | null },
+    settings: {
+      preferredCurrency?: string | null;
+      averageCostDisplayCurrency?: string | null;
+      passkeyStartupLockEnabled?: boolean;
+    },
   ): Promise<UserSettings> {
     const existing = await this.getUserSettings(userId);
 
@@ -1696,6 +1704,9 @@ export class DatabaseStorage implements IStorage {
         const v = settings.averageCostDisplayCurrency;
         updateData.averageCostDisplayCurrency =
           v === "EUR" || v === "USD" ? v : null;
+      }
+      if (settings.passkeyStartupLockEnabled !== undefined) {
+        updateData.passkeyStartupLockEnabled = settings.passkeyStartupLockEnabled;
       }
 
       const [updated] = await db
@@ -1718,6 +1729,10 @@ export class DatabaseStorage implements IStorage {
         userId,
         preferredCurrency: pref,
         averageCostDisplayCurrency: avgCcy,
+        passkeyStartupLockEnabled:
+          settings.passkeyStartupLockEnabled !== undefined
+            ? settings.passkeyStartupLockEnabled
+            : true,
       })
       .returning();
     return created!;

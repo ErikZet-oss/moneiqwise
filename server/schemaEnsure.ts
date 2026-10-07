@@ -141,3 +141,11 @@ export async function ensureUserSettingsAverageCostDisplayCurrencyColumn(): Prom
     ADD COLUMN IF NOT EXISTS average_cost_display_currency varchar(3)
   `);
 }
+
+/** Passkey app-lock prepínač pre startup unlock flow. */
+export async function ensureUserSettingsPasskeyStartupLockColumn(): Promise<void> {
+  await pool.query(`
+    ALTER TABLE user_settings
+    ADD COLUMN IF NOT EXISTS passkey_startup_lock_enabled boolean NOT NULL DEFAULT true
+  `);
+}

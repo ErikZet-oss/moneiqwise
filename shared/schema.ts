@@ -280,6 +280,8 @@ export const userSettings = pgTable("user_settings", {
   preferredCurrency: varchar("preferred_currency", { length: 3 }).default("EUR"),
   /** Ak null, priemerné nákupné ceny sa zobrazujú v `preferred_currency`. Inak len tieto ceny v EUR alebo USD. */
   averageCostDisplayCurrency: varchar("average_cost_display_currency", { length: 3 }),
+  /** App lock po štarte: ak true a user má passkey, app vyžiada passkey unlock pri otvorení. */
+  passkeyStartupLockEnabled: boolean("passkey_startup_lock_enabled").notNull().default(true),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 

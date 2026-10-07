@@ -3165,6 +3165,7 @@ export async function registerRoutes(
     ensureExchangeRatesTable,
     ensureUserRegistrationStatusColumn,
     ensureUserSettingsAverageCostDisplayCurrencyColumn,
+    ensureUserSettingsPasskeyStartupLockColumn,
     ensurePokemonTcgColumns,
   } = await import("./schemaEnsure");
   await ensurePortfolioSortOrderColumn();
@@ -3172,6 +3173,7 @@ export async function registerRoutes(
   await ensureExchangeRatesTable();
   await ensureUserRegistrationStatusColumn();
   await ensureUserSettingsAverageCostDisplayCurrencyColumn();
+  await ensureUserSettingsPasskeyStartupLockColumn();
   await ensurePokemonTcgColumns();
 
   // Setup auth middleware
@@ -6751,6 +6753,7 @@ export async function registerRoutes(
           settings?.averageCostDisplayCurrency === "EUR" || settings?.averageCostDisplayCurrency === "USD"
             ? settings.averageCostDisplayCurrency
             : null,
+        passkeyStartupLockEnabled: settings?.passkeyStartupLockEnabled !== false,
       });
     } catch (error) {
       console.error("Error fetching user settings:", error);
@@ -6763,11 +6766,12 @@ export async function registerRoutes(
     try {
       const userId = req.user.claims.sub;
       const body = req.body ?? {};
-      const { preferredCurrency, averageCostDisplayCurrency } = body;
+      const { preferredCurrency, averageCostDisplayCurrency, passkeyStartupLockEnabled } = body;
 
       const patch: {
         preferredCurrency?: string | null;
         averageCostDisplayCurrency?: string | null;
+        passkeyStartupLockEnabled?: boolean;
       } = {};
       if (preferredCurrency !== undefined) {
         patch.preferredCurrency = preferredCurrency || "EUR";
@@ -6776,6 +6780,9 @@ export async function registerRoutes(
         const a = averageCostDisplayCurrency;
         patch.averageCostDisplayCurrency =
           a === null || a === "" ? null : a === "EUR" || a === "USD" ? a : null;
+      }
+      if (passkeyStartupLockEnabled !== undefined) {
+        patch.passkeyStartupLockEnabled = passkeyStartupLockEnabled === true;
       }
 
       const settings = await storage.upsertUserSettings(userId, patch);
@@ -6786,6 +6793,7 @@ export async function registerRoutes(
           settings.averageCostDisplayCurrency === "EUR" || settings.averageCostDisplayCurrency === "USD"
             ? settings.averageCostDisplayCurrency
             : null,
+        passkeyStartupLockEnabled: settings.passkeyStartupLockEnabled !== false,
       });
     } catch (error) {
       console.error("Error updating user settings:", error);
