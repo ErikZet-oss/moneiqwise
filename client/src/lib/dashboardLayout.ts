@@ -12,6 +12,7 @@ export const DASHBOARD_WIDGET_IDS = [
   "news",
   "dailyGainers",
   "dailyLosers",
+  "aiMacroAudit",
   "holdings",
 ] as const;
 
@@ -48,6 +49,7 @@ export const DASHBOARD_WIDGET_META: Record<
   news: { label: "Novinky", required: false },
   dailyGainers: { label: "Najlepšie (%)", required: false },
   dailyLosers: { label: "Najhoršie (%)", required: false },
+  aiMacroAudit: { label: "AI Macro Audit", required: false },
   holdings: { label: "Prehľad aktív", required: false },
 };
 
@@ -66,6 +68,7 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayout = {
     news: true,
     dailyGainers: true,
     dailyLosers: true,
+    aiMacroAudit: true,
     holdings: true,
   },
 };

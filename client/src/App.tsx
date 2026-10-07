@@ -25,6 +25,7 @@ import GoalTracker from "@/pages/GoalTracker";
 import EventsCalendar from "@/pages/EventsCalendar";
 import Watchlist from "@/pages/Watchlist";
 import AiAgent from "@/pages/AiAgent";
+import AiMacroAudit from "@/pages/AiMacroAudit";
 import AssetDetail from "@/pages/AssetDetail";
 import TaxSummaryPage from "@/pages/TaxSummaryPage";
 import FaqPage from "@/pages/FaqPage";
@@ -105,6 +106,7 @@ function Router() {
       <Route path="/ai-agent/alerty" component={AiAgent} />
       <Route path="/ai-agent/skener" component={AiAgent} />
       <Route path="/ai-skener" component={RedirectToAiAgentSkener} />
+      <Route path="/ai-macro-audit" component={AiMacroAudit} />
       <Route path="/settings" component={Settings} />
       <Route path="/admin/registrations" component={AdminRegistrations} />
       <Route path="/faq" component={FaqPage} />

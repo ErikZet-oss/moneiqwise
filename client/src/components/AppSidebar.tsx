@@ -1,4 +1,4 @@
-import { BarChart3, History, LogOut, User, TrendingUp, Settings, Briefcase, ChevronDown, Check, Target, Banknote, Upload, Sun, Moon, Layers, PieChart, Scale, LineChart, CircleHelp, CalendarClock, UserCog, Eye, Brain } from "lucide-react";
+import { BarChart3, History, LogOut, User, TrendingUp, Settings, Briefcase, ChevronDown, Check, Target, Banknote, Upload, Sun, Moon, Layers, PieChart, Scale, LineChart, CircleHelp, CalendarClock, UserCog, Eye, Brain, Sparkles } from "lucide-react";
 import { useLocation } from "wouter";
 import {
   Sidebar,
@@ -84,6 +84,11 @@ const menuItems = [
     title: "AI Agent",
     url: "/ai-agent/bot",
     icon: Brain,
+  },
+  {
+    title: "AI Macro Audit",
+    url: "/ai-macro-audit",
+    icon: Sparkles,
   },
   {
     title: "Daňový asistent",

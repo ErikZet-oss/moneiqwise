@@ -18,6 +18,7 @@ export const QUICK_NAV_SECTIONS: QuickNavSection[] = [
   { path: "/events", label: "Kalendár udalostí", shortLabel: "Kalendár" },
   { path: "/watchlist", label: "Watchlist", shortLabel: "Watchlist" },
   { path: "/ai-agent/bot", label: "AI Agent", shortLabel: "AI Agent" },
+  { path: "/ai-macro-audit", label: "AI Macro Audit", shortLabel: "Macro AI" },
   { path: "/tax", label: "Daňový asistent", shortLabel: "Dane" },
   { path: "/options", label: "Opcie", shortLabel: "Opcie" },
   { path: "/import", label: "Import brokera", shortLabel: "Import" },

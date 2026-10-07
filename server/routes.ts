@@ -3141,6 +3141,8 @@ export async function registerRoutes(
   registerAiScannerRoutes(app, isAuthenticated);
   const { registerAiBotRoutes } = await import("./aiBotRoutes");
   registerAiBotRoutes(app, isAuthenticated);
+  const { registerAiAuditorRoutes } = await import("./aiAuditorRoutes");
+  registerAiAuditorRoutes(app, isAuthenticated);
   const { registerPaperBotRoutes } = await import("./paperBotRoutes");
   registerPaperBotRoutes(app, isAuthenticated);
 

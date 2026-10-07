@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import {
   BarChart3,
   Brain,
+  Sparkles,
   CalendarClock,
   Eye,
   History,
@@ -38,6 +39,7 @@ const ICON_BY_PATH: Record<string, LucideIcon> = {
   "/ai-agent/alerty": Brain,
   "/ai-agent/skener": Brain,
   "/ai-skener": Brain,
+  "/ai-macro-audit": Sparkles,
   "/tax": Scale,
   "/options": Target,
   "/import": Upload,

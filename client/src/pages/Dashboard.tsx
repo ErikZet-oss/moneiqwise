@@ -75,6 +75,7 @@ import { BrokerLogo } from "@/components/BrokerLogo";
 import { MobilePortfolioChart } from "@/components/MobilePortfolioChart";
 import { DesktopPortfolioChart } from "@/components/DesktopPortfolioChart";
 import { DashboardAllocationWidget } from "@/components/DashboardAllocationWidget";
+import { DashboardAiMacroAuditWidget } from "@/components/DashboardAiMacroAuditWidget";
 import { DashboardWidgetFrame } from "@/components/DashboardWidgetFrame";
 import type { HoldingWithCostCurrency } from "@shared/holdingCostCurrency";
 import { isPhysicalSilverTicker } from "@shared/physicalMetal";
@@ -3454,6 +3455,19 @@ export default function Dashboard() {
                       renderLosersCard()
                     )
                   ) : null}
+                </DashboardWidgetFrame>
+              );
+            }
+            if (widgetId === "aiMacroAudit") {
+              return (
+                <DashboardWidgetFrame
+                  key={widgetId}
+                  id={widgetId}
+                  editing={dashboardEditing}
+                  visible={visible}
+                  onToggleVisible={() => toggleDashboardWidget(widgetId)}
+                >
+                  <DashboardAiMacroAuditWidget />
                 </DashboardWidgetFrame>
               );
             }
