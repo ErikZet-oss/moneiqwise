@@ -8,7 +8,12 @@ import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
 import { useTheme } from "@/hooks/useTheme";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-type TimePeriod = "1M" | "3M" | "6M" | "YTD" | "ALL";
+import {
+  PortfolioChartPeriodPicker,
+  portfolioChartPeriodGainLabel,
+  portfolioChartPeriodToRange,
+  type PortfolioChartPeriod,
+} from "@/components/PortfolioChartPeriodPicker";
 
 interface SnapshotPoint {
   date: string;
@@ -34,7 +39,7 @@ export function DesktopPortfolioChart({
   totalProfit,
   totalProfitPercent,
 }: DesktopPortfolioChartProps) {
-  const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>("ALL");
+  const [selectedPeriod, setSelectedPeriod] = useState<PortfolioChartPeriod>("ALL");
   const [chartDataIdle, setChartDataIdle] = useState(false);
   useEffect(() => {
     let cancelled = false;
@@ -63,22 +68,14 @@ export function DesktopPortfolioChart({
   const portfolioParam = getQueryParam();
   const chartQueriesEnabled = showChart && chartDataIdle;
 
-  const periodToRange: Record<TimePeriod, "1m" | "3m" | "6m" | "ytd" | "all"> = {
-    "1M": "1m",
-    "3M": "3m",
-    "6M": "6m",
-    YTD: "ytd",
-    ALL: "all",
-  };
-
   const { data: history } = useQuery<SnapshotHistoryRes>({
-    queryKey: ["/api/portfolio/history", portfolioParam, periodToRange[selectedPeriod]],
+    queryKey: ["/api/portfolio/history", portfolioParam, portfolioChartPeriodToRange[selectedPeriod]],
     enabled: chartQueriesEnabled,
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const p = new URLSearchParams();
       p.set("portfolio", portfolioParam);
-      p.set("range", periodToRange[selectedPeriod]);
+      p.set("range", portfolioChartPeriodToRange[selectedPeriod]);
       const res = await fetch(`/api/portfolio/history?${p.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch portfolio history snapshots");
       return res.json();
@@ -154,16 +151,6 @@ export function DesktopPortfolioChart({
       ? "hsl(350 65% 68%)"
       : "hsl(0 84% 60%)";
 
-  const periods: TimePeriod[] = ["1M", "3M", "6M", "YTD", "ALL"];
-
-  const periodLabel: Record<TimePeriod, string> = {
-    "1M": "Za 1M",
-    "3M": "Za 3M",
-    "6M": "Za 6M",
-    YTD: "Za YTD",
-    ALL: "Celkový",
-  };
-
   if (!showChart) {
     return null;
   }
@@ -176,7 +163,7 @@ export function DesktopPortfolioChart({
             <CardTitle className="text-base font-semibold">Vývoj portfólia</CardTitle>
             <div className="flex items-center gap-2 mt-1" data-testid="desktop-period-gain">
               <span className="text-xs text-muted-foreground">
-                {periodLabel[selectedPeriod]} zisk/strata:
+                {portfolioChartPeriodGainLabel[selectedPeriod]} zisk/strata:
               </span>
               <span className={`text-sm font-medium ${isPositive ? "text-green-500" : "text-red-500"}`}>
                 {isPositive ? "+" : ""}{formatCurrency(periodGainLoss.amount)}
@@ -188,22 +175,11 @@ export function DesktopPortfolioChart({
               </span>
             </div>
           </div>
-          <div className="flex gap-1 shrink-0">
-            {periods.map((period) => (
-              <button
-                key={period}
-                onClick={() => setSelectedPeriod(period)}
-                className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
-                  selectedPeriod === period
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:text-foreground"
-                }`}
-                data-testid={`button-desktop-period-${period}`}
-              >
-                {period === "ALL" ? "Vše" : period}
-              </button>
-            ))}
-          </div>
+          <PortfolioChartPeriodPicker
+            layout="desktop"
+            value={selectedPeriod}
+            onChange={setSelectedPeriod}
+          />
         </div>
       </CardHeader>
       <CardContent className="pt-0">

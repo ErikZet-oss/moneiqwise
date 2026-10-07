@@ -14,6 +14,12 @@ import { ArrowRightLeft, Eye, EyeOff, HelpCircle, Loader2, Moon, RefreshCw } fro
 import type { Holding } from "@shared/schema";
 import { isPokemonPortfolio } from "@shared/pokemonTcg";
 import { getExtendedSessionLabel, getQuoteRefreshIntervalMs, getQuoteStaleTimeMs, getUsMarketSessionState, shouldShowExtendedQuote, shouldUseExtendedQuotes } from "@/lib/usMarketSession";
+import {
+  PortfolioChartPeriodPicker,
+  portfolioChartPeriodMobileGainLabel,
+  portfolioChartPeriodToRange,
+  type PortfolioChartPeriod,
+} from "@/components/PortfolioChartPeriodPicker";
 
 interface StockQuote {
   ticker: string;
@@ -24,8 +30,6 @@ interface StockQuote {
   preMarketPrice?: number | null;
   preMarketChangePercent?: number | null;
 }
-
-type TimePeriod = "1M" | "3M" | "6M" | "YTD" | "ALL";
 
 interface SnapshotPoint {
   date: string;
@@ -66,7 +70,7 @@ export function MobilePortfolioChart({
   athCelebrationActive = false,
 }: MobilePortfolioChartProps) {
   const premarketMoonClass = "text-amber-600 dark:text-amber-400";
-  const [selectedPeriod, setSelectedPeriod] = useState<TimePeriod>("ALL");
+  const [selectedPeriod, setSelectedPeriod] = useState<PortfolioChartPeriod>("ALL");
   /** Odloží ťažké dotazy (história, eur map) až po idle — rýchlejší prvý render dashboardu. */
   const [chartDataIdle, setChartDataIdle] = useState(false);
   useEffect(() => {
@@ -138,22 +142,14 @@ export function MobilePortfolioChart({
     },
   });
 
-  const periodToRange: Record<TimePeriod, "1m" | "3m" | "6m" | "ytd" | "all"> = {
-    "1M": "1m",
-    "3M": "3m",
-    "6M": "6m",
-    YTD: "ytd",
-    ALL: "all",
-  };
-
   const { data: history } = useQuery<SnapshotHistoryRes>({
-    queryKey: ["/api/portfolio/history", portfolioParam, periodToRange[selectedPeriod]],
+    queryKey: ["/api/portfolio/history", portfolioParam, portfolioChartPeriodToRange[selectedPeriod]],
     enabled: chartQueriesEnabled,
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const p = new URLSearchParams();
       p.set("portfolio", portfolioParam);
-      p.set("range", periodToRange[selectedPeriod]);
+      p.set("range", portfolioChartPeriodToRange[selectedPeriod]);
       const res = await fetch(`/api/portfolio/history?${p.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch portfolio history snapshots");
       return res.json();
@@ -222,14 +218,6 @@ export function MobilePortfolioChart({
     totalInvested,
   ]);
 
-  const periodLabel: Record<TimePeriod, string> = {
-    "1M": "1M",
-    "3M": "3M",
-    "6M": "6M",
-    YTD: "YTD",
-    ALL: "celé obdobie",
-  };
-
   const minValue = useMemo(() => {
     if (chartData.length === 0) return 0;
     return Math.min(...chartData.map(d => d.value)) * 0.995;
@@ -297,8 +285,6 @@ export function MobilePortfolioChart({
     const percent = totalCurrent > 0 ? (amount / totalCurrent) * 100 : 0;
     return { available: true, amount, percent };
   }, [holdings, quotes, convertPrice, getTickerCurrency]);
-
-  const periods: TimePeriod[] = ["1M", "3M", "6M", "YTD", "ALL"];
 
   const usSessionState = getUsMarketSessionState();
 
@@ -572,7 +558,7 @@ export function MobilePortfolioChart({
             data-testid="mobile-period-gain"
           >
             <span className="text-[11px] text-muted-foreground">
-              Za {periodLabel[selectedPeriod]}:
+              Za {portfolioChartPeriodMobileGainLabel[selectedPeriod]}:
             </span>
             <div className="flex items-center gap-1.5">
               <span
@@ -596,22 +582,11 @@ export function MobilePortfolioChart({
             </div>
           </div>
 
-          <div className="flex justify-between items-center -mx-2 mt-2">
-            {periods.map((period) => (
-              <button
-                key={period}
-                onClick={() => setSelectedPeriod(period)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
-                  selectedPeriod === period
-                    ? "bg-muted text-foreground"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-                data-testid={`button-period-${period}`}
-              >
-                {period === "ALL" ? "Vše" : period}
-              </button>
-            ))}
-          </div>
+          <PortfolioChartPeriodPicker
+            layout="mobile"
+            value={selectedPeriod}
+            onChange={setSelectedPeriod}
+          />
         </>
       )}
     </div>
