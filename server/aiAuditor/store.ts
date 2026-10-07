@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db";
+import { hydrateAiAuditorAnalysis } from "./hydrateAnalysis";
 import {
   AI_AUDITOR_DAILY_LIMIT,
   type AiAuditorAnalysis,
@@ -75,7 +76,7 @@ function mapRun(row: any): AiAuditorRun {
     userId: String(row.user_id),
     portfolioId: String(row.portfolio_id),
     portfolioLabel: String(row.portfolio_label || ""),
-    analysis: analysis as AiAuditorAnalysis,
+    analysis: hydrateAiAuditorAnalysis(analysis),
     model: row.model != null ? String(row.model) : null,
     createdAt: new Date(row.created_at).toISOString(),
   };

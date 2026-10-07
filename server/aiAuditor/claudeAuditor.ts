@@ -8,6 +8,8 @@ import type {
   AiAuditorNewsItem,
   AiAuditorRecommendation,
   AiAuditorRiskLevel,
+  AiAuditorScoreBreakdown,
+  AiAuditorScoreFactor,
   AiAuditorSentiment,
 } from "./types";
 
@@ -117,11 +119,96 @@ function asSentiment(v: unknown): AiAuditorSentiment {
   return "neutral";
 }
 
-function asMacroBlock(raw: any): AiAuditorMacroBlock {
+function clampScore(v: unknown, fallback: number): number {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+
+function asScoreFactor(raw: any, fallbackScore: number, fallbackDetail: string): AiAuditorScoreFactor {
+  return {
+    score: clampScore(raw?.score, fallbackScore),
+    detail: String(raw?.detail || "").trim() || fallbackDetail,
+  };
+}
+
+function asMacroBlock(raw: any, fallbackDetail: string): AiAuditorMacroBlock {
+  const detail = String(raw?.detail || "").trim() || fallbackDetail;
+  const deepDive = String(raw?.deepDive || "").trim() || detail;
+  const mitigation =
+    String(raw?.mitigation || "").trim() ||
+    "Zváž diverzifikáciu a menšiu koncentráciu v najcitlivejších pozíciách.";
   return {
     impact: asImpact(raw?.impact),
-    detail: String(raw?.detail || "").trim() || "Bez detailu.",
+    detail,
+    deepDive,
+    mitigation,
   };
+}
+
+function impactToScore(impact: AiAuditorImpact): number {
+  switch (impact) {
+    case "positive":
+      return 78;
+    case "neutral":
+      return 62;
+    case "mixed":
+      return 48;
+    case "negative":
+      return 32;
+  }
+}
+
+function riskToScore(level: AiAuditorRiskLevel): number {
+  switch (level) {
+    case "low":
+      return 78;
+    case "medium":
+      return 52;
+    case "high":
+      return 28;
+  }
+}
+
+function sentimentAvgScore(items: AiAuditorNewsItem[]): number {
+  if (items.length === 0) return 55;
+  let sum = 0;
+  for (const n of items) {
+    sum += n.sentiment === "positive" ? 75 : n.sentiment === "negative" ? 30 : 55;
+  }
+  return Math.round(sum / items.length);
+}
+
+function resolveNewsUrl(
+  ticker: string,
+  headline: string,
+  rawUrl: unknown,
+  ctx: AiBotRunContext,
+): string | null {
+  const fromModel = String(rawUrl || "").trim();
+  if (fromModel.startsWith("http://") || fromModel.startsWith("https://")) {
+    return fromModel;
+  }
+  const t = ticker.toUpperCase();
+  const h = headline.toLowerCase();
+  const news = ctx.news || [];
+  const exact = news.find(
+    (n) =>
+      (n.ticker || "").toUpperCase() === t &&
+      n.title.toLowerCase() === h &&
+      n.link,
+  );
+  if (exact?.link) return exact.link;
+  const partial = news.find(
+    (n) =>
+      (n.ticker || "").toUpperCase() === t &&
+      n.link &&
+      (n.title.toLowerCase().includes(h.slice(0, 40)) ||
+        h.includes(n.title.toLowerCase().slice(0, 40))),
+  );
+  if (partial?.link) return partial.link;
+  const byTicker = news.find((n) => (n.ticker || "").toUpperCase() === t && n.link);
+  return byTicker?.link || null;
 }
 
 function normalizeAnalysis(raw: any, ctx: AiBotRunContext): AiAuditorAnalysis {
@@ -142,12 +229,21 @@ function normalizeAnalysis(raw: any, ctx: AiBotRunContext): AiAuditorAnalysis {
 
   const newsSentiment: AiAuditorNewsItem[] = Array.isArray(raw?.newsSentiment)
     ? raw.newsSentiment
-        .map((n: any) => ({
-          ticker: String(n?.ticker || "").toUpperCase().trim(),
-          headline: String(n?.headline || "").trim(),
-          sentiment: asSentiment(n?.sentiment),
-          whyItMatters: String(n?.whyItMatters || "").trim(),
-        }))
+        .map((n: any) => {
+          const ticker = String(n?.ticker || "").toUpperCase().trim();
+          const headline = String(n?.headline || "").trim();
+          const whyItMatters = String(n?.whyItMatters || "").trim();
+          const portfolioImpactDetail =
+            String(n?.portfolioImpactDetail || "").trim() || whyItMatters;
+          return {
+            ticker,
+            headline,
+            sentiment: asSentiment(n?.sentiment),
+            whyItMatters,
+            portfolioImpactDetail,
+            sourceUrl: resolveNewsUrl(ticker, headline, n?.sourceUrl, ctx),
+          };
+        })
         .filter((n: AiAuditorNewsItem) => n.ticker && n.headline)
         .slice(0, 8)
     : [];
@@ -169,20 +265,64 @@ function normalizeAnalysis(raw: any, ctx: AiBotRunContext): AiAuditorAnalysis {
         .slice(0, 4)
     : [];
 
+  const fedRates = asMacroBlock(
+    raw?.macroStress?.fedRates,
+    "Citlivosť na sadzby Fedu nebola vyhodnotená.",
+  );
+  const inflation = asMacroBlock(
+    raw?.macroStress?.inflation,
+    "Inflačný stres nebol vyhodnotený.",
+  );
+  const sectorLevel = asRisk(raw?.macroStress?.sectorConcentration?.level);
+  const sectorDetail =
+    String(raw?.macroStress?.sectorConcentration?.detail || "").trim() ||
+    "Sektorová koncentrácia nebola vyhodnotená.";
+  const sectorDeep =
+    String(raw?.macroStress?.sectorConcentration?.deepDive || "").trim() || sectorDetail;
+  const sectorMit =
+    String(raw?.macroStress?.sectorConcentration?.mitigation || "").trim() ||
+    "Zváž zníženie váhy najväčšieho sektora a doplnenie defenzívnejších ETF.";
+
+  const sb = raw?.scoreBreakdown;
+  const scoreBreakdown: AiAuditorScoreBreakdown = {
+    sectorConcentration: asScoreFactor(
+      sb?.sectorConcentration,
+      riskToScore(sectorLevel),
+      sectorDetail,
+    ),
+    fedSensitivity: asScoreFactor(
+      sb?.fedSensitivity,
+      impactToScore(fedRates.impact),
+      fedRates.detail,
+    ),
+    newsSentiment: asScoreFactor(
+      sb?.newsSentiment,
+      sentimentAvgScore(newsSentiment),
+      newsSentiment[0]?.whyItMatters ||
+        "Sentiment správ voči tvojim holdingom.",
+    ),
+    inflationResilience: asScoreFactor(
+      sb?.inflationResilience,
+      impactToScore(inflation.impact),
+      inflation.detail,
+    ),
+  };
+
   return {
     healthScore,
     healthLabel: String(raw?.healthLabel || "").trim() || "Bez hodnotenia",
     summaryOneLiner:
       String(raw?.summaryOneLiner || "").trim() ||
       "Analýza portfólia voči aktuálnemu makro prostrediu.",
+    scoreBreakdown,
     macroStress: {
-      fedRates: asMacroBlock(raw?.macroStress?.fedRates),
-      inflation: asMacroBlock(raw?.macroStress?.inflation),
+      fedRates,
+      inflation,
       sectorConcentration: {
-        level: asRisk(raw?.macroStress?.sectorConcentration?.level),
-        detail:
-          String(raw?.macroStress?.sectorConcentration?.detail || "").trim() ||
-          "Sektorová koncentrácia nebola vyhodnotená.",
+        level: sectorLevel,
+        detail: sectorDetail,
+        deepDive: sectorDeep,
+        mitigation: sectorMit,
         topSectors,
       },
     },
@@ -212,6 +352,7 @@ export async function runClaudeAiAuditorAnalysis(
     ticker: n.ticker,
     query: n.query,
     published: n.publishedAt,
+    link: n.link || null,
   }));
 
   const userPayload = {
@@ -224,24 +365,52 @@ export async function runClaudeAiAuditorAnalysis(
   const system = `Si senior makro a portfolio analytik pre retail investora (app Moneiqwise).
 Odpovedaj VÝHRADNE platným JSON (bez markdown). Texty v JSON hodnotách píš PO SLOVENSKY.
 Buď konkrétny voči holdingom a správam; nevymýšľaj tickery, ktoré nie sú v holdings.
-healthScore 0–100 = odolnosť portfólia voči aktuálnemu makro prostrediu (Fed, inflácia, sektorová koncentrácia, sentiment správ).`;
+healthScore a čiastkové skóre 0–100: vyššie = zdravšie / odolnejšie (nižšia koncentrácia, nižšia citlivosť na Fed, lepší sentiment, vyššia inflačná odolnosť).
+Pri správach použi sourceUrl z recentNews.link, ak sedí headline; inak null.
+portfolioImpactDetail: spomeň váhu tickera v portfóliu (weightPct) a približný dopad na hodnotu portfólia v EUR (totalMarketValue × weight).
+deepDive: 2–4 vety so scenárom (napr. −10 % Nasdaq). mitigation: jeden konkrétny krok.`;
 
   const user = `Vyhodnoť portfólio a vráť JSON s kľúčmi:
 {
   "healthScore": 0-100,
-  "healthLabel": "krátky status (napr. Vyvážené / Vysoká citlivosť na Fed)",
+  "healthLabel": "krátky status",
   "summaryOneLiner": "1 úderná veta",
+  "scoreBreakdown": {
+    "sectorConcentration": { "score": 0-100, "detail": "prečo toto skóre (koncentrácia)" },
+    "fedSensitivity": { "score": 0-100, "detail": "citlivosť rastových titulov na sadzby" },
+    "newsSentiment": { "score": 0-100, "detail": "nálada správ k holdingom" },
+    "inflationResilience": { "score": 0-100, "detail": "schopnosť firiem preniesť infláciu" }
+  },
   "macroStress": {
-    "fedRates": { "impact": "positive|neutral|negative|mixed", "detail": "..." },
-    "inflation": { "impact": "positive|neutral|negative|mixed", "detail": "..." },
+    "fedRates": {
+      "impact": "positive|neutral|negative|mixed",
+      "detail": "krátky súhrn na karte",
+      "deepDive": "scenáre a dopad na portfólio",
+      "mitigation": "konkrétny krok na zníženie rizika"
+    },
+    "inflation": {
+      "impact": "positive|neutral|negative|mixed",
+      "detail": "...",
+      "deepDive": "...",
+      "mitigation": "..."
+    },
     "sectorConcentration": {
       "level": "low|medium|high",
       "detail": "...",
+      "deepDive": "...",
+      "mitigation": "...",
       "topSectors": [{ "name": "...", "weightPct": 12.5 }]
     }
   },
   "newsSentiment": [
-    { "ticker": "NVDA", "headline": "...", "sentiment": "positive|neutral|negative", "whyItMatters": "..." }
+    {
+      "ticker": "NVDA",
+      "headline": "...",
+      "sentiment": "positive|neutral|negative",
+      "whyItMatters": "1–2 vety na kartu",
+      "portfolioImpactDetail": "váha v portfóliu + dopad v EUR + prečo to bolí/pomáha",
+      "sourceUrl": "https://... alebo null"
+    }
   ],
   "recommendations": [
     { "title": "...", "detail": "...", "priority": "high|medium|low" }
@@ -255,7 +424,7 @@ ${JSON.stringify(userPayload)}`;
     // Newer Claude models reject `temperature` ("temp is deprecated for this model").
     const msg = await client.messages.create({
       model: AI_AUDITOR_MODEL,
-      max_tokens: 4096,
+      max_tokens: 6144,
       system,
       messages: [{ role: "user", content: user }],
     });
@@ -263,8 +432,8 @@ ${JSON.stringify(userPayload)}`;
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
       .join("\n");
-    const raw = extractJsonObject(text);
-    return normalizeAnalysis(raw, ctx);
+    const parsed = extractJsonObject(text);
+    return normalizeAnalysis(parsed, ctx);
   } catch (err) {
     const wrapped = new Error(formatAnthropicError(err));
     (wrapped as any).cause = err;
