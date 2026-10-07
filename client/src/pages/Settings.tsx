@@ -8,12 +8,13 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { startRegistration } from "@simplewebauthn/browser";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings, type ChartBenchmarkId } from "@/hooks/useChartSettings";
 import { CHART_BENCHMARK_OPTIONS } from "@/lib/chartBenchmarks";
 import { useQuickNavFab } from "@/hooks/useQuickNavFab";
 import { MAX_QUICK_NAV_ITEMS, QUICK_NAV_SECTIONS } from "@/lib/quickNavSections";
-import { Loader2, Eye, EyeOff, Coins, Calculator, RefreshCw, Briefcase, Plus, Pencil, Trash2, LineChart, Newspaper, AlertTriangle, ChevronUp, ChevronDown, Eraser, TrendingUp, Code2, Download, MousePointerClick, X } from "lucide-react";
+import { Loader2, Eye, EyeOff, Coins, Calculator, RefreshCw, Briefcase, Plus, Pencil, Trash2, LineChart, Newspaper, AlertTriangle, ChevronUp, ChevronDown, Eraser, TrendingUp, Code2, Download, MousePointerClick, X, KeyRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { BrokerLogo, BrokerSelectItem, BROKER_CATALOG } from "@/components/BrokerLogo";
 import { BROKER_CODES, type Currency, type BrokerCode } from "@shared/schema";
@@ -41,6 +42,16 @@ interface SnapshotDevResponse {
   source?: string;
   startIso?: string;
   endIso?: string;
+}
+
+interface PasskeyItem {
+  id: string;
+  label: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
+  deviceType: "singleDevice" | "multiDevice";
+  backedUp: boolean;
+  transports: string[];
 }
 
 export default function Settings() {
@@ -92,9 +103,16 @@ export default function Settings() {
   const [wipeConfirmText, setWipeConfirmText] = useState("");
   const [devSnapshotScope, setDevSnapshotScope] = useState<string>("all");
   const [auditDownloadLoading, setAuditDownloadLoading] = useState(false);
+  const [deletingPasskeyId, setDeletingPasskeyId] = useState<string | null>(null);
+  const passkeysSupported =
+    typeof window !== "undefined" && "PublicKeyCredential" in window;
 
   const { data: settings, isLoading } = useQuery<ApiSettings>({
     queryKey: ["/api/settings"],
+  });
+
+  const { data: passkeysData, isLoading: passkeysLoading } = useQuery<{ passkeys: PasskeyItem[] }>({
+    queryKey: ["/api/auth/passkeys"],
   });
 
   const { data: exchangeRate } = useQuery<ExchangeRate>({
@@ -166,6 +184,59 @@ export default function Settings() {
       toast({
         title: "Chyba",
         description: "Nepodarilo sa uložiť nastavenia.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const registerPasskeyMutation = useMutation({
+    mutationFn: async () => {
+      const optionsResponse = await apiRequest("POST", "/api/auth/passkeys/options/register");
+      const optionsPayload = (await optionsResponse.json()) as {
+        options?: Parameters<typeof startRegistration>[0]["optionsJSON"];
+      };
+      if (!optionsPayload.options) {
+        throw new Error("Server nevrátil challenge pre registráciu passkey.");
+      }
+      const passkeyResponse = await startRegistration({
+        optionsJSON: optionsPayload.options,
+      });
+      await apiRequest("POST", "/api/auth/passkeys/verify/register", {
+        response: passkeyResponse,
+      });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/passkeys"] });
+      toast({
+        title: "Passkey pridaný",
+        description: "Prihlásenie cez WebAuthn je pripravené.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Registrácia passkey zlyhala",
+        description: error.message || "Skúste to znova.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const deletePasskeyMutation = useMutation({
+    mutationFn: async (passkeyId: string) => {
+      await apiRequest("DELETE", `/api/auth/passkeys/${passkeyId}`);
+    },
+    onSuccess: async () => {
+      setDeletingPasskeyId(null);
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/passkeys"] });
+      toast({
+        title: "Passkey odstránený",
+        description: "Vybraný passkey bol zmazaný.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Odstránenie passkey zlyhalo",
+        description: error.message || "Skúste to znova.",
         variant: "destructive",
       });
     },
@@ -440,6 +511,17 @@ export default function Settings() {
     }
   };
 
+  const passkeys = passkeysData?.passkeys ?? [];
+  const formatPasskeyDate = (value: string | null) => {
+    if (!value) return "—";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "—";
+    return date.toLocaleString("sk-SK", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -456,6 +538,105 @@ export default function Settings() {
           Portfóliá, zobrazenie, menu a mena pre prehľad.
         </p>
       </div>
+
+      <Card>
+        <CardHeader className="p-4 pb-2">
+          <div className="flex items-center gap-2">
+            <KeyRound className="h-5 w-5 text-primary" />
+            <CardTitle className="text-sm font-medium">Passkeys (WebAuthn)</CardTitle>
+          </div>
+          <CardDescription className="text-xs leading-snug">
+            Prihlasovanie pomocou odtlačku prsta, Face ID alebo PIN-u zariadenia bez zadávania hesla.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-4 pt-3 space-y-3">
+          {!passkeysSupported ? (
+            <div className="rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              Tento prehliadač alebo zariadenie nepodporuje WebAuthn passkeys.
+            </div>
+          ) : null}
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-xs text-muted-foreground">
+              Registrované passkeys:{" "}
+              <span className="font-medium text-foreground">{passkeys.length}</span>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => registerPasskeyMutation.mutate()}
+              disabled={!passkeysSupported || registerPasskeyMutation.isPending}
+              data-testid="button-register-passkey"
+            >
+              {registerPasskeyMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Registrujem...
+                </>
+              ) : (
+                "Pridať passkey"
+              )}
+            </Button>
+          </div>
+
+          {passkeysLoading ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              Načítavam passkeys...
+            </div>
+          ) : passkeys.length === 0 ? (
+            <div className="rounded-md border border-dashed border-border/70 px-3 py-2 text-xs text-muted-foreground">
+              Zatiaľ nemáte žiadny passkey.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {passkeys.map((passkey, index) => (
+                <div
+                  key={passkey.id}
+                  className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <p className="font-medium text-foreground">
+                        {passkey.label?.trim() || `Passkey #${index + 1}`}
+                      </p>
+                      <p className="text-muted-foreground">
+                        Typ: {passkey.deviceType === "multiDevice" ? "Synchronizovaný" : "Lokálny"} ·
+                        {" "}Záloha: {passkey.backedUp ? "áno" : "nie"}
+                      </p>
+                      <p className="text-muted-foreground">
+                        Vytvorený: {formatPasskeyDate(passkey.createdAt)}
+                      </p>
+                      <p className="text-muted-foreground">
+                        Naposledy použitý: {formatPasskeyDate(passkey.lastUsedAt)}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => {
+                        setDeletingPasskeyId(passkey.id);
+                        deletePasskeyMutation.mutate(passkey.id);
+                      }}
+                      disabled={deletePasskeyMutation.isPending && deletingPasskeyId === passkey.id}
+                      data-testid={`button-delete-passkey-${passkey.id}`}
+                    >
+                      {deletePasskeyMutation.isPending && deletingPasskeyId === passkey.id ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                          Mažem...
+                        </>
+                      ) : (
+                        "Odstrániť"
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="p-4 pb-2">

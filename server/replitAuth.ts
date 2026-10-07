@@ -1,7 +1,23 @@
 import type { Express, Request, Response, NextFunction, RequestHandler } from "express";
 import session from "express-session";
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "crypto";
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull, sql } from "drizzle-orm";
+import {
+  generateAuthenticationOptions,
+  generateRegistrationOptions,
+  verifyAuthenticationResponse,
+  verifyRegistrationResponse,
+  type VerifiedAuthenticationResponse,
+  type VerifiedRegistrationResponse,
+} from "@simplewebauthn/server";
+import type {
+  AuthenticationResponseJSON,
+  Base64URLString,
+  PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialRequestOptionsJSON,
+  RegistrationResponseJSON,
+  WebAuthnCredential,
+} from "@simplewebauthn/server";
 import { db } from "./db";
 import { storage } from "./storage";
 import { parseAdminEmailSet } from "./adminAuth";
@@ -25,6 +41,22 @@ type LockoutState = {
 
 const endpointRateLimits = new Map<string, RateLimitState>();
 const loginLockouts = new Map<string, LockoutState>();
+
+type PasskeyRecord = {
+  id: string;
+  userId: string;
+  credentialId: string;
+  publicKey: string;
+  counter: number;
+  deviceType: "singleDevice" | "multiDevice";
+  backedUp: boolean;
+  transports: string[];
+  label: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
+};
+
+let passkeyTableReady: Promise<void> | null = null;
 
 function parseBool(value: string | undefined, defaultValue: boolean) {
   if (value === undefined) return defaultValue;
@@ -149,6 +181,186 @@ function registerLoginFailure(email: string) {
 
 function clearLoginFailures(email: string) {
   loginLockouts.delete(getLockoutKey(email));
+}
+
+function asRows<T = any>(result: unknown): T[] {
+  if (Array.isArray(result)) return result as T[];
+  const r = result as { rows?: T[] };
+  return Array.isArray(r?.rows) ? r.rows : [];
+}
+
+function parseTransports(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw.map((v) => String(v).trim()).filter(Boolean);
+  }
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.map((v) => String(v).trim()).filter(Boolean);
+      }
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function mapPasskeyRow(row: any): PasskeyRecord {
+  return {
+    id: String(row.id),
+    userId: String(row.user_id),
+    credentialId: String(row.credential_id),
+    publicKey: String(row.public_key),
+    counter: Number(row.counter || 0),
+    deviceType: row.device_type === "multiDevice" ? "multiDevice" : "singleDevice",
+    backedUp: row.backed_up === true,
+    transports: parseTransports(row.transports),
+    label: row.label != null ? String(row.label) : null,
+    createdAt: new Date(row.created_at).toISOString(),
+    lastUsedAt: row.last_used_at ? new Date(row.last_used_at).toISOString() : null,
+  };
+}
+
+function toBase64Url(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString("base64url");
+}
+
+function fromBase64Url(value: string): Uint8Array {
+  return new Uint8Array(Buffer.from(value, "base64url"));
+}
+
+async function ensurePasskeyTable() {
+  if (!passkeyTableReady) {
+    passkeyTableReady = (async () => {
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS webauthn_passkeys (
+          id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
+          user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          credential_id TEXT NOT NULL UNIQUE,
+          public_key TEXT NOT NULL,
+          counter BIGINT NOT NULL DEFAULT 0,
+          device_type TEXT NOT NULL DEFAULT 'singleDevice',
+          backed_up BOOLEAN NOT NULL DEFAULT false,
+          transports JSONB,
+          label TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          last_used_at TIMESTAMPTZ
+        );
+      `);
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS webauthn_passkeys_user_idx
+          ON webauthn_passkeys (user_id, created_at DESC);
+      `);
+    })();
+  }
+  return passkeyTableReady;
+}
+
+async function listPasskeysForUser(userId: string): Promise<PasskeyRecord[]> {
+  await ensurePasskeyTable();
+  const result = await db.execute(sql`
+    SELECT id, user_id, credential_id, public_key, counter, device_type, backed_up, transports, label, created_at, last_used_at
+    FROM webauthn_passkeys
+    WHERE user_id = ${userId}
+    ORDER BY created_at DESC
+  `);
+  return asRows(result).map(mapPasskeyRow);
+}
+
+async function getPasskeyByCredentialId(credentialId: string): Promise<PasskeyRecord | null> {
+  await ensurePasskeyTable();
+  const result = await db.execute(sql`
+    SELECT id, user_id, credential_id, public_key, counter, device_type, backed_up, transports, label, created_at, last_used_at
+    FROM webauthn_passkeys
+    WHERE credential_id = ${credentialId}
+    LIMIT 1
+  `);
+  const row = asRows(result)[0];
+  return row ? mapPasskeyRow(row) : null;
+}
+
+async function findAccountByUserId(userId: string) {
+  const [account] = await db
+    .select()
+    .from(localAuthAccounts)
+    .where(eq(localAuthAccounts.userId, userId))
+    .limit(1);
+  return account;
+}
+
+function firstHeaderValue(input: string | undefined): string {
+  if (!input) return "";
+  return input.split(",")[0]?.trim() ?? "";
+}
+
+function inferRequestOrigin(req: Request): string {
+  const origin = firstHeaderValue(req.get("origin"));
+  if (origin) return origin;
+  const proto =
+    firstHeaderValue(req.get("x-forwarded-proto")) || req.protocol || "http";
+  const host =
+    firstHeaderValue(req.get("x-forwarded-host")) ||
+    firstHeaderValue(req.get("host"));
+  if (!host) return "";
+  return `${proto}://${host}`;
+}
+
+function getWebAuthnExpectedOrigins(req: Request): string[] {
+  const set = new Set<string>();
+  const envRaw = process.env.WEBAUTHN_ORIGIN || process.env.WEBAUTHN_ORIGINS || "";
+  for (const part of envRaw.split(",")) {
+    const value = part.trim();
+    if (value) set.add(value);
+  }
+  const inferred = inferRequestOrigin(req);
+  if (inferred) set.add(inferred);
+  if (process.env.NODE_ENV !== "production") {
+    set.add("http://localhost:5000");
+    set.add("http://127.0.0.1:5000");
+  }
+  return Array.from(set);
+}
+
+function getWebAuthnRpID(req: Request): string {
+  const configured = process.env.WEBAUTHN_RP_ID?.trim();
+  if (configured) return configured;
+  const host =
+    firstHeaderValue(req.get("x-forwarded-host")) ||
+    firstHeaderValue(req.get("host")) ||
+    "localhost";
+  return host.split(":")[0] || "localhost";
+}
+
+function getWebAuthnRpName(): string {
+  return process.env.WEBAUTHN_RP_NAME?.trim() || "Moneiqwise";
+}
+
+function requireSessionUserId(req: Request, res: Response): string | null {
+  const userId = req.session?.userId || (req as any).user?.claims?.sub;
+  if (!userId) {
+    res.status(401).json({ message: "Unauthorized" });
+    return null;
+  }
+  return String(userId);
+}
+
+function clearPasskeyFlow(req: Request) {
+  delete req.session.passkeyFlow;
+}
+
+function getPasskeyFlow(
+  req: Request,
+  action: "register" | "login",
+): { action: "register" | "login"; challenge: string; userId: string | null; issuedAt: number } | null {
+  const flow = req.session.passkeyFlow;
+  if (!flow || flow.action !== action || !flow.challenge) return null;
+  // Expire challenge after 5 minutes.
+  if (!Number.isFinite(flow.issuedAt) || Date.now() - flow.issuedAt > 5 * 60 * 1000) {
+    clearPasskeyFlow(req);
+    return null;
+  }
+  return flow;
 }
 
 function regenerateSession(req: Request): Promise<void> {
@@ -329,6 +541,317 @@ export async function setupAuth(app: Express) {
     return next();
   });
 
+  void ensurePasskeyTable().catch((err) =>
+    console.error("[auth] ensure passkey table failed:", err),
+  );
+
+  app.get("/api/auth/passkeys", async (req: Request, res: Response) => {
+    try {
+      const userId = requireSessionUserId(req, res);
+      if (!userId) return;
+      const passkeys = await listPasskeysForUser(userId);
+      return res.json({
+        passkeys: passkeys.map((p) => ({
+          id: p.id,
+          label: p.label,
+          createdAt: p.createdAt,
+          lastUsedAt: p.lastUsedAt,
+          deviceType: p.deviceType,
+          backedUp: p.backedUp,
+          transports: p.transports,
+        })),
+      });
+    } catch (error) {
+      console.error("[auth] list passkeys failed:", error);
+      return res.status(500).json({ message: "Nepodarilo sa načítať passkeys." });
+    }
+  });
+
+  app.delete("/api/auth/passkeys/:id", async (req: Request, res: Response) => {
+    try {
+      const userId = requireSessionUserId(req, res);
+      if (!userId) return;
+      const passkeyId = String(req.params?.id || "").trim();
+      if (!passkeyId) {
+        return res.status(400).json({ message: "Chýba passkey identifikátor." });
+      }
+      const result = await db.execute(sql`
+        DELETE FROM webauthn_passkeys
+        WHERE id = ${passkeyId} AND user_id = ${userId}
+        RETURNING id
+      `);
+      const deleted = asRows(result).length;
+      if (!deleted) {
+        return res.status(404).json({ message: "Passkey sa nenašiel." });
+      }
+      return res.json({ ok: true });
+    } catch (error) {
+      console.error("[auth] delete passkey failed:", error);
+      return res.status(500).json({ message: "Nepodarilo sa zmazať passkey." });
+    }
+  });
+
+  app.post("/api/auth/passkeys/options/register", async (req: Request, res: Response) => {
+    try {
+      const userId = requireSessionUserId(req, res);
+      if (!userId) return;
+
+      const [profile] = await db
+        .select({
+          email: users.email,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          registrationStatus: users.registrationStatus,
+        })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+      const account = await findAccountByUserId(userId);
+      const email = account?.email?.trim() || profile?.email?.trim() || "";
+      if (!email) {
+        return res.status(400).json({ message: "K tomuto účtu nie je možné pridať passkey." });
+      }
+      if (!profile || profile.registrationStatus !== "approved") {
+        return res.status(403).json({ message: "Účet nie je pripravený na passkey registráciu." });
+      }
+
+      const displayName =
+        [profile.firstName, profile.lastName].filter(Boolean).join(" ").trim() || email;
+      const existingPasskeys = await listPasskeysForUser(userId);
+      const options: PublicKeyCredentialCreationOptionsJSON =
+        await generateRegistrationOptions({
+          rpName: getWebAuthnRpName(),
+          rpID: getWebAuthnRpID(req),
+          userName: email,
+          userID: new TextEncoder().encode(userId),
+          userDisplayName: displayName,
+          attestationType: "none",
+          excludeCredentials: existingPasskeys.map((credential) => ({
+            id: credential.credentialId as Base64URLString,
+            transports: credential.transports,
+          })),
+          authenticatorSelection: {
+            residentKey: "required",
+            userVerification: "preferred",
+          },
+        });
+
+      req.session.passkeyFlow = {
+        action: "register",
+        challenge: options.challenge,
+        userId,
+        issuedAt: Date.now(),
+      };
+      return res.json({ options });
+    } catch (error) {
+      console.error("[auth] passkey register options failed:", error);
+      return res.status(500).json({ message: "Nepodarilo sa pripraviť registráciu passkey." });
+    }
+  });
+
+  app.post("/api/auth/passkeys/verify/register", async (req: Request, res: Response) => {
+    try {
+      const userId = requireSessionUserId(req, res);
+      if (!userId) return;
+      const flow = getPasskeyFlow(req, "register");
+      if (!flow || flow.userId !== userId) {
+        return res.status(400).json({ message: "Registrácia passkey vypršala. Skúste to znova." });
+      }
+
+      const responseJSON = req.body?.response as RegistrationResponseJSON | undefined;
+      if (!responseJSON || typeof responseJSON !== "object") {
+        return res.status(400).json({ message: "Neplatná odpoveď autentifikátora." });
+      }
+
+      const verification: VerifiedRegistrationResponse =
+        await verifyRegistrationResponse({
+          response: responseJSON,
+          expectedChallenge: flow.challenge,
+          expectedOrigin: getWebAuthnExpectedOrigins(req),
+          expectedRPID: getWebAuthnRpID(req),
+          requireUserVerification: true,
+        });
+
+      if (!verification.verified || !verification.registrationInfo) {
+        clearPasskeyFlow(req);
+        return res.status(400).json({ message: "Registráciu passkey sa nepodarilo overiť." });
+      }
+
+      const credential = verification.registrationInfo.credential;
+      const existing = await getPasskeyByCredentialId(credential.id);
+      if (existing && existing.userId !== userId) {
+        clearPasskeyFlow(req);
+        return res.status(409).json({ message: "Táto passkey už patrí inému účtu." });
+      }
+
+      const label =
+        typeof req.body?.label === "string" && req.body.label.trim()
+          ? req.body.label.trim().slice(0, 80)
+          : null;
+
+      await db.execute(sql`
+        INSERT INTO webauthn_passkeys (
+          user_id, credential_id, public_key, counter, device_type, backed_up, transports, label, last_used_at
+        ) VALUES (
+          ${userId},
+          ${credential.id},
+          ${toBase64Url(credential.publicKey)},
+          ${credential.counter},
+          ${verification.registrationInfo.credentialDeviceType},
+          ${verification.registrationInfo.credentialBackedUp},
+          ${JSON.stringify(credential.transports ?? [])}::jsonb,
+          ${label},
+          NOW()
+        )
+        ON CONFLICT (credential_id) DO UPDATE SET
+          user_id = EXCLUDED.user_id,
+          public_key = EXCLUDED.public_key,
+          counter = EXCLUDED.counter,
+          device_type = EXCLUDED.device_type,
+          backed_up = EXCLUDED.backed_up,
+          transports = EXCLUDED.transports,
+          label = COALESCE(EXCLUDED.label, webauthn_passkeys.label),
+          last_used_at = NOW()
+      `);
+
+      clearPasskeyFlow(req);
+      return res.json({ ok: true });
+    } catch (error) {
+      console.error("[auth] passkey register verify failed:", error);
+      clearPasskeyFlow(req);
+      return res.status(400).json({ message: "Overenie passkey zlyhalo." });
+    }
+  });
+
+  app.post("/api/auth/passkeys/options/login", async (req: Request, res: Response) => {
+    try {
+      const rate = applyRateLimit(req, "passkey-login-options");
+      if (!rate.allowed) {
+        res.setHeader("Retry-After", rate.retryAfterSec.toString());
+        return res.status(429).json({ message: "Príliš veľa pokusov. Skúste to neskôr." });
+      }
+
+      const emailInput =
+        typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+      const account = emailInput ? await findAccountByEmail(emailInput) : null;
+      const userPasskeys = account ? await listPasskeysForUser(account.userId) : [];
+      const options: PublicKeyCredentialRequestOptionsJSON =
+        await generateAuthenticationOptions({
+          rpID: getWebAuthnRpID(req),
+          userVerification: "preferred",
+          allowCredentials:
+            userPasskeys.length > 0
+              ? userPasskeys.map((credential) => ({
+                  id: credential.credentialId as Base64URLString,
+                  transports: credential.transports,
+                }))
+              : undefined,
+        });
+
+      req.session.passkeyFlow = {
+        action: "login",
+        challenge: options.challenge,
+        userId: account?.userId ?? null,
+        issuedAt: Date.now(),
+      };
+
+      return res.json({ options });
+    } catch (error) {
+      console.error("[auth] passkey login options failed:", error);
+      return res.status(500).json({ message: "Nepodarilo sa pripraviť passkey prihlásenie." });
+    }
+  });
+
+  app.post("/api/auth/passkeys/verify/login", async (req: Request, res: Response) => {
+    try {
+      const flow = getPasskeyFlow(req, "login");
+      if (!flow) {
+        return res.status(400).json({ message: "Passkey prihlásenie vypršalo. Skúste to znova." });
+      }
+
+      const responseJSON = req.body?.response as AuthenticationResponseJSON | undefined;
+      if (!responseJSON || typeof responseJSON !== "object") {
+        return res.status(400).json({ message: "Neplatná passkey odpoveď." });
+      }
+
+      const stored = await getPasskeyByCredentialId(String(responseJSON.id || "").trim());
+      if (!stored) {
+        clearPasskeyFlow(req);
+        return res.status(401).json({ message: "Passkey sa nenašla pre tento účet." });
+      }
+      if (flow.userId && flow.userId !== stored.userId) {
+        clearPasskeyFlow(req);
+        return res.status(401).json({ message: "Passkey nepatrí k zadanému účtu." });
+      }
+
+      const [acctUser] = await db
+        .select({ registrationStatus: users.registrationStatus })
+        .from(users)
+        .where(eq(users.id, stored.userId))
+        .limit(1);
+      if (!acctUser) {
+        clearPasskeyFlow(req);
+        return res.status(401).json({ message: "Účet neexistuje." });
+      }
+      if (acctUser.registrationStatus === "pending") {
+        clearPasskeyFlow(req);
+        return res.status(403).json({ message: "Účet ešte nie je schválený." });
+      }
+      if (acctUser.registrationStatus === "blocked") {
+        clearPasskeyFlow(req);
+        return res.status(403).json({ message: "Účet je zablokovaný." });
+      }
+
+      const credential: WebAuthnCredential = {
+        id: stored.credentialId as Base64URLString,
+        publicKey: fromBase64Url(stored.publicKey),
+        counter: stored.counter,
+        transports: stored.transports,
+      };
+      const verification: VerifiedAuthenticationResponse =
+        await verifyAuthenticationResponse({
+          response: responseJSON,
+          expectedChallenge: flow.challenge,
+          expectedOrigin: getWebAuthnExpectedOrigins(req),
+          expectedRPID: getWebAuthnRpID(req),
+          credential,
+          requireUserVerification: true,
+        });
+
+      if (!verification.verified) {
+        clearPasskeyFlow(req);
+        return res.status(401).json({ message: "Passkey overenie zlyhalo." });
+      }
+
+      await db.execute(sql`
+        UPDATE webauthn_passkeys
+        SET
+          counter = ${verification.authenticationInfo.newCounter},
+          device_type = ${verification.authenticationInfo.credentialDeviceType},
+          backed_up = ${verification.authenticationInfo.credentialBackedUp},
+          last_used_at = NOW()
+        WHERE id = ${stored.id}
+      `);
+
+      const account = await findAccountByUserId(stored.userId);
+      if (account?.email) clearLoginFailures(account.email);
+
+      await regenerateSession(req);
+      req.session.userId = stored.userId;
+      if (req.body?.rememberMe === true) {
+        req.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 30;
+      } else {
+        req.session.cookie.expires = false as any;
+      }
+      clearPasskeyFlow(req);
+      return res.status(200).json({ ok: true });
+    } catch (error) {
+      console.error("[auth] passkey login verify failed:", error);
+      clearPasskeyFlow(req);
+      return res.status(401).json({ message: "Passkey prihlásenie zlyhalo." });
+    }
+  });
+
   app.post("/api/login", async (req: Request, res: Response) => {
     try {
       const values = validateCredentials(req, res);
@@ -378,6 +901,7 @@ export async function setupAuth(app: Express) {
       clearLoginFailures(values.email);
       await regenerateSession(req);
       req.session.userId = account.userId;
+      clearPasskeyFlow(req);
       if (rememberMe) {
         req.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 30;
       } else {
@@ -430,6 +954,7 @@ export async function setupAuth(app: Express) {
 
       await regenerateSession(req);
       req.session.userId = user.id;
+      clearPasskeyFlow(req);
       if (rememberMe) {
         req.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 30;
       } else {
@@ -572,6 +1097,12 @@ export const isAuthenticated: RequestHandler = async (req: Request, res: Respons
 declare module "express-session" {
   interface SessionData {
     userId?: string;
+    passkeyFlow?: {
+      action: "register" | "login";
+      challenge: string;
+      userId: string | null;
+      issuedAt: number;
+    };
   }
 }
 
