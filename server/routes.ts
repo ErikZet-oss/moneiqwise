@@ -72,6 +72,7 @@ import {
 } from "./watchlistStockInfo";
 import { fetchEarningsHistoryForAsset } from "./earningsHistory";
 import { fetchAnalystRatingsForAsset } from "./analystRatings";
+import { fetchOwnershipActivityForAsset } from "./ownershipActivity";
 import { db } from "./db";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 
@@ -4086,6 +4087,41 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error fetching analyst ratings:", error);
       res.status(500).json({ message: "Nepodarilo sa načítať analyst ratings." });
+    }
+  });
+
+  /** Nákupy insiderov a inštitúcií (Yahoo) — pre detail držaného aktíva. */
+  app.get("/api/assets/:ticker/ownership-activity", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      let rawTicker = req.params.ticker as string;
+      try {
+        rawTicker = decodeURIComponent(rawTicker);
+      } catch {
+        // keep raw
+      }
+
+      const holdingRows = await storage.getHoldingsForTickerAcrossPortfolios(userId, rawTicker);
+      const txRows = await storage.getTransactionsForTickerAcrossPortfolios(userId, rawTicker);
+      if (holdingRows.length === 0 && txRows.length === 0) {
+        return res.status(404).json({ message: "Pre toto aktívum nemáte žiadne dáta." });
+      }
+
+      const displayTicker = holdingRows[0]?.ticker ?? txRows[0]?.ticker ?? rawTicker;
+      if (displayTicker.toUpperCase() === "CASH") {
+        return res.json({
+          ticker: displayTicker,
+          currency: null,
+          items: [],
+          source: null,
+        });
+      }
+
+      const ownershipActivity = await fetchOwnershipActivityForAsset(displayTicker);
+      res.json(ownershipActivity);
+    } catch (error) {
+      console.error("Error fetching ownership activity:", error);
+      res.status(500).json({ message: "Nepodarilo sa načítať nákupy insiderov/inštitúcií." });
     }
   });
 

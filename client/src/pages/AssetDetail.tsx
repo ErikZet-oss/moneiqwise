@@ -154,6 +154,23 @@ type EarningsHistoryResponse = {
   years: EarningsYearGroup[];
 };
 
+type OwnershipActivityItem = {
+  id: string;
+  date: string | null;
+  actorName: string;
+  shares: number | null;
+  value: number | null;
+  kind: "INSIDER" | "INSTITUTION";
+  note: string | null;
+};
+
+type OwnershipActivityResponse = {
+  ticker: string;
+  currency: string | null;
+  items: OwnershipActivityItem[];
+  source: "yahoo" | null;
+};
+
 type OpenFifoLotRow = {
   acquiredAt: string;
   remainingShares: number;
@@ -221,6 +238,40 @@ function formatEps(value: number | null): string {
   return value.toLocaleString("sk-SK", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 }
 
+function formatOwnershipDate(value: string | null): string {
+  if (!value) return "—";
+  try {
+    return format(parseISO(value), "d. M. yyyy", { locale: sk });
+  } catch {
+    return value;
+  }
+}
+
+function formatOwnershipShares(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  const abs = Math.abs(value);
+  if (abs >= 1e9) return `${(value / 1e9).toFixed(2)} mld.`;
+  if (abs >= 1e6) return `${(value / 1e6).toFixed(2)} mil.`;
+  return value.toLocaleString("sk-SK", { maximumFractionDigits: 0 });
+}
+
+function formatOwnershipValue(value: number | null, currencyHint: string | null): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  const ccy = (currencyHint ?? "").toUpperCase();
+  if (/^[A-Z]{3}$/.test(ccy)) {
+    try {
+      return new Intl.NumberFormat("sk-SK", {
+        style: "currency",
+        currency: ccy,
+        maximumFractionDigits: 0,
+      }).format(value);
+    } catch {
+      // fallback below
+    }
+  }
+  return `${value.toLocaleString("sk-SK", { maximumFractionDigits: 0 })}${ccy ? ` ${ccy}` : ""}`;
+}
+
 function surpriseTone(pct: number | null): "beat" | "miss" | "flat" | null {
   if (pct == null || !Number.isFinite(pct)) return null;
   if (pct > 0.05) return "beat";
@@ -276,6 +327,23 @@ export default function AssetDetail() {
       return res.json();
     },
     enabled: !!ticker && !!data && data.ticker !== "CASH",
+    staleTime: 60 * 60 * 1000,
+  });
+
+  const {
+    data: ownershipActivity,
+    isLoading: ownershipActivityLoading,
+    isError: ownershipActivityError,
+  } = useQuery<OwnershipActivityResponse>({
+    queryKey: ["/api/assets", ticker, "ownership-activity"],
+    queryFn: async () => {
+      const res = await fetch(`/api/assets/${encodeURIComponent(ticker)}/ownership-activity`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("ownership-activity");
+      return res.json();
+    },
+    enabled: !!ticker && !!data && data.ticker !== "CASH" && !isPokemonTicker(data.ticker),
     staleTime: 60 * 60 * 1000,
   });
 
@@ -423,6 +491,8 @@ export default function AssetDetail() {
     if (hasUnassigned) out.push({ value: "unassigned", label: "Nezaradené" });
     return out;
   }, [data?.marketTransactions, portfolioNameById]);
+
+  const ownershipRows = ownershipActivity?.items ?? [];
 
   const formatTxnValue = (tx: Transaction): string => {
     const cur = txnCurrency(tx);
@@ -1460,6 +1530,131 @@ export default function AssetDetail() {
           ticker={data.ticker}
           formatPrice={(amount) => mask(formatQuoteAmount(amount))}
         />
+      )}
+
+      {data.ticker !== "CASH" && !isPokemonTicker(data.ticker) && (
+        <Card className="border-border bg-card shadow-sm" data-testid="asset-ownership-activity">
+          <CardHeader className="p-4 pb-2">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <CardTitle className="text-base font-semibold">Nákupy insiderov a inštitúcií</CardTitle>
+                <CardDescription className="text-[11px] md:text-xs mt-0.5">
+                  Zoradené od najnovšieho · dátum nákupu/reportu
+                </CardDescription>
+              </div>
+              {ownershipActivity?.source && (
+                <Badge variant="outline" className="shrink-0 text-[10px]">
+                  Yahoo
+                </Badge>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="p-4 pt-1 space-y-2">
+            {ownershipActivityLoading ? (
+              <Skeleton className="h-28 w-full" />
+            ) : ownershipActivityError ? (
+              <p className="text-sm text-destructive">
+                Nákupy insiderov/inštitúcií sa nepodarilo načítať.
+              </p>
+            ) : ownershipRows.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Pre toto aktívum sa nenašli nové nákupy insiderov alebo inštitúcií.
+              </p>
+            ) : (
+              <>
+                <div className="md:hidden space-y-2">
+                  {ownershipRows.map((row) => (
+                    <div
+                      key={`${row.id}-mobile`}
+                      className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="text-[11px] text-muted-foreground">{formatOwnershipDate(row.date)}</div>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[10px] px-1.5 py-0 h-5 shrink-0",
+                            row.kind === "INSIDER"
+                              ? "border-sky-500/40 text-sky-700 dark:text-sky-300"
+                              : "border-violet-500/40 text-violet-700 dark:text-violet-300",
+                          )}
+                        >
+                          {row.kind === "INSIDER" ? "Insider" : "Inštitúcia"}
+                        </Badge>
+                      </div>
+                      <div className="text-sm font-semibold mt-1 truncate">{row.actorName}</div>
+                      {row.note && <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">{row.note}</p>}
+                      <div className="grid grid-cols-2 gap-2 mt-2">
+                        <div>
+                          <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Kusy</div>
+                          <div className="text-sm font-semibold tabular-nums">
+                            {row.shares == null ? "—" : mask(formatOwnershipShares(row.shares))}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-[10px] text-muted-foreground uppercase tracking-wide">Hodnota</div>
+                          <div className="text-sm font-semibold tabular-nums">
+                            {row.value == null
+                              ? "—"
+                              : mask(formatOwnershipValue(row.value, ownershipActivity?.currency ?? null))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="hidden md:block overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Dátum</TableHead>
+                        <TableHead>Kto nakúpil</TableHead>
+                        <TableHead className="text-right">Kusy</TableHead>
+                        <TableHead className="text-right">Hodnota</TableHead>
+                        <TableHead>Typ</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {ownershipRows.map((row) => (
+                        <TableRow key={row.id}>
+                          <TableCell className="text-sm whitespace-nowrap">
+                            {formatOwnershipDate(row.date)}
+                          </TableCell>
+                          <TableCell className="min-w-[260px]">
+                            <div className="font-medium">{row.actorName}</div>
+                            {row.note && <div className="text-xs text-muted-foreground mt-0.5">{row.note}</div>}
+                          </TableCell>
+                          <TableCell className="text-right text-sm font-mono">
+                            {row.shares == null ? "—" : mask(formatOwnershipShares(row.shares))}
+                          </TableCell>
+                          <TableCell className="text-right text-sm font-mono">
+                            {row.value == null
+                              ? "—"
+                              : mask(formatOwnershipValue(row.value, ownershipActivity?.currency ?? null))}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-[10px]",
+                                row.kind === "INSIDER"
+                                  ? "border-sky-500/40 text-sky-700 dark:text-sky-300"
+                                  : "border-violet-500/40 text-violet-700 dark:text-violet-300",
+                              )}
+                            >
+                              {row.kind === "INSIDER" ? "Insider" : "Inštitúcia"}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {data.ticker !== "CASH" && data.positions.length > 0 && (
