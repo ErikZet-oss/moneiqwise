@@ -99,6 +99,8 @@ import {
 } from "@/lib/usMarketSession";
 import { formatShareQuantity } from "@/lib/utils";
 
+const IMPORTANT_NOTIFICATIONS_STORAGE_PREFIX = "mw-important-notifications:";
+
 /** Krátky typ v mobile „jednoduché“ zobrazení (badge ako XTB). */
 function mobileSimpleAssetBadgeLabel(holding: HoldingWithCostCurrency): string {
   const t = holding.ticker.toUpperCase();
@@ -1910,6 +1912,27 @@ export default function Dashboard() {
 
   const importantNotificationCount = importantNotifications.length;
   const hasImportantNotifications = importantNotificationCount > 0;
+
+  useEffect(() => {
+    try {
+      const payload = {
+        updatedAtMs: Date.now(),
+        count: importantNotificationCount,
+        items: importantNotifications,
+      };
+      localStorage.setItem(
+        `${IMPORTANT_NOTIFICATIONS_STORAGE_PREFIX}${portfolioParam}`,
+        JSON.stringify(payload),
+      );
+      window.dispatchEvent(
+        new CustomEvent("importantNotificationsChanged", {
+          detail: { portfolio: portfolioParam, count: importantNotificationCount },
+        }),
+      );
+    } catch {
+      // ignore
+    }
+  }, [importantNotificationCount, importantNotifications, portfolioParam]);
 
   const calculateOpenOptionsValue = () => {
     if (!optionTrades) return { 
