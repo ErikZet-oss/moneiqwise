@@ -1,64 +1,71 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { ChevronDown, KeyRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button, Checkbox, Chip, Input } from "@/redesign/ui";
 import type { LandingAuth } from "@/pages/useLandingAuth";
 
+/**
+ * Feature sections for the long-scroll login.
+ * Motion follows Figma frame "Login — parallax: fázy a špecifikácia":
+ * progress 0→1 as the section moves from viewport bottom to vertical center;
+ * odd phones +160→0 (from right), even −160→0 (from left); Y +40→0;
+ * phone opacity 0.4→1; text fades in during progress 0→0.5; glow at scroll×0.3.
+ */
 const FEATURES: {
   index: string;
   title: string;
   body: string;
   side: "left" | "right";
-  kind: "overview" | "profit" | "dividends" | "import" | "charts" | "calendar" | "tax";
+  image: string;
 }[] = [
   {
     index: "01 / 07",
     title: "Prehľad portfólia",
     body: "Celková hodnota, zisk/strata a denná zmena",
     side: "right",
-    kind: "overview",
+    image: "/landing/overview.png",
   },
   {
     index: "02 / 07",
     title: "Analýza ziskov",
     body: "Realizované zisky, YTD a mesačné prehľady",
     side: "left",
-    kind: "profit",
+    image: "/landing/profit.png",
   },
   {
     index: "03 / 07",
     title: "Sledovanie dividend",
     body: "Hrubé, čisté dividendy a zrážková daň",
     side: "right",
-    kind: "dividends",
+    image: "/landing/dividends.png",
   },
   {
     index: "04 / 07",
     title: "Import/Export",
     body: "CSV import a export všetkých transakcií",
     side: "left",
-    kind: "import",
+    image: "/landing/history.png",
   },
   {
     index: "05 / 07",
     title: "Pokročilé grafy výkonu",
     body: "Porovnanie portfólia vs. S&P 500 a vývoj v čase",
     side: "right",
-    kind: "charts",
+    image: "/landing/charts.png",
   },
   {
     index: "06 / 07",
     title: "Trhový kalendár udalostí",
     body: "Earnings, dividendy a makro dáta s preklikom na detaily",
     side: "left",
-    kind: "calendar",
+    image: "/landing/calendar.png",
   },
   {
     index: "07 / 07",
     title: "Opcie a daňový asistent",
     body: "Sledovanie opcií, realizovaného zisku a ročných prehľadov",
     side: "right",
-    kind: "tax",
+    image: "/landing/tax.png",
   },
 ];
 
@@ -68,8 +75,48 @@ const STRENGTH_LABEL: Record<string, string> = {
   Silne: "Silné",
 };
 
+/** Phone frame size from Figma; ~35% stays past the screen edge when settled. */
+const PHONE_W = 211;
+const PHONE_H = 440;
+const PHONE_OVERHANG = Math.round(PHONE_W * 0.35);
+const PHONE_SLIDE_X = 160;
+const PHONE_SLIDE_Y = 40;
+const TEXT_SLIDE_Y = 24;
+
 export function RedesignLanding({ auth }: { auth: LandingAuth }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+    const reduceQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let frame = 0;
+
+    const update = () => {
+      frame = 0;
+      const reduce = reduceQuery.matches;
+      const view = scroller.getBoundingClientRect();
+      scroller.querySelectorAll<HTMLElement>("[data-parallax-section]").forEach((section) => {
+        applySectionParallax(section, view, reduce);
+      });
+    };
+
+    const onScroll = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(update);
+    };
+
+    update();
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    reduceQuery.addEventListener("change", onScroll);
+    return () => {
+      cancelAnimationFrame(frame);
+      scroller.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      reduceQuery.removeEventListener("change", onScroll);
+    };
+  }, []);
 
   const goToAuth = (tab: "login" | "register") => {
     auth.setAuthTab(tab);
@@ -79,14 +126,24 @@ export function RedesignLanding({ auth }: { auth: LandingAuth }) {
     scroller.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
   };
 
+  const scrollToFeatures = () => {
+    const scroller = scrollRef.current;
+    const target = scroller?.querySelector<HTMLElement>("#rd-login-features");
+    if (!scroller || !target) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const top = target.offsetTop - 12;
+    scroller.scrollTo({ top, behavior: reduce ? "auto" : "smooth" });
+  };
+
   return (
     <div
       ref={scrollRef}
       data-redesign-login-scroll
       className="h-dvh overflow-y-auto bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]"
     >
-      <Hero auth={auth} />
-      <section className="px-6 pb-2 pt-8">
+      {/* Auth card stays fixed in document flow — not part of parallax (Figma). */}
+      <Hero auth={auth} onScrollToFeatures={scrollToFeatures} />
+      <section id="rd-login-features" className="px-6 pb-2 pt-8">
         <h2 className="text-[34px] font-bold leading-[38px] tracking-[-0.02em]">
           Všetky investície. Jedna <span className="text-[var(--rd-profit)]">aplikácia.</span>
         </h2>
@@ -95,7 +152,7 @@ export function RedesignLanding({ auth }: { auth: LandingAuth }) {
         </p>
       </section>
       {FEATURES.map((feature) => (
-        <FeatureSection key={feature.index} {...feature} />
+        <FeatureSection key={feature.index} feature={feature} />
       ))}
       <footer className="flex flex-col items-center gap-4 px-6 pb-12 pt-10">
         <Wordmark className="text-[34px] leading-[38px]" />
@@ -114,28 +171,18 @@ export function RedesignLanding({ auth }: { auth: LandingAuth }) {
   );
 }
 
-function Hero({ auth }: { auth: LandingAuth }) {
-  const heroRef = useRef<HTMLElement>(null);
-  const [glow, setGlow] = useState(0);
-  useEffect(() => {
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
-    if (reduce.matches) return;
-    const scroller = heroRef.current?.closest("[data-redesign-login-scroll]");
-    const onScroll = () => {
-      const top = scroller instanceof HTMLElement ? scroller.scrollTop : 0;
-      setGlow(top * 0.3);
-    };
-    onScroll();
-    scroller?.addEventListener("scroll", onScroll, { passive: true });
-    return () => scroller?.removeEventListener("scroll", onScroll);
-  }, []);
-
+function Hero({
+  auth,
+  onScrollToFeatures,
+}: {
+  auth: LandingAuth;
+  onScrollToFeatures: () => void;
+}) {
   return (
-    <section ref={heroRef} className="relative flex flex-col gap-6 px-4 pb-8 pt-16">
+    <section className="relative flex flex-col gap-6 px-4 pb-8 pt-16">
       <div
         aria-hidden
         className="pointer-events-none absolute left-4 top-[-40px] size-[280px] rounded-full bg-[var(--rd-profit)]/20 blur-3xl"
-        style={{ transform: `translate3d(0, ${glow}px, 0)` }}
       />
       <div className="relative flex flex-col items-center gap-2 text-center">
         <Wordmark className="text-[40px] leading-[44px]" />
@@ -166,13 +213,7 @@ function Hero({ auth }: { auth: LandingAuth }) {
       <button
         type="button"
         className="flex flex-col items-center gap-2 py-2 text-[11px] font-semibold uppercase leading-[14px] tracking-[0.08em] text-[var(--rd-text-tertiary)]"
-        onClick={() => {
-          const scroller = heroRef.current?.closest("[data-redesign-login-scroll]");
-          const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-          if (scroller instanceof HTMLElement) {
-            scroller.scrollTo({ top: 760, behavior: reduce ? "auto" : "smooth" });
-          }
-        }}
+        onClick={onScrollToFeatures}
       >
         Čo v aplikácii nájdeš
         <ChevronDown className="size-5" aria-hidden />
@@ -288,131 +329,116 @@ function ResetForm({ auth }: { auth: LandingAuth }) {
   );
 }
 
-function FeatureSection({
-  index,
-  title,
-  body,
-  side,
-  kind,
-}: (typeof FEATURES)[number]) {
-  const ref = useRef<HTMLElement>(null);
-  const [shown, setShown] = useState(false);
-  const [glow, setGlow] = useState(0);
+/**
+ * Motion from Figma "Login — parallax: fázy a špecifikácia".
+ * progress 0 at section top = viewport bottom; 1 when section is vertically centered.
+ * prefers-reduced-motion: no transforms, only opacity fade when near viewport.
+ */
+function applySectionParallax(section: HTMLElement, view: DOMRect, reduce: boolean) {
+  const rect = section.getBoundingClientRect();
+  const start = view.bottom;
+  const end = view.top + view.height / 2 - rect.height / 2;
+  const raw = (start - rect.top) / (start - end || 1);
+  const progress = Math.min(1, Math.max(0, raw));
+  const fromX = Number(section.dataset.fromX || 0);
+  // Distance the section has traveled into the viewport (for glow depth).
+  const traveled = Math.max(0, Math.min(view.height + rect.height, view.bottom - rect.top));
 
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
-    if (reduce.matches) {
-      setShown(true);
-      return;
+  const phone = section.querySelector<HTMLElement>("[data-parallax-phone]");
+  if (phone) {
+    if (reduce) {
+      phone.style.transform = "translate3d(0, 0, 0)";
+      phone.style.opacity = progress > 0.15 ? "1" : "0";
+    } else {
+      const x = fromX * (1 - progress);
+      const y = PHONE_SLIDE_Y * (1 - progress);
+      phone.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+      phone.style.opacity = String(0.4 + 0.6 * progress);
     }
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry?.isIntersecting) setShown(true);
-      },
-      { threshold: 0.35 },
-    );
-    observer.observe(el);
-    const scroller = el.closest("[data-redesign-login-scroll]");
-    const onScroll = () => {
-      const rect = el.getBoundingClientRect();
-      const parent = scroller instanceof HTMLElement ? scroller.getBoundingClientRect() : null;
-      const viewTop = parent?.top ?? 0;
-      const viewHeight = parent?.height ?? window.innerHeight;
-      const delta = rect.top + rect.height / 2 - (viewTop + viewHeight / 2);
-      setGlow(delta * 0.3);
-    };
-    onScroll();
-    scroller?.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      observer.disconnect();
-      scroller?.removeEventListener("scroll", onScroll);
-    };
-  }, []);
+  }
+
+  const text = section.querySelector<HTMLElement>("[data-parallax-text]");
+  if (text) {
+    if (reduce) {
+      text.style.transform = "translate3d(0, 0, 0)";
+      text.style.opacity = progress > 0.15 ? "1" : "0";
+    } else {
+      // Text finishes in the first half of the phone motion so it reads earlier.
+      const textProgress = Math.min(1, progress / 0.5);
+      const y = TEXT_SLIDE_Y * (1 - textProgress);
+      text.style.transform = `translate3d(0, ${y}px, 0)`;
+      text.style.opacity = String(textProgress);
+    }
+  }
+
+  const glow = section.querySelector<HTMLElement>("[data-parallax-glow]");
+  if (glow) {
+    // Slower than content: translateY = scroll × 0.3
+    const y = reduce ? 0 : traveled * 0.3;
+    glow.style.transform = `translate3d(0, ${y}px, 0)`;
+  }
+}
+
+function FeatureSection({ feature }: { feature: (typeof FEATURES)[number] }) {
+  const fromRight = feature.side === "right";
+  const fromX = fromRight ? PHONE_SLIDE_X : -PHONE_SLIDE_X;
 
   return (
-    <section ref={ref} className="relative h-[560px] overflow-hidden">
+    <section
+      data-parallax-section
+      data-from-x={fromX}
+      className="relative h-[560px] overflow-hidden"
+    >
       <div
+        data-parallax-glow
         aria-hidden
         className={cn(
-          "pointer-events-none absolute top-[140px] size-[280px] rounded-full bg-[var(--rd-profit)]/25 blur-3xl",
-          side === "right" ? "right-[-80px]" : "left-[-80px]",
+          "pointer-events-none absolute top-[140px] size-[280px] rounded-full bg-[var(--rd-profit)]/30 blur-3xl will-change-transform",
+          fromRight ? "right-[-120px]" : "left-[-120px]",
         )}
-        style={{ transform: `translate3d(0, ${glow}px, 0)` }}
+        style={{ transform: "translate3d(0, 0, 0)" }}
       />
+      {/* Phone chrome matches Figma: 211×440, radius 34, notch, ~35% overhang. */}
       <div
-        className={cn(
-          "rd-phone-slide absolute top-[60px] w-[211px] transition-transform duration-700 ease-out",
-          side === "right" ? "right-[-28px]" : "left-[-28px]",
-          !shown && (side === "right" ? "translate-x-[180px]" : "-translate-x-[180px]"),
-        )}
+        data-parallax-phone
+        className="pointer-events-none absolute top-[60px] will-change-transform"
+        style={{
+          width: PHONE_W,
+          height: PHONE_H,
+          ...(fromRight ? { right: -PHONE_OVERHANG } : { left: -PHONE_OVERHANG }),
+          transform: `translate3d(${fromX}px, ${PHONE_SLIDE_Y}px, 0)`,
+          opacity: 0.4,
+        }}
       >
-        <PhoneMock kind={kind} title={title} />
-      </div>
-      <div
-        className={cn(
-          "absolute top-[190px] w-[196px]",
-          side === "right" ? "left-6" : "right-6 text-right",
-        )}
-      >
-        <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">{index}</p>
-        <h3 className="mt-3 text-[22px] font-bold leading-7 tracking-[-0.01em]">{title}</h3>
-        <p className="mt-3 text-sm leading-5 text-[var(--rd-text-secondary)]">{body}</p>
-      </div>
-    </section>
-  );
-}
-
-function PhoneMock({ kind, title }: { kind: (typeof FEATURES)[number]["kind"]; title: string }) {
-  return (
-    <div className="h-[440px] overflow-hidden rounded-[28px] border border-[var(--rd-border-strong)] bg-[#050607] shadow-[0_24px_60px_-24px_rgba(0,0,0,0.8)]">
-      <div className="mx-auto mt-2 h-1.5 w-14 rounded-full bg-[var(--rd-bg-surface-hover)]" />
-      <div className="px-3 pt-3">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--rd-text-tertiary)]">MoneIQWise</p>
-        <p className="text-sm font-semibold leading-5">{title}</p>
-        <div className="mt-3 space-y-2">
-          <MockBody kind={kind} />
+        <div className="relative h-full w-full overflow-hidden rounded-[34px] border border-[var(--rd-border-strong)] bg-[var(--rd-bg-base)] shadow-[0_24px_48px_rgba(0,0,0,0.45)]">
+          <div
+            aria-hidden
+            className="absolute left-1/2 top-[5px] z-10 h-[6px] w-[56px] -translate-x-1/2 rounded-[3px] bg-[var(--rd-bg-surface-hover)]"
+          />
+          <img
+            src={feature.image}
+            alt=""
+            width={195}
+            height={426}
+            decoding="async"
+            loading="lazy"
+            className="absolute inset-x-2 top-[14px] h-[calc(100%-14px)] w-[calc(100%-16px)] rounded-t-[26px] object-cover object-top"
+          />
         </div>
       </div>
-    </div>
-  );
-}
-
-function MockBody({ kind }: { kind: (typeof FEATURES)[number]["kind"] }) {
-  if (kind === "overview") {
-    return (
-      <>
-        <MockStat label="Hodnota" value="37 143 €" tone="text-[var(--rd-text-primary)]" />
-        <MockStat label="Profit" value="+19 854 €" tone="text-[var(--rd-profit)]" />
-        <MockBars />
-      </>
-    );
-  }
-  if (kind === "profit") return <MockStat label="YTD" value="+12,4 %" tone="text-[var(--rd-profit)]" />;
-  if (kind === "dividends") return <MockStat label="Dividendy" value="842 €" tone="text-[var(--rd-profit)]" />;
-  if (kind === "import") return <MockStat label="Import" value="XTB · CSV" tone="text-[var(--rd-text-primary)]" />;
-  if (kind === "charts") return <MockBars />;
-  if (kind === "calendar") return <MockStat label="Najbližšie" value="Earnings" tone="text-[var(--rd-info)]" />;
-  return <MockStat label="Daň" value="Ročný súčet" tone="text-[var(--rd-warning)]" />;
-}
-
-function MockStat({ label, value, tone }: { label: string; value: string; tone: string }) {
-  return (
-    <div className="rounded-[10px] border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface)] p-2">
-      <p className="text-[9px] uppercase tracking-[0.08em] text-[var(--rd-text-tertiary)]">{label}</p>
-      <p className={cn("font-mono text-sm font-medium", tone)}>{value}</p>
-    </div>
-  );
-}
-
-function MockBars() {
-  return (
-    <div className="flex h-16 items-end gap-1 rounded-[10px] border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface)] p-2">
-      {[40, 55, 48, 70, 62, 80, 74].map((height) => (
-        <span key={height} className="flex-1 rounded-sm bg-[var(--rd-profit)]/80" style={{ height: `${height}%` }} />
-      ))}
-    </div>
+      <div
+        data-parallax-text
+        className={cn(
+          "absolute top-[190px] w-[196px] will-change-transform",
+          fromRight ? "left-6" : "right-4",
+        )}
+        style={{ transform: `translate3d(0, ${TEXT_SLIDE_Y}px, 0)`, opacity: 0 }}
+      >
+        <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">{feature.index}</p>
+        <h3 className="mt-3 text-[22px] font-bold leading-7 tracking-[-0.01em]">{feature.title}</h3>
+        <p className="mt-3 text-sm leading-5 text-[var(--rd-text-secondary)]">{feature.body}</p>
+      </div>
+    </section>
   );
 }
 
