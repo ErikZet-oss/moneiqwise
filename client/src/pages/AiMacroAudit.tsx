@@ -42,6 +42,8 @@ import {
   type AiAuditorRiskLevel,
   type AiAuditorSentiment,
 } from "@/lib/aiAuditor";
+import { useMobileRedesign } from "@/hooks/useMobileUi";
+import AiMacroAuditMobile from "@/pages/redesign/AiMacroAuditMobile";
 import { cn } from "@/lib/utils";
 
 function impactPillClass(impact: AiAuditorImpact) {
@@ -97,7 +99,7 @@ const SCORE_FACTOR_META = [
   },
 ];
 
-export default function AiMacroAudit() {
+function AiMacroAuditClassic() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { getQueryParam, selectedPortfolio, isAllPortfolios } = usePortfolio();
@@ -653,4 +655,9 @@ export default function AiMacroAudit() {
       )}
     </div>
   );
+}
+
+export default function AiMacroAudit() {
+  const redesign = useMobileRedesign();
+  return redesign ? <AiMacroAuditMobile /> : <AiMacroAuditClassic />;
 }

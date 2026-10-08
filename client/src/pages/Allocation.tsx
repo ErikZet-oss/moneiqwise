@@ -16,6 +16,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
+import { useMobileRedesign } from "@/hooks/useMobileUi";
+import AllocationMobile from "@/pages/redesign/AllocationMobile";
 import { useToast } from "@/hooks/use-toast";
 import type { Holding } from "@shared/schema";
 import { CASH_INTEREST_DISPLAY_NAME, CASH_INTEREST_TICKER } from "@shared/tickerCurrency";
@@ -195,7 +197,7 @@ function useFineHover() {
   return fineHover;
 }
 
-export default function Allocation() {
+function AllocationClassic() {
   const { currency, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
   const { toast } = useToast();
   const {
@@ -871,4 +873,9 @@ function AllocationPieCard({
       </CardContent>
     </Card>
   );
+}
+
+export default function Allocation() {
+  const redesign = useMobileRedesign();
+  return redesign ? <AllocationMobile /> : <AllocationClassic />;
 }

@@ -1,0 +1,140 @@
+import { useState, type ReactNode } from "react";
+import { CircleHelp, RefreshCw } from "lucide-react";
+import { usePortfolio } from "@/hooks/usePortfolio";
+import { Dialog } from "@/redesign/ui";
+import { cn } from "@/lib/utils";
+
+export function PageBody({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cn("flex flex-col gap-4 px-4 pb-6 pt-2", className)}>{children}</div>;
+}
+
+export function KvRow({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  tone?: "neutral" | "up" | "down";
+}) {
+  const valueClass =
+    tone === "up"
+      ? "text-[var(--rd-profit)]"
+      : tone === "down"
+        ? "text-[var(--rd-loss)]"
+        : "text-[var(--rd-text-primary)]";
+  return (
+    <div className="flex items-center gap-2 text-xs leading-4">
+      <p className="min-w-0 flex-1 text-[var(--rd-text-secondary)]">{label}</p>
+      <p className={cn("shrink-0 font-mono font-medium", valueClass)}>{value}</p>
+    </div>
+  );
+}
+
+export function toneOf(value: number): "neutral" | "up" | "down" {
+  if (!Number.isFinite(value) || value === 0) return "neutral";
+  return value > 0 ? "up" : "down";
+}
+
+export function signedMoney(formatCurrency: (n: number) => string, value: number): string {
+  const sign = value > 0 ? "+" : value < 0 ? "−" : "";
+  return `${sign}${formatCurrency(Math.abs(value))}`;
+}
+
+export function signedPct(value: number, digits = 2): string {
+  if (!Number.isFinite(value)) return "—";
+  const sign = value > 0 ? "+" : value < 0 ? "−" : "";
+  return `${sign}${Math.abs(value).toFixed(digits)}%`;
+}
+
+export function IconButton({
+  label,
+  onClick,
+  spinning,
+  children,
+}: {
+  label: string;
+  onClick?: () => void;
+  spinning?: boolean;
+  children?: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)] text-[var(--rd-text-primary)]"
+    >
+      {children ?? <RefreshCw className={cn("size-[18px]", spinning && "animate-spin")} />}
+    </button>
+  );
+}
+
+export function HelpButton({ title, body }: { title: string; body: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        aria-label={title}
+        onClick={() => setOpen(true)}
+        className="inline-flex size-8 shrink-0 items-center justify-center text-[var(--rd-text-tertiary)]"
+      >
+        <CircleHelp className="size-4" />
+      </button>
+      <Dialog open={open} title={title} body={body} onClose={() => setOpen(false)} />
+    </>
+  );
+}
+
+export function PortfolioSwitcher({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  const { portfolios, selectedPortfolioId, setSelectedPortfolioId } = usePortfolio();
+  const pick = (id: string) => {
+    setSelectedPortfolioId(id);
+    onClose();
+  };
+  return (
+    <Dialog open={open} title="Portfólio" body="Výber je zdieľaný s ostatnými obrazovkami." onClose={onClose}>
+      <div className="mt-3 flex flex-col">
+        <button
+          type="button"
+          onClick={() => pick("all")}
+          className={cn(
+            "min-h-11 rounded-[var(--rd-radius-sm)] px-2 text-left text-sm",
+            selectedPortfolioId === "all" ? "text-[var(--rd-profit)]" : "text-[var(--rd-text-primary)]",
+          )}
+        >
+          Všetky portfóliá
+        </button>
+        {portfolios.map((portfolio) => (
+          <button
+            key={portfolio.id}
+            type="button"
+            onClick={() => pick(portfolio.id)}
+            className={cn(
+              "min-h-11 rounded-[var(--rd-radius-sm)] px-2 text-left text-sm",
+              selectedPortfolioId === portfolio.id ? "text-[var(--rd-profit)]" : "text-[var(--rd-text-primary)]",
+            )}
+          >
+            {portfolio.name}
+          </button>
+        ))}
+      </div>
+    </Dialog>
+  );
+}
+
+export const CHART_COLORS = [
+  "var(--rd-chart-1)",
+  "var(--rd-chart-2)",
+  "var(--rd-chart-3)",
+  "var(--rd-chart-4)",
+  "var(--rd-chart-5)",
+  "var(--rd-chart-6)",
+];

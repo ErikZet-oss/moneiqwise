@@ -2,10 +2,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Bell, Brain, Bot, ScanSearch, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useMobileRedesign } from "@/hooks/useMobileUi";
 import AiSkener from "@/pages/AiSkener";
 import AiBot from "@/pages/AiBot";
 import AiAlerts from "@/pages/AiAlerts";
 import AiPaperBot from "@/pages/AiPaperBot";
+import AiAgentMobile from "@/pages/redesign/AiAgentMobile";
 
 type TabId = "bot" | "paper" | "alerts" | "skener";
 
@@ -16,7 +18,7 @@ function tabFromPath(path: string): TabId {
   return "bot";
 }
 
-export default function AiAgent() {
+function AiAgentClassic() {
   const [location, setLocation] = useLocation();
   const tab = tabFromPath(location);
 
@@ -145,4 +147,9 @@ export default function AiAgent() {
       </div>
     </div>
   );
+}
+
+export default function AiAgent() {
+  const redesign = useMobileRedesign();
+  return redesign ? <AiAgentMobile /> : <AiAgentClassic />;
 }

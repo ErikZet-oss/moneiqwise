@@ -26,6 +26,8 @@ import { BrokerLogo } from "@/components/BrokerLogo";
 import { useCurrency } from "@/hooks/useCurrency";
 import { useChartSettings } from "@/hooks/useChartSettings";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useMobileRedesign } from "@/hooks/useMobileUi";
+import AssetDetailMobile from "@/pages/redesign/AssetDetailMobile";
 import { HelpTip } from "@/components/HelpTip";
 import { AnalystRatingsCard } from "@/components/AnalystRatingsCard";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -285,7 +287,7 @@ function codeToCurrency(c: string): "EUR" | "USD" | "GBP" | "CZK" | "PLN" {
   return "EUR";
 }
 
-export default function AssetDetail() {
+function AssetDetailClassic() {
   const params = useParams();
   const rawTicker = (params as { ticker?: string }).ticker ?? "";
   const ticker = rawTicker ? decodeURIComponent(rawTicker) : "";
@@ -2047,4 +2049,9 @@ export default function AssetDetail() {
       </Card>
     </div>
   );
+}
+
+export default function AssetDetail() {
+  const redesign = useMobileRedesign();
+  return redesign ? <AssetDetailMobile /> : <AssetDetailClassic />;
 }

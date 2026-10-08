@@ -10,6 +10,8 @@ import { Switch } from "@/components/ui/switch";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useCurrency } from "@/hooks/useCurrency";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useMobileRedesign } from "@/hooks/useMobileUi";
+import GoalTrackerMobile from "@/pages/redesign/GoalTrackerMobile";
 import { HelpTip } from "@/components/HelpTip";
 
 type HistoryPoint = {
@@ -53,7 +55,7 @@ function parseNumberInput(raw: string, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
-export default function GoalTracker() {
+function GoalTrackerClassic() {
   const { getQueryParam, selectedPortfolio, isAllPortfolios } = usePortfolio();
   const { formatCurrency } = useCurrency();
   const portfolioParam = getQueryParam();
@@ -525,5 +527,10 @@ export default function GoalTracker() {
       </Card>
     </div>
   );
+}
+
+export default function GoalTracker() {
+  const redesign = useMobileRedesign();
+  return redesign ? <GoalTrackerMobile /> : <GoalTrackerClassic />;
 }
 

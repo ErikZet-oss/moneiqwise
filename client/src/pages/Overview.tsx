@@ -19,6 +19,8 @@ import {
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
+import { useMobileRedesign } from "@/hooks/useMobileUi";
+import OverviewMobile from "@/pages/redesign/OverviewMobile";
 import { BrokerLogo } from "@/components/BrokerLogo";
 import type { HoldingWithCostCurrency } from "@shared/holdingCostCurrency";
 import type { OptionTrade } from "@shared/schema";
@@ -125,7 +127,7 @@ async function fetchAllOptionTrades(): Promise<OptionTrade[]> {
   return res.json();
 }
 
-export default function Overview() {
+function OverviewClassic() {
   const queryClient = useQueryClient();
   const [refreshingPortfolioId, setRefreshingPortfolioId] = useState<string | null>(
     null,
@@ -982,4 +984,9 @@ export default function Overview() {
       )}
     </div>
   );
+}
+
+export default function Overview() {
+  const redesign = useMobileRedesign();
+  return redesign ? <OverviewMobile /> : <OverviewClassic />;
 }

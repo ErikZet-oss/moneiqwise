@@ -36,6 +36,8 @@ import {
   CASH_INTEREST_TAX_DISPLAY_NAME,
   CASH_INTEREST_TICKER,
 } from "@shared/tickerCurrency";
+import { useMobileRedesign } from "@/hooks/useMobileUi";
+import ImportMobile from "@/pages/redesign/ImportMobile";
 import { formatShareQuantity } from "@/lib/utils";
 
 interface ParsedTransaction {
@@ -169,7 +171,7 @@ async function readHttpErrorMessage(response: Response): Promise<string> {
   return `HTTP ${status} ${response.statusText || ""}`.trim();
 }
 
-export default function Import() {
+function ImportClassic() {
   const { toast } = useToast();
   const { formatCurrency } = useCurrency();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1153,4 +1155,9 @@ export default function Import() {
       </div>
     </div>
   );
+}
+
+export default function Import() {
+  const redesign = useMobileRedesign();
+  return redesign ? <ImportMobile /> : <ImportClassic />;
 }

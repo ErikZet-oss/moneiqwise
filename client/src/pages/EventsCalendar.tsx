@@ -22,6 +22,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { HelpTip } from "@/components/HelpTip";
+import { useMobileRedesign } from "@/hooks/useMobileUi";
+import EventsCalendarMobile from "@/pages/redesign/EventsCalendarMobile";
 import { CompanyLogo } from "@/components/CompanyLogo";
 
 type EarningsSession = "BMO" | "AMC" | null;
@@ -133,7 +135,7 @@ function buildIcsHref(ev: CalendarEvent): string {
   return `data:text/calendar;charset=utf-8,${encodeURIComponent(ics)}`;
 }
 
-export default function EventsCalendar() {
+function EventsCalendarClassic() {
   const { getQueryParam, selectedPortfolio, isAllPortfolios } = usePortfolio();
   const portfolioParam = getQueryParam();
 
@@ -482,4 +484,9 @@ export default function EventsCalendar() {
       </Sheet>
     </div>
   );
+}
+
+export default function EventsCalendar() {
+  const redesign = useMobileRedesign();
+  return redesign ? <EventsCalendarMobile /> : <EventsCalendarClassic />;
 }

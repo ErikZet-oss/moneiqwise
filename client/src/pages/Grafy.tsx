@@ -28,6 +28,8 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useMobileRedesign } from "@/hooks/useMobileUi";
+import GrafyMobile from "@/pages/redesign/GrafyMobile";
 import { HelpTip } from "@/components/HelpTip";
 import { cn } from "@/lib/utils";
 
@@ -105,7 +107,7 @@ function RangeToggle({
   );
 }
 
-export default function Grafy() {
+function GrafyClassic() {
   const { formatCurrency, currency } = useCurrency();
   const {
     portfolios,
@@ -466,4 +468,9 @@ export default function Grafy() {
       </Card>
     </div>
   );
+}
+
+export default function Grafy() {
+  const redesign = useMobileRedesign();
+  return redesign ? <GrafyMobile /> : <GrafyClassic />;
 }

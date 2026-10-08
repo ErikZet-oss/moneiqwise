@@ -19,6 +19,8 @@ import { Badge } from "@/components/ui/badge";
 import { BrokerLogo, BrokerSelectItem, BROKER_CATALOG } from "@/components/BrokerLogo";
 import { BROKER_CODES, type Currency, type BrokerCode } from "@shared/schema";
 import { HelpTip } from "@/components/HelpTip";
+import { useMobileRedesign } from "@/hooks/useMobileUi";
+import SettingsMobile from "@/pages/redesign/SettingsMobile";
 
 interface ApiSettings {
   preferredCurrency: Currency;
@@ -55,7 +57,7 @@ interface PasskeyItem {
   transports: string[];
 }
 
-export default function Settings() {
+function SettingsClassic() {
   const { toast } = useToast();
   const { allPortfolios, createPortfolio, updatePortfolio, deletePortfolio, setPortfolioHidden, reorderPortfolios } = usePortfolio();
   const {
@@ -1666,4 +1668,9 @@ export default function Settings() {
       </Dialog>
     </div>
   );
+}
+
+export default function Settings() {
+  const redesign = useMobileRedesign();
+  return redesign ? <SettingsMobile /> : <SettingsClassic />;
 }

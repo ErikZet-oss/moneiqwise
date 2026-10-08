@@ -1,4 +1,6 @@
 import { useState, useRef } from "react";
+import { useMobileRedesign } from "@/hooks/useMobileUi";
+import OptionsMobile from "@/pages/redesign/OptionsMobile";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { usePortfolio } from "@/hooks/usePortfolio";
@@ -41,7 +43,7 @@ const formatUSD = (value: number): string => {
   }).format(value);
 };
 
-export default function Options() {
+function OptionsClassic() {
   const { selectedPortfolioId, portfolios, allPortfolios } = usePortfolio();
   const { toast } = useToast();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -1412,4 +1414,9 @@ function ImportOptionsForm({
       </DialogFooter>
     </form>
   );
+}
+
+export default function Options() {
+  const redesign = useMobileRedesign();
+  return redesign ? <OptionsMobile /> : <OptionsClassic />;
 }

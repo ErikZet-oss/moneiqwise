@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/select";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
+import { useMobileRedesign } from "@/hooks/useMobileUi";
+import TaxSummaryMobile from "@/pages/redesign/TaxSummaryMobile";
 import {
   FileDown,
   ShieldCheck,
@@ -134,7 +136,7 @@ function buildAccountantBundleCsv(data: TaxSummaryApiResponse): string {
   );
 }
 
-export default function TaxSummaryPage() {
+function TaxSummaryClassic() {
   const { formatCurrency } = useCurrency();
   const { portfolios } = usePortfolio();
 
@@ -473,4 +475,9 @@ export default function TaxSummaryPage() {
       )}
     </div>
   );
+}
+
+export default function TaxSummaryPage() {
+  const redesign = useMobileRedesign();
+  return redesign ? <TaxSummaryMobile /> : <TaxSummaryClassic />;
 }

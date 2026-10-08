@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import { useMobileRedesign } from "@/hooks/useMobileUi";
+import WatchlistMobile from "@/pages/redesign/WatchlistMobile";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   closestCenter,
@@ -190,7 +192,7 @@ function formatEarningsDate(iso: string): string {
 }
 
 
-export default function Watchlist() {
+function WatchlistClassic() {
   const { currency, exchangeRate, getTickerCurrency } = useCurrency();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -1047,4 +1049,9 @@ export default function Watchlist() {
       </Sheet>
     </div>
   );
+}
+
+export default function Watchlist() {
+  const redesign = useMobileRedesign();
+  return redesign ? <WatchlistMobile /> : <WatchlistClassic />;
 }

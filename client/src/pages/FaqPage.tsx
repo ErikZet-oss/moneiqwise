@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { useMobileRedesign } from "@/hooks/useMobileUi";
+import FaqMobile from "@/pages/redesign/FaqMobile";
 
 function Formula({ children }: { children: ReactNode }) {
   return (
@@ -10,7 +12,7 @@ function Formula({ children }: { children: ReactNode }) {
   );
 }
 
-export default function FaqPage() {
+function FaqPageClassic() {
   return (
     <div className="max-w-3xl mx-auto flex flex-col gap-3 md:gap-6 pb-12">
       <div>
@@ -475,4 +477,9 @@ export default function FaqPage() {
       </div>
     </div>
   );
+}
+
+export default function FaqPage() {
+  const redesign = useMobileRedesign();
+  return redesign ? <FaqMobile /> : <FaqPageClassic />;
 }

@@ -55,9 +55,3 @@
   font-family: var(--rd-font-sans);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  [data-mobile-ui="redesign"] .rd-phone-slide {
-    transform: none !important;
-    transition: none !important;
-  }
-}

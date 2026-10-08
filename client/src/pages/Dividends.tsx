@@ -31,6 +31,8 @@ import {
 } from "@shared/tickerCurrency";
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis } from "recharts";
 import { HelpTip } from "@/components/HelpTip";
+import { useMobileRedesign } from "@/hooks/useMobileUi";
+import DividendsMobile from "@/pages/redesign/DividendsMobile";
 import {
   Sheet,
   SheetContent,
@@ -103,7 +105,7 @@ type CalendarRow = {
   source: "paid" | "forecast";
 };
 
-export default function Dividends() {
+function DividendsClassic() {
   const { formatCurrency } = useCurrency();
   const { getQueryParam } = usePortfolio();
   const portfolioParam = getQueryParam();
@@ -1186,4 +1188,9 @@ export default function Dividends() {
       </Sheet>
     </div>
   );
+}
+
+export default function Dividends() {
+  const redesign = useMobileRedesign();
+  return redesign ? <DividendsMobile /> : <DividendsClassic />;
 }

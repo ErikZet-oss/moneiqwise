@@ -28,6 +28,8 @@ import {
   getTickerCurrency,
 } from "@shared/tickerCurrency";
 import { AddTransactionForm } from "@/components/AddTransactionForm";
+import { useMobileRedesign } from "@/hooks/useMobileUi";
+import HistoryMobile from "@/pages/redesign/HistoryMobile";
 import { isPokemonPortfolio, isPokemonTicker } from "@shared/pokemonTcg";
 import { formatShareQuantity } from "@/lib/utils";
 import {
@@ -117,7 +119,7 @@ type SortField =
   | "realizedGain";
 type SortDirection = "asc" | "desc";
 
-export default function History() {
+function HistoryClassic() {
   const { toast } = useToast();
   const { formatCurrency, convertPrice } = useCurrency();
   const { getQueryParam, portfolios, isAllPortfolios, selectedPortfolio } = usePortfolio();
@@ -1746,4 +1748,9 @@ export default function History() {
       </Dialog>
     </div>
   );
+}
+
+export default function History() {
+  const redesign = useMobileRedesign();
+  return redesign ? <HistoryMobile /> : <HistoryClassic />;
 }

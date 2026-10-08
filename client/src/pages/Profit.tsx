@@ -19,6 +19,8 @@ import { useChartSettings } from "@/hooks/useChartSettings";
 import { CompanyLogo } from "@/components/CompanyLogo";
 import { BrokerLogo } from "@/components/BrokerLogo";
 import { HelpTip } from "@/components/HelpTip";
+import { useMobileRedesign } from "@/hooks/useMobileUi";
+import ProfitMobile from "@/pages/redesign/ProfitMobile";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { Transaction } from "@shared/schema";
 import type { BrokerCode } from "@shared/schema";
@@ -214,7 +216,7 @@ interface PortfolioHistoryResponse {
   points: PortfolioHistoryPoint[];
 }
 
-export default function Profit() {
+function ProfitClassic() {
   const { formatCurrency: formatCurrencyRaw } = useCurrency();
   const { hideAmounts } = useChartSettings();
   const formatCurrency = (n: number) => (hideAmounts ? "••••••" : formatCurrencyRaw(n));
@@ -1557,4 +1559,9 @@ function YearMonthPerformance({
       </CardContent>
     </Card>
   );
+}
+
+export default function Profit() {
+  const redesign = useMobileRedesign();
+  return redesign ? <ProfitMobile /> : <ProfitClassic />;
 }
