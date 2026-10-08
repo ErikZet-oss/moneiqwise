@@ -1202,6 +1202,8 @@ export default function Dashboard() {
 
   const { data: optionStats } = useQuery<OptionStats>({
     queryKey: ["/api/options/stats/summary", portfolioParam],
+    staleTime: 0,
+    refetchOnMount: "always",
     queryFn: async () => {
       const res = await fetch(
         `/api/options/stats/summary?portfolio=${encodeURIComponent(portfolioParam)}`,
@@ -1214,6 +1216,8 @@ export default function Dashboard() {
 
   const { data: optionTrades } = useQuery<OptionTrade[]>({
     queryKey: ["/api/options", portfolioParam],
+    staleTime: 0,
+    refetchOnMount: "always",
     queryFn: async () => {
       const res = await fetch(`/api/options?portfolio=${encodeURIComponent(portfolioParam)}`);
       if (!res.ok) throw new Error("Failed to fetch options");
