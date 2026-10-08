@@ -18,7 +18,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { BrokerLogo } from "@/components/BrokerLogo";
-import { ArrowRightLeft, Eye, EyeOff, HelpCircle, Loader2, Moon, RefreshCw } from "lucide-react";
+import { ArrowRightLeft, Bell, ExternalLink, Eye, EyeOff, HelpCircle, Loader2, Moon, RefreshCw } from "lucide-react";
 import type { Holding } from "@shared/schema";
 import { isPokemonPortfolio } from "@shared/pokemonTcg";
 import { getExtendedSessionLabel, getQuoteRefreshIntervalMs, getQuoteStaleTimeMs, getUsMarketSessionState, shouldShowExtendedQuote, shouldUseExtendedQuotes } from "@/lib/usMarketSession";
@@ -69,6 +69,15 @@ interface MobilePortfolioChartProps {
   onRefreshQuotes?: () => void | Promise<void>;
   quotesRefreshing?: boolean;
   athCelebrationActive?: boolean;
+  importantNotifications?: Array<{
+    id: string;
+    title: string;
+    subtitle: string;
+    dateIso: string | null;
+    infoUrl?: string;
+    tone?: "default" | "positive" | "negative" | "warning";
+  }>;
+  importantNotificationCount?: number;
 }
 
 export function MobilePortfolioChart({ 
@@ -83,6 +92,8 @@ export function MobilePortfolioChart({
   onRefreshQuotes,
   quotesRefreshing = false,
   athCelebrationActive = false,
+  importantNotifications = [],
+  importantNotificationCount = 0,
 }: MobilePortfolioChartProps) {
   const premarketMoonClass = "text-amber-600 dark:text-amber-400";
   const [periodSelection, setPeriodSelection] =
@@ -122,6 +133,16 @@ export function MobilePortfolioChart({
   const { theme } = useTheme();
   
   const maskAmount = (amount: string) => hideAmounts ? "••••••" : amount;
+  const formatNotificationDate = (value: string | null): string => {
+    if (!value) return "—";
+    try {
+      return format(parse(value, "yyyy-MM-dd", new Date()), "d. M. yyyy", { locale: sk });
+    } catch {
+      const ts = Date.parse(value);
+      if (Number.isFinite(ts)) return new Date(ts).toLocaleDateString("sk-SK");
+      return value;
+    }
+  };
   
   const portfolioParam = getQueryParam();
   const chartQueriesEnabled = showChart && chartDataIdle;
@@ -458,17 +479,72 @@ export function MobilePortfolioChart({
             <p className="text-xs text-muted-foreground">Súčet aktuálnej trhovej hodnoty všetkých vašich pozícií vrátane opcií.</p>
           </PopoverContent>
         </Popover>
-        <button
-          onClick={toggleHideAmounts}
-          className="p-1.5 rounded-full hover:bg-muted transition-colors"
-          data-testid="button-toggle-amounts"
-        >
-          {hideAmounts ? (
-            <EyeOff className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <Eye className="h-4 w-4 text-muted-foreground" />
-          )}
-        </button>
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={toggleHideAmounts}
+            className="p-1.5 rounded-full hover:bg-muted transition-colors text-muted-foreground"
+            data-testid="button-toggle-amounts"
+          >
+            {hideAmounts ? (
+              <EyeOff className="h-4 w-4" />
+            ) : (
+              <Eye className="h-4 w-4" />
+            )}
+          </button>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="relative p-1.5 rounded-full hover:bg-muted transition-colors text-muted-foreground"
+                aria-label="Dôležité notifikácie"
+                data-testid="button-mobile-notifications"
+              >
+                <Bell className="h-4 w-4" />
+                {importantNotificationCount > 0 && (
+                  <span className="absolute -right-1 -top-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-semibold text-white">
+                    {importantNotificationCount > 99 ? "99+" : importantNotificationCount}
+                  </span>
+                )}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[min(92vw,420px)] p-0" align="end">
+              <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
+                <p className="text-sm font-semibold">Dôležité notifikácie</p>
+                <span className="text-xs text-muted-foreground">{importantNotificationCount}</span>
+              </div>
+              {importantNotifications.length === 0 ? (
+                <div className="px-3 py-4 text-xs text-muted-foreground">
+                  Zatiaľ žiadne nové dôležité notifikácie.
+                </div>
+              ) : (
+                <ul className="max-h-[58vh] overflow-y-auto divide-y divide-border/60">
+                  {importantNotifications.map((n) => (
+                    <li key={n.id} className="px-3 py-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-medium leading-snug">{n.title}</p>
+                        <span className="shrink-0 text-[10px] text-muted-foreground">
+                          {formatNotificationDate(n.dateIso)}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-xs text-muted-foreground leading-snug">{n.subtitle}</p>
+                      {n.infoUrl && (
+                        <a
+                          href={n.infoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                        >
+                          Detail
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
       
       <div className="flex items-baseline gap-2 mb-0.5 flex-wrap">

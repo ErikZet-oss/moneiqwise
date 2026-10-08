@@ -52,7 +52,6 @@ import {
   HelpCircle,
   Loader2,
   RefreshCw,
-  Bell,
   Moon,
   Calendar,
   ChevronDown,
@@ -98,8 +97,6 @@ import {
   shouldUseExtendedQuotes,
 } from "@/lib/usMarketSession";
 import { formatShareQuantity } from "@/lib/utils";
-
-const IMPORTANT_NOTIFICATIONS_STORAGE_PREFIX = "mw-important-notifications:";
 
 /** Krátky typ v mobile „jednoduché“ zobrazení (badge ako XTB). */
 function mobileSimpleAssetBadgeLabel(holding: HoldingWithCostCurrency): string {
@@ -1911,28 +1908,6 @@ export default function Dashboard() {
   ]);
 
   const importantNotificationCount = importantNotifications.length;
-  const hasImportantNotifications = importantNotificationCount > 0;
-
-  useEffect(() => {
-    try {
-      const payload = {
-        updatedAtMs: Date.now(),
-        count: importantNotificationCount,
-        items: importantNotifications,
-      };
-      localStorage.setItem(
-        `${IMPORTANT_NOTIFICATIONS_STORAGE_PREFIX}${portfolioParam}`,
-        JSON.stringify(payload),
-      );
-      window.dispatchEvent(
-        new CustomEvent("importantNotificationsChanged", {
-          detail: { portfolio: portfolioParam, count: importantNotificationCount },
-        }),
-      );
-    } catch {
-      // ignore
-    }
-  }, [importantNotificationCount, importantNotifications, portfolioParam]);
 
   const calculateOpenOptionsValue = () => {
     if (!optionTrades) return { 
@@ -2500,75 +2475,6 @@ export default function Dashboard() {
   const moversHasContent =
     (portfolios.length > 0 && moversTickers.length > 0) || dashboardEditing;
 
-  const renderPortfolioNotificationsBell = () => (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition-colors",
-            hasImportantNotifications
-              ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15"
-              : "border-border/70 bg-muted/20 text-muted-foreground hover:bg-muted/35",
-          )}
-          aria-label="Dôležité notifikácie"
-          data-testid="button-portfolio-notifications"
-        >
-          <Bell className="h-4 w-4" />
-          {importantNotificationCount > 0 && (
-            <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white">
-              {importantNotificationCount > 99 ? "99+" : importantNotificationCount}
-            </span>
-          )}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-[min(92vw,430px)] p-0" align="end">
-        <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
-          <p className="text-sm font-semibold">Dôležité notifikácie</p>
-          <span className="text-xs text-muted-foreground">{importantNotificationCount}</span>
-        </div>
-        {importantNotifications.length === 0 ? (
-          <div className="px-3 py-5 text-sm text-muted-foreground">
-            Zatiaľ žiadne nové dôležité notifikácie.
-          </div>
-        ) : (
-          <ul className="max-h-[60vh] overflow-y-auto divide-y divide-border/60">
-            {importantNotifications.map((n) => (
-              <li key={n.id} className="px-3 py-2.5">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-medium leading-snug">{n.title}</p>
-                  <span
-                    className={cn(
-                      "shrink-0 text-[10px] font-medium",
-                      n.tone === "positive" && "text-emerald-600 dark:text-emerald-400",
-                      n.tone === "negative" && "text-red-500",
-                      n.tone === "warning" && "text-amber-600 dark:text-amber-400",
-                      n.tone === "default" && "text-muted-foreground",
-                    )}
-                  >
-                    {formatNotificationDateIso(n.dateIso)}
-                  </span>
-                </div>
-                <p className="mt-0.5 text-xs text-muted-foreground leading-snug">{n.subtitle}</p>
-                {n.infoUrl && (
-                  <a
-                    href={n.infoUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
-                  >
-                    Detail
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </PopoverContent>
-    </Popover>
-  );
-
   if (holdingsLoading) {
     return (
       <div className="space-y-6">
@@ -2598,13 +2504,6 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col gap-3 md:gap-5">
-      <div className="md:hidden flex items-center gap-2 min-w-0" data-testid="mobile-portfolio-header">
-        {!isAllPortfolios && <BrokerLogo brokerCode={selectedPortfolio?.brokerCode} size="xs" />}
-        <h1 className="text-base font-semibold text-foreground truncate min-w-0">
-          {dashboardPortfolioLabel}
-        </h1>
-        <div className="ml-auto">{renderPortfolioNotificationsBell()}</div>
-      </div>
       <div className="hidden md:flex items-center gap-2 min-w-0" data-testid="desktop-portfolio-header">
         {!isAllPortfolios && <BrokerLogo brokerCode={selectedPortfolio?.brokerCode} size="sm" />}
         <h1
@@ -2613,7 +2512,6 @@ export default function Dashboard() {
         >
           {dashboardPortfolioLabel}
         </h1>
-        {renderPortfolioNotificationsBell()}
         {athForCurrentSelection && (
           <span
             className="shrink-0 inline-flex items-center gap-0.5 text-sm motion-safe:animate-bounce"
@@ -2866,6 +2764,8 @@ export default function Dashboard() {
         onRefreshQuotes={refreshDashboardQuotes}
         quotesRefreshing={quotesFetching}
         athCelebrationActive={athForCurrentSelection}
+        importantNotifications={importantNotifications}
+        importantNotificationCount={importantNotificationCount}
       />
 
       <div

@@ -1,5 +1,4 @@
-import { useEffect, useState } from "react";
-import { BarChart3, History, LogOut, User, TrendingUp, Settings, Briefcase, ChevronDown, Check, Target, Banknote, Upload, Sun, Moon, Layers, PieChart, Scale, LineChart, CircleHelp, CalendarClock, UserCog, Eye, Brain, Sparkles, Bell, ExternalLink } from "lucide-react";
+import { BarChart3, History, LogOut, User, TrendingUp, Settings, Briefcase, ChevronDown, Check, Target, Banknote, Upload, Sun, Moon, Layers, PieChart, Scale, LineChart, CircleHelp, CalendarClock, UserCog, Eye, Brain, Sparkles } from "lucide-react";
 import { useLocation } from "wouter";
 import {
   Sidebar,
@@ -22,7 +21,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/hooks/useAuth";
 import { usePortfolio } from "@/hooks/usePortfolio";
@@ -30,22 +28,6 @@ import { useTheme } from "@/hooks/useTheme";
 import { BrokerLogo } from "@/components/BrokerLogo";
 import { apiRequest, PORTFOLIO_QUERY_CACHE_KEY, queryClient } from "@/lib/queryClient";
 import type { User as UserType } from "@shared/schema";
-
-const IMPORTANT_NOTIFICATIONS_STORAGE_PREFIX = "mw-important-notifications:";
-
-type SidebarImportantNotification = {
-  id: string;
-  title: string;
-  subtitle: string;
-  dateIso: string | null;
-  infoUrl?: string;
-};
-
-type SidebarImportantNotificationsCache = {
-  updatedAtMs: number;
-  count: number;
-  items: SidebarImportantNotification[];
-};
 
 const menuItems = [
   {
@@ -130,32 +112,6 @@ const menuItems = [
   },
 ];
 
-function readImportantNotifications(scope: string): SidebarImportantNotificationsCache {
-  try {
-    const raw =
-      localStorage.getItem(`${IMPORTANT_NOTIFICATIONS_STORAGE_PREFIX}${scope}`) ??
-      (scope !== "all"
-        ? localStorage.getItem(`${IMPORTANT_NOTIFICATIONS_STORAGE_PREFIX}all`)
-        : null);
-    if (!raw) return { updatedAtMs: 0, count: 0, items: [] };
-    const parsed = JSON.parse(raw) as Partial<SidebarImportantNotificationsCache>;
-    return {
-      updatedAtMs: typeof parsed.updatedAtMs === "number" ? parsed.updatedAtMs : 0,
-      count: typeof parsed.count === "number" ? parsed.count : 0,
-      items: Array.isArray(parsed.items) ? (parsed.items as SidebarImportantNotification[]) : [],
-    };
-  } catch {
-    return { updatedAtMs: 0, count: 0, items: [] };
-  }
-}
-
-function formatNotificationDate(value: string | null): string {
-  if (!value) return "—";
-  const ts = Date.parse(value);
-  if (!Number.isFinite(ts)) return value;
-  return new Date(ts).toLocaleDateString("sk-SK");
-}
-
 export function AppSidebar() {
   const [location, setLocation] = useLocation();
   const { isMobile, setOpenMobile } = useSidebar();
@@ -165,31 +121,6 @@ export function AppSidebar() {
   const { user } = useAuth();
   const { portfolios, selectedPortfolioId, selectedPortfolio, setSelectedPortfolioId, isAllPortfolios } = usePortfolio();
   const { theme, toggleTheme } = useTheme();
-  const notificationScope = selectedPortfolioId && selectedPortfolioId.length > 0 ? selectedPortfolioId : "all";
-  const [importantNotifications, setImportantNotifications] = useState<SidebarImportantNotificationsCache>({
-    updatedAtMs: 0,
-    count: 0,
-    items: [],
-  });
-
-  useEffect(() => {
-    setImportantNotifications(readImportantNotifications(notificationScope));
-  }, [notificationScope]);
-
-  useEffect(() => {
-    const refresh = () => setImportantNotifications(readImportantNotifications(notificationScope));
-    const onStorage = (event: StorageEvent) => {
-      if (!event.key) return;
-      if (!event.key.startsWith(IMPORTANT_NOTIFICATIONS_STORAGE_PREFIX)) return;
-      refresh();
-    };
-    window.addEventListener("importantNotificationsChanged", refresh as EventListener);
-    window.addEventListener("storage", onStorage);
-    return () => {
-      window.removeEventListener("importantNotificationsChanged", refresh as EventListener);
-      window.removeEventListener("storage", onStorage);
-    };
-  }, [notificationScope]);
 
   const getInitials = (user: UserType | undefined) => {
     if (!user) return "U";
@@ -242,118 +173,58 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupLabel className="text-[10px] md:text-xs">Portfólio</SidebarGroupLabel>
           <SidebarGroupContent>
-            <div className="flex items-center gap-1.5">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    className="flex-1 min-w-0 flex items-center gap-2 px-2 md:px-3 py-1.5 md:py-2 rounded-md hover-elevate text-left text-xs md:text-sm"
-                    data-testid="button-portfolio-selector"
-                  >
-                    {selectedPortfolio?.brokerCode ? (
-                      <BrokerLogo brokerCode={selectedPortfolio.brokerCode} size="xs" />
-                    ) : (
-                      <Briefcase className="h-4 w-4 text-muted-foreground" />
-                    )}
-                    <span className="flex-1 truncate">{getSelectedPortfolioName()}</span>
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button 
+                  className="w-full flex items-center gap-2 px-2 md:px-3 py-1.5 md:py-2 rounded-md hover-elevate text-left text-xs md:text-sm"
+                  data-testid="button-portfolio-selector"
+                >
+                  {selectedPortfolio?.brokerCode ? (
+                    <BrokerLogo brokerCode={selectedPortfolio.brokerCode} size="xs" />
+                  ) : (
+                    <Briefcase className="h-4 w-4 text-muted-foreground" />
+                  )}
+                  <span className="flex-1 truncate">{getSelectedPortfolioName()}</span>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                <DropdownMenuItem 
+                  onClick={() => {
+                    setSelectedPortfolioId("all");
+                    closeMobileSidebar();
+                  }}
+                  data-testid="select-portfolio-all"
+                >
+                  <div className="flex items-center gap-2 w-full">
+                    <Briefcase className="h-4 w-4" />
+                    <span className="flex-1">Všetky portfóliá</span>
+                    {isAllPortfolios && <Check className="h-4 w-4 text-primary" />}
+                  </div>
+                </DropdownMenuItem>
+                {portfolios.length > 0 && <DropdownMenuSeparator />}
+                {portfolios.map((portfolio) => (
                   <DropdownMenuItem
+                    key={portfolio.id}
                     onClick={() => {
-                      setSelectedPortfolioId("all");
+                      setSelectedPortfolioId(portfolio.id);
                       closeMobileSidebar();
                     }}
-                    data-testid="select-portfolio-all"
+                    data-testid={`select-portfolio-${portfolio.id}`}
                   >
                     <div className="flex items-center gap-2 w-full">
-                      <Briefcase className="h-4 w-4" />
-                      <span className="flex-1">Všetky portfóliá</span>
-                      {isAllPortfolios && <Check className="h-4 w-4 text-primary" />}
+                      {portfolio.brokerCode ? (
+                        <BrokerLogo brokerCode={portfolio.brokerCode} size="xs" />
+                      ) : (
+                        <Briefcase className="h-4 w-4" />
+                      )}
+                      <span className="flex-1 truncate">{portfolio.name}</span>
+                      {selectedPortfolioId === portfolio.id && <Check className="h-4 w-4 text-primary" />}
                     </div>
                   </DropdownMenuItem>
-                  {portfolios.length > 0 && <DropdownMenuSeparator />}
-                  {portfolios.map((portfolio) => (
-                    <DropdownMenuItem
-                      key={portfolio.id}
-                      onClick={() => {
-                        setSelectedPortfolioId(portfolio.id);
-                        closeMobileSidebar();
-                      }}
-                      data-testid={`select-portfolio-${portfolio.id}`}
-                    >
-                      <div className="flex items-center gap-2 w-full">
-                        {portfolio.brokerCode ? (
-                          <BrokerLogo brokerCode={portfolio.brokerCode} size="xs" />
-                        ) : (
-                          <Briefcase className="h-4 w-4" />
-                        )}
-                        <span className="flex-1 truncate">{portfolio.name}</span>
-                        {selectedPortfolioId === portfolio.id && <Check className="h-4 w-4 text-primary" />}
-                      </div>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    className={`relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition-colors ${
-                      importantNotifications.count > 0
-                        ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15"
-                        : "border-border/70 bg-muted/20 text-muted-foreground hover:bg-muted/35"
-                    }`}
-                    aria-label="Dôležité notifikácie"
-                    data-testid="button-sidebar-notifications"
-                  >
-                    <Bell className="h-4 w-4" />
-                    {importantNotifications.count > 0 && (
-                      <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white">
-                        {importantNotifications.count > 99 ? "99+" : importantNotifications.count}
-                      </span>
-                    )}
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[min(92vw,430px)] p-0" align="start">
-                  <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
-                    <p className="text-sm font-semibold">Dôležité notifikácie</p>
-                    <span className="text-xs text-muted-foreground">{importantNotifications.count}</span>
-                  </div>
-                  {importantNotifications.items.length === 0 ? (
-                    <div className="px-3 py-5 text-sm text-muted-foreground">
-                      Zatiaľ žiadne nové dôležité notifikácie.
-                    </div>
-                  ) : (
-                    <ul className="max-h-[58vh] overflow-y-auto divide-y divide-border/60">
-                      {importantNotifications.items.map((item) => (
-                        <li key={item.id} className="px-3 py-2.5">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="text-sm font-medium leading-snug">{item.title}</p>
-                            <span className="shrink-0 text-[10px] text-muted-foreground">
-                              {formatNotificationDate(item.dateIso)}
-                            </span>
-                          </div>
-                          <p className="mt-0.5 text-xs text-muted-foreground leading-snug">{item.subtitle}</p>
-                          {item.infoUrl && (
-                            <a
-                              href={item.infoUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
-                            >
-                              Detail
-                              <ExternalLink className="h-3 w-3" />
-                            </a>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </PopoverContent>
-              </Popover>
-            </div>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </SidebarGroupContent>
         </SidebarGroup>
 
