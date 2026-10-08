@@ -1201,23 +1201,25 @@ export default function Dashboard() {
   });
 
   const { data: optionStats } = useQuery<OptionStats>({
-    queryKey: ["/api/options/stats/summary", isAllPortfolios ? "all" : portfolioParam],
+    queryKey: ["/api/options/stats/summary", portfolioParam],
     queryFn: async () => {
-      const res = await fetch("/api/options/stats/summary");
+      const res = await fetch(
+        `/api/options/stats/summary?portfolio=${encodeURIComponent(portfolioParam)}`,
+      );
       if (!res.ok) throw new Error("Failed to fetch options stats");
       return res.json();
     },
-    enabled: dashboardSecondaryReady && isAllPortfolios,
+    enabled: dashboardSecondaryReady,
   });
 
   const { data: optionTrades } = useQuery<OptionTrade[]>({
-    queryKey: ["/api/options", isAllPortfolios ? "all" : portfolioParam],
+    queryKey: ["/api/options", portfolioParam],
     queryFn: async () => {
-      const res = await fetch("/api/options");
+      const res = await fetch(`/api/options?portfolio=${encodeURIComponent(portfolioParam)}`);
       if (!res.ok) throw new Error("Failed to fetch options");
       return res.json();
     },
-    enabled: dashboardSecondaryReady && isAllPortfolios,
+    enabled: dashboardSecondaryReady,
   });
 
   const { data: pnlBreakdown } = useQuery<PnlBreakdown>({
@@ -1654,7 +1656,7 @@ export default function Dashboard() {
     : selectedPortfolio?.name ?? "Vybrané portfólio";
 
   const calculateOpenOptionsValue = () => {
-    if (!optionTrades || !isAllPortfolios) return { 
+    if (!optionTrades) return { 
       buyPremiumValue: 0, 
       buyTotalCost: 0, 
       sellCommission: 0, 
@@ -1704,7 +1706,8 @@ export default function Dashboard() {
 
   const calculatePortfolioMetrics = () => {
     const hasHoldings = holdings && holdings.length > 0 && quotes;
-    const hasOptions = isAllPortfolios && optionStats;
+    const hasOptions =
+      !!optionStats && Number.isFinite(Number(optionStats.totalTrades)) && Number(optionStats.totalTrades) > 0;
     
     const stockRealizedGain = convertPrice(
       realizedGains?.realizedGainTotal ?? realizedGains?.totalRealized ?? 0,
