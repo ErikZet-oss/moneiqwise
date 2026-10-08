@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
-import { useIsMobile } from "@/hooks/use-mobile";
 
 export type MobileUiMode = "classic" | "redesign";
 
@@ -59,14 +58,14 @@ export function useMobileUi() {
 }
 
 /**
- * True only for the stored `redesign` value on viewports under 768px.
- * Sets `data-mobile-ui="redesign"` on `<html>` while active. Desktop never
- * receives the attribute, even when the stored value is `redesign`.
+ * True when the user selected Nový on the login / Viac toggle.
+ * Applies the redesign shell + page UIs on any viewport so desktop testing
+ * matches the toggle (Figma redesign is mobile-first, but the preference
+ * must not silently fall back to classic above 768px).
  */
 export function useMobileRedesign() {
   const { mode } = useMobileUi();
-  const isMobile = useIsMobile();
-  const active = mode === "redesign" && isMobile;
+  const active = mode === "redesign";
 
   useLayoutEffect(() => {
     if (!active) return;
