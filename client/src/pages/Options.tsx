@@ -42,7 +42,7 @@ const formatUSD = (value: number): string => {
 };
 
 export default function Options() {
-  const { selectedPortfolioId, portfolios } = usePortfolio();
+  const { selectedPortfolioId, portfolios, allPortfolios } = usePortfolio();
   const { toast } = useToast();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isCloseDialogOpen, setIsCloseDialogOpen] = useState(false);
@@ -52,14 +52,36 @@ export default function Options() {
   const [filter, setFilter] = useState<"all" | "open" | "closed">("all");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const portfolioParam = selectedPortfolioId && selectedPortfolioId !== "all" ? `?portfolio=${selectedPortfolioId}` : "";
+  const portfolioScope = selectedPortfolioId && selectedPortfolioId !== "all" ? selectedPortfolioId : "all";
 
   const { data: trades, isLoading: tradesLoading } = useQuery<OptionTrade[]>({
-    queryKey: ["/api/options" + portfolioParam],
+    queryKey: ["/api/options", portfolioScope],
+    staleTime: 0,
+    refetchOnMount: "always",
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (portfolioScope !== "all") params.set("portfolio", portfolioScope);
+      const qs = params.toString();
+      const url = qs ? `/api/options?${qs}` : "/api/options";
+      const res = await fetch(url, { credentials: "include", cache: "no-store" });
+      if (!res.ok) throw new Error("Failed to fetch options");
+      return res.json();
+    },
   });
 
   const { data: stats, isLoading: statsLoading } = useQuery<OptionStats>({
-    queryKey: ["/api/options/stats/summary" + portfolioParam],
+    queryKey: ["/api/options/stats/summary", portfolioScope],
+    staleTime: 0,
+    refetchOnMount: "always",
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (portfolioScope !== "all") params.set("portfolio", portfolioScope);
+      const qs = params.toString();
+      const url = qs ? `/api/options/stats/summary?${qs}` : "/api/options/stats/summary";
+      const res = await fetch(url, { credentials: "include", cache: "no-store" });
+      if (!res.ok) throw new Error("Failed to fetch options stats");
+      return res.json();
+    },
   });
 
   const invalidateOptionsQueries = () => {
@@ -160,8 +182,17 @@ export default function Options() {
     return true;
   }) || [];
 
+  const portfolioNameById = new Map((allPortfolios ?? []).map((p) => [p.id, p.name]));
+  const tradePortfolioLabel = (trade: OptionTrade) => {
+    if (!trade.portfolioId) return "Nezaradené";
+    return portfolioNameById.get(trade.portfolioId) || "Neznáme portfólio";
+  };
+
   const handleExport = () => {
-    const exportUrl = `/api/options/export${portfolioParam}`;
+    const exportUrl =
+      portfolioScope !== "all"
+        ? `/api/options/export?portfolio=${encodeURIComponent(portfolioScope)}`
+        : "/api/options/export";
     window.open(exportUrl, '_blank');
   };
 
@@ -397,6 +428,11 @@ export default function Options() {
                     ? "Nemáte žiadne otvorené pozície."
                     : "Nemáte žiadne uzatvorené pozície."}
               </p>
+              {portfolioScope !== "all" && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Tip: obchody označené ako „Nezaradené“ sa zobrazia aj vo vybranom portfóliu.
+                </p>
+              )}
               {filter === "all" && (
                 <div className="flex flex-col sm:flex-row gap-2 justify-center mt-4">
                   <Button 
@@ -434,6 +470,12 @@ export default function Options() {
                           <span className="font-semibold text-xs">{trade.underlying}</span>
                           {getDirectionBadge(trade.direction, trade.optionType)}
                           {getStatusBadge(trade.status)}
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] ${trade.portfolioId ? "border-border/70" : "border-amber-500/40 text-amber-700 dark:text-amber-300"}`}
+                          >
+                            {tradePortfolioLabel(trade)}
+                          </Badge>
                         </div>
                         
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">

@@ -1753,10 +1753,7 @@ export class DatabaseStorage implements IStorage {
         .select()
         .from(optionTrades)
         .where(
-          and(
-            eq(optionTrades.userId, userId),
-            eq(optionTrades.portfolioId, portfolioId)
-          )
+          and(eq(optionTrades.userId, userId), or(eq(optionTrades.portfolioId, portfolioId), isNull(optionTrades.portfolioId)))
         )
         .orderBy(desc(optionTrades.openDate));
     }
