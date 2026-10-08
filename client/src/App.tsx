@@ -37,6 +37,10 @@ import { MarketQuoteTicker } from "@/components/MarketQuoteTicker";
 import { QuickNavFab, QUICK_NAV_CONTENT_PAD } from "@/components/QuickNavFab";
 import { DashboardEditHeaderButton } from "@/components/DashboardEditHeaderButton";
 import { useQuickNavFab } from "@/hooks/useQuickNavFab";
+import { useMobileRedesign } from "@/hooks/useMobileUi";
+import { Button as RedesignButton, TabBar, TickerTape } from "@/redesign/ui";
+import { RedesignStatusScreen, RedesignUnlockScreen } from "@/redesign/RedesignUnlock";
+import MorePage from "@/pages/redesign/MorePage";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { startAuthentication } from "@simplewebauthn/browser";
@@ -59,7 +63,8 @@ function matchDemoLinkPath(location: string): string | null {
 
 function QuickNavFabGate() {
   const { isAuthenticated, isLoading } = useAuth();
-  if (isLoading || !isAuthenticated) return null;
+  const redesign = useMobileRedesign();
+  if (isLoading || !isAuthenticated || redesign) return null;
   return <QuickNavFab />;
 }
 
@@ -89,6 +94,7 @@ function RedirectToAiAgentBot() {
 
 function AppUnlockGate({ children }: { children: ReactNode }) {
   const { user, isAuthenticated, isLoading } = useAuth();
+  const redesign = useMobileRedesign();
   const { toast } = useToast();
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [isUnlocked, setIsUnlocked] = useState(false);
@@ -212,6 +218,11 @@ function AppUnlockGate({ children }: { children: ReactNode }) {
   }, [shouldRequireUnlock, isUnlocking, isUnlocked]);
 
   if (startupWithActiveSession && (passkeysQuery.isLoading || settingsQuery.isLoading)) {
+    if (redesign) {
+      return (
+        <RedesignStatusScreen title="Overujem zabezpečenie" body="Chvíľu strpenia, kým overíme passkey." />
+      );
+    }
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -223,6 +234,23 @@ function AppUnlockGate({ children }: { children: ReactNode }) {
   }
 
   if (startupWithActiveSession && passkeysQuery.isError) {
+    if (redesign) {
+      return (
+        <RedesignStatusScreen
+          title="Nepodarilo sa overiť passkeys"
+          body="Skús obnoviť stránku alebo odhlásiť/prihlásiť sa znova."
+        >
+          <RedesignButton
+            className="w-full"
+            onClick={() => passkeysQuery.refetch()}
+            disabled={passkeysQuery.isFetching}
+            data-testid="button-passkey-unlock-retry"
+          >
+            {passkeysQuery.isFetching ? "Skúšam znova..." : "Skúsiť znova"}
+          </RedesignButton>
+        </RedesignStatusScreen>
+      );
+    }
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="w-full max-w-md rounded-xl border bg-card p-5 text-center space-y-3">
@@ -243,6 +271,15 @@ function AppUnlockGate({ children }: { children: ReactNode }) {
   }
 
   if (shouldRequireUnlock) {
+    if (redesign) {
+      return (
+        <RedesignUnlockScreen
+          unlocking={isUnlocking}
+          error={unlockError}
+          onUnlock={() => void handleUnlock("manual")}
+        />
+      );
+    }
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="w-full max-w-md rounded-xl border bg-card p-5 text-center space-y-3">
@@ -320,6 +357,7 @@ function Router() {
       <Route path="/settings" component={Settings} />
       <Route path="/admin/registrations" component={AdminRegistrations} />
       <Route path="/faq" component={FaqPage} />
+      <Route path="/more" component={MorePage} />
       <Route path="/asset/:ticker" component={AssetDetail} />
       <Route component={NotFound} />
     </Switch>
@@ -372,9 +410,26 @@ function DemoModeBanner() {
 function AuthenticatedLayout() {
   const { isAuthenticated, isLoading } = useAuth();
   const { enabled: quickNavEnabled } = useQuickNavFab();
+  const redesign = useMobileRedesign();
 
   if (isLoading || !isAuthenticated) {
     return <Router />;
+  }
+
+  if (redesign) {
+    return (
+      <PortfolioProvider>
+        <AppUnlockGate>
+          <div className="flex h-dvh w-full flex-col bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
+            <TickerTape />
+            <main className="min-h-0 flex-1 overflow-auto pb-[calc(96px+env(safe-area-inset-bottom))]">
+              <Router />
+            </main>
+            <TabBar />
+          </div>
+        </AppUnlockGate>
+      </PortfolioProvider>
+    );
   }
 
   const style = {

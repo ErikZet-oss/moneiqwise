@@ -1,0 +1,63 @@
+/* Mobile redesign tokens. Applied only while <html data-mobile-ui="redesign">. */
+
+[data-mobile-ui="redesign"] {
+  --rd-bg-base: #050607;
+  --rd-bg-surface: #0e1012;
+  --rd-bg-surface-raised: #15181b;
+  --rd-bg-surface-hover: #1d2125;
+
+  --rd-border-subtle: #1f2327;
+  --rd-border-strong: #2c3137;
+
+  --rd-text-primary: #f3f5f6;
+  --rd-text-secondary: #a3aab3;
+  --rd-text-tertiary: #6b727c;
+  --rd-text-on-brand: #03130e;
+
+  --rd-profit: #2fdab8;
+  --rd-profit-dim: #0f2e28;
+  --rd-loss: #f0667e;
+  --rd-loss-dim: #331920;
+  --rd-warning: #f2b84b;
+  --rd-warning-dim: #33270f;
+  --rd-info: #6bb0f5;
+  --rd-info-dim: #14263a;
+  --rd-ai: #b48ce0;
+  --rd-ai-dim: #261c33;
+
+  --rd-chart-1: #2fdab8;
+  --rd-chart-2: #6bb0f5;
+  --rd-chart-3: #b48ce0;
+  --rd-chart-4: #f2b84b;
+  --rd-chart-5: #f0667e;
+  --rd-chart-6: #5c6570;
+
+  --rd-space-2: 2px;
+  --rd-space-4: 4px;
+  --rd-space-8: 8px;
+  --rd-space-12: 12px;
+  --rd-space-16: 16px;
+  --rd-space-20: 20px;
+  --rd-space-24: 24px;
+  --rd-space-32: 32px;
+  --rd-space-40: 40px;
+
+  --rd-radius-xs: 6px;
+  --rd-radius-sm: 10px;
+  --rd-radius-md: 14px;
+  --rd-radius-lg: 20px;
+  --rd-radius-full: 999px;
+
+  --rd-font-sans: "Inter", sans-serif;
+  --rd-font-mono: "JetBrains Mono", monospace;
+
+  color: var(--rd-text-primary);
+  font-family: var(--rd-font-sans);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-mobile-ui="redesign"] .rd-phone-slide {
+    transform: none !important;
+    transition: none !important;
+  }
+}

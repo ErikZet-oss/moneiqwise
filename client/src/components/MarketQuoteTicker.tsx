@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 
-const TICKER_ROWS: { yahoo: string; label: string; decimals: number }[] = [
+export const TICKER_ROWS: { yahoo: string; label: string; decimals: number }[] = [
   { yahoo: "EURUSD=X", label: "EUR/USD", decimals: 4 },
   { yahoo: "BTC-USD", label: "BTC/USD", decimals: 0 },
   { yahoo: "^GSPC", label: "S&P 500", decimals: 2 },
@@ -19,7 +19,7 @@ interface QuoteRow {
   changePercent: number;
 }
 
-async function fetchTickerQuotes(): Promise<Record<string, QuoteRow>> {
+export async function fetchTickerQuotes(): Promise<Record<string, QuoteRow>> {
   const res = await fetch("/api/stocks/quotes/batch", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -31,7 +31,7 @@ async function fetchTickerQuotes(): Promise<Record<string, QuoteRow>> {
   return data.quotes ?? {};
 }
 
-function formatValue(price: number, decimals: number) {
+export function formatTickerValue(price: number, decimals: number) {
   if (!Number.isFinite(price)) return "—";
   return price.toLocaleString("sk-SK", {
     minimumFractionDigits: decimals,
@@ -39,7 +39,7 @@ function formatValue(price: number, decimals: number) {
   });
 }
 
-function formatPct(pct: number) {
+export function formatTickerPct(pct: number) {
   if (!Number.isFinite(pct)) return "—";
   const sign = pct > 0 ? "+" : "";
   return `${sign}${pct.toFixed(2)}%`;
@@ -114,9 +114,9 @@ export function MarketQuoteTicker() {
             >
               <span className="font-medium text-foreground/85">{row.label}</span>
               <span className="tabular-nums text-foreground/90">
-                {q ? formatValue(q.price, row.decimals) : "—"}
+                {q ? formatTickerValue(q.price, row.decimals) : "—"}
               </span>
-              <span className={`tabular-nums ${pctCls}`}>{q ? formatPct(pct) : ""}</span>
+              <span className={`tabular-nums ${pctCls}`}>{q ? formatTickerPct(pct) : ""}</span>
             </div>
           );
         });
