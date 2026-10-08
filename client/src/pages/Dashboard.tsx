@@ -69,6 +69,8 @@ import {
 } from "@/lib/analystRatingSeen";
 import { useDashboardLayout } from "@/hooks/useDashboardLayout";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useMobileRedesign } from "@/hooks/useMobileUi";
+import DashboardMobile from "@/pages/redesign/DashboardMobile";
 import { CompanyLogo } from "@/components/CompanyLogo";
 import { AssetThumb } from "@/components/AssetThumb";
 import { BrokerLogo } from "@/components/BrokerLogo";
@@ -841,7 +843,7 @@ interface UpcomingMacroEventsRes {
   all: Array<{ code: string; shortLabel: string; date: string; title: string }>;
 }
 
-export default function Dashboard() {
+function DashboardClassic() {
   const [, setLocation] = useLocation();
   const { currency, convertPrice, convertAverageCostPrice, getTickerCurrency, resolveHoldingCostCurrency, pnlInvestedForDisplay, formatCurrency, formatAverageCostCurrency } = useCurrency();
   const { getQueryParam, selectedPortfolio, isAllPortfolios, portfolios } = usePortfolio();
@@ -4452,4 +4454,9 @@ export default function Dashboard() {
       </DndContext>
     </div>
   );
+}
+
+export default function Dashboard() {
+  const redesign = useMobileRedesign();
+  return redesign ? <DashboardMobile /> : <DashboardClassic />;
 }

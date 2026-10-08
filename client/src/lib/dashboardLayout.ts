@@ -111,7 +111,9 @@ export function normalizeDashboardLayout(
   }
 
   const rawVisible =
-    parsed.visible && typeof parsed.visible === "object" ? parsed.visible : {};
+    parsed.visible && typeof parsed.visible === "object"
+      ? (parsed.visible as Record<string, unknown>)
+      : {};
   const legacyInsights =
     typeof rawVisible.insights === "boolean" ? rawVisible.insights : true;
   const legacyMovers =

@@ -55,11 +55,8 @@ function syncChartSettingsVisibility(layout: DashboardLayout) {
     const stored = localStorage.getItem("portfolio-chart-settings");
     const prev = stored ? (JSON.parse(stored) as Record<string, unknown>) : {};
     const next = {
-      showChart: true,
       showTooltip: false,
       hideAmounts: false,
-      showNews: true,
-      showDailyMovers: true,
       dailyMoversCount: 5,
       showAthPopup: true,
       showCalendarEventsPopup: true,
