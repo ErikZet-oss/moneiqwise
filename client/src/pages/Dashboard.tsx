@@ -1,6 +1,6 @@
 import { Fragment, useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueries } from "@tanstack/react-query";
 import {
   DndContext,
   closestCenter,
@@ -52,6 +52,7 @@ import {
   HelpCircle,
   Loader2,
   RefreshCw,
+  Bell,
   Moon,
   Calendar,
   ChevronDown,
@@ -388,6 +389,43 @@ interface StockQuote {
   preMarketChangePercent?: number | null;
 }
 
+type OwnershipAlertItem = {
+  id: string;
+  date: string | null;
+  actorName: string;
+  shares: number | null;
+  value: number | null;
+  kind: "INSIDER" | "INSTITUTION";
+  action: "BUY" | "SELL";
+  note: string | null;
+};
+
+type OwnershipAlertResponse = {
+  ticker: string;
+  currency: string | null;
+  items: OwnershipAlertItem[];
+  source: "yahoo" | null;
+};
+
+type PortfolioNotificationKind =
+  | "ownership"
+  | "ath"
+  | "earnings"
+  | "dividend"
+  | "macro"
+  | "move-up"
+  | "move-down";
+
+type PortfolioNotificationItem = {
+  id: string;
+  kind: PortfolioNotificationKind;
+  title: string;
+  subtitle: string;
+  dateIso: string | null;
+  tone: "default" | "positive" | "negative" | "warning";
+  infoUrl?: string;
+};
+
 async function fetchDashboardQuotesBatch(
   tickers: string[],
   refresh: boolean,
@@ -408,6 +446,23 @@ async function fetchDashboardQuotesBatch(
   }
 
   return data.quotes as Record<string, StockQuote>;
+}
+
+function formatNotificationDateIso(value: string | null): string {
+  if (!value) return "bez dátumu";
+  try {
+    return format(parseISO(value), "d. M. yyyy", { locale: sk });
+  } catch {
+    return value;
+  }
+}
+
+function formatOwnershipCount(value: number | null): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  const abs = Math.abs(value);
+  if (abs >= 1e9) return `${(value / 1e9).toFixed(2)} mld`;
+  if (abs >= 1e6) return `${(value / 1e6).toFixed(2)} mil`;
+  return value.toLocaleString("sk-SK", { maximumFractionDigits: 0 });
 }
 
 type PortfolioQuoteCurrency = "EUR" | "USD" | "GBP" | "CZK" | "PLN" | "HKD";
@@ -1361,6 +1416,39 @@ export default function Dashboard() {
     enabled: dashboardSecondaryReady && showAnalystRatingPopup,
   });
 
+  const ownershipAlertTickers = useMemo(() => {
+    if (!holdings || holdings.length === 0) return [] as string[];
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const h of holdings) {
+      const sh = parseFloat(h.shares);
+      const t = (h.ticker || "").toUpperCase();
+      if (!Number.isFinite(sh) || sh <= 0) continue;
+      if (!t || t === "CASH" || isPokemonTicker(t)) continue;
+      if (seen.has(t)) continue;
+      seen.add(t);
+      out.push(t);
+      if (out.length >= 15) break;
+    }
+    return out;
+  }, [holdings]);
+
+  const ownershipAlertQueries = useQueries({
+    queries: ownershipAlertTickers.map((ticker) => ({
+      queryKey: ["/api/assets", ticker, "ownership-activity", "alerts", portfolioParam],
+      queryFn: async () => {
+        const res = await fetch(
+          `/api/assets/${encodeURIComponent(ticker)}/ownership-activity?includeAll=1`,
+          { credentials: "include" },
+        );
+        if (!res.ok) throw new Error("ownership activity");
+        return res.json() as Promise<OwnershipAlertResponse>;
+      },
+      enabled: dashboardSecondaryReady,
+      staleTime: 30 * 60 * 1000,
+    })),
+  });
+
   const mergedDashboardCalendarEvents = useMemo(() => {
     const out: DashboardCalendarEvent[] = [];
     for (const e of holdingsNextEarnings?.all ?? []) {
@@ -1397,6 +1485,38 @@ export default function Dashboard() {
     }
     return out.sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title));
   }, [holdingsNextEarnings?.all, upcomingDividendsCalendar?.all, upcomingMacroEvents?.all]);
+
+  const ownershipAlertRows = useMemo(() => {
+    const rows: Array<
+      OwnershipAlertItem & {
+        ticker: string;
+        companyName: string;
+        currency: string | null;
+      }
+    > = [];
+    ownershipAlertQueries.forEach((q, idx) => {
+      const ticker = ownershipAlertTickers[idx];
+      if (!ticker) return;
+      const payload = q.data;
+      if (!payload?.items?.length) return;
+      const companyName = tickerDisplayNames.get(ticker) ?? ticker;
+      for (const item of payload.items.slice(0, 6)) {
+        rows.push({
+          ...item,
+          ticker,
+          companyName,
+          currency: payload.currency ?? null,
+        });
+      }
+    });
+    rows.sort((a, b) => {
+      const ta = a.date ? Date.parse(a.date) : -Infinity;
+      const tb = b.date ? Date.parse(b.date) : -Infinity;
+      if (tb !== ta) return tb - ta;
+      return (b.value ?? -Infinity) - (a.value ?? -Infinity);
+    });
+    return rows.slice(0, 12);
+  }, [ownershipAlertQueries, ownershipAlertTickers, tickerDisplayNames]);
 
   useEffect(() => {
     setMobileEarningsIndex(0);
@@ -1658,6 +1778,138 @@ export default function Dashboard() {
   const dashboardPortfolioLabel = isAllPortfolios
     ? "Všetky portfóliá"
     : selectedPortfolio?.name ?? "Vybrané portfólio";
+
+  const importantNotifications = useMemo<PortfolioNotificationItem[]>(() => {
+    const items: PortfolioNotificationItem[] = [];
+    const todayIso = format(startOfDay(new Date()), "yyyy-MM-dd");
+    const ownershipCutoffMs = Date.now() - 14 * 24 * 60 * 60 * 1000;
+    const calendarHorizonIso = format(
+      new Date(startOfDay(new Date()).getTime() + 7 * 24 * 60 * 60 * 1000),
+      "yyyy-MM-dd",
+    );
+
+    for (const row of ownershipAlertRows) {
+      const eventMs = row.date ? Date.parse(row.date) : NaN;
+      if (Number.isFinite(eventMs) && eventMs < ownershipCutoffMs) continue;
+      const actorKindLabel = row.kind === "INSIDER" ? "Insider" : "Inštitúcia";
+      const actionLabel = row.action === "BUY" ? "nákup" : "predaj";
+      const sharesLabel = row.shares != null ? `${formatOwnershipCount(row.shares)} ks` : "počet ks —";
+      const valueLabel =
+        row.value != null
+          ? `${formatOwnershipCount(row.value)}${row.currency ? ` ${row.currency}` : ""}`
+          : "hodnota —";
+      items.push({
+        id: `ownership-${row.id}`,
+        kind: "ownership",
+        title: `${row.ticker}: ${actorKindLabel} ${actionLabel}`,
+        subtitle: `${row.actorName} · ${sharesLabel} · ${valueLabel}`,
+        dateIso: row.date,
+        tone: row.action === "BUY" ? "positive" : "warning",
+        infoUrl: `https://finance.yahoo.com/quote/${encodeURIComponent(row.ticker)}`,
+      });
+    }
+
+    const athRows = isAllPortfolios
+      ? athReachedPortfoliosForDialog
+      : athReachedPortfoliosForDialog.filter((p) => p.id === selectedPortfolio?.id);
+    for (const p of athRows) {
+      items.push({
+        id: `ath-${p.id}`,
+        kind: "ath",
+        title: `${p.name} dosiahlo ATH`,
+        subtitle: p.previousAthDate
+          ? `Predchádzajúce ATH: ${format(parse(p.previousAthDate, "yyyy-MM-dd", new Date()), "d. M. yyyy", {
+              locale: sk,
+            })}`
+          : "Prvé zachytené ATH",
+        dateIso: todayIso,
+        tone: "positive",
+      });
+    }
+
+    for (const ev of mergedDashboardCalendarEvents
+      .filter((e) => e.date >= todayIso && e.date <= calendarHorizonIso)
+      .slice(0, 8)) {
+      const label =
+        ev.type === "earnings" ? "Earnings" : ev.type === "dividend" ? "Dividenda" : "Makro udalosť";
+      items.push({
+        id: `calendar-${ev.type}-${ev.date}-${ev.title}`,
+        kind: ev.type,
+        title: `${label}: ${ev.title}`,
+        subtitle: ev.subtitle,
+        dateIso: ev.date,
+        tone: ev.type === "macro" ? "warning" : "default",
+        infoUrl: ev.infoUrl,
+      });
+    }
+
+    if (holdings && quotes) {
+      const seen = new Set<string>();
+      for (const h of holdings) {
+        const ticker = (h.ticker || "").toUpperCase();
+        if (!ticker || seen.has(ticker)) continue;
+        seen.add(ticker);
+        const shares = parseFloat(h.shares);
+        if (!Number.isFinite(shares) || shares <= 0) continue;
+        if (ticker === "CASH" || isPokemonTicker(ticker)) continue;
+        const pct = Number(quotes[ticker]?.changePercent);
+        if (!Number.isFinite(pct) || Math.abs(pct) < 5) continue;
+        const rising = pct >= 0;
+        items.push({
+          id: `move-${ticker}`,
+          kind: rising ? "move-up" : "move-down",
+          title: `${ticker} ${rising ? "rastie" : "klesá"} ${Math.abs(pct).toFixed(2)}%`,
+          subtitle: (h.companyName || ticker).trim(),
+          dateIso: todayIso,
+          tone: rising ? "positive" : "negative",
+          infoUrl: `https://finance.yahoo.com/quote/${encodeURIComponent(ticker)}`,
+        });
+      }
+    }
+
+    const rank = (n: PortfolioNotificationItem) => {
+      switch (n.kind) {
+        case "move-down":
+          return 0;
+        case "ownership":
+          return 1;
+        case "move-up":
+          return 2;
+        case "ath":
+          return 3;
+        case "earnings":
+          return 4;
+        case "dividend":
+          return 5;
+        case "macro":
+          return 6;
+        default:
+          return 10;
+      }
+    };
+
+    return items
+      .sort((a, b) => {
+        const ra = rank(a);
+        const rb = rank(b);
+        if (ra !== rb) return ra - rb;
+        const ta = a.dateIso ? Date.parse(a.dateIso) : -Infinity;
+        const tb = b.dateIso ? Date.parse(b.dateIso) : -Infinity;
+        return tb - ta;
+      })
+      .slice(0, 30);
+  }, [
+    athReachedPortfoliosForDialog,
+    holdings,
+    isAllPortfolios,
+    mergedDashboardCalendarEvents,
+    ownershipAlertRows,
+    quotes,
+    selectedPortfolio?.id,
+  ]);
+
+  const importantNotificationCount = importantNotifications.length;
+  const hasImportantNotifications = importantNotificationCount > 0;
 
   const calculateOpenOptionsValue = () => {
     if (!optionTrades) return { 
@@ -2225,6 +2477,75 @@ export default function Dashboard() {
   const moversHasContent =
     (portfolios.length > 0 && moversTickers.length > 0) || dashboardEditing;
 
+  const renderPortfolioNotificationsBell = () => (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition-colors",
+            hasImportantNotifications
+              ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15"
+              : "border-border/70 bg-muted/20 text-muted-foreground hover:bg-muted/35",
+          )}
+          aria-label="Dôležité notifikácie"
+          data-testid="button-portfolio-notifications"
+        >
+          <Bell className="h-4 w-4" />
+          {importantNotificationCount > 0 && (
+            <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white">
+              {importantNotificationCount > 99 ? "99+" : importantNotificationCount}
+            </span>
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[min(92vw,430px)] p-0" align="end">
+        <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
+          <p className="text-sm font-semibold">Dôležité notifikácie</p>
+          <span className="text-xs text-muted-foreground">{importantNotificationCount}</span>
+        </div>
+        {importantNotifications.length === 0 ? (
+          <div className="px-3 py-5 text-sm text-muted-foreground">
+            Zatiaľ žiadne nové dôležité notifikácie.
+          </div>
+        ) : (
+          <ul className="max-h-[60vh] overflow-y-auto divide-y divide-border/60">
+            {importantNotifications.map((n) => (
+              <li key={n.id} className="px-3 py-2.5">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-medium leading-snug">{n.title}</p>
+                  <span
+                    className={cn(
+                      "shrink-0 text-[10px] font-medium",
+                      n.tone === "positive" && "text-emerald-600 dark:text-emerald-400",
+                      n.tone === "negative" && "text-red-500",
+                      n.tone === "warning" && "text-amber-600 dark:text-amber-400",
+                      n.tone === "default" && "text-muted-foreground",
+                    )}
+                  >
+                    {formatNotificationDateIso(n.dateIso)}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-muted-foreground leading-snug">{n.subtitle}</p>
+                {n.infoUrl && (
+                  <a
+                    href={n.infoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-1 inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
+                  >
+                    Detail
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+
   if (holdingsLoading) {
     return (
       <div className="space-y-6">
@@ -2254,6 +2575,13 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col gap-3 md:gap-5">
+      <div className="md:hidden flex items-center gap-2 min-w-0" data-testid="mobile-portfolio-header">
+        {!isAllPortfolios && <BrokerLogo brokerCode={selectedPortfolio?.brokerCode} size="xs" />}
+        <h1 className="text-base font-semibold text-foreground truncate min-w-0">
+          {dashboardPortfolioLabel}
+        </h1>
+        <div className="ml-auto">{renderPortfolioNotificationsBell()}</div>
+      </div>
       <div className="hidden md:flex items-center gap-2 min-w-0" data-testid="desktop-portfolio-header">
         {!isAllPortfolios && <BrokerLogo brokerCode={selectedPortfolio?.brokerCode} size="sm" />}
         <h1
@@ -2262,6 +2590,7 @@ export default function Dashboard() {
         >
           {dashboardPortfolioLabel}
         </h1>
+        {renderPortfolioNotificationsBell()}
         {athForCurrentSelection && (
           <span
             className="shrink-0 inline-flex items-center gap-0.5 text-sm motion-safe:animate-bounce"

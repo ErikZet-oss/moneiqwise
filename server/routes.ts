@@ -4094,6 +4094,7 @@ export async function registerRoutes(
   app.get("/api/assets/:ticker/ownership-activity", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
+      const includeAll = req.query.includeAll === "1" || req.query.includeAll === "true";
       let rawTicker = req.params.ticker as string;
       try {
         rawTicker = decodeURIComponent(rawTicker);
@@ -4117,7 +4118,11 @@ export async function registerRoutes(
         });
       }
 
-      const ownershipActivity = await fetchOwnershipActivityForAsset(displayTicker);
+      const ownershipActivity = await fetchOwnershipActivityForAsset(displayTicker, {
+        includeInsiderSells: includeAll,
+        includeInstitutionDecreases: includeAll,
+        maxItems: includeAll ? 120 : 60,
+      });
       res.json(ownershipActivity);
     } catch (error) {
       console.error("Error fetching ownership activity:", error);

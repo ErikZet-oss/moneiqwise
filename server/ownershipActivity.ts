@@ -13,6 +13,7 @@ export type OwnershipActivityItem = {
   shares: number | null;
   value: number | null;
   kind: OwnershipActivityKind;
+  action: "BUY" | "SELL";
   note: string | null;
 };
 
@@ -100,11 +101,25 @@ function toShortNote(parts: Array<string | null>): string | null {
   return s.length > 140 ? `${s.slice(0, 137)}...` : s;
 }
 
-export async function fetchOwnershipActivityForAsset(ticker: string): Promise<OwnershipActivityPayload> {
+type OwnershipActivityFetchOptions = {
+  includeInsiderSells?: boolean;
+  includeInstitutionDecreases?: boolean;
+  maxItems?: number;
+};
+
+export async function fetchOwnershipActivityForAsset(
+  ticker: string,
+  options?: OwnershipActivityFetchOptions,
+): Promise<OwnershipActivityPayload> {
   const key = ticker.trim().toUpperCase();
   if (!key || key === "CASH") return emptyPayload(ticker);
 
-  const cached = cache.get(key);
+  const includeInsiderSells = options?.includeInsiderSells === true;
+  const includeInstitutionDecreases = options?.includeInstitutionDecreases === true;
+  const maxItems = Math.max(1, Math.min(200, options?.maxItems ?? 60));
+  const cacheKey = `${key}|iSell:${includeInsiderSells ? 1 : 0}|instDec:${includeInstitutionDecreases ? 1 : 0}|max:${maxItems}`;
+
+  const cached = cache.get(cacheKey);
   if (cached && Date.now() - cached.t < CACHE_TTL_MS) return cached.v;
 
   const yahooTicker = toYahooTicker(key);
@@ -121,7 +136,9 @@ export async function fetchOwnershipActivityForAsset(ticker: string): Promise<Ow
         ?.transactions ?? [];
     for (const row of insiderRows.slice(0, 80)) {
       const transactionText = str(row.transactionText);
-      if (classifyInsiderTransaction(transactionText) !== "buy") continue;
+      const txKind = classifyInsiderTransaction(transactionText);
+      if (txKind === "unknown") continue;
+      if (txKind === "sell" && !includeInsiderSells) continue;
       items.push({
         id: `insider-${key}-${seq++}`,
         date: isoDateFromUnknown(row.startDate),
@@ -129,6 +146,7 @@ export async function fetchOwnershipActivityForAsset(ticker: string): Promise<Ow
         shares: num(row.shares),
         value: num(row.value),
         kind: "INSIDER",
+        action: txKind === "sell" ? "SELL" : "BUY",
         note: toShortNote([str(row.filerRelation), transactionText]),
       });
     }
@@ -139,7 +157,21 @@ export async function fetchOwnershipActivityForAsset(ticker: string): Promise<Ow
     ) => {
       for (const row of (rows ?? []).slice(0, 120)) {
         const pctChange = num(row.pctChange);
-        if (pctChange == null || pctChange <= 0) continue;
+        if (pctChange == null) continue;
+        if (pctChange > 0) {
+          items.push({
+            id: `inst-${key}-${seq++}`,
+            date: isoDateFromUnknown(row.reportDate),
+            actorName: str(row.organization) ?? str(row.name) ?? "Neznáma inštitúcia",
+            shares: num(row.position),
+            value: num(row.value),
+            kind: "INSTITUTION",
+            action: "BUY",
+            note: toShortNote([label, `Zmena podielu +${(pctChange * 100).toFixed(2)}%`]),
+          });
+          continue;
+        }
+        if (!includeInstitutionDecreases) continue;
         items.push({
           id: `inst-${key}-${seq++}`,
           date: isoDateFromUnknown(row.reportDate),
@@ -147,7 +179,8 @@ export async function fetchOwnershipActivityForAsset(ticker: string): Promise<Ow
           shares: num(row.position),
           value: num(row.value),
           kind: "INSTITUTION",
-          note: toShortNote([label, `Zmena podielu +${(pctChange * 100).toFixed(2)}%`]),
+          action: "SELL",
+          note: toShortNote([label, `Zmena podielu ${(pctChange * 100).toFixed(2)}%`]),
         });
       }
     };
@@ -176,15 +209,15 @@ export async function fetchOwnershipActivityForAsset(ticker: string): Promise<Ow
     const payload: OwnershipActivityPayload = {
       ticker: key,
       currency: str(priceMod.currency),
-      items: items.slice(0, 60),
+      items: items.slice(0, maxItems),
       source: "yahoo",
     };
-    cache.set(key, { t: Date.now(), v: payload });
+    cache.set(cacheKey, { t: Date.now(), v: payload });
     return payload;
   } catch (err) {
     console.warn(`[ownershipActivity] Yahoo failed for ${key}:`, err);
     const empty = emptyPayload(key);
-    cache.set(key, { t: Date.now(), v: empty });
+    cache.set(cacheKey, { t: Date.now(), v: empty });
     return empty;
   }
 }
