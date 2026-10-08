@@ -1,14 +1,14 @@
 import { useCallback, useMemo, useState, type MouseEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { ChevronRight, Loader2, RefreshCw } from "lucide-react";
+import { ChevronRight, Eye, EyeOff, Loader2, RefreshCw } from "lucide-react";
 import type { OptionTrade } from "@shared/schema";
 import type { HoldingWithCostCurrency } from "@shared/holdingCostCurrency";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
 import { Badge, Card, EmptyState, StatTile, TopBar } from "@/redesign/ui";
-import { IconButton, KvRow, PageBody, signedMoney, signedPct, toneOf } from "./mobileChrome";
+import { HelpButton, IconButton, KvRow, PageBody, signedMoney, signedPct, toneOf } from "./mobileChrome";
 
 interface StockQuote {
   ticker: string;
@@ -70,7 +70,7 @@ export default function OverviewMobile() {
   const { portfolios, setSelectedPortfolioId, isLoading: portfoliosLoading } = usePortfolio();
   const { convertPrice, getTickerCurrency, resolveHoldingCostCurrency, pnlInvestedForDisplay, formatCurrency } =
     useCurrency();
-  const { hideAmounts } = useChartSettings();
+  const { hideAmounts, toggleHideAmounts } = useChartSettings();
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const mask = (value: string) => (hideAmounts ? "••••••" : value);
 
@@ -352,15 +352,36 @@ export default function OverviewMobile() {
   };
 
   return (
-    <div>
-      <TopBar overline="Prehľad portfólií" title="Portfóliá" />
+    <div className="bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
+      <TopBar
+        overline="Prehľad portfólií"
+        title="Portfóliá"
+        trailing={
+          <div className="flex items-center gap-1">
+            <HelpButton
+              title="Portfóliá"
+              body="Súhrn všetkých portfólií. Ťuknutím na Otvoriť portfólio prejdeš na Prehľad s vybraným portfóliom."
+            />
+            <button
+              type="button"
+              aria-label={hideAmounts ? "Zobraziť sumy" : "Skryť sumy"}
+              className="inline-flex size-9 items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)]"
+              onClick={() => toggleHideAmounts()}
+            >
+              {hideAmounts ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+            </button>
+            <IconButton
+              label="Obnoviť ceny všetkých portfólií"
+              onClick={() => void refreshAll()}
+              spinning={refreshingId === "all"}
+            />
+          </div>
+        }
+      />
       <PageBody>
-        <div className="flex items-center gap-3">
-          <p className="min-w-0 flex-1 text-xs leading-4 text-[var(--rd-text-secondary)]">
-            Rýchly prehľad výkonnosti všetkých vašich portfólií.
-          </p>
-          <IconButton label="Obnoviť ceny všetkých portfólií" onClick={() => void refreshAll()} spinning={refreshingId === "all"} />
-        </div>
+        <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">
+          Rýchly prehľad výkonnosti všetkých vašich portfólií.
+        </p>
 
         {portfoliosLoading || isPending ? (
           <Card>
