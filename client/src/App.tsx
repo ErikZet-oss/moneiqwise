@@ -32,6 +32,7 @@ import AssetDetail from "@/pages/AssetDetail";
 import TaxSummaryPage from "@/pages/TaxSummaryPage";
 import FaqPage from "@/pages/FaqPage";
 import AdminRegistrations from "@/pages/AdminRegistrations";
+import DemoEnter from "@/pages/DemoEnter";
 import { MarketQuoteTicker } from "@/components/MarketQuoteTicker";
 import { QuickNavFab, QUICK_NAV_CONTENT_PAD } from "@/components/QuickNavFab";
 import { DashboardEditHeaderButton } from "@/components/DashboardEditHeaderButton";
@@ -48,6 +49,13 @@ type PasskeysPayload = {
 type AppSettingsPayload = {
   passkeyStartupLockEnabled?: boolean;
 };
+
+/** Single-segment path `/4d4b` + userId (e.g. `/4d4brc2b7ik44gdsxvb89thu`). */
+function matchDemoLinkPath(location: string): string | null {
+  const path = location.split("?")[0] || "";
+  const m = /^\/(4d4b[a-zA-Z0-9_-]+)$/.exec(path);
+  return m ? m[1] : null;
+}
 
 function QuickNavFabGate() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -362,13 +370,27 @@ function AuthenticatedLayout() {
   );
 }
 
+function AppShell() {
+  const [location] = useLocation();
+  const demoToken = matchDemoLinkPath(location);
+  if (demoToken) {
+    return <DemoEnter pathToken={demoToken} />;
+  }
+
+  return (
+    <>
+      <AuthenticatedLayout />
+      <QuickNavFabGate />
+    </>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <TooltipProvider>
-          <AuthenticatedLayout />
-          <QuickNavFabGate />
+          <AppShell />
           <Toaster />
         </TooltipProvider>
       </ThemeProvider>

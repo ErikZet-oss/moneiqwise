@@ -5,6 +5,7 @@ import fs from "fs";
 import path from "path";
 import { storage, type RegistrationAdminListFilter } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
+import { registerDemoLinkRoutes } from "./demoLink";
 import { isRegistrationAdminEmail } from "./adminAuth";
 import {
   insertTransactionSchema,
@@ -3179,6 +3180,7 @@ export async function registerRoutes(
 
   // Setup auth middleware
   await setupAuth(app);
+  registerDemoLinkRoutes(app);
 
   const { registerAiScannerRoutes } = await import("./aiScannerRoutes");
   registerAiScannerRoutes(app, isAuthenticated);

@@ -363,7 +363,7 @@ function getPasskeyFlow(
   return flow;
 }
 
-function regenerateSession(req: Request): Promise<void> {
+export function regenerateSession(req: Request): Promise<void> {
   return new Promise((resolve, reject) => {
     req.session.regenerate((err) => (err ? reject(err) : resolve()));
   });
