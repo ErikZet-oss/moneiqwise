@@ -1097,6 +1097,8 @@ export const isAuthenticated: RequestHandler = async (req: Request, res: Respons
 declare module "express-session" {
   interface SessionData {
     userId?: string;
+    /** Temporary no-login demo session (secret /4d4b… link). */
+    isDemo?: boolean;
     passkeyFlow?: {
       action: "register" | "login";
       challenge: string;

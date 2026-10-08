@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { storage } from "./storage";
-import { regenerateSession } from "./replitAuth";
+import { clearSessionCookie, regenerateSession } from "./replitAuth";
 
 /** Secret path prefix for temporary no-login demo links. */
 export const DEMO_LINK_PREFIX = "4d4b";
@@ -18,7 +18,7 @@ function isDemoLinkEnabled(): boolean {
 
 /**
  * Valid demo path tokens: full `4d4brc2b7ik44gdsxvb89thu` or any `4d4b…`
- * that maps to the fixed demo user (path is just the secret, not a real user lookup).
+ * (path is only a secret — always logs into DEMO_USER_ID).
  */
 export function isValidDemoPathToken(input: unknown): boolean {
   if (typeof input !== "string") return false;
@@ -46,7 +46,6 @@ async function ensureDemoUser() {
     registrationStatus: "approved",
   });
 
-  // Empty starter portfolio so dashboard has something to show / rename later.
   const portfolios = await storage.getPortfoliosByUser(DEMO_USER_ID);
   if (portfolios.length === 0) {
     await storage.createPortfolio({
@@ -56,6 +55,20 @@ async function ensureDemoUser() {
   }
 
   return user;
+}
+
+function destroyDemoSession(req: Request, res: Response, asJson: boolean) {
+  req.session.destroy((err) => {
+    if (err) {
+      if (asJson) {
+        return res.status(500).json({ message: "Odhlasenie z dema zlyhalo." });
+      }
+      return res.redirect("/");
+    }
+    clearSessionCookie(res);
+    if (asJson) return res.status(200).json({ ok: true });
+    return res.redirect("/");
+  });
 }
 
 export function registerDemoLinkRoutes(app: Express) {
@@ -77,10 +90,21 @@ export function registerDemoLinkRoutes(app: Express) {
       await ensureDemoUser();
       await regenerateSession(req);
       req.session.userId = DEMO_USER_ID;
+      req.session.isDemo = true;
+      // Short-lived — must not stick like a normal "remember me" login.
+      req.session.cookie.maxAge = 1000 * 60 * 60 * 4;
       return res.status(200).json({ ok: true, userId: DEMO_USER_ID });
     } catch (error) {
       console.error("[demo-link] enter failed:", error);
       return res.status(500).json({ message: "Demo prihlasenie zlyhalo." });
     }
+  });
+
+  app.post("/api/demo/exit", (req: Request, res: Response) => {
+    destroyDemoSession(req, res, true);
+  });
+
+  app.get("/api/demo/exit", (req: Request, res: Response) => {
+    destroyDemoSession(req, res, false);
   });
 }

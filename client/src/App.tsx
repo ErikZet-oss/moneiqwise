@@ -326,6 +326,49 @@ function Router() {
   );
 }
 
+function DemoModeBanner() {
+  const { isDemo } = useAuth();
+  const [, setLocation] = useLocation();
+  const [exiting, setExiting] = useState(false);
+  if (!isDemo) return null;
+
+  const exitDemo = async () => {
+    setExiting(true);
+    try {
+      await fetch("/api/demo/exit", { method: "POST", credentials: "include" });
+      queryClient.setQueryData(["/api/auth/user"], null);
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      setLocation("/");
+    } finally {
+      setExiting(false);
+    }
+  };
+
+  return (
+    <div
+      className="sticky top-0 z-[60] flex items-center justify-between gap-3 border-b border-amber-500/30 bg-amber-500/15 px-3 py-2 text-xs text-amber-950 dark:text-amber-100"
+      data-testid="banner-demo-mode"
+    >
+      <p className="min-w-0 leading-snug">
+        <span className="font-semibold">Demo režim</span>
+        {" — "}
+        toto nie je ostrý login. Bežný login je na úvodnej stránke po ukončení dema.
+      </p>
+      <Button
+        type="button"
+        size="sm"
+        variant="secondary"
+        className="h-7 shrink-0 text-xs"
+        disabled={exiting}
+        onClick={() => void exitDemo()}
+        data-testid="button-exit-demo"
+      >
+        {exiting ? "Ukončujem…" : "Ukončiť demo"}
+      </Button>
+    </div>
+  );
+}
+
 function AuthenticatedLayout() {
   const { isAuthenticated, isLoading } = useAuth();
   const { enabled: quickNavEnabled } = useQuickNavFab();
@@ -344,6 +387,7 @@ function AuthenticatedLayout() {
       <AppUnlockGate>
         <SidebarProvider style={style as CSSProperties}>
           <div className="flex h-screen w-full flex-col">
+            <DemoModeBanner />
             <MarketQuoteTicker />
             <div className="flex min-h-0 flex-1 w-full">
               <AppSidebar />

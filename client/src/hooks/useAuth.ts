@@ -1,8 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import type { User } from "@shared/schema";
 
-/** Rozšírenie odpovede `/api/auth/user` o práva správcu registrácií. */
-export type AuthUser = User & { isRegistrationAdmin?: boolean };
+/** Rozšírenie odpovede `/api/auth/user` o práva správcu registrácií / demo. */
+export type AuthUser = User & {
+  isRegistrationAdmin?: boolean;
+  /** Session z dočasného /4d4b… linku (nie ostrý login). */
+  isDemo?: boolean;
+};
 
 export async function fetchAuthUser(): Promise<AuthUser | null> {
   const res = await fetch("/api/auth/user", { credentials: "include" });
@@ -29,5 +33,6 @@ export function useAuth() {
     user: user ?? undefined,
     isLoading: isPending,
     isAuthenticated: !!user,
+    isDemo: user?.isDemo === true,
   };
 }
