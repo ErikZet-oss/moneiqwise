@@ -37,7 +37,7 @@ import { MarketQuoteTicker } from "@/components/MarketQuoteTicker";
 import { QuickNavFab, QUICK_NAV_CONTENT_PAD } from "@/components/QuickNavFab";
 import { DashboardEditHeaderButton } from "@/components/DashboardEditHeaderButton";
 import { useQuickNavFab } from "@/hooks/useQuickNavFab";
-import { useMobileRedesign } from "@/hooks/useMobileUi";
+import { MobileUiDocumentSync, useMobileRedesign } from "@/hooks/useMobileUi";
 import { Button as RedesignButton, TabBar, TickerTape } from "@/redesign/ui";
 import { RedesignStatusScreen, RedesignUnlockScreen } from "@/redesign/RedesignUnlock";
 import MorePage from "@/pages/redesign/MorePage";
@@ -74,6 +74,17 @@ function RedirectToHistory() {
     setLocation("/history");
   }, [setLocation]);
   return null;
+}
+
+/** Classic shell never used /more — keep users on settings instead of a redesign-only page. */
+function MoreOrRedirect() {
+  const redesign = useMobileRedesign();
+  const [, setLocation] = useLocation();
+  useEffect(() => {
+    if (!redesign) setLocation("/settings");
+  }, [redesign, setLocation]);
+  if (!redesign) return null;
+  return <MorePage />;
 }
 
 function RedirectToAiAgentSkener() {
@@ -357,7 +368,7 @@ function Router() {
       <Route path="/settings" component={Settings} />
       <Route path="/admin/registrations" component={AdminRegistrations} />
       <Route path="/faq" component={FaqPage} />
-      <Route path="/more" component={MorePage} />
+      <Route path="/more" component={MoreOrRedirect} />
       <Route path="/asset/:ticker" component={AssetDetail} />
       <Route component={NotFound} />
     </Switch>
@@ -420,7 +431,7 @@ function AuthenticatedLayout() {
     return (
       <PortfolioProvider>
         <AppUnlockGate>
-          <div className="flex h-dvh w-full flex-col bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
+          <div className="rd-app-shell flex h-dvh w-full flex-col bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
             <TickerTape />
             <main className="min-h-0 flex-1 overflow-auto pb-[calc(96px+env(safe-area-inset-bottom))]">
               <Router />
@@ -489,6 +500,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <TooltipProvider>
+          <MobileUiDocumentSync />
           <AppShell />
           <Toaster />
         </TooltipProvider>

@@ -139,7 +139,7 @@ export function RedesignLanding({ auth }: { auth: LandingAuth }) {
     <div
       ref={scrollRef}
       data-redesign-login-scroll
-      className="h-dvh overflow-y-auto bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]"
+      className="rd-landing h-dvh overflow-y-auto bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]"
     >
       {/* Auth card stays fixed in document flow — not part of parallax (Figma). */}
       <Hero auth={auth} onScrollToFeatures={scrollToFeatures} />

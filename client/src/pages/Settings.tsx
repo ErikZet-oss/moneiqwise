@@ -14,12 +14,13 @@ import { useChartSettings, type ChartBenchmarkId } from "@/hooks/useChartSetting
 import { CHART_BENCHMARK_OPTIONS } from "@/lib/chartBenchmarks";
 import { useQuickNavFab } from "@/hooks/useQuickNavFab";
 import { MAX_QUICK_NAV_ITEMS, QUICK_NAV_SECTIONS } from "@/lib/quickNavSections";
-import { Loader2, Eye, EyeOff, Coins, Calculator, RefreshCw, Briefcase, Plus, Pencil, Trash2, LineChart, Newspaper, AlertTriangle, ChevronUp, ChevronDown, Eraser, TrendingUp, Code2, Download, MousePointerClick, X, KeyRound } from "lucide-react";
+import { Loader2, Eye, EyeOff, Coins, Calculator, RefreshCw, Briefcase, Plus, Pencil, Trash2, LineChart, Newspaper, AlertTriangle, ChevronUp, ChevronDown, Eraser, TrendingUp, Code2, Download, MousePointerClick, X, KeyRound, Palette } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { BrokerLogo, BrokerSelectItem, BROKER_CATALOG } from "@/components/BrokerLogo";
 import { BROKER_CODES, type Currency, type BrokerCode } from "@shared/schema";
 import { HelpTip } from "@/components/HelpTip";
 import { useMobileRedesign } from "@/hooks/useMobileUi";
+import { MobileUiToggle } from "@/redesign/MobileUiToggle";
 import SettingsMobile from "@/pages/redesign/SettingsMobile";
 
 interface ApiSettings {
@@ -549,6 +550,21 @@ function SettingsClassic() {
           Portfóliá, zobrazenie, menu a mena pre prehľad.
         </p>
       </div>
+
+      <Card>
+        <CardHeader className="p-4 pb-2">
+          <div className="flex items-center gap-2">
+            <Palette className="h-5 w-5 text-primary" />
+            <CardTitle className="text-sm font-medium">Vzhľad aplikácie</CardTitle>
+          </div>
+          <CardDescription className="text-xs leading-snug">
+            Klasický = pôvodné UI. Nový = mobilný redizajn (Figma).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-4 pt-2">
+          <MobileUiToggle variant="classic" />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="p-4 pb-2">

@@ -50,7 +50,11 @@
 
   --rd-font-sans: "Inter", sans-serif;
   --rd-font-mono: "JetBrains Mono", monospace;
+}
 
+/* Scope color/font to redesign surfaces only — never paint classic UI via <html>. */
+[data-mobile-ui="redesign"] .rd-app-shell,
+[data-mobile-ui="redesign"] .rd-landing {
   color: var(--rd-text-primary);
   font-family: var(--rd-font-sans);
 }

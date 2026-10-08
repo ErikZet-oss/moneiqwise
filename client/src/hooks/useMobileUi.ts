@@ -15,17 +15,34 @@ function loadMode(): MobileUiMode {
   return "classic";
 }
 
+function applyDocumentMode(mode: MobileUiMode) {
+  if (typeof document === "undefined") return;
+  if (mode === "redesign") {
+    document.documentElement.setAttribute("data-mobile-ui", "redesign");
+  } else {
+    // Classic must never keep redesign color/font overrides on <html>.
+    document.documentElement.removeAttribute("data-mobile-ui");
+  }
+}
+
 function saveMode(mode: MobileUiMode) {
   try {
     localStorage.setItem(STORAGE_KEY, mode);
+    applyDocumentMode(mode);
     window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: mode }));
   } catch {
     // ignore
   }
 }
 
-/** How many mounted callers currently want the redesign attribute. */
-let redesignAttributeUsers = 0;
+/** Keep <html data-mobile-ui> in sync for the whole app (one mount is enough). */
+export function MobileUiDocumentSync() {
+  const { mode } = useMobileUi();
+  useLayoutEffect(() => {
+    applyDocumentMode(mode);
+  }, [mode]);
+  return null;
+}
 
 export function useMobileUi() {
   const [mode, setModeState] = useState<MobileUiMode>(loadMode);
@@ -37,7 +54,7 @@ export function useMobileUi() {
     };
     const handleStorage = (event: StorageEvent) => {
       if (event.key !== STORAGE_KEY) return;
-      if (event.newValue === "classic" || event.newValue === "redesign") {
+      if (event.newValue === "redesign" || event.newValue === "classic") {
         setModeState(event.newValue);
       }
     };
@@ -58,27 +75,10 @@ export function useMobileUi() {
 }
 
 /**
- * True when the user selected Nový on the login / Viac toggle.
- * Applies the redesign shell + page UIs on any viewport so desktop testing
- * matches the toggle (Figma redesign is mobile-first, but the preference
- * must not silently fall back to classic above 768px).
+ * True when the user selected Nový on the login / settings toggle.
+ * Classic mode must render the pre-redesign shell and pages unchanged.
  */
 export function useMobileRedesign() {
   const { mode } = useMobileUi();
-  const active = mode === "redesign";
-
-  useLayoutEffect(() => {
-    if (!active) return;
-    redesignAttributeUsers += 1;
-    document.documentElement.setAttribute("data-mobile-ui", "redesign");
-    return () => {
-      redesignAttributeUsers -= 1;
-      if (redesignAttributeUsers <= 0) {
-        redesignAttributeUsers = 0;
-        document.documentElement.removeAttribute("data-mobile-ui");
-      }
-    };
-  }, [active]);
-
-  return active;
+  return mode === "redesign";
 }

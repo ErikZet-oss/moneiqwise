@@ -168,15 +168,13 @@ export default function Landing() {
   if (redesign) {
     return (
       <>
-        <MobileUiToggle pinned />
+        <MobileUiToggle pinned variant="redesign" />
         <RedesignLanding auth={auth} />
       </>
     );
   }
 
   return (
-    <>
-      <MobileUiToggle pinned />
     <div className="landing-page min-h-screen relative overflow-hidden bg-[#08090b] text-white">
       <div className="absolute inset-0 landing-fade-grid" aria-hidden />
       <div className="absolute inset-0 opacity-70" aria-hidden>
@@ -187,7 +185,11 @@ export default function Landing() {
         aria-hidden
       />
 
-      <div className="relative z-10 flex min-h-screen pt-14 lg:pt-4">
+      <div className="absolute inset-x-0 top-0 z-20 flex justify-center px-4 pt-[max(10px,env(safe-area-inset-top))]">
+        <MobileUiToggle variant="classic" />
+      </div>
+
+      <div className="relative z-10 flex min-h-screen">
         <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 xl:p-14">
           <div>
             <div className="flex items-center gap-3 mb-16">
@@ -511,6 +513,5 @@ export default function Landing() {
         </div>
       </div>
     </div>
-    </>
   );
 }
