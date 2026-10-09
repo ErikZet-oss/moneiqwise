@@ -1456,44 +1456,42 @@ export default function DashboardMobile() {
 
       case "holdings":
         return frame(
-          <Card className="gap-0 p-0">
-            <div className="flex flex-col gap-1.5 p-4 pb-2">
-              <div className="min-w-0">
-                <SectionHeader title="Prehľad aktív" />
-                <p className="rd-type-body-sm text-[var(--rd-text-tertiary)]">Vaše aktuálne držané akcie (EUR)</p>
-              </div>
-              <div className="flex gap-1.5">
-                <button
-                  type="button"
-                  className="inline-flex h-[30px] items-center gap-1.5 rounded-full border border-[var(--rd-border-strong)] [background-image:var(--rd-bg-surface-gradient)] px-2 text-[12px] font-medium text-[var(--rd-text-primary)]"
-                  onClick={() => setViewOpen(true)}
-                >
-                  <LayoutList className="size-3.5" />
-                  Zobrazenie
-                </button>
-                <button
-                  type="button"
-                  className="inline-flex h-[30px] items-center gap-1.5 rounded-full border border-[var(--rd-border-strong)] [background-image:var(--rd-bg-surface-gradient)] px-2 text-[12px] font-medium text-[var(--rd-text-primary)]"
-                  onClick={() => {
-                    setDraftSortBy(mobileAssetsSortBy);
-                    setDraftSortOrder(mobileAssetsSortOrder);
-                    setSortOpen(true);
-                  }}
-                >
-                  <ArrowDownUp className="size-3.5" />
-                  Zoradiť
-                </button>
-              </div>
+          <Card className="gap-1.5 p-3">
+            <div className="flex flex-col gap-0.5">
+              <SectionHeader title="Prehľad aktív" />
+              <p className="rd-type-body-sm text-[var(--rd-text-tertiary)]">
+                Vaše aktuálne držané akcie ({currency})
+              </p>
+            </div>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                className="inline-flex h-[28px] items-center gap-1.5 rounded-full border border-[var(--rd-border-strong)] [background-image:var(--rd-bg-surface-gradient)] px-2 text-[12px] font-medium leading-4 text-[var(--rd-text-primary)]"
+                onClick={() => setViewOpen(true)}
+              >
+                <LayoutList className="size-3.5" />
+                Zobrazenie
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-[28px] items-center gap-1.5 rounded-full border border-[var(--rd-border-strong)] [background-image:var(--rd-bg-surface-gradient)] px-2 text-[12px] font-medium leading-4 text-[var(--rd-text-primary)]"
+                onClick={() => {
+                  setDraftSortBy(mobileAssetsSortBy);
+                  setDraftSortOrder(mobileAssetsSortOrder);
+                  setSortOpen(true);
+                }}
+              >
+                <ArrowDownUp className="size-3.5" />
+                Zoradiť
+              </button>
             </div>
             {holdingsLoading ? (
-              <p className="px-4 pb-4 text-sm text-[var(--rd-text-tertiary)]">Načítavam…</p>
+              <p className="rd-type-body-sm text-[var(--rd-text-tertiary)]">Načítavam…</p>
             ) : enrichedHoldings.length === 0 ? (
-              <div className="p-4">
-                <EmptyState title="Žiadne pozície" body="Importuj transakcie alebo pridaj nákup v Histórii." />
-              </div>
+              <EmptyState title="Žiadne pozície" body="Importuj transakcie alebo pridaj nákup v Histórii." />
             ) : (
-              <div className="divide-y divide-[var(--rd-border-subtle)] px-4">
-                {enrichedHoldings.slice(0, holdingsLimit).map((row) => {
+              <div className="flex flex-col">
+                {enrichedHoldings.slice(0, holdingsLimit).map((row, index) => {
                   const h = row.holding;
                   const rowKey = h.id || h.ticker;
                   const afterHoursPrice =
@@ -1504,118 +1502,93 @@ export default function DashboardMobile() {
                     row.showAfterHours && row.afterHoursPct != null
                       ? signedPct(row.afterHoursPct)
                       : undefined;
-                  if (mobileAssetsView === "simple") {
-                    const expandable = canExpandLots(h);
-                    const expanded = expandable && expandedHoldingId === rowKey;
-                    const lotsPath = isAllPortfolios
-                      ? "all"
-                      : h.portfolioId
-                        ? h.portfolioId
-                        : "unassigned";
-                    return (
-                      <HoldingRowSimple
-                        key={rowKey}
-                        ticker={h.ticker}
-                        name={holdingName(h)}
-                        assetType={simpleBadge(h)}
-                        value={mask(formatCurrency(row.value))}
-                        lot={`${formatShareQuantity(row.shares)} @ ${mask(formatAverageCostCurrency(row.avg))}`}
-                        dayChange={signedPct(row.dayPct)}
-                        dayTrend={trendFromNumber(row.dayTrendSource)}
-                        pl={`${mask(signedMoney(formatCurrency, row.gain))} (${signedPct(row.gainPct)})`}
-                        plTrend={trendFromNumber(row.gain)}
-                        imageUrl={h.tcgImageUrl}
-                        expandable={expandable}
-                        expanded={expanded}
-                        onToggle={
-                          expandable
-                            ? () =>
-                                setExpandedHoldingId((cur) => (cur === rowKey ? null : rowKey))
-                            : undefined
-                        }
-                        onNameClick={() => setLocation(`/asset/${encodeURIComponent(h.ticker)}`)}
-                        afterHoursPrice={afterHoursPrice}
-                        afterHoursChange={afterHoursChange}
-                        afterHoursTrend={row.afterHoursTrend}
-                        lotsSlot={
-                          expanded ? (
-                            <SimpleLotsPanel
-                              portfolioPath={lotsPath}
-                              ticker={h.ticker}
-                              shares={row.shares}
-                              currentPrice={row.valuationPrice}
-                              investedDisplay={row.invested}
-                              mask={mask}
-                              formatAverageCostCurrency={formatAverageCostCurrency}
-                              convertPrice={convertPrice}
-                              convertAverageCostPrice={convertAverageCostPrice}
-                            />
-                          ) : null
-                        }
-                      />
-                    );
-                  }
-                  const expandable = canExpandLots(h);
-                  const expanded = expandable && expandedHoldingId === rowKey;
                   const lotsPath = isAllPortfolios
                     ? "all"
                     : h.portfolioId
                       ? h.portfolioId
                       : "unassigned";
-                  return (
-                    <HoldingRowExpandable
-                      key={rowKey}
+                  const expandable = canExpandLots(h);
+                  const expanded = expandable && expandedHoldingId === rowKey;
+                  const lotsSlot = expanded ? (
+                    <SimpleLotsPanel
+                      portfolioPath={lotsPath}
                       ticker={h.ticker}
-                      name={holdingName(h)}
-                      qty={`${formatShareQuantity(row.shares)} ks`}
-                      value={mask(formatCurrency(row.value))}
-                      delta={signedPct(row.gainPct)}
-                      trend={trendFromNumber(row.gainPct)}
-                      avg={mask(formatAverageCostCurrency(row.avg))}
-                      price={mask(formatCurrency(row.price))}
-                      dayChange={signedPct(row.dayPct)}
-                      dayTrend={trendFromNumber(row.dayTrendSource)}
-                      pl={mask(signedMoney(formatCurrency, row.gain))}
-                      plTrend={trendFromNumber(row.gain)}
-                      imageUrl={h.tcgImageUrl}
-                      expanded={expanded}
-                      onToggle={
-                        expandable
-                          ? () => setExpandedHoldingId((cur) => (cur === rowKey ? null : rowKey))
-                          : undefined
-                      }
-                      onTickerClick={() => setLocation(`/asset/${encodeURIComponent(h.ticker)}`)}
-                      afterHoursPrice={afterHoursPrice}
-                      afterHoursChange={afterHoursChange}
-                      afterHoursTrend={row.afterHoursTrend}
-                      lotsSlot={
-                        expanded ? (
-                          <SimpleLotsPanel
-                            portfolioPath={lotsPath}
-                            ticker={h.ticker}
-                            shares={row.shares}
-                            currentPrice={row.valuationPrice}
-                            investedDisplay={row.invested}
-                            mask={mask}
-                            formatAverageCostCurrency={formatAverageCostCurrency}
-                            convertPrice={convertPrice}
-                            convertAverageCostPrice={convertAverageCostPrice}
-                          />
-                        ) : null
-                      }
+                      shares={row.shares}
+                      currentPrice={row.valuationPrice}
+                      investedDisplay={row.invested}
+                      mask={mask}
+                      formatAverageCostCurrency={formatAverageCostCurrency}
+                      convertPrice={convertPrice}
+                      convertAverageCostPrice={convertAverageCostPrice}
                     />
+                  ) : null;
+                  return (
+                    <div key={rowKey}>
+                      {index > 0 ? <div className="h-px w-full bg-[var(--rd-border-subtle)]" /> : null}
+                      {mobileAssetsView === "simple" ? (
+                        <HoldingRowSimple
+                          ticker={h.ticker}
+                          name={holdingName(h)}
+                          assetType={simpleBadge(h)}
+                          value={mask(formatCurrency(row.value))}
+                          lot={`${formatShareQuantity(row.shares)} @ ${mask(formatAverageCostCurrency(row.avg))}`}
+                          dayChange={signedPct(row.dayPct)}
+                          dayTrend={trendFromNumber(row.dayTrendSource)}
+                          pl={`${mask(signedMoney(formatCurrency, row.gain))} (${signedPct(row.gainPct)})`}
+                          plTrend={trendFromNumber(row.gain)}
+                          imageUrl={h.tcgImageUrl}
+                          expandable={expandable}
+                          expanded={expanded}
+                          onToggle={
+                            expandable
+                              ? () => setExpandedHoldingId((cur) => (cur === rowKey ? null : rowKey))
+                              : undefined
+                          }
+                          onNameClick={() => setLocation(`/asset/${encodeURIComponent(h.ticker)}`)}
+                          afterHoursPrice={afterHoursPrice}
+                          afterHoursChange={afterHoursChange}
+                          afterHoursTrend={row.afterHoursTrend}
+                          lotsSlot={lotsSlot}
+                        />
+                      ) : (
+                        <HoldingRowExpandable
+                          ticker={h.ticker}
+                          name={holdingName(h)}
+                          qty={`${formatShareQuantity(row.shares)} ks`}
+                          value={mask(formatCurrency(row.value))}
+                          delta={signedPct(row.gainPct)}
+                          trend={trendFromNumber(row.gainPct)}
+                          avg={mask(formatAverageCostCurrency(row.avg))}
+                          price={mask(formatCurrency(row.price))}
+                          pl={mask(signedMoney(formatCurrency, row.gain))}
+                          plTrend={trendFromNumber(row.gain)}
+                          imageUrl={h.tcgImageUrl}
+                          expanded={expanded}
+                          onToggle={
+                            expandable
+                              ? () => setExpandedHoldingId((cur) => (cur === rowKey ? null : rowKey))
+                              : undefined
+                          }
+                          onTickerClick={() => setLocation(`/asset/${encodeURIComponent(h.ticker)}`)}
+                          afterHoursPrice={afterHoursPrice}
+                          afterHoursChange={afterHoursChange}
+                          afterHoursTrend={row.afterHoursTrend}
+                          lotsSlot={lotsSlot}
+                        />
+                      )}
+                    </div>
                   );
                 })}
               </div>
             )}
             {enrichedHoldings.length > holdingsLimit ? (
-              <button
-                type="button"
-                className="w-full border-t border-[var(--rd-border-subtle)] py-3 text-center text-sm font-medium text-[var(--rd-profit)]"
+              <Button
+                variant="Secondary"
+                className="w-full"
                 onClick={() => setHoldingsLimit((n) => n + 12)}
               >
                 Viac · ďalších {enrichedHoldings.length - holdingsLimit}
-              </button>
+              </Button>
             ) : null}
           </Card>,
         );
@@ -1851,71 +1824,149 @@ export default function DashboardMobile() {
         onClose={() => setSettingsWidgetId(null)}
       />
 
-      <Dialog open={sortOpen} title="Zoradiť aktíva" onClose={() => setSortOpen(false)}>
-        <div className="mt-3 space-y-2">
+      <Dialog
+        open={sortOpen}
+        title="Zoradiť podľa"
+        body="Vyberte kritérium a poradie zoradenia zoznamu aktív na mobile."
+        onClose={() => setSortOpen(false)}
+        showHelpIcon={false}
+      >
+        <div className="mt-3 flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            {(
+              [
+                ["name", "Názov"],
+                ["value", "Hodnota"],
+                ["netProfit", "Čistý zisk"],
+                ["gainPercent", "% zhodnotenia"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                className="flex min-h-[40px] w-full items-center gap-3 text-left"
+                onClick={() => setDraftSortBy(value)}
+              >
+                <span
+                  className={cn(
+                    "inline-flex size-4 shrink-0 items-center justify-center rounded-full border",
+                    draftSortBy === value
+                      ? "border-[var(--rd-profit)] bg-[var(--rd-profit)]"
+                      : "border-[var(--rd-border-strong)]",
+                  )}
+                  aria-hidden
+                >
+                  {draftSortBy === value ? (
+                    <span className="size-1.5 rounded-full bg-[var(--rd-text-on-brand)]" />
+                  ) : null}
+                </span>
+                <span
+                  className={cn(
+                    "rd-type-body",
+                    draftSortBy === value
+                      ? "text-[var(--rd-text-primary)]"
+                      : "text-[var(--rd-text-secondary)]",
+                  )}
+                >
+                  {label}
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="h-px bg-[var(--rd-border-subtle)]" />
+          <div className="flex flex-col gap-2">
+            <p className="rd-type-overline text-[var(--rd-text-tertiary)]">Poradie</p>
+            <div className="flex gap-4">
+              {(
+                [
+                  ["asc", "Vzostupne"],
+                  ["desc", "Zostupne"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className="inline-flex items-center gap-2"
+                  onClick={() => setDraftSortOrder(value)}
+                >
+                  <span
+                    className={cn(
+                      "inline-flex size-4 shrink-0 items-center justify-center rounded-full border",
+                      draftSortOrder === value
+                        ? "border-[var(--rd-profit)] bg-[var(--rd-profit)]"
+                        : "border-[var(--rd-border-strong)]",
+                    )}
+                    aria-hidden
+                  >
+                    {draftSortOrder === value ? (
+                      <span className="size-1.5 rounded-full bg-[var(--rd-text-on-brand)]" />
+                    ) : null}
+                  </span>
+                  <span className="rd-type-body text-[var(--rd-text-primary)]">{label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button variant="Secondary" className="flex-1" onClick={() => setSortOpen(false)}>
+              Zrušiť
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={() => {
+                setMobileAssetsSortBy(draftSortBy);
+                setMobileAssetsSortOrder(draftSortOrder);
+                setSortOpen(false);
+              }}
+            >
+              Použiť
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      <Dialog open={viewOpen} title="Zobrazenie" onClose={() => setViewOpen(false)} showHelpIcon={false}>
+        <div className="mt-3 flex flex-col gap-1">
           {(
             [
-              ["name", "Názov"],
-              ["value", "Hodnota"],
-              ["netProfit", "Zisk/strata"],
-              ["gainPercent", "Zisk %"],
+              ["detailed", "Podrobné"],
+              ["simple", "Jednoduché"],
             ] as const
           ).map(([value, label]) => (
             <button
               key={value}
               type="button"
-              className="flex min-h-[40px] w-full items-center justify-between rounded-[var(--rd-radius-sm)] px-2 text-sm"
-              onClick={() => setDraftSortBy(value)}
+              className="flex min-h-[40px] w-full items-center gap-3 text-left"
+              onClick={() => {
+                setMobileAssetsView(value);
+                setViewOpen(false);
+              }}
             >
-              <span>{label}</span>
-              {draftSortBy === value ? <Check className="size-4 text-[var(--rd-profit)]" /> : null}
+              <span
+                className={cn(
+                  "inline-flex size-4 shrink-0 items-center justify-center rounded-full border",
+                  mobileAssetsView === value
+                    ? "border-[var(--rd-profit)] bg-[var(--rd-profit)]"
+                    : "border-[var(--rd-border-strong)]",
+                )}
+                aria-hidden
+              >
+                {mobileAssetsView === value ? (
+                  <span className="size-1.5 rounded-full bg-[var(--rd-text-on-brand)]" />
+                ) : null}
+              </span>
+              <span
+                className={cn(
+                  "rd-type-body",
+                  mobileAssetsView === value
+                    ? "text-[var(--rd-text-primary)]"
+                    : "text-[var(--rd-text-secondary)]",
+                )}
+              >
+                {label}
+              </span>
             </button>
           ))}
-          <div className="flex gap-2 pt-2">
-            <Chip active={draftSortOrder === "asc"} onClick={() => setDraftSortOrder("asc")}>
-              Vzostupne
-            </Chip>
-            <Chip active={draftSortOrder === "desc"} onClick={() => setDraftSortOrder("desc")}>
-              Zostupne
-            </Chip>
-          </div>
-          <Button
-            className="mt-3 w-full"
-            onClick={() => {
-              setMobileAssetsSortBy(draftSortBy);
-              setMobileAssetsSortOrder(draftSortOrder);
-              setSortOpen(false);
-            }}
-          >
-            Použiť
-          </Button>
-        </div>
-      </Dialog>
-
-      <Dialog open={viewOpen} title="Zobrazenie" onClose={() => setViewOpen(false)}>
-        <div className="mt-3 space-y-2">
-          <button
-            type="button"
-            className="flex min-h-[40px] w-full items-center justify-between rounded-[var(--rd-radius-sm)] px-2 text-sm"
-            onClick={() => {
-              setMobileAssetsView("detailed");
-              setViewOpen(false);
-            }}
-          >
-            <span>Podrobné</span>
-            {mobileAssetsView === "detailed" ? <Check className="size-4 text-[var(--rd-profit)]" /> : null}
-          </button>
-          <button
-            type="button"
-            className="flex min-h-[40px] w-full items-center justify-between rounded-[var(--rd-radius-sm)] px-2 text-sm"
-            onClick={() => {
-              setMobileAssetsView("simple");
-              setViewOpen(false);
-            }}
-          >
-            <span>Jednoduché</span>
-            {mobileAssetsView === "simple" ? <Check className="size-4 text-[var(--rd-profit)]" /> : null}
-          </button>
         </div>
       </Dialog>
     </div>

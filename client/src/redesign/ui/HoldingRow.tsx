@@ -27,7 +27,7 @@ export function LotRow({
         ? "text-[var(--rd-text-secondary)]"
         : "text-[var(--rd-profit)]";
   return (
-    <div className="flex min-h-[40px] w-full items-center gap-1.5 py-1.5">
+    <div className="flex min-h-[32px] w-full items-center gap-1.5 py-1.5">
       <Badge label={label} tone={tone} />
       <p className="rd-type-data-sm min-w-0 flex-1 text-[var(--rd-text-secondary)]">{date}</p>
       <p className="rd-type-data-sm shrink-0 text-[var(--rd-text-primary)]">{lot}</p>
@@ -45,15 +45,17 @@ export type HoldingLot = {
   tone?: BadgeTone;
 };
 
-function AfterHours({
+function AfterHoursLine({
   price,
   change,
   changeTrend = "Flat",
+  showLabel = true,
   className,
 }: {
   price?: string;
   change?: string;
   changeTrend?: DeltaTrend;
+  showLabel?: boolean;
   className?: string;
 }) {
   if (!price && !change) return null;
@@ -64,12 +66,38 @@ function AfterHours({
         ? "text-[var(--rd-profit)]"
         : "text-[var(--rd-text-tertiary)]";
   return (
-    <div className={cn("flex items-center gap-1 text-[var(--rd-text-tertiary)]", className)}>
-      <Moon className="size-2.5 shrink-0 text-[var(--rd-warning)]" aria-hidden />
-      <span className="rd-type-body-sm">Mimo trhu</span>
+    <div className={cn("flex items-center gap-1", className)}>
+      <Moon className="size-3 shrink-0 text-[var(--rd-warning)]" aria-hidden />
+      {showLabel ? <span className="rd-type-body-sm text-[var(--rd-text-tertiary)]">Mimo trhu</span> : null}
       {price ? <span className="rd-type-data-micro text-[var(--rd-text-primary)]">{price}</span> : null}
       {change ? <span className={cn("rd-type-data-micro", changeClass)}>{change}</span> : null}
     </div>
+  );
+}
+
+function ExpandChevron({
+  expanded,
+  onToggle,
+  size = "md",
+}: {
+  expanded: boolean;
+  onToggle?: () => void;
+  size?: "sm" | "md";
+}) {
+  const icon = expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />;
+  if (!onToggle) {
+    return <span className={cn("inline-flex shrink-0 items-center justify-center", size === "sm" ? "size-4" : "size-4")} aria-hidden />;
+  }
+  return (
+    <button
+      type="button"
+      aria-expanded={expanded}
+      aria-label={expanded ? "Zbaliť loty" : "Rozbaliť loty"}
+      onClick={onToggle}
+      className="inline-flex size-4 shrink-0 items-center justify-center text-[var(--rd-text-tertiary)]"
+    >
+      {icon}
+    </button>
   );
 }
 
@@ -99,8 +127,8 @@ export function HoldingRow({
   afterHoursTrend?: DeltaTrend;
 }) {
   return (
-    <div className="flex w-full flex-col gap-1 py-2.5">
-      <div className="flex min-h-[40px] w-full items-center gap-2">
+    <div className="flex w-full flex-col gap-1 py-2">
+      <div className="flex min-h-[40px] w-full items-center gap-1.5">
         <Avatar ticker={ticker} companyName={name} imageUrl={imageUrl} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
@@ -115,16 +143,16 @@ export function HoldingRow({
           </div>
           <p className="rd-type-body-sm truncate text-[var(--rd-text-secondary)]">{name}</p>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-0.5">
+        <div className="flex shrink-0 flex-col items-end gap-1">
           <p className="rd-type-data text-[var(--rd-text-primary)]">{value}</p>
           <Delta value={delta} trend={trend} />
         </div>
       </div>
-      <AfterHours
+      <AfterHoursLine
         price={afterHoursPrice}
         change={afterHoursChange}
         changeTrend={afterHoursTrend}
-        className="pl-[36px]"
+        className="pl-9"
       />
     </div>
   );
@@ -139,8 +167,6 @@ export function HoldingRowExpandable({
   trend = "Flat",
   avg,
   price,
-  dayChange,
-  dayTrend = "Flat",
   pl,
   plTrend = "Up",
   expanded = false,
@@ -161,6 +187,7 @@ export function HoldingRowExpandable({
   trend?: DeltaTrend;
   avg?: string;
   price?: string;
+  /** @deprecated day change is not shown on detailed rows in Figma */
   dayChange?: string;
   dayTrend?: DeltaTrend;
   pl?: string;
@@ -175,18 +202,17 @@ export function HoldingRowExpandable({
   afterHoursChange?: string;
   afterHoursTrend?: DeltaTrend;
 }) {
+  const plClass =
+    plTrend === "Down"
+      ? "text-[var(--rd-loss)]"
+      : plTrend === "Up"
+        ? "text-[var(--rd-profit)]"
+        : "text-[var(--rd-text-secondary)]";
+
   return (
-    <div className="flex w-full flex-col gap-1.5 py-2.5">
-      <div className="flex min-h-[40px] items-center gap-1.5">
-        <button
-          type="button"
-          aria-expanded={expanded}
-          aria-label={expanded ? "Zbaliť loty" : "Rozbaliť loty"}
-          onClick={onToggle}
-          className="inline-flex size-[30px] items-center justify-center text-[var(--rd-text-tertiary)]"
-        >
-          {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-        </button>
+    <div className="flex w-full flex-col gap-1.5 py-2">
+      <div className="flex items-center gap-1.5">
+        <ExpandChevron expanded={expanded} onToggle={onToggle} />
         <Avatar ticker={ticker} companyName={name} imageUrl={imageUrl} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
@@ -201,48 +227,34 @@ export function HoldingRowExpandable({
           </div>
           <p className="rd-type-body-sm truncate text-[var(--rd-text-secondary)]">{name}</p>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-0.5">
+        <div className="flex shrink-0 flex-col items-end gap-1">
           <p className="rd-type-data text-[var(--rd-text-primary)]">{value}</p>
           <Delta value={delta} trend={trend} />
         </div>
       </div>
-      <div className="flex items-center justify-between gap-2 pl-8">
-        <div className="flex min-w-0 items-center gap-2 rd-type-body-sm text-[var(--rd-text-tertiary)]">
+      <div className="flex items-center justify-between gap-1.5 pl-4">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           {avg ? (
-            <span>
+            <span className="inline-flex items-center gap-1 rd-type-body-sm text-[var(--rd-text-tertiary)]">
               Priem <span className="rd-type-data-micro text-[var(--rd-text-primary)]">{avg}</span>
             </span>
           ) : null}
           {price ? (
-            <span>
-              Cena <span className="rd-type-data-micro text-[var(--rd-text-primary)]">{price}</span>{" "}
-              {dayChange ? (
-                <span
-                  className={cn(
-                    "rd-type-data-micro",
-                    dayTrend === "Down" ? "text-[var(--rd-loss)]" : dayTrend === "Up" ? "text-[var(--rd-profit)]" : "text-[var(--rd-text-tertiary)]",
-                  )}
-                >
-                  {dayChange}
-                </span>
-              ) : null}
+            <span className="inline-flex items-center gap-1 rd-type-body-sm text-[var(--rd-text-tertiary)]">
+              Cena <span className="rd-type-data-micro text-[var(--rd-text-primary)]">{price}</span>
+              <AfterHoursLine
+                price={afterHoursPrice}
+                change={afterHoursChange}
+                changeTrend={afterHoursTrend}
+                showLabel={false}
+              />
             </span>
           ) : null}
         </div>
-        {pl ? (
-          <p className={cn("rd-type-data-sm shrink-0", plTrend === "Down" ? "text-[var(--rd-loss)]" : "text-[var(--rd-profit)]")}>
-            {pl}
-          </p>
-        ) : null}
+        {pl ? <p className={cn("rd-type-data-sm shrink-0", plClass)}>{pl}</p> : null}
       </div>
-      <AfterHours
-        price={afterHoursPrice}
-        change={afterHoursChange}
-        changeTrend={afterHoursTrend}
-        className="pl-8"
-      />
       {expanded ? (
-        <div className="pl-2">
+        <div className="pl-1.5">
           {lotsSlot}
           {lots.map((lot) => (
             <LotRow key={`${lot.date}-${lot.lot}`} {...lot} />
@@ -312,19 +324,7 @@ export function HoldingRowSimple({
   return (
     <div className="flex w-full flex-col gap-1.5 py-2">
       <div className="flex items-center gap-1.5">
-        {expandable ? (
-          <button
-            type="button"
-            aria-expanded={expanded}
-            aria-label={expanded ? "Zbaliť loty" : "Rozbaliť loty"}
-            onClick={onToggle}
-            className="inline-flex size-4 shrink-0 items-center justify-center text-[var(--rd-text-tertiary)]"
-          >
-            {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-          </button>
-        ) : (
-          <span className="inline-block size-4 shrink-0" aria-hidden />
-        )}
+        <ExpandChevron expanded={expanded} onToggle={expandable ? onToggle : undefined} size="sm" />
         <Avatar ticker={ticker} companyName={name} imageUrl={imageUrl} />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex items-center gap-1.5">
@@ -349,14 +349,14 @@ export function HoldingRowSimple({
           </div>
         </div>
       </div>
-      <AfterHours
+      <AfterHoursLine
         price={afterHoursPrice}
         change={afterHoursChange}
         changeTrend={afterHoursTrend}
         className="pl-[68px]"
       />
       {expanded ? (
-        <div className="pl-2">
+        <div className="pl-1.5">
           {lotsSlot}
           {lots.map((item) => (
             <LotRow key={`${item.date}-${item.lot}`} {...item} />
