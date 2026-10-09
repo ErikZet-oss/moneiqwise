@@ -1621,16 +1621,6 @@ export default function DashboardMobile() {
           overline={overline}
           title="Prehľad"
           onOverlineClick={() => setPickerOpen(true)}
-          leading={
-            <button
-              type="button"
-              aria-label="Vybrať portfólio"
-              className="inline-flex"
-              onClick={() => setPickerOpen(true)}
-            >
-              <PortfolioMark isAll={isAllPortfolios} brokerCode={selectedPortfolio?.brokerCode} size={28} />
-            </button>
-          }
           trailing={
             <button
               type="button"
