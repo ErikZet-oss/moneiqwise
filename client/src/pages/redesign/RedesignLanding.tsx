@@ -93,7 +93,7 @@ function Hero({
       </div>
       <button
         type="button"
-        className="flex flex-col items-center gap-2 py-2 rd-type-overline text-[var(--rd-text-tertiary)]"
+        className="rd-login-features-cta flex flex-col items-center gap-2 py-2 rd-type-overline text-[var(--rd-text-tertiary)]"
         onClick={onScrollToFeatures}
       >
         Čo v aplikácii nájdeš

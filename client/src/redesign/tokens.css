@@ -252,3 +252,35 @@ html[data-mobile-ui="redesign"] {
   line-height: var(--rd-leading-data-micro);
   font-variant-numeric: tabular-nums;
 }
+
+@keyframes rd-login-cta-pulse {
+  0%,
+  100% {
+    color: var(--rd-text-tertiary);
+  }
+  50% {
+    color: var(--rd-profit);
+  }
+}
+
+@keyframes rd-login-cta-chevron {
+  0%,
+  100% {
+    color: var(--rd-text-tertiary);
+    transform: translateY(0);
+  }
+  50% {
+    color: var(--rd-profit);
+    transform: translateY(3px);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-mobile-ui="redesign"] .rd-login-features-cta {
+    animation: rd-login-cta-pulse 2.4s ease-in-out infinite;
+  }
+
+  [data-mobile-ui="redesign"] .rd-login-features-cta svg {
+    animation: rd-login-cta-chevron 2.4s ease-in-out infinite;
+  }
+}
