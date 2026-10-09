@@ -731,11 +731,11 @@ export default function SettingsMobile() {
             <SettingsSection title="Rýchla navigácia">
               <Card className="gap-1.5">
                 <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">
-                  Spodný panel s až {MAX_QUICK_NAV_ITEMS} skratkami do sekcií z menu. Každú položku si vyberiete sami.
+                  Spodný panel s až {MAX_QUICK_NAV_ITEMS} skratkami do sekcií z menu. Pozícia 5 (Viac) je vždy pevná.
                 </p>
                 <SettingToggle
-                  label="Zobraziť spodnú navigáciu"
-                  hint="Plávajúci panel dole na stránke"
+                  label="Vlastné položky spodnej navigácie"
+                  hint="Zapnite a vyberte až 4 sekcie. Vypnuté = predvolené (Prehľad, Portfóliá, História, AI)."
                   checked={quickNavEnabled}
                   onCheckedChange={setQuickNavEnabled}
                 />
@@ -746,7 +746,7 @@ export default function SettingsMobile() {
                       Položky ({quickNavItems.length}/{quickNavMaxItems})
                     </p>
                     <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">
-                      Priraďte každej pozícii inú sekciu z menu. Vzhľad panelu kopíruje tmavý/bledý režim aplikácie.
+                      Priraďte každej pozícii inú sekciu. Zmeny sa hneď prejavia v spodnom paneli.
                     </p>
                     <div className="flex flex-col gap-1.5">
                       {quickNavItems.map((path, index) => (
