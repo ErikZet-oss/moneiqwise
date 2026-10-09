@@ -25,7 +25,7 @@ const RANGES = [
   { v: "6m", label: "6M" },
   { v: "1y", label: "1R" },
   { v: "5y", label: "5R" },
-  { v: "all", label: "Všetko" },
+  { v: "all", label: "VĹˇetko" },
 ] as const;
 type PriceRange = (typeof RANGES)[number]["v"];
 
@@ -79,7 +79,7 @@ function recommendationLabel(key: string | null): string {
     case "sell":
     case "underperform": return "Sell";
     case "strong_sell": return "Strong Sell";
-    default: return key ? key.replace(/_/g, " ") : "—";
+    default: return key ? key.replace(/_/g, " ") : "â€”";
   }
 }
 
@@ -92,7 +92,7 @@ export default function AssetDetailMobile() {
   const [range, setRange] = useState<PriceRange>("1y");
   const [quoteInPreferred, setQuoteInPreferred] = useState(true);
   const [openYear, setOpenYear] = useState<number | null>(null);
-  const mask = (value: string) => (hideAmounts ? "••••••" : value);
+  const mask = (value: string) => (hideAmounts ? "â€˘â€˘â€˘â€˘â€˘â€˘" : value);
 
   const { data, isLoading, error } = useQuery<AssetDetailResponse>({
     queryKey: ["/api/assets", ticker],
@@ -143,16 +143,16 @@ export default function AssetDetailMobile() {
   const periodChange = first && last ? ((last - first) / first) * 100 : null;
 
   if (!ticker) {
-    return <PageBody><EmptyState title="Neplatný ticker" body="Vráťte sa na prehľad a otvorte aktívum zo zoznamu." actionLabel="Späť na prehľad" onAction={() => setLocation("/")} /></PageBody>;
+    return <PageBody><EmptyState title="NeplatnĂ˝ ticker" body="VrĂˇĹĄte sa na prehÄľad a otvorte aktĂ­vum zo zoznamu." actionLabel="SpĂ¤ĹĄ na prehÄľad" onAction={() => setLocation("/")} /></PageBody>;
   }
   if (isLoading) {
-    return <PageBody><p className="text-sm text-[var(--rd-text-secondary)]">Načítavam {ticker}…</p></PageBody>;
+    return <PageBody><p className="text-sm text-[var(--rd-text-secondary)]">NaÄŤĂ­tavam {ticker}â€¦</p></PageBody>;
   }
   if (error instanceof Error && error.message === "NOT_FOUND") {
-    return <PageBody><EmptyState title="Bez dát" body="Pre tento ticker nemáte v aplikácii žiadne dáta." actionLabel="Späť na prehľad" onAction={() => setLocation("/")} /></PageBody>;
+    return <PageBody><EmptyState title="Bez dĂˇt" body="Pre tento ticker nemĂˇte v aplikĂˇcii Ĺľiadne dĂˇta." actionLabel="SpĂ¤ĹĄ na prehÄľad" onAction={() => setLocation("/")} /></PageBody>;
   }
   if (error || !data) {
-    return <PageBody><EmptyState title="Detail sa nenačítal" body="Skúste to znova o chvíľu." actionLabel="Späť na prehľad" onAction={() => setLocation("/")} /></PageBody>;
+    return <PageBody><EmptyState title="Detail sa nenaÄŤĂ­tal" body="SkĂşste to znova o chvĂ­Äľu." actionLabel="SpĂ¤ĹĄ na prehÄľad" onAction={() => setLocation("/")} /></PageBody>;
   }
 
   const quote = data.quote;
@@ -176,14 +176,14 @@ export default function AssetDetailMobile() {
   return (
     <div>
       <PageBody>
-        <button type="button" onClick={() => setLocation("/")} className="inline-flex min-h-11 items-center gap-2 text-[13px] font-medium text-[var(--rd-text-secondary)]">
+        <button type="button" onClick={() => setLocation("/")} className="inline-flex min-h-[40px] items-center gap-2 text-[13px] font-medium text-[var(--rd-text-secondary)]">
           <ArrowLeft className="size-4" />
-          Späť na prehľad
+          SpĂ¤ĹĄ na prehÄľad
         </button>
         <div className="flex items-start gap-3">
           <Avatar ticker={data.ticker} />
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-[22px] font-bold leading-7" data-testid="asset-detail-title">{data.companyName}</h1>
+            <h1 className="truncate rd-type-h1" data-testid="asset-detail-title">{data.companyName}</h1>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <span className="font-mono text-xs text-[var(--rd-text-secondary)]">{data.ticker}</span>
               <a className="text-xs text-[var(--rd-profit)]" href={`https://finance.yahoo.com/quote/${encodeURIComponent(data.ticker)}`} target="_blank" rel="noreferrer">Yahoo Finance</a>
@@ -198,24 +198,24 @@ export default function AssetDetailMobile() {
         ) : null}
 
         <Card className="gap-2">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--rd-text-tertiary)]">Aktuálna cena</p>
-          <p className="font-mono text-[28px] font-bold leading-[34px]">{quote ? mask(priceLabel(quote.price)) : "—"}</p>
+          <p className="rd-type-overline text-[var(--rd-text-tertiary)]">AktuĂˇlna cena</p>
+          <p className="rd-type-display-lg">{quote ? mask(priceLabel(quote.price)) : "â€”"}</p>
           {quote ? (
             <p className={`font-mono text-xs ${quote.change >= 0 ? "text-[var(--rd-profit)]" : "text-[var(--rd-loss)]"}`}>
-              {signedMoney((n) => priceLabel(n), quote.change)} · {signedPct(quote.changePercent)} dnes
+              {signedMoney((n) => priceLabel(n), quote.change)} Â· {signedPct(quote.changePercent)} dnes
             </p>
           ) : null}
           {data.priceNote ? <p className="text-xs text-[var(--rd-text-tertiary)]">{data.priceNote}</p> : null}
         </Card>
 
         <div className="grid grid-cols-2 gap-3">
-          <StatTile label="Vaša pozícia" value={value != null ? mask(formatCurrency(value)) : "—"} sub={`${formatShareQuantity(data.totals.shares)} ks`} />
-          <StatTile label="Celkový výnos" value={totalReturn != null ? mask(signedMoney(formatCurrency, totalReturn)) : "—"} sub={returnPct != null ? signedPct(returnPct) : undefined} tone={toneOf(totalReturn ?? 0) === "down" ? "Down" : "Up"} />
+          <StatTile label="VaĹˇa pozĂ­cia" value={value != null ? mask(formatCurrency(value)) : "â€”"} sub={`${formatShareQuantity(data.totals.shares)} ks`} />
+          <StatTile label="CelkovĂ˝ vĂ˝nos" value={totalReturn != null ? mask(signedMoney(formatCurrency, totalReturn)) : "â€”"} sub={returnPct != null ? signedPct(returnPct) : undefined} tone={toneOf(totalReturn ?? 0) === "down" ? "Down" : "Up"} />
         </div>
-        <StatTile label="Investované" value={mask(formatCurrency(invested))} />
+        <StatTile label="InvestovanĂ©" value={mask(formatCurrency(invested))} />
 
         <Card>
-          <p className="text-[17px] font-semibold leading-6">Vývoj ceny a obchody</p>
+          <p className="rd-type-h2">VĂ˝voj ceny a obchody</p>
           <div className="flex flex-wrap gap-1">
             {RANGES.map((option) => (
               <Chip key={option.v} active={range === option.v} onClick={() => setRange(option.v)}>{option.label}</Chip>
@@ -223,19 +223,19 @@ export default function AssetDetailMobile() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--rd-text-tertiary)]">ROI pozície</p>
-              <p className="text-xs text-[var(--rd-text-tertiary)]">vs. priem. nákup</p>
-              <p className={`font-mono text-[17px] ${toneOf(returnPct ?? 0) === "down" ? "text-[var(--rd-loss)]" : "text-[var(--rd-profit)]"}`}>{returnPct != null ? signedPct(returnPct) : "—"}</p>
+              <p className="rd-type-overline text-[var(--rd-text-tertiary)]">ROI pozĂ­cie</p>
+              <p className="text-xs text-[var(--rd-text-tertiary)]">vs. priem. nĂˇkup</p>
+              <p className={`rd-type-data-lg ${toneOf(returnPct ?? 0) === "down" ? "text-[var(--rd-loss)]" : "text-[var(--rd-profit)]"}`}>{returnPct != null ? signedPct(returnPct) : "â€”"}</p>
             </div>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--rd-text-tertiary)]">Zmena ceny</p>
-              <p className="text-xs text-[var(--rd-text-tertiary)]">v období (graf)</p>
-              <p className={`font-mono text-[17px] ${toneOf(periodChange ?? 0) === "down" ? "text-[var(--rd-loss)]" : "text-[var(--rd-profit)]"}`}>{periodChange != null ? signedPct(periodChange) : "—"}</p>
+              <p className="rd-type-overline text-[var(--rd-text-tertiary)]">Zmena ceny</p>
+              <p className="text-xs text-[var(--rd-text-tertiary)]">v obdobĂ­ (graf)</p>
+              <p className={`rd-type-data-lg ${toneOf(periodChange ?? 0) === "down" ? "text-[var(--rd-loss)]" : "text-[var(--rd-profit)]"}`}>{periodChange != null ? signedPct(periodChange) : "â€”"}</p>
             </div>
           </div>
           <div className="h-40 w-full">
             {visible.length < 2 ? (
-              <p className="text-xs text-[var(--rd-text-secondary)]">Nedostatok cenovej histórie.</p>
+              <p className="text-xs text-[var(--rd-text-secondary)]">Nedostatok cenovej histĂłrie.</p>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={visible} margin={{ top: 8, right: 0, left: 0, bottom: 0 }}>
@@ -259,27 +259,27 @@ export default function AssetDetailMobile() {
           </div>
           <div className="flex gap-4 text-xs text-[var(--rd-text-secondary)]">
             <span className="inline-flex items-center gap-2"><i className="size-2 rounded-full bg-[var(--rd-text-secondary)]" /> Cena</span>
-            <span className="inline-flex items-center gap-2"><i className="size-2 rounded-full bg-[var(--rd-profit)]" /> Nákup</span>
+            <span className="inline-flex items-center gap-2"><i className="size-2 rounded-full bg-[var(--rd-profit)]" /> NĂˇkup</span>
             <span className="inline-flex items-center gap-2"><i className="size-2 rounded-full bg-[var(--rd-loss)]" /> Predaj</span>
           </div>
         </Card>
 
         <Card className="gap-2">
-          <p className="text-[17px] font-semibold leading-6">Detail pozície</p>
+          <p className="rd-type-h2">Detail pozĂ­cie</p>
           <div className="grid grid-cols-2 gap-3">
             <StatTile label="Kusy" value={formatShareQuantity(data.totals.shares)} />
-            <StatTile label="Priem. nákup" value={mask(formatCurrency(convertPrice(data.totals.averageCost, costCurrency)))} />
-            <StatTile label="Nákladová báza" value={mask(formatCurrency(invested))} />
-            <StatTile label="Zmena v období" value={periodChange != null ? signedPct(periodChange) : "—"} tone={toneOf(periodChange ?? 0) === "down" ? "Down" : "Up"} />
+            <StatTile label="Priem. nĂˇkup" value={mask(formatCurrency(convertPrice(data.totals.averageCost, costCurrency)))} />
+            <StatTile label="NĂˇkladovĂˇ bĂˇza" value={mask(formatCurrency(invested))} />
+            <StatTile label="Zmena v obdobĂ­" value={periodChange != null ? signedPct(periodChange) : "â€”"} tone={toneOf(periodChange ?? 0) === "down" ? "Down" : "Up"} />
           </div>
           <p className="text-xs text-[var(--rd-text-secondary)]">
-            Najbližšie earnings: {data.nextEarnings?.date ? new Date(`${data.nextEarnings.date}T12:00:00`).toLocaleDateString("sk-SK") : "—"}
+            NajbliĹľĹˇie earnings: {data.nextEarnings?.date ? new Date(`${data.nextEarnings.date}T12:00:00`).toLocaleDateString("sk-SK") : "â€”"}
           </p>
         </Card>
 
         {data.positions.length > 0 ? (
           <Card className="gap-2">
-            <p className="text-[17px] font-semibold leading-6">Podľa portfólia</p>
+            <p className="rd-type-h2">PodÄľa portfĂłlia</p>
             {data.positions.map((position) => (
               <div key={position.portfolioId ?? position.portfolioName} className="flex items-center gap-2 border-t border-[var(--rd-border-subtle)] py-2 text-sm">
                 <p className="min-w-0 flex-1 truncate">{position.portfolioName}</p>
@@ -290,15 +290,15 @@ export default function AssetDetailMobile() {
         ) : null}
 
         <Card>
-          <p className="text-[17px] font-semibold leading-6">Výsledky (earnings)</p>
-          <p className="text-xs text-[var(--rd-text-tertiary)]">EPS a ukazovatele podľa rokov / kvartálov</p>
+          <p className="rd-type-h2">VĂ˝sledky (earnings)</p>
+          <p className="text-xs text-[var(--rd-text-tertiary)]">EPS a ukazovatele podÄľa rokov / kvartĂˇlov</p>
           {(earnings?.years ?? []).map((year) => (
             <div key={year.year} className="border-t border-[var(--rd-border-subtle)] py-2">
-              <button type="button" onClick={() => setOpenYear((prev) => (prev === year.year ? null : year.year))} className="flex min-h-11 w-full items-center gap-2 text-left">
+              <button type="button" onClick={() => setOpenYear((prev) => (prev === year.year ? null : year.year))} className="flex min-h-[40px] w-full items-center gap-2 text-left">
                 <span className="flex-1 font-semibold">{year.year}</span>
-                <span className="text-xs text-[var(--rd-text-tertiary)]">{year.quarters.length} kvartálov</span>
+                <span className="text-xs text-[var(--rd-text-tertiary)]">{year.quarters.length} kvartĂˇlov</span>
               </button>
-              {year.revenue != null ? <p className="text-xs text-[var(--rd-text-secondary)]">Tržby {year.revenue.toLocaleString("sk-SK")}</p> : null}
+              {year.revenue != null ? <p className="text-xs text-[var(--rd-text-secondary)]">TrĹľby {year.revenue.toLocaleString("sk-SK")}</p> : null}
               {year.netIncome != null ? <p className="text-xs text-[var(--rd-text-secondary)]">Zisk {year.netIncome.toLocaleString("sk-SK")}</p> : null}
               {openYear === year.year
                 ? year.quarters.map((quarter) => (
@@ -307,7 +307,7 @@ export default function AssetDetailMobile() {
                       {quarter.epsSurprisePercent != null ? (
                         <Badge label={`${quarter.epsSurprisePercent >= 0 ? "Beat" : "Miss"} ${signedPct(quarter.epsSurprisePercent, 1)}`} tone={quarter.epsSurprisePercent >= 0 ? "Profit" : "Loss"} />
                       ) : null}
-                      <p className="font-mono text-xs">EPS {quarter.epsActual ?? "—"}</p>
+                      <p className="font-mono text-xs">EPS {quarter.epsActual ?? "â€”"}</p>
                     </div>
                   ))
                 : null}
@@ -318,25 +318,25 @@ export default function AssetDetailMobile() {
 
         <Card>
           <div className="flex items-center gap-2">
-            <p className="text-[17px] font-semibold leading-6">Analyst Ratings</p>
+            <p className="rd-type-h2">Analyst Ratings</p>
             <Badge label={recommendationLabel(ratings?.recommendationKey ?? null)} tone="Info" />
           </div>
-          <p className="text-xs text-[var(--rd-text-tertiary)]">Konsenzus analytikov a cieľové ceny (Yahoo)</p>
+          <p className="text-xs text-[var(--rd-text-tertiary)]">Konsenzus analytikov a cieÄľovĂ© ceny (Yahoo)</p>
           <StatTile
             label="Target (mean)"
-            value={ratings?.targetMean != null ? mask(priceLabel(ratings.targetMean)) : "—"}
+            value={ratings?.targetMean != null ? mask(priceLabel(ratings.targetMean)) : "â€”"}
             sub={ratings?.numberOfAnalystOpinions != null ? `${ratings.numberOfAnalystOpinions} analytikov` : undefined}
           />
         </Card>
 
         {(data.marketTransactions ?? []).slice(0, 6).length > 0 ? (
           <Card className="gap-0">
-            <p className="pb-2 text-[17px] font-semibold leading-6">Obchody</p>
+            <p className="pb-2 rd-type-h2">Obchody</p>
             {data.marketTransactions.slice(0, 6).map((tx) => (
               <TransactionRow
                 key={tx.id}
                 ticker={data.ticker}
-                badge={tx.type === "SELL" ? "Predaj" : tx.type === "BUY" ? "Nákup" : tx.type}
+                badge={tx.type === "SELL" ? "Predaj" : tx.type === "BUY" ? "NĂˇkup" : tx.type}
                 tone={tx.type === "SELL" ? "Loss" : "Profit"}
                 meta={String(tx.transactionDate).slice(0, 10)}
                 amount={mask(formatCurrency(convertPrice(parseFloat(tx.pricePerShare) * parseFloat(tx.shares), costCurrency)))}

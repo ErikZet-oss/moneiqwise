@@ -92,13 +92,13 @@ export default function EventsCalendarMobile() {
 
   return (
     <div className="bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
-      <TopBar overline="Trhový kalendár" title="Kalendár" />
+      <TopBar overline="TrhovĂ˝ kalendĂˇr" title="KalendĂˇr" />
       <PageBody>
         <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">
-          Earnings, dividendy a makro dáta na jednom mieste.
+          Earnings, dividendy a makro dĂˇta na jednom mieste.
         </p>
         <Card>
-          <h3 className="text-[15px] font-semibold">Filtre udalostí</h3>
+          <h3 className="text-[15px] font-semibold">Filtre udalostĂ­</h3>
           <Checkbox id="rd-cal-earn" checked={showEarnings} onCheckedChange={setShowEarnings} label="Earnings" />
           <Checkbox id="rd-cal-div" checked={showDividends} onCheckedChange={setShowDividends} label="Dividendy" />
           <Checkbox id="rd-cal-macro" checked={showMacro} onCheckedChange={setShowMacro} label="Makro" />
@@ -107,16 +107,16 @@ export default function EventsCalendarMobile() {
           <div className="flex items-center justify-between">
             <h3 className="text-[15px] font-semibold capitalize">{format(month, "LLLL yyyy", { locale: sk })}</h3>
             <div className="flex">
-              <button type="button" aria-label="Predošlý" className="size-9 inline-flex items-center justify-center" onClick={() => setMonth((m) => subMonths(m, 1))}>
+              <button type="button" aria-label="PredoĹˇlĂ˝" className="size-[30px] inline-flex items-center justify-center" onClick={() => setMonth((m) => subMonths(m, 1))}>
                 <ChevronLeft className="size-4" />
               </button>
-              <button type="button" aria-label="Ďalší" className="size-9 inline-flex items-center justify-center" onClick={() => setMonth((m) => addMonths(m, 1))}>
+              <button type="button" aria-label="ÄŽalĹˇĂ­" className="size-[30px] inline-flex items-center justify-center" onClick={() => setMonth((m) => addMonths(m, 1))}>
                 <ChevronRight className="size-4" />
               </button>
             </div>
           </div>
           <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-[var(--rd-text-tertiary)]">
-            {["Po", "Ut", "St", "Št", "Pi", "So", "Ne"].map((d) => (
+            {["Po", "Ut", "St", "Ĺ t", "Pi", "So", "Ne"].map((d) => (
               <span key={d}>{d}</span>
             ))}
           </div>
@@ -132,13 +132,13 @@ export default function EventsCalendarMobile() {
                   key={key}
                   type="button"
                   onClick={() => list.length && setDayKey(key)}
-                  className="flex min-h-11 flex-col items-center justify-center rounded-[var(--rd-radius-xs)] text-xs"
+                  className="flex min-h-[40px] flex-col items-center justify-center rounded-[var(--rd-radius-xs)] text-xs"
                 >
                   <span className="font-mono">{format(day, "d")}</span>
                   {list[0] ? (
                     <span className="max-w-full truncate px-0.5 text-[9px] text-[var(--rd-info)]">
                       {list[0].ticker || list[0].label.slice(0, 6)}
-                      {list.length > 1 ? ` · ${list.length}` : ""}
+                      {list.length > 1 ? ` Â· ${list.length}` : ""}
                     </span>
                   ) : null}
                 </button>
@@ -151,14 +151,14 @@ export default function EventsCalendarMobile() {
       <Dialog
         open={!!dayKey}
         title={dayKey ? format(new Date(dayKey), "EEEE d. MMMM yyyy", { locale: sk }) : ""}
-        body={dayEvents.length ? `Plánované udalosti: ${dayEvents.length}` : undefined}
+        body={dayEvents.length ? `PlĂˇnovanĂ© udalosti: ${dayEvents.length}` : undefined}
         onClose={() => setDayKey(null)}
       >
         <ul className="mt-3 space-y-2">
           {dayEvents.map((e, i) => (
             <li key={`${e.kind}-${e.label}-${i}`} className="rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-subtle)] px-3 py-2 text-sm">
               <p className="text-[11px] uppercase tracking-[0.06em] text-[var(--rd-text-tertiary)]">{e.kind}</p>
-              <p className="font-medium">{e.ticker ? `${e.ticker} — ${e.label}` : e.label}</p>
+              <p className="font-medium">{e.ticker ? `${e.ticker} â€” ${e.label}` : e.label}</p>
             </li>
           ))}
         </ul>

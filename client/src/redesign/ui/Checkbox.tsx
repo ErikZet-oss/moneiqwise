@@ -13,7 +13,7 @@ export function Checkbox({
   id?: string;
 }) {
   return (
-    <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm leading-5 text-[var(--rd-text-primary)]">
+    <label className="flex min-h-[40px] cursor-pointer items-center gap-2 text-[13px] leading-[18px] text-[var(--rd-text-primary)]">
       <input
         id={id}
         type="checkbox"

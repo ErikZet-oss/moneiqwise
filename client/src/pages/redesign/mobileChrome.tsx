@@ -5,7 +5,11 @@ import { Dialog } from "@/redesign/ui";
 import { cn } from "@/lib/utils";
 
 export function PageBody({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("flex flex-col gap-4 px-4 pb-6 pt-2", className)}>{children}</div>;
+  return (
+    <div className={cn("flex flex-col gap-3 px-[var(--rd-page-gutter)] pb-4 pt-1.5", className)}>
+      {children}
+    </div>
+  );
 }
 
 export function KvRow({
@@ -24,9 +28,9 @@ export function KvRow({
         ? "text-[var(--rd-loss)]"
         : "text-[var(--rd-text-primary)]";
   return (
-    <div className="flex items-center gap-2 text-xs leading-4">
-      <p className="min-w-0 flex-1 text-[var(--rd-text-secondary)]">{label}</p>
-      <p className={cn("shrink-0 font-mono font-medium", valueClass)}>{value}</p>
+    <div className="flex items-center gap-2">
+      <p className="rd-type-body-sm min-w-0 flex-1 text-[var(--rd-text-secondary)]">{label}</p>
+      <p className={cn("rd-type-data-sm shrink-0", valueClass)}>{value}</p>
     </div>
   );
 }
@@ -37,13 +41,13 @@ export function toneOf(value: number): "neutral" | "up" | "down" {
 }
 
 export function signedMoney(formatCurrency: (n: number) => string, value: number): string {
-  const sign = value > 0 ? "+" : value < 0 ? "−" : "";
+  const sign = value > 0 ? "+" : value < 0 ? "â’" : "";
   return `${sign}${formatCurrency(Math.abs(value))}`;
 }
 
 export function signedPct(value: number, digits = 2): string {
-  if (!Number.isFinite(value)) return "—";
-  const sign = value > 0 ? "+" : value < 0 ? "−" : "";
+  if (!Number.isFinite(value)) return "â€”";
+  const sign = value > 0 ? "+" : value < 0 ? "â’" : "";
   return `${sign}${Math.abs(value).toFixed(digits)}%`;
 }
 
@@ -63,9 +67,9 @@ export function IconButton({
       type="button"
       aria-label={label}
       onClick={onClick}
-      className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)] text-[var(--rd-text-primary)]"
+      className="inline-flex size-[30px] shrink-0 items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)] text-[var(--rd-text-primary)]"
     >
-      {children ?? <RefreshCw className={cn("size-[18px]", spinning && "animate-spin")} />}
+      {children ?? <RefreshCw className={cn("size-3.5", spinning && "animate-spin")} />}
     </button>
   );
 }
@@ -78,9 +82,9 @@ export function HelpButton({ title, body }: { title: string; body: string }) {
         type="button"
         aria-label={title}
         onClick={() => setOpen(true)}
-        className="inline-flex size-8 shrink-0 items-center justify-center text-[var(--rd-text-tertiary)]"
+        className="inline-flex size-[30px] shrink-0 items-center justify-center text-[var(--rd-text-tertiary)]"
       >
-        <CircleHelp className="size-4" />
+        <CircleHelp className="size-3.5" />
       </button>
       <Dialog open={open} title={title} body={body} onClose={() => setOpen(false)} />
     </>
@@ -100,17 +104,17 @@ export function PortfolioSwitcher({
     onClose();
   };
   return (
-    <Dialog open={open} title="Portfólio" body="Výber je zdieľaný s ostatnými obrazovkami." onClose={onClose}>
+    <Dialog open={open} title="PortfĂłlio" body="VĂ˝ber je zdieÄľanĂ˝ s ostatnĂ˝mi obrazovkami." onClose={onClose}>
       <div className="mt-3 flex flex-col">
         <button
           type="button"
           onClick={() => pick("all")}
           className={cn(
-            "min-h-11 rounded-[var(--rd-radius-sm)] px-2 text-left text-sm",
+            "min-h-[40px] rounded-[var(--rd-radius-sm)] px-2 text-left text-sm",
             selectedPortfolioId === "all" ? "text-[var(--rd-profit)]" : "text-[var(--rd-text-primary)]",
           )}
         >
-          Všetky portfóliá
+          VĹˇetky portfĂłliĂˇ
         </button>
         {portfolios.map((portfolio) => (
           <button
@@ -118,7 +122,7 @@ export function PortfolioSwitcher({
             type="button"
             onClick={() => pick(portfolio.id)}
             className={cn(
-              "min-h-11 rounded-[var(--rd-radius-sm)] px-2 text-left text-sm",
+              "min-h-[40px] rounded-[var(--rd-radius-sm)] px-2 text-left text-sm",
               selectedPortfolioId === portfolio.id ? "text-[var(--rd-profit)]" : "text-[var(--rd-text-primary)]",
             )}
           >

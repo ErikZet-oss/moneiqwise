@@ -28,22 +28,9 @@ export function StatTile({
         className,
       )}
     >
-      <p className="truncate text-[11px] font-semibold uppercase leading-[14px] tracking-[0.08em] text-[var(--rd-text-tertiary)]">
-        {label}
-      </p>
-      <p
-        className={cn(
-          "truncate font-mono text-[17px] font-medium leading-6 tracking-[-0.01em]",
-          valueClass[tone],
-        )}
-      >
-        {value}
-      </p>
-      {sub ? (
-        <p className="truncate font-mono text-xs font-medium leading-4 text-[var(--rd-text-secondary)]">
-          {sub}
-        </p>
-      ) : null}
+      <p className="rd-type-overline truncate text-[var(--rd-text-tertiary)]">{label}</p>
+      <p className={cn("rd-type-data-lg truncate", valueClass[tone])}>{value}</p>
+      {sub ? <p className="rd-type-data-sm truncate text-[var(--rd-text-secondary)]">{sub}</p> : null}
     </div>
   );
 }

@@ -6,10 +6,10 @@ import type { LandingAuth } from "@/pages/useLandingAuth";
 
 /**
  * Feature sections for the long-scroll login.
- * Motion follows Figma frame "Login — parallax: fázy a špecifikácia":
- * progress 0→1 as the section moves from viewport bottom to vertical center;
- * odd phones +160→0 (from right), even −160→0 (from left); Y +40→0;
- * phone opacity 0.4→1; text fades in during progress 0→0.5; glow at scroll×0.3.
+ * Motion follows Figma frame "Login â€” parallax: fĂˇzy a ĹˇpecifikĂˇcia":
+ * progress 0â†’1 as the section moves from viewport bottom to vertical center;
+ * odd phones +160â†’0 (from right), even â’160â†’0 (from left); Y +40â†’0;
+ * phone opacity 0.4â†’1; text fades in during progress 0â†’0.5; glow at scrollĂ—0.3.
  */
 const FEATURES: {
   index: string;
@@ -20,59 +20,59 @@ const FEATURES: {
 }[] = [
   {
     index: "01 / 07",
-    title: "Prehľad portfólia",
-    body: "Celková hodnota, zisk/strata a denná zmena",
+    title: "PrehÄľad portfĂłlia",
+    body: "CelkovĂˇ hodnota, zisk/strata a dennĂˇ zmena",
     side: "right",
     image: "/landing/overview.png",
   },
   {
     index: "02 / 07",
-    title: "Analýza ziskov",
-    body: "Realizované zisky, YTD a mesačné prehľady",
+    title: "AnalĂ˝za ziskov",
+    body: "RealizovanĂ© zisky, YTD a mesaÄŤnĂ© prehÄľady",
     side: "left",
     image: "/landing/profit.png",
   },
   {
     index: "03 / 07",
     title: "Sledovanie dividend",
-    body: "Hrubé, čisté dividendy a zrážková daň",
+    body: "HrubĂ©, ÄŤistĂ© dividendy a zrĂˇĹľkovĂˇ daĹ",
     side: "right",
     image: "/landing/dividends.png",
   },
   {
     index: "04 / 07",
     title: "Import/Export",
-    body: "CSV import a export všetkých transakcií",
+    body: "CSV import a export vĹˇetkĂ˝ch transakciĂ­",
     side: "left",
     image: "/landing/history.png",
   },
   {
     index: "05 / 07",
-    title: "Pokročilé grafy výkonu",
-    body: "Porovnanie portfólia vs. S&P 500 a vývoj v čase",
+    title: "PokroÄŤilĂ© grafy vĂ˝konu",
+    body: "Porovnanie portfĂłlia vs. S&P 500 a vĂ˝voj v ÄŤase",
     side: "right",
     image: "/landing/charts.png",
   },
   {
     index: "06 / 07",
-    title: "Trhový kalendár udalostí",
-    body: "Earnings, dividendy a makro dáta s preklikom na detaily",
+    title: "TrhovĂ˝ kalendĂˇr udalostĂ­",
+    body: "Earnings, dividendy a makro dĂˇta s preklikom na detaily",
     side: "left",
     image: "/landing/calendar.png",
   },
   {
     index: "07 / 07",
-    title: "Opcie a daňový asistent",
-    body: "Sledovanie opcií, realizovaného zisku a ročných prehľadov",
+    title: "Opcie a daĹovĂ˝ asistent",
+    body: "Sledovanie opciĂ­, realizovanĂ©ho zisku a roÄŤnĂ˝ch prehÄľadov",
     side: "right",
     image: "/landing/tax.png",
   },
 ];
 
 const STRENGTH_LABEL: Record<string, string> = {
-  Slabe: "Slabé",
-  Stredne: "Stredné",
-  Silne: "Silné",
+  Slabe: "SlabĂ©",
+  Stredne: "StrednĂ©",
+  Silne: "SilnĂ©",
 };
 
 /** Phone frame size from Figma; ~35% stays past the screen edge when settled. */
@@ -141,29 +141,29 @@ export function RedesignLanding({ auth }: { auth: LandingAuth }) {
       data-redesign-login-scroll
       className="rd-landing h-dvh overflow-y-auto bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]"
     >
-      {/* Auth card stays fixed in document flow — not part of parallax (Figma). */}
+      {/* Auth card stays fixed in document flow â€” not part of parallax (Figma). */}
       <Hero auth={auth} onScrollToFeatures={scrollToFeatures} />
       <section id="rd-login-features" className="px-6 pb-2 pt-8">
-        <h2 className="text-[34px] font-bold leading-[38px] tracking-[-0.02em]">
-          Všetky investície. Jedna <span className="text-[var(--rd-profit)]">aplikácia.</span>
+        <h2 className="rd-type-display-lg">
+          VĹˇetky investĂ­cie. Jedna <span className="text-[var(--rd-profit)]">aplikĂˇcia.</span>
         </h2>
         <p className="mt-3 text-sm leading-5 text-[var(--rd-text-secondary)]">
-          Portfólio, dividendy, grafy a ďalšie prehľady na jednom mieste.
+          PortfĂłlio, dividendy, grafy a ÄŹalĹˇie prehÄľady na jednom mieste.
         </p>
       </section>
       {FEATURES.map((feature) => (
         <FeatureSection key={feature.index} feature={feature} />
       ))}
       <footer className="flex flex-col items-center gap-4 px-6 pb-12 pt-10">
-        <Wordmark className="text-[34px] leading-[38px]" />
-        <p className="text-sm leading-5 text-[var(--rd-text-secondary)]">Investuj múdrejšie.</p>
+        <Wordmark className="rd-type-display-lg" />
+        <p className="text-sm leading-5 text-[var(--rd-text-secondary)]">Investuj mĂşdrejĹˇie.</p>
         <Button className="w-full" onClick={() => goToAuth("register")}>
-          Vytvoriť účet
+          VytvoriĹĄ ĂşÄŤet
         </Button>
         <Button variant="Ghost" className="w-full" onClick={() => goToAuth("login")}>
-          Už mám účet — prihlásiť sa
+          UĹľ mĂˇm ĂşÄŤet â€” prihlĂˇsiĹĄ sa
         </Button>
-        <p className="text-[11px] font-semibold uppercase leading-[14px] tracking-[0.08em] text-[var(--rd-profit)]">
+        <p className="rd-type-overline text-[var(--rd-profit)]">
           moneiqwise.onrender.com
         </p>
       </footer>
@@ -186,21 +186,21 @@ function Hero({
       />
       <div className="relative flex flex-col items-center gap-2 text-center">
         <Wordmark className="text-[40px] leading-[44px]" />
-        <p className="text-sm leading-5 text-[var(--rd-text-secondary)]">Investuj múdrejšie.</p>
+        <p className="text-sm leading-5 text-[var(--rd-text-secondary)]">Investuj mĂşdrejĹˇie.</p>
       </div>
       <div className="relative flex flex-col gap-4 rounded-[var(--rd-radius-lg)] border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface)] p-5">
         <div className="text-center">
-          <h1 className="text-[22px] font-bold leading-7 tracking-[-0.01em]">Vitajte späť</h1>
+          <h1 className="rd-type-h1">Vitajte spĂ¤ĹĄ</h1>
           <p className="mt-1 text-xs leading-4 text-[var(--rd-text-secondary)]">
-            Prihláste sa alebo si vytvorte účet
+            PrihlĂˇste sa alebo si vytvorte ĂşÄŤet
           </p>
         </div>
         <div className="flex items-center justify-between rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-base)] p-1">
           <Chip active={auth.authTab === "login"} className="flex-1" onClick={() => auth.setAuthTab("login")}>
-            Prihlásenie
+            PrihlĂˇsenie
           </Chip>
           <Chip active={auth.authTab === "register"} className="flex-1" onClick={() => auth.setAuthTab("register")}>
-            Registrácia
+            RegistrĂˇcia
           </Chip>
           <Chip active={auth.authTab === "reset"} className="flex-1" onClick={() => auth.setAuthTab("reset")}>
             Reset hesla
@@ -212,10 +212,10 @@ function Hero({
       </div>
       <button
         type="button"
-        className="flex flex-col items-center gap-2 py-2 text-[11px] font-semibold uppercase leading-[14px] tracking-[0.08em] text-[var(--rd-text-tertiary)]"
+        className="flex flex-col items-center gap-2 py-2 rd-type-overline text-[var(--rd-text-tertiary)]"
         onClick={onScrollToFeatures}
       >
-        Čo v aplikácii nájdeš
+        ÄŚo v aplikĂˇcii nĂˇjdeĹˇ
         <ChevronDown className="size-5" aria-hidden />
       </button>
     </section>
@@ -248,14 +248,14 @@ function LoginForm({ auth }: { auth: LandingAuth }) {
         id="rd-login-remember"
         checked={auth.loginRememberMe}
         onCheckedChange={auth.setLoginRememberMe}
-        label="Zapamätať ma na 30 dní"
+        label="ZapamĂ¤taĹĄ ma na 30 dnĂ­"
       />
       <Button type="submit" className="w-full" disabled={auth.isSubmitting || auth.isPasskeySubmitting} data-testid="button-login-submit">
-        {auth.isSubmitting ? "Prihlasujem..." : "Prihlásiť sa"}
+        {auth.isSubmitting ? "Prihlasujem..." : "PrihlĂˇsiĹĄ sa"}
       </Button>
       <div className="flex items-center gap-3">
         <span className="h-px flex-1 bg-[var(--rd-border-subtle)]" />
-        <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--rd-text-tertiary)]">alebo</span>
+        <span className="rd-type-overline text-[var(--rd-text-tertiary)]">alebo</span>
         <span className="h-px flex-1 bg-[var(--rd-border-subtle)]" />
       </div>
       <Button
@@ -267,7 +267,7 @@ function LoginForm({ auth }: { auth: LandingAuth }) {
         data-testid="button-login-passkey"
       >
         <KeyRound className="size-[18px]" />
-        {auth.isPasskeySubmitting ? "Overujem passkey..." : "Prihlásiť cez passkey"}
+        {auth.isPasskeySubmitting ? "Overujem passkey..." : "PrihlĂˇsiĹĄ cez passkey"}
       </Button>
     </form>
   );
@@ -277,23 +277,23 @@ function RegisterForm({ auth }: { auth: LandingAuth }) {
   const checks = auth.registerStrength.checks;
   return (
     <form onSubmit={auth.submitRegister} className="flex flex-col gap-4">
-      <Input label="Meno" placeholder="Meno (voliteľné)" value={auth.registerFirstName} onChange={(event) => auth.setRegisterFirstName(event.target.value)} data-testid="input-register-firstname" />
-      <Input label="Priezvisko" placeholder="Priezvisko (voliteľné)" value={auth.registerLastName} onChange={(event) => auth.setRegisterLastName(event.target.value)} data-testid="input-register-lastname" />
+      <Input label="Meno" placeholder="Meno (voliteÄľnĂ©)" value={auth.registerFirstName} onChange={(event) => auth.setRegisterFirstName(event.target.value)} data-testid="input-register-firstname" />
+      <Input label="Priezvisko" placeholder="Priezvisko (voliteÄľnĂ©)" value={auth.registerLastName} onChange={(event) => auth.setRegisterLastName(event.target.value)} data-testid="input-register-lastname" />
       <Input label="E-mail" type="email" placeholder="Email" required value={auth.registerEmail} onChange={(event) => auth.setRegisterEmail(event.target.value)} data-testid="input-register-email" />
       <Input label="Heslo" type="password" placeholder="Heslo" required minLength={6} value={auth.registerPassword} onChange={(event) => auth.setRegisterPassword(event.target.value)} data-testid="input-register-password" />
       <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">
         Sila hesla: <span className="font-medium text-[var(--rd-text-primary)]">{STRENGTH_LABEL[auth.registerStrength.label] ?? auth.registerStrength.label}</span>
       </p>
       <ul className="space-y-1 text-xs leading-4 text-[var(--rd-text-tertiary)]">
-        <li>{checks.minLength ? "✓" : "○"} aspoň 8 znakov</li>
-        <li>{checks.uppercase ? "✓" : "○"} veľké písmeno</li>
-        <li>{checks.lowercase ? "✓" : "○"} malé písmeno</li>
-        <li>{checks.number ? "✓" : "○"} číslo</li>
-        <li>{checks.symbol ? "✓" : "○"} špeciálny znak</li>
+        <li>{checks.minLength ? "âś“" : "â—‹"} aspoĹ 8 znakov</li>
+        <li>{checks.uppercase ? "âś“" : "â—‹"} veÄľkĂ© pĂ­smeno</li>
+        <li>{checks.lowercase ? "âś“" : "â—‹"} malĂ© pĂ­smeno</li>
+        <li>{checks.number ? "âś“" : "â—‹"} ÄŤĂ­slo</li>
+        <li>{checks.symbol ? "âś“" : "â—‹"} ĹˇpeciĂˇlny znak</li>
       </ul>
-      <Checkbox id="rd-register-remember" checked={auth.registerRememberMe} onCheckedChange={auth.setRegisterRememberMe} label="Zapamätať ma na 30 dní" />
+      <Checkbox id="rd-register-remember" checked={auth.registerRememberMe} onCheckedChange={auth.setRegisterRememberMe} label="ZapamĂ¤taĹĄ ma na 30 dnĂ­" />
       <Button type="submit" className="w-full" disabled={auth.isSubmitting} data-testid="button-register-submit">
-        {auth.isSubmitting ? "Registrujem..." : "Vytvoriť účet"}
+        {auth.isSubmitting ? "Registrujem..." : "VytvoriĹĄ ĂşÄŤet"}
       </Button>
     </form>
   );
@@ -305,7 +305,7 @@ function ResetForm({ auth }: { auth: LandingAuth }) {
       <form onSubmit={auth.submitForgotPassword} className="flex flex-col gap-4">
         <Input label="E-mail" type="email" placeholder="Email" required value={auth.forgotEmail} onChange={(event) => auth.setForgotEmail(event.target.value)} />
         <Button type="submit" variant="Secondary" className="w-full" disabled={auth.isSubmitting}>
-          {auth.isSubmitting ? "Vytváram token..." : "Vytvoriť reset token"}
+          {auth.isSubmitting ? "VytvĂˇram token..." : "VytvoriĹĄ reset token"}
         </Button>
       </form>
       {auth.devResetToken ? (
@@ -317,12 +317,12 @@ function ResetForm({ auth }: { auth: LandingAuth }) {
       <form onSubmit={auth.submitResetPassword} className="flex flex-col gap-4">
         <Input label="E-mail" type="email" required value={auth.resetEmail} onChange={(event) => auth.setResetEmail(event.target.value)} />
         <Input label="Reset token" required value={auth.resetToken} onChange={(event) => auth.setResetToken(event.target.value)} />
-        <Input label="Nové heslo" type="password" required value={auth.resetNewPassword} onChange={(event) => auth.setResetNewPassword(event.target.value)} />
+        <Input label="NovĂ© heslo" type="password" required value={auth.resetNewPassword} onChange={(event) => auth.setResetNewPassword(event.target.value)} />
         <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">
-          Sila nového hesla: <span className="font-medium text-[var(--rd-text-primary)]">{STRENGTH_LABEL[auth.resetStrength.label] ?? auth.resetStrength.label}</span>
+          Sila novĂ©ho hesla: <span className="font-medium text-[var(--rd-text-primary)]">{STRENGTH_LABEL[auth.resetStrength.label] ?? auth.resetStrength.label}</span>
         </p>
         <Button type="submit" className="w-full" disabled={auth.isSubmitting}>
-          {auth.isSubmitting ? "Mením heslo..." : "Zmeniť heslo"}
+          {auth.isSubmitting ? "MenĂ­m heslo..." : "ZmeniĹĄ heslo"}
         </Button>
       </form>
     </div>
@@ -330,7 +330,7 @@ function ResetForm({ auth }: { auth: LandingAuth }) {
 }
 
 /**
- * Motion from Figma "Login — parallax: fázy a špecifikácia".
+ * Motion from Figma "Login â€” parallax: fĂˇzy a ĹˇpecifikĂˇcia".
  * progress 0 at section top = viewport bottom; 1 when section is vertically centered.
  * prefers-reduced-motion: no transforms, only opacity fade when near viewport.
  */
@@ -373,7 +373,7 @@ function applySectionParallax(section: HTMLElement, view: DOMRect, reduce: boole
 
   const glow = section.querySelector<HTMLElement>("[data-parallax-glow]");
   if (glow) {
-    // Slower than content: translateY = scroll × 0.3
+    // Slower than content: translateY = scroll Ă— 0.3
     const y = reduce ? 0 : traveled * 0.3;
     glow.style.transform = `translate3d(0, ${y}px, 0)`;
   }
@@ -398,7 +398,7 @@ function FeatureSection({ feature }: { feature: (typeof FEATURES)[number] }) {
         )}
         style={{ transform: "translate3d(0, 0, 0)" }}
       />
-      {/* Phone chrome matches Figma: 211×440, radius 34, notch, ~35% overhang. */}
+      {/* Phone chrome matches Figma: 211Ă—440, radius 34, notch, ~35% overhang. */}
       <div
         data-parallax-phone
         className="pointer-events-none absolute top-[60px] will-change-transform"
@@ -435,7 +435,7 @@ function FeatureSection({ feature }: { feature: (typeof FEATURES)[number] }) {
         style={{ transform: `translate3d(0, ${TEXT_SLIDE_Y}px, 0)`, opacity: 0 }}
       >
         <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">{feature.index}</p>
-        <h3 className="mt-3 text-[22px] font-bold leading-7 tracking-[-0.01em]">{feature.title}</h3>
+        <h3 className="mt-3 rd-type-h1">{feature.title}</h3>
         <p className="mt-3 text-sm leading-5 text-[var(--rd-text-secondary)]">{feature.body}</p>
       </div>
     </section>

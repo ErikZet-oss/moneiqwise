@@ -24,7 +24,7 @@ const RANGES = [
   { v: "6m", label: "6M" },
   { v: "ytd", label: "YTD" },
   { v: "1y", label: "1R" },
-  { v: "all", label: "Všetko" },
+  { v: "all", label: "VĹˇetko" },
 ] as const;
 
 type RangeVal = (typeof RANGES)[number]["v"];
@@ -50,15 +50,15 @@ export default function GrafyMobile() {
   const [range, setRange] = useState<RangeVal>("all");
   const [pickerOpen, setPickerOpen] = useState(false);
   const portfolioParam = getQueryParam();
-  const mask = (value: string) => (hideAmounts ? "••••••" : value);
-  const overline = isAllPortfolios ? "Všetky portfóliá" : selectedPortfolio?.name ?? "Portfólio";
+  const mask = (value: string) => (hideAmounts ? "â€˘â€˘â€˘â€˘â€˘â€˘" : value);
+  const overline = isAllPortfolios ? "VĹˇetky portfĂłliĂˇ" : selectedPortfolio?.name ?? "PortfĂłlio";
 
   const { data: history, isLoading: histLoading, error } = useQuery<PortfolioHistoryRes>({
     queryKey: ["/api/portfolio-history", portfolioParam, range, currency],
     queryFn: async () => {
       const params = new URLSearchParams({ portfolio: portfolioParam, range });
       const res = await fetch(`/api/portfolio-history?${params.toString()}`, { credentials: "include" });
-      if (!res.ok) throw new Error("História zlyhala");
+      if (!res.ok) throw new Error("HistĂłria zlyhala");
       return res.json();
     },
     staleTime: 5 * 60 * 1000,
@@ -69,7 +69,7 @@ export default function GrafyMobile() {
     queryFn: async () => {
       const params = new URLSearchParams({ portfolio: portfolioParam, range: "all" });
       const res = await fetch(`/api/portfolio-history?${params.toString()}`, { credentials: "include" });
-      if (!res.ok) throw new Error("ATH história zlyhala");
+      if (!res.ok) throw new Error("ATH histĂłria zlyhala");
       return res.json();
     },
     staleTime: 10 * 60 * 1000,
@@ -95,38 +95,38 @@ export default function GrafyMobile() {
       <PageBody>
         <div className="flex items-start gap-2">
           <p className="min-w-0 flex-1 text-xs leading-4 text-[var(--rd-text-secondary)]">
-            Časové série hodnoty portfólia a porovnanie výkonu s indexom S&P 500.
+            ÄŚasovĂ© sĂ©rie hodnoty portfĂłlia a porovnanie vĂ˝konu s indexom S&P 500.
           </p>
           <HelpButton
-            title="Stránka Grafy"
-            body="Časové série hodnoty portfólia a porovnanie výkonu s indexom S&P 500. Metodika zodpovedá TWR (oceňovanie MTM, vklady a výbery ako toky)."
+            title="StrĂˇnka Grafy"
+            body="ÄŚasovĂ© sĂ©rie hodnoty portfĂłlia a porovnanie vĂ˝konu s indexom S&P 500. Metodika zodpovedĂˇ TWR (oceĹovanie MTM, vklady a vĂ˝bery ako toky)."
           />
         </div>
 
         <Card>
           <div className="flex items-center gap-2">
-            <p className="min-w-0 flex-1 text-[17px] font-semibold leading-6">Zobrazenie</p>
+            <p className="min-w-0 flex-1 rd-type-h2">Zobrazenie</p>
             <HelpButton
               title="Filtre grafu"
-              body="Portfólio určuje, ktoré transakcie sa zarátajú do série. Obdobie skracuje časovú os. Výber portfólia je zdieľaný s ostatnými obrazovkami."
+              body="PortfĂłlio urÄŤuje, ktorĂ© transakcie sa zarĂˇtajĂş do sĂ©rie. Obdobie skracuje ÄŤasovĂş os. VĂ˝ber portfĂłlia je zdieÄľanĂ˝ s ostatnĂ˝mi obrazovkami."
             />
           </div>
-          <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">Vyberte portfólio a časové obdobie.</p>
+          <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">Vyberte portfĂłlio a ÄŤasovĂ© obdobie.</p>
           <div className="flex items-center gap-2">
-            <p className="text-[13px] font-medium text-[var(--rd-text-secondary)]">Portfólio</p>
-            <HelpButton title="Výber portfólia" body="Jedno portfólio alebo agregácia všetkých. Rovnaká voľba ako v hornom prepínači." />
+            <p className="text-[13px] font-medium text-[var(--rd-text-secondary)]">PortfĂłlio</p>
+            <HelpButton title="VĂ˝ber portfĂłlia" body="Jedno portfĂłlio alebo agregĂˇcia vĹˇetkĂ˝ch. RovnakĂˇ voÄľba ako v hornom prepĂ­naÄŤi." />
           </div>
           <Select
             value={selectedPortfolioId || "all"}
             onChange={(id) => setSelectedPortfolioId(id)}
             options={[
-              { value: "all", label: "Všetky portfóliá" },
+              { value: "all", label: "VĹˇetky portfĂłliĂˇ" },
               ...portfolios.map((portfolio) => ({ value: portfolio.id, label: portfolio.name })),
             ]}
           />
           <div className="flex items-center gap-2">
             <p className="text-[13px] font-medium text-[var(--rd-text-secondary)]">Obdobie</p>
-            <HelpButton title="Časové obdobie" body="Rozsah dát na osi X. YTD je od 1. januára bežného roka." />
+            <HelpButton title="ÄŚasovĂ© obdobie" body="Rozsah dĂˇt na osi X. YTD je od 1. januĂˇra beĹľnĂ©ho roka." />
           </div>
           <div className="flex flex-wrap gap-1">
             {RANGES.map((option) => (
@@ -137,32 +137,32 @@ export default function GrafyMobile() {
           </div>
           <div className="flex items-start gap-2">
             <p className="min-w-0 flex-1 text-xs leading-4 text-[var(--rd-text-tertiary)]">
-              {history?.methodNote || "Dáta z rovnakého oceňovania a tokov (MTM, vklady/výbery) ako TWR."}
+              {history?.methodNote || "DĂˇta z rovnakĂ©ho oceĹovania a tokov (MTM, vklady/vĂ˝bery) ako TWR."}
             </p>
-            <HelpButton title="Poznámka k metodike" body="Stručné vysvetlenie výpočtu z backendu pre zobrazenú sériu a menu." />
+            <HelpButton title="PoznĂˇmka k metodike" body="StruÄŤnĂ© vysvetlenie vĂ˝poÄŤtu z backendu pre zobrazenĂş sĂ©riu a menu." />
           </div>
         </Card>
 
         {error ? (
-          <EmptyState title="História sa nenačítala" body="Skontrolujte pripojenie a skúste znova." />
+          <EmptyState title="HistĂłria sa nenaÄŤĂ­tala" body="Skontrolujte pripojenie a skĂşste znova." />
         ) : null}
 
         <Card>
           <div className="flex items-center gap-2">
-            <p className="min-w-0 flex-1 text-[17px] font-semibold leading-6">Celková hodnota vs. investované</p>
+            <p className="min-w-0 flex-1 rd-type-h2">CelkovĂˇ hodnota vs. investovanĂ©</p>
             <HelpButton
-              title="Hodnota vs. čisté vklady"
-              body="Krivka je denná trhová hodnota. Schodík sú kumulatívne čisté vklady mínus výbery. Farba plochy závisí od toho, či je hodnota nad touto čiarou."
+              title="Hodnota vs. ÄŤistĂ© vklady"
+              body="Krivka je dennĂˇ trhovĂˇ hodnota. SchodĂ­k sĂş kumulatĂ­vne ÄŤistĂ© vklady mĂ­nus vĂ˝bery. Farba plochy zĂˇvisĂ­ od toho, ÄŤi je hodnota nad touto ÄŤiarou."
             />
           </div>
           <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">
-            Plocha pod krivkou: farba podľa zisku oproti tokom. Schodíky = čisté vklady mínus výbery.
+            Plocha pod krivkou: farba podÄľa zisku oproti tokom. SchodĂ­ky = ÄŤistĂ© vklady mĂ­nus vĂ˝bery.
           </p>
           <div className="h-40 w-full">
             {histLoading || isLoading ? (
-              <p className="text-xs text-[var(--rd-text-tertiary)]">Načítavam graf…</p>
+              <p className="text-xs text-[var(--rd-text-tertiary)]">NaÄŤĂ­tavam grafâ€¦</p>
             ) : points.length === 0 ? (
-              <p className="text-xs text-[var(--rd-text-secondary)]">Nedostatok dát v zvolenom rozsahu.</p>
+              <p className="text-xs text-[var(--rd-text-secondary)]">Nedostatok dĂˇt v zvolenom rozsahu.</p>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={points} margin={{ top: 8, right: 0, left: 0, bottom: 0 }}>
@@ -183,7 +183,7 @@ export default function GrafyMobile() {
                         <div className="rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-strong)] bg-[var(--rd-bg-surface-raised)] p-2 text-xs">
                           <p>{row.date}</p>
                           <p>Hodnota: {mask(formatCurrency(row.totalValue))}</p>
-                          <p>Čisté vklady: {mask(formatCurrency(row.netInvested))}</p>
+                          <p>ÄŚistĂ© vklady: {mask(formatCurrency(row.netInvested))}</p>
                         </div>
                       );
                     }}
@@ -195,48 +195,48 @@ export default function GrafyMobile() {
             )}
           </div>
           <div className="flex gap-4 text-xs text-[var(--rd-text-secondary)]">
-            <span className="inline-flex items-center gap-2"><i className="size-2 rounded-full bg-[var(--rd-profit)]" /> Trhová hodnota</span>
-            <span className="inline-flex items-center gap-2"><i className="size-2 rounded-full bg-[var(--rd-chart-6)]" /> Čisté vklady</span>
+            <span className="inline-flex items-center gap-2"><i className="size-2 rounded-full bg-[var(--rd-profit)]" /> TrhovĂˇ hodnota</span>
+            <span className="inline-flex items-center gap-2"><i className="size-2 rounded-full bg-[var(--rd-chart-6)]" /> ÄŚistĂ© vklady</span>
           </div>
           <div className="h-px w-full bg-[var(--rd-border-subtle)]" />
           <KvRow
-            label="ATH portfólia"
+            label="ATH portfĂłlia"
             value={
               athPoint
                 ? format(parseISO(athPoint.date), "d. MMM yyyy", { locale: sk })
-                : "Nedostatok dát"
+                : "Nedostatok dĂˇt"
             }
           />
         </Card>
 
         <Card>
           <div className="flex items-center gap-2">
-            <p className="min-w-0 flex-1 text-[17px] font-semibold leading-6">Výkon v % oproti S&P 500</p>
+            <p className="min-w-0 flex-1 rd-type-h2">VĂ˝kon v % oproti S&P 500</p>
             <HelpButton
-              title="Kumulatívny výnos v %"
-              body="Obe krivky začínajú na 0 % v prvý deň rozsahu. Portfólio je TWR, index je vývoj uzávierok ^GSPC."
+              title="KumulatĂ­vny vĂ˝nos v %"
+              body="Obe krivky zaÄŤĂ­najĂş na 0 % v prvĂ˝ deĹ rozsahu. PortfĂłlio je TWR, index je vĂ˝voj uzĂˇvierok ^GSPC."
             />
           </div>
           <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">
-            Obe krivky začínajú na 0 % v prvý deň zobrazeného rozsahu.
+            Obe krivky zaÄŤĂ­najĂş na 0 % v prvĂ˝ deĹ zobrazenĂ©ho rozsahu.
           </p>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--rd-text-tertiary)]">Portfólio</p>
-              <p className={`font-mono text-[17px] font-medium ${toneOf(last?.portfolioCumulativePct ?? 0) === "down" ? "text-[var(--rd-loss)]" : "text-[var(--rd-profit)]"}`}>
-                {last ? signedPct(last.portfolioCumulativePct) : "—"}
+              <p className="rd-type-overline text-[var(--rd-text-tertiary)]">PortfĂłlio</p>
+              <p className={`rd-type-data-lg font-medium ${toneOf(last?.portfolioCumulativePct ?? 0) === "down" ? "text-[var(--rd-loss)]" : "text-[var(--rd-profit)]"}`}>
+                {last ? signedPct(last.portfolioCumulativePct) : "â€”"}
               </p>
             </div>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--rd-text-tertiary)]">S&P 500</p>
-              <p className="font-mono text-[17px] font-medium text-[var(--rd-warning)]">
-                {last ? signedPct(last.sp500CumulativePct) : "—"}
+              <p className="rd-type-overline text-[var(--rd-text-tertiary)]">S&P 500</p>
+              <p className="rd-type-data-lg font-medium text-[var(--rd-warning)]">
+                {last ? signedPct(last.sp500CumulativePct) : "â€”"}
               </p>
             </div>
           </div>
           <div className="h-36 w-full">
             {points.length < 2 ? (
-              <p className="text-xs text-[var(--rd-text-secondary)]">Nedostatok dát pre porovnanie v %.</p>
+              <p className="text-xs text-[var(--rd-text-secondary)]">Nedostatok dĂˇt pre porovnanie v %.</p>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={points} margin={{ top: 8, right: 0, left: 0, bottom: 0 }}>
@@ -250,7 +250,7 @@ export default function GrafyMobile() {
                       return (
                         <div className="rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-strong)] bg-[var(--rd-bg-surface-raised)] p-2 text-xs">
                           <p>{row.date}</p>
-                          <p>Portfólio: {signedPct(row.portfolioCumulativePct)}</p>
+                          <p>PortfĂłlio: {signedPct(row.portfolioCumulativePct)}</p>
                           <p>S&P 500: {signedPct(row.sp500CumulativePct)}</p>
                         </div>
                       );
@@ -263,7 +263,7 @@ export default function GrafyMobile() {
             )}
           </div>
           <div className="flex gap-4 text-xs text-[var(--rd-text-secondary)]">
-            <span className="inline-flex items-center gap-2"><i className="size-2 rounded-full bg-[var(--rd-profit)]" /> Portfólio (TWR)</span>
+            <span className="inline-flex items-center gap-2"><i className="size-2 rounded-full bg-[var(--rd-profit)]" /> PortfĂłlio (TWR)</span>
             <span className="inline-flex items-center gap-2"><i className="size-2 rounded-full bg-[var(--rd-warning)]" /> S&P 500 (^GSPC)</span>
           </div>
         </Card>

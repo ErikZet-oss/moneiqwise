@@ -11,14 +11,12 @@ export function Input({
   const autoId = useId();
   const inputId = id ?? autoId;
   return (
-    <label htmlFor={inputId} className="flex w-full flex-col gap-2">
-      {label ? (
-        <span className="text-[13px] font-medium leading-4 text-[var(--rd-text-secondary)]">{label}</span>
-      ) : null}
+    <label htmlFor={inputId} className="flex w-full flex-col gap-1.5">
+      {label ? <span className="rd-type-label text-[var(--rd-text-secondary)]">{label}</span> : null}
       <input
         id={inputId}
         className={cn(
-          "min-h-11 w-full rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-strong)] bg-[var(--rd-bg-surface-raised)] px-3 py-3 text-sm leading-5 text-[var(--rd-text-primary)] outline-none placeholder:text-[var(--rd-text-tertiary)] focus:border-[var(--rd-profit)]",
+          "min-h-[40px] w-full rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-strong)] bg-[var(--rd-bg-surface-raised)] px-3 py-2 text-[13px] leading-[18px] text-[var(--rd-text-primary)] outline-none placeholder:text-[var(--rd-text-tertiary)] focus:border-[var(--rd-profit)]",
           mono && "font-mono font-medium",
           className,
         )}

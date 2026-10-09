@@ -20,7 +20,7 @@ type ProjectionPoint = {
   actualValue: number | null;
 };
 
-const MONTHS_SK = ["Jan", "Feb", "Mar", "Apr", "Maj", "Jún", "Júl", "Aug", "Sep", "Okt", "Nov", "Dec"];
+const MONTHS_SK = ["Jan", "Feb", "Mar", "Apr", "Maj", "JĂşn", "JĂşl", "Aug", "Sep", "Okt", "Nov", "Dec"];
 
 function monthKeyFromDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -49,7 +49,7 @@ export default function GoalTrackerMobile() {
     queryFn: async () => {
       const params = new URLSearchParams({ portfolio: portfolioParam, range: "all" });
       const res = await fetch(`/api/portfolio-history?${params.toString()}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Nepodarilo sa načítať históriu pre Môj cieľ.");
+      if (!res.ok) throw new Error("Nepodarilo sa naÄŤĂ­taĹĄ histĂłriu pre MĂ´j cieÄľ.");
       return res.json();
     },
     staleTime: 5 * 60 * 1000,
@@ -152,47 +152,47 @@ export default function GoalTrackerMobile() {
   const effectiveSelectedYear = selectedYear && yearsList.includes(Number(selectedYear)) ? Number(selectedYear) : yearsList[0] ?? new Date().getFullYear();
   const yearRows = projection.filter((point) => point.year === effectiveSelectedYear);
   const selectedDetail = (selectedMonthKey ? projection.find((point) => point.monthKey === selectedMonthKey) : null) ?? yearRows[0] ?? null;
-  const overline = isAllPortfolios ? "Všetky portfóliá" : selectedPortfolio?.name ?? "Portfólio";
+  const overline = isAllPortfolios ? "VĹˇetky portfĂłliĂˇ" : selectedPortfolio?.name ?? "PortfĂłlio";
   const hitLabel = summary.goalHitDate
     ? new Date(summary.goalHitDate).toLocaleDateString("sk-SK")
-    : "—";
+    : "â€”";
 
   return (
     <div>
-      <TopBar overline={overline} title="Môj cieľ" onOverlineClick={() => setPickerOpen(true)} />
+      <TopBar overline={overline} title="MĂ´j cieÄľ" onOverlineClick={() => setPickerOpen(true)} />
       <PortfolioSwitcher open={pickerOpen} onClose={() => setPickerOpen(false)} />
       <PageBody>
         <div className="flex items-start gap-2">
           <p className="min-w-0 flex-1 text-xs leading-4 text-[var(--rd-text-secondary)]">
-            Porovnanie plánu zloženého úročenia s realitou tvojho portfólia.
+            Porovnanie plĂˇnu zloĹľenĂ©ho ĂşroÄŤenia s realitou tvojho portfĂłlia.
           </p>
           <HelpButton
-            title="Ako funguje sekcia Môj cieľ"
-            body="Porovnáva plán zloženého úročenia s realitou z histórie portfólia. Plán sa počíta mesačne z počiatočnej sumy, mesačného vkladu a ročného úroku."
+            title="Ako funguje sekcia MĂ´j cieÄľ"
+            body="PorovnĂˇva plĂˇn zloĹľenĂ©ho ĂşroÄŤenia s realitou z histĂłrie portfĂłlia. PlĂˇn sa poÄŤĂ­ta mesaÄŤne z poÄŤiatoÄŤnej sumy, mesaÄŤnĂ©ho vkladu a roÄŤnĂ©ho Ăşroku."
           />
         </div>
 
         <Card>
-          <p className="text-[17px] font-semibold leading-6">Nastavenie simulácie</p>
-          <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">Zadaj cieľovú hodnotu, mesačný vklad a ročný výnos.</p>
+          <p className="rd-type-h2">Nastavenie simulĂˇcie</p>
+          <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">Zadaj cieÄľovĂş hodnotu, mesaÄŤnĂ˝ vklad a roÄŤnĂ˝ vĂ˝nos.</p>
           <div className="grid grid-cols-2 gap-3">
-            <Input label="Počiatočná suma" value={useCurrentPortfolioAsInitial ? String(Math.round(effectiveInitialAmount)) : initialAmountInput} onChange={(event) => setInitialAmountInput(event.target.value)} inputMode="decimal" disabled={useCurrentPortfolioAsInitial} />
-            <Input label="Cieľová suma" value={goalAmountInput} onChange={(event) => setGoalAmountInput(event.target.value)} inputMode="decimal" />
-            <Input label="Mesačný vklad" value={monthlyDepositInput} onChange={(event) => setMonthlyDepositInput(event.target.value)} inputMode="decimal" />
-            <Input label="Cieľový úrok (% p.a.)" value={annualReturnInput} onChange={(event) => setAnnualReturnInput(event.target.value)} inputMode="decimal" />
+            <Input label="PoÄŤiatoÄŤnĂˇ suma" value={useCurrentPortfolioAsInitial ? String(Math.round(effectiveInitialAmount)) : initialAmountInput} onChange={(event) => setInitialAmountInput(event.target.value)} inputMode="decimal" disabled={useCurrentPortfolioAsInitial} />
+            <Input label="CieÄľovĂˇ suma" value={goalAmountInput} onChange={(event) => setGoalAmountInput(event.target.value)} inputMode="decimal" />
+            <Input label="MesaÄŤnĂ˝ vklad" value={monthlyDepositInput} onChange={(event) => setMonthlyDepositInput(event.target.value)} inputMode="decimal" />
+            <Input label="CieÄľovĂ˝ Ăşrok (% p.a.)" value={annualReturnInput} onChange={(event) => setAnnualReturnInput(event.target.value)} inputMode="decimal" />
           </div>
           <div className="flex items-center gap-3">
             <div className="min-w-0 flex-1">
-              <p className="text-sm leading-5">Použiť aktuálnu hodnotu portfólia</p>
+              <p className="text-sm leading-5">PouĹľiĹĄ aktuĂˇlnu hodnotu portfĂłlia</p>
             </div>
-            <HelpButton title="Automatické predvyplnenie" body="Keď je zapnuté, počiatočná suma sa berie z poslednej reálnej hodnoty portfólia." />
-            <Toggle checked={useCurrentPortfolioAsInitial} onCheckedChange={setUseCurrentPortfolioAsInitial} label="Použiť aktuálnu hodnotu portfólia" />
+            <HelpButton title="AutomatickĂ© predvyplnenie" body="KeÄŹ je zapnutĂ©, poÄŤiatoÄŤnĂˇ suma sa berie z poslednej reĂˇlnej hodnoty portfĂłlia." />
+            <Toggle checked={useCurrentPortfolioAsInitial} onCheckedChange={setUseCurrentPortfolioAsInitial} label="PouĹľiĹĄ aktuĂˇlnu hodnotu portfĂłlia" />
           </div>
         </Card>
 
         <Card>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--rd-text-tertiary)]">Odhad na konci cieľa</p>
-          <p className="font-mono text-[36px] font-bold leading-10 tracking-[-0.02em]" data-testid="text-goal-projected-final-value">
+          <p className="rd-type-overline text-[var(--rd-text-tertiary)]">Odhad na konci cieÄľa</p>
+          <p className="rd-type-display-hero" data-testid="text-goal-projected-final-value">
             {formatCurrency(summary.projectedFinalValue)}
           </p>
           <div className="flex items-center gap-2">
@@ -202,7 +202,7 @@ export default function GoalTrackerMobile() {
             </p>
           </div>
           <KvRow label="Vklady spolu" value={formatCurrency(summary.totalOwnContributions)} />
-          <KvRow label="Mesačné vklady spolu" value={formatCurrency(summary.totalPlannedDeposits)} />
+          <KvRow label="MesaÄŤnĂ© vklady spolu" value={formatCurrency(summary.totalPlannedDeposits)} />
           <KvRow
             label="Zhodnotenie"
             value={`${signedMoney(formatCurrency, summary.projectedGrowth)} (${signedPct(summary.projectedGrowthPct, 1)})`}
@@ -212,13 +212,13 @@ export default function GoalTrackerMobile() {
 
         <Card>
           <div className="flex items-center gap-2">
-            <p className="min-w-0 flex-1 text-[17px] font-semibold leading-6">Cieľ vs realita</p>
-            <HelpButton title="Graf cieľ vs realita" body="Prerušovaná čiara je cieľový plán. Plocha je reálna hodnota portfólia. Vodorovná čiara je cieľová suma." />
+            <p className="min-w-0 flex-1 rd-type-h2">CieÄľ vs realita</p>
+            <HelpButton title="Graf cieÄľ vs realita" body="PreruĹˇovanĂˇ ÄŤiara je cieÄľovĂ˝ plĂˇn. Plocha je reĂˇlna hodnota portfĂłlia. VodorovnĂˇ ÄŤiara je cieÄľovĂˇ suma." />
           </div>
-          <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">Prerušovaná čiara = cieľový plán. Plocha = reálna hodnota portfólia.</p>
+          <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">PreruĹˇovanĂˇ ÄŤiara = cieÄľovĂ˝ plĂˇn. Plocha = reĂˇlna hodnota portfĂłlia.</p>
           <div className="h-40 w-full">
             {isLoading ? (
-              <p className="text-xs text-[var(--rd-text-tertiary)]">Načítavam históriu…</p>
+              <p className="text-xs text-[var(--rd-text-tertiary)]">NaÄŤĂ­tavam histĂłriuâ€¦</p>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={projection} margin={{ top: 8, right: 0, left: 0, bottom: 0 }}>
@@ -232,8 +232,8 @@ export default function GoalTrackerMobile() {
                       return (
                         <div className="rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-strong)] bg-[var(--rd-bg-surface-raised)] p-2 text-xs">
                           <p>{row.label}</p>
-                          <p>Cieľ: {formatCurrency(row.targetValue)}</p>
-                          <p>Realita: {row.actualValue != null ? formatCurrency(row.actualValue) : "—"}</p>
+                          <p>CieÄľ: {formatCurrency(row.targetValue)}</p>
+                          <p>Realita: {row.actualValue != null ? formatCurrency(row.actualValue) : "â€”"}</p>
                         </div>
                       );
                     }}
@@ -247,14 +247,14 @@ export default function GoalTrackerMobile() {
           </div>
           <div className="flex gap-4 text-xs text-[var(--rd-text-secondary)]">
             <span className="inline-flex items-center gap-2"><i className="size-2 rounded-full bg-[var(--rd-profit)]" /> Realita</span>
-            <span className="inline-flex items-center gap-2"><i className="size-2 rounded-full bg-[var(--rd-text-secondary)]" /> Plán</span>
-            <span className="inline-flex items-center gap-2"><i className="size-2 rounded-full bg-[var(--rd-chart-6)]" /> Cieľ</span>
+            <span className="inline-flex items-center gap-2"><i className="size-2 rounded-full bg-[var(--rd-text-secondary)]" /> PlĂˇn</span>
+            <span className="inline-flex items-center gap-2"><i className="size-2 rounded-full bg-[var(--rd-chart-6)]" /> CieÄľ</span>
           </div>
         </Card>
 
         <Card>
-          <p className="text-[17px] font-semibold leading-6">Mesačný kalendár</p>
-          <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">Klikni na mesiac a uvidíš porovnanie cieľovej a reálnej hodnoty.</p>
+          <p className="rd-type-h2">MesaÄŤnĂ˝ kalendĂˇr</p>
+          <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">Klikni na mesiac a uvidĂ­Ĺˇ porovnanie cieÄľovej a reĂˇlnej hodnoty.</p>
           <Select
             label="Rok"
             value={String(effectiveSelectedYear)}
@@ -281,7 +281,7 @@ export default function GoalTrackerMobile() {
                 >
                   <p className="text-xs font-medium text-[var(--rd-text-primary)]">{MONTHS_SK[month]}</p>
                   <p className="mt-1 font-mono text-[10px] leading-3">
-                    {diff == null ? "Bez reality" : `${diff >= 0 ? "+" : "−"}${formatCurrency(Math.abs(diff))}`}
+                    {diff == null ? "Bez reality" : `${diff >= 0 ? "+" : "â’"}${formatCurrency(Math.abs(diff))}`}
                   </p>
                 </button>
               );
@@ -292,12 +292,12 @@ export default function GoalTrackerMobile() {
               <p className="text-sm font-semibold">
                 {MONTHS_SK[selectedDetail.month]} {selectedDetail.year}
               </p>
-              <KvRow label="Cieľová suma" value={formatCurrency(goalAmount)} />
-              <KvRow label="Potrebná hodnota pre cieľ" value={formatCurrency(selectedDetail.targetValue)} />
-              <KvRow label="Tvoja reálna hodnota" value={selectedDetail.actualValue != null ? formatCurrency(selectedDetail.actualValue) : "Bez dát"} />
+              <KvRow label="CieÄľovĂˇ suma" value={formatCurrency(goalAmount)} />
+              <KvRow label="PotrebnĂˇ hodnota pre cieÄľ" value={formatCurrency(selectedDetail.targetValue)} />
+              <KvRow label="Tvoja reĂˇlna hodnota" value={selectedDetail.actualValue != null ? formatCurrency(selectedDetail.actualValue) : "Bez dĂˇt"} />
               <KvRow
-                label="Stav voči cieľu"
-                value={selectedDetail.actualValue != null ? signedMoney(formatCurrency, selectedDetail.actualValue - goalAmount) : "—"}
+                label="Stav voÄŤi cieÄľu"
+                value={selectedDetail.actualValue != null ? signedMoney(formatCurrency, selectedDetail.actualValue - goalAmount) : "â€”"}
                 tone={toneOf((selectedDetail.actualValue ?? 0) - goalAmount)}
               />
             </div>

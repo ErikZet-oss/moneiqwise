@@ -72,7 +72,7 @@ export default function OverviewMobile() {
     useCurrency();
   const { hideAmounts, toggleHideAmounts } = useChartSettings();
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
-  const mask = (value: string) => (hideAmounts ? "••••••" : value);
+  const mask = (value: string) => (hideAmounts ? "â€˘â€˘â€˘â€˘â€˘â€˘" : value);
 
   const { data: overview, isPending } = useQuery({
     queryKey: ["/api/overview"],
@@ -354,24 +354,24 @@ export default function OverviewMobile() {
   return (
     <div className="bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
       <TopBar
-        overline="Prehľad portfólií"
-        title="Portfóliá"
+        overline="PrehÄľad portfĂłliĂ­"
+        title="PortfĂłliĂˇ"
         trailing={
           <div className="flex items-center gap-1">
             <HelpButton
-              title="Portfóliá"
-              body="Súhrn všetkých portfólií. Ťuknutím na Otvoriť portfólio prejdeš na Prehľad s vybraným portfóliom."
+              title="PortfĂłliĂˇ"
+              body="SĂşhrn vĹˇetkĂ˝ch portfĂłliĂ­. Ĺ¤uknutĂ­m na OtvoriĹĄ portfĂłlio prejdeĹˇ na PrehÄľad s vybranĂ˝m portfĂłliom."
             />
             <button
               type="button"
-              aria-label={hideAmounts ? "Zobraziť sumy" : "Skryť sumy"}
-              className="inline-flex size-9 items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)]"
+              aria-label={hideAmounts ? "ZobraziĹĄ sumy" : "SkryĹĄ sumy"}
+              className="inline-flex size-[30px] items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)]"
               onClick={() => toggleHideAmounts()}
             >
               {hideAmounts ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
             </button>
             <IconButton
-              label="Obnoviť ceny všetkých portfólií"
+              label="ObnoviĹĄ ceny vĹˇetkĂ˝ch portfĂłliĂ­"
               onClick={() => void refreshAll()}
               spinning={refreshingId === "all"}
             />
@@ -380,65 +380,65 @@ export default function OverviewMobile() {
       />
       <PageBody>
         <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">
-          Rýchly prehľad výkonnosti všetkých vašich portfólií.
+          RĂ˝chly prehÄľad vĂ˝konnosti vĹˇetkĂ˝ch vaĹˇich portfĂłliĂ­.
         </p>
 
         {portfoliosLoading || isPending ? (
           <Card>
-            <p className="text-sm text-[var(--rd-text-secondary)]">Načítavam portfóliá…</p>
+            <p className="text-sm text-[var(--rd-text-secondary)]">NaÄŤĂ­tavam portfĂłliĂˇâ€¦</p>
           </Card>
         ) : portfolios.length === 0 || !aggregated ? (
-          <EmptyState title="Žiadne portfólio" body="Po vytvorení portfólia sa tu zobrazí súhrn hodnoty a zisku." />
+          <EmptyState title="Ĺ˝iadne portfĂłlio" body="Po vytvorenĂ­ portfĂłlia sa tu zobrazĂ­ sĂşhrn hodnoty a zisku." />
         ) : (
           <>
             <Card className="gap-2">
               <div className="flex items-center gap-2">
-                <p className="min-w-0 flex-1 text-[11px] font-semibold uppercase leading-[14px] tracking-[0.08em] text-[var(--rd-text-tertiary)]">
-                  Celková hodnota
+                <p className="min-w-0 flex-1 rd-type-overline text-[var(--rd-text-tertiary)]">
+                  CelkovĂˇ hodnota
                 </p>
                 {weightedYtd != null ? <Badge label={`YTD ${signedPct(weightedYtd)}`} tone={weightedYtd >= 0 ? "Profit" : "Loss"} /> : null}
               </div>
-              <p className="font-mono text-[36px] font-bold leading-10 tracking-[-0.02em] text-[var(--rd-text-primary)]">
+              <p className="rd-type-display-hero text-[var(--rd-text-primary)]">
                 {mask(formatCurrency(aggregated.totalValue))}
               </p>
-              <KvRow label="Investované" value={mask(formatCurrency(aggregated.totalInvested))} />
-              <KvRow label="Hotovosť" value={mask(formatCurrency(aggregated.cashValue))} />
+              <KvRow label="InvestovanĂ©" value={mask(formatCurrency(aggregated.totalInvested))} />
+              <KvRow label="HotovosĹĄ" value={mask(formatCurrency(aggregated.cashValue))} />
             </Card>
 
             <div className="grid grid-cols-2 gap-3">
               <StatTile
-                label="Celkový zisk"
+                label="CelkovĂ˝ zisk"
                 value={mask(signedMoney(formatCurrency, aggregated.totalProfit))}
                 sub={signedPct(aggregated.totalProfitPercent)}
                 tone={toneOf(aggregated.totalProfit) === "down" ? "Down" : toneOf(aggregated.totalProfit) === "up" ? "Up" : "Neutral"}
               />
               <StatTile
-                label="Denná zmena"
+                label="DennĂˇ zmena"
                 value={mask(signedMoney(formatCurrency, aggregated.dailyChange))}
                 sub={signedPct(aggregated.dailyChangePercent)}
                 tone={toneOf(aggregated.dailyChange) === "down" ? "Down" : toneOf(aggregated.dailyChange) === "up" ? "Up" : "Neutral"}
               />
               <StatTile
-                label="Nerealizovaný"
+                label="NerealizovanĂ˝"
                 value={mask(signedMoney(formatCurrency, aggregated.unrealizedGain))}
-                sub="otvorené pozície"
+                sub="otvorenĂ© pozĂ­cie"
                 tone={toneOf(aggregated.unrealizedGain) === "down" ? "Down" : "Up"}
               />
               <StatTile
-                label="Realizovaný"
+                label="RealizovanĂ˝"
                 value={mask(signedMoney(formatCurrency, aggregated.realizedGain))}
                 sub="z predajov"
                 tone={toneOf(aggregated.realizedGain) === "down" ? "Down" : "Up"}
               />
             </div>
             <StatTile
-              label="Pasívny príjem"
+              label="PasĂ­vny prĂ­jem"
               value={mask(formatCurrency(aggregated.passiveIncome))}
               sub={signedPct(aggregated.passiveIncomePercent)}
             />
 
-            <p className="text-[11px] font-semibold uppercase leading-[14px] tracking-[0.08em] text-[var(--rd-text-tertiary)]">
-              Portfóliá
+            <p className="rd-type-overline text-[var(--rd-text-tertiary)]">
+              PortfĂłliĂˇ
             </p>
             {portfolios.map((portfolio) => {
               const metrics = metricsById.get(portfolio.id);
@@ -447,11 +447,11 @@ export default function OverviewMobile() {
               return (
                 <Card key={portfolio.id} className="gap-2">
                   <div className="flex items-center gap-2">
-                    <p className="min-w-0 flex-1 text-[17px] font-semibold leading-6 tracking-[-0.01em]">{portfolio.name}</p>
+                    <p className="min-w-0 flex-1 rd-type-h2">{portfolio.name}</p>
                     {ytd != null ? <Badge label={`YTD ${signedPct(ytd)}`} tone={ytd >= 0 ? "Profit" : "Loss"} /> : null}
                     <button
                       type="button"
-                      aria-label="Obnoviť ceny a dennú zmenu"
+                      aria-label="ObnoviĹĄ ceny a dennĂş zmenu"
                       onClick={(event) => void refreshOne(portfolio.id, event)}
                       className="inline-flex size-8 items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)]"
                     >
@@ -462,34 +462,34 @@ export default function OverviewMobile() {
                       )}
                     </button>
                   </div>
-                  <p className="font-mono text-[28px] font-bold leading-[34px] tracking-[-0.015em]">
+                  <p className="rd-type-display-lg">
                     {mask(formatCurrency(metrics.totalValue))}
                   </p>
-                  <KvRow label="Investované" value={mask(formatCurrency(metrics.totalInvested))} />
-                  <KvRow label="Hotovosť" value={mask(formatCurrency(metrics.cashValue))} />
+                  <KvRow label="InvestovanĂ©" value={mask(formatCurrency(metrics.totalInvested))} />
+                  <KvRow label="HotovosĹĄ" value={mask(formatCurrency(metrics.cashValue))} />
                   <div className="h-px w-full bg-[var(--rd-border-subtle)]" />
                   <KvRow
-                    label="Celkový zisk"
-                    value={`${mask(signedMoney(formatCurrency, metrics.totalProfit))} · ${signedPct(metrics.totalProfitPercent)}`}
+                    label="CelkovĂ˝ zisk"
+                    value={`${mask(signedMoney(formatCurrency, metrics.totalProfit))} Â· ${signedPct(metrics.totalProfitPercent)}`}
                     tone={toneOf(metrics.totalProfit)}
                   />
-                  <KvRow label="Nerealizovaný" value={mask(signedMoney(formatCurrency, metrics.unrealizedGain))} tone={toneOf(metrics.unrealizedGain)} />
-                  <KvRow label="Realizovaný" value={mask(signedMoney(formatCurrency, metrics.realizedGain))} tone={toneOf(metrics.realizedGain)} />
+                  <KvRow label="NerealizovanĂ˝" value={mask(signedMoney(formatCurrency, metrics.unrealizedGain))} tone={toneOf(metrics.unrealizedGain)} />
+                  <KvRow label="RealizovanĂ˝" value={mask(signedMoney(formatCurrency, metrics.realizedGain))} tone={toneOf(metrics.realizedGain)} />
                   <KvRow
-                    label="Denná zmena"
-                    value={`${mask(signedMoney(formatCurrency, metrics.dailyChange))} · ${signedPct(metrics.dailyChangePercent)}`}
+                    label="DennĂˇ zmena"
+                    value={`${mask(signedMoney(formatCurrency, metrics.dailyChange))} Â· ${signedPct(metrics.dailyChangePercent)}`}
                     tone={toneOf(metrics.dailyChange)}
                   />
                   <KvRow
-                    label="Pasívny príjem"
+                    label="PasĂ­vny prĂ­jem"
                     value={`${signedPct(metrics.passiveIncomePercent)} (${mask(formatCurrency(metrics.passiveIncome))})`}
                   />
                   <button
                     type="button"
                     onClick={() => openPortfolio(portfolio.id)}
-                    className="inline-flex min-h-11 items-center justify-end gap-1 self-end text-[13px] font-medium text-[var(--rd-profit)]"
+                    className="inline-flex min-h-[40px] items-center justify-end gap-1 self-end text-[13px] font-medium text-[var(--rd-profit)]"
                   >
-                    Otvoriť portfólio
+                    OtvoriĹĄ portfĂłlio
                     <ChevronRight className="size-3.5" />
                   </button>
                 </Card>

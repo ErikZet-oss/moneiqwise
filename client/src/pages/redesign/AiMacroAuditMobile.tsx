@@ -11,7 +11,7 @@ export default function AiMacroAuditMobile() {
   const queryClient = useQueryClient();
   const { getQueryParam, selectedPortfolio, isAllPortfolios } = usePortfolio();
   const portfolioId = getQueryParam();
-  const pfName = isAllPortfolios ? "Všetky portfóliá" : selectedPortfolio?.name || "Portfólio";
+  const pfName = isAllPortfolios ? "VĹˇetky portfĂłliĂˇ" : selectedPortfolio?.name || "PortfĂłlio";
   const [scoreOpen, setScoreOpen] = useState(false);
 
   const { data, isLoading } = useQuery<AiAuditorLatestResponse>({
@@ -42,13 +42,13 @@ export default function AiMacroAuditMobile() {
       queryClient.setQueryData(["/api/ai-auditor/latest", portfolioId], payload);
       const analysis = ensureAnalysisShape(payload.run?.analysis ?? null);
       toast({
-        title: "Audit hotový",
-        description: `Skóre ${analysis?.healthScore ?? "—"}/100`,
+        title: "Audit hotovĂ˝",
+        description: `SkĂłre ${analysis?.healthScore ?? "â€”"}/100`,
       });
     },
     onError: (err: Error) => {
       toast({
-        title: "Nepodarilo sa spustiť audit",
+        title: "Nepodarilo sa spustiĹĄ audit",
         description: err.message,
         variant: "destructive",
       });
@@ -66,48 +66,48 @@ export default function AiMacroAuditMobile() {
     <div className="bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
       <TopBar overline={pfName} title="AI Macro Audit" />
       <PageBody>
-        <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">Hĺbková analýza portfólia</p>
+        <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">HÄşbkovĂˇ analĂ˝za portfĂłlia</p>
         <Card>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--rd-text-tertiary)]">
+              <p className="rd-type-overline text-[var(--rd-text-tertiary)]">
                 Health score
               </p>
               <button
                 type="button"
-                className="mt-1 font-mono text-[36px] font-bold leading-10 text-[var(--rd-ai)]"
+                className="mt-1 rd-type-display-hero text-[var(--rd-ai)]"
                 onClick={() => setScoreOpen((v) => !v)}
               >
-                {analysis?.healthScore != null ? `${analysis.healthScore}` : "—"}
+                {analysis?.healthScore != null ? `${analysis.healthScore}` : "â€”"}
                 <span className="text-lg text-[var(--rd-text-tertiary)]"> / 100</span>
               </button>
               <p className="mt-1 text-xs text-[var(--rd-text-tertiary)]">
-                Dnes {usage ? `${usage.used}/${usage.limit}` : "—"} · {pfName}
+                Dnes {usage ? `${usage.used}/${usage.limit}` : "â€”"} Â· {pfName}
               </p>
             </div>
             <Button
               disabled={runMutation.isPending || limitReached}
               onClick={() => runMutation.mutate()}
             >
-              {runMutation.isPending ? "Beží…" : "Spustiť analýzu"}
+              {runMutation.isPending ? "BeĹľĂ­â€¦" : "SpustiĹĄ analĂ˝zu"}
             </Button>
           </div>
           {scoreOpen ? (
             <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">
-              Skóre je vážený súčet faktorov auditu. Podrobný rozklad je v klasickom zobrazení.
+              SkĂłre je vĂˇĹľenĂ˝ sĂşÄŤet faktorov auditu. PodrobnĂ˝ rozklad je v klasickom zobrazenĂ­.
             </p>
           ) : null}
         </Card>
 
         {isLoading ? (
-          <p className="text-sm text-[var(--rd-text-tertiary)]">Načítavam…</p>
+          <p className="text-sm text-[var(--rd-text-tertiary)]">NaÄŤĂ­tavamâ€¦</p>
         ) : !analysis ? (
-          <EmptyState title="Zatiaľ žiadny audit" body="Spusti analýzu pre health score a makro riziká." />
+          <EmptyState title="ZatiaÄľ Ĺľiadny audit" body="Spusti analĂ˝zu pre health score a makro rizikĂˇ." />
         ) : (
           <Card>
             <h3 className="text-[15px] font-semibold">Zhrnutie</h3>
             <p className="text-sm leading-5 text-[var(--rd-text-secondary)]">
-              {analysis.summaryOneLiner || "Audit je hotový. Detaily sú v klasickom zobrazení."}
+              {analysis.summaryOneLiner || "Audit je hotovĂ˝. Detaily sĂş v klasickom zobrazenĂ­."}
             </p>
           </Card>
         )}

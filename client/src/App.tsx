@@ -433,7 +433,7 @@ function AuthenticatedLayout() {
         <AppUnlockGate>
           <div className="rd-app-shell flex h-dvh w-full flex-col bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
             <TickerTape />
-            <main className="min-h-0 flex-1 overflow-auto pb-[calc(96px+env(safe-area-inset-bottom))]">
+            <main className="min-h-0 flex-1 overflow-auto pb-[calc(72px+env(safe-area-inset-bottom))]">
               <Router />
             </main>
             <TabBar />

@@ -33,7 +33,7 @@ export default function TaxSummaryMobile() {
       const res = await fetch(`/api/tax-summary?${p}`, { credentials: "include" });
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as { message?: string };
-        throw new Error(j.message || "Chyba pri načítaní daňového prehľadu");
+        throw new Error(j.message || "Chyba pri naÄŤĂ­tanĂ­ daĹovĂ©ho prehÄľadu");
       }
       return res.json();
     },
@@ -73,39 +73,39 @@ export default function TaxSummaryMobile() {
 
   return (
     <div className="bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
-      <TopBar overline="Ročné súčty" title="Daňový asistent" />
+      <TopBar overline="RoÄŤnĂ© sĂşÄŤty" title="DaĹovĂ˝ asistent" />
       <PageBody>
         <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">
-          Ročné súčty pre orientáciu pred podaním a účtovníctvom. Čísla sú v EUR.
+          RoÄŤnĂ© sĂşÄŤty pre orientĂˇciu pred podanĂ­m a ĂşÄŤtovnĂ­ctvom. ÄŚĂ­sla sĂş v EUR.
         </p>
         <div className="grid grid-cols-2 gap-3">
           <Select
-            label="Kalendárny rok"
+            label="KalendĂˇrny rok"
             value={String(year)}
             onChange={(v) => setYear(parseInt(v, 10))}
             options={yearChoices.map((y) => ({ value: String(y), label: String(y) }))}
           />
           <Select
-            label="Portfólio"
+            label="PortfĂłlio"
             value={portfolio}
             onChange={setPortfolio}
             options={[
-              { value: "all", label: "Všetky portfóliá" },
+              { value: "all", label: "VĹˇetky portfĂłliĂˇ" },
               ...portfolios.map((p) => ({ value: p.id, label: p.name })),
             ]}
           />
         </div>
 
         {query.isPending ? (
-          <p className="text-sm text-[var(--rd-text-tertiary)]">Načítavam…</p>
+          <p className="text-sm text-[var(--rd-text-tertiary)]">NaÄŤĂ­tavamâ€¦</p>
         ) : query.isError ? (
           <p className="text-sm text-[var(--rd-loss)]">{(query.error as Error).message}</p>
         ) : (
           <>
             <Card>
               <h3 className="text-[15px] font-semibold">V suchu (orient.)</h3>
-              <p className="text-xs text-[var(--rd-text-tertiary)]">Oslobodený / dlh. držba ≥ 365 dní</p>
-              <p className="mt-2 font-mono text-[22px] font-bold text-[var(--rd-profit)]">
+              <p className="text-xs text-[var(--rd-text-tertiary)]">OslobodenĂ˝ / dlh. drĹľba â‰Ą 365 dnĂ­</p>
+              <p className="mt-2 rd-type-display-lg text-[var(--rd-profit)]">
                 {formatCurrency(d?.longTermExemptGainEur ?? 0)}
               </p>
               <p className="text-xs text-[var(--rd-text-tertiary)]">
@@ -113,25 +113,25 @@ export default function TaxSummaryMobile() {
               </p>
             </Card>
             <Card>
-              <h3 className="text-[15px] font-semibold">Krátkodobé</h3>
-              <p className="text-xs text-[var(--rd-text-tertiary)]">Zdaniteľný základ po zápočte strát</p>
-              <p className="mt-2 font-mono text-[22px] font-bold">{formatCurrency(d?.shortTermTaxableBaseEur ?? 0)}</p>
+              <h3 className="text-[15px] font-semibold">KrĂˇtkodobĂ©</h3>
+              <p className="text-xs text-[var(--rd-text-tertiary)]">ZdaniteÄľnĂ˝ zĂˇklad po zĂˇpoÄŤte strĂˇt</p>
+              <p className="mt-2 rd-type-display-lg">{formatCurrency(d?.shortTermTaxableBaseEur ?? 0)}</p>
               <p className="text-xs text-[var(--rd-text-tertiary)]">
-                +{formatCurrency(d?.shortTermGainEur ?? 0)} / −{formatCurrency(Math.abs(d?.shortTermLossEur ?? 0))}
+                +{formatCurrency(d?.shortTermGainEur ?? 0)} / â’{formatCurrency(Math.abs(d?.shortTermLossEur ?? 0))}
               </p>
             </Card>
             <Card>
               <h3 className="text-[15px] font-semibold">Marec / dane</h3>
-              <p className="text-xs text-[var(--rd-text-tertiary)]">Odhadovaná daň (19 %)</p>
-              <p className="mt-2 font-mono text-[22px] font-bold">{formatCurrency(d?.estimatedTaxSimple19Eur ?? 0)}</p>
+              <p className="text-xs text-[var(--rd-text-tertiary)]">OdhadovanĂˇ daĹ (19 %)</p>
+              <p className="mt-2 rd-type-display-lg">{formatCurrency(d?.estimatedTaxSimple19Eur ?? 0)}</p>
             </Card>
             <div className="grid grid-cols-3 gap-3">
-              <StatTile label="Hrubý súčet" value={formatCurrency(d?.dividendsGrossEur ?? 0)} />
-              <StatTile label="Zrážka" value={formatCurrency(d?.dividendsTaxEur ?? 0)} />
+              <StatTile label="HrubĂ˝ sĂşÄŤet" value={formatCurrency(d?.dividendsGrossEur ?? 0)} />
+              <StatTile label="ZrĂˇĹľka" value={formatCurrency(d?.dividendsTaxEur ?? 0)} />
               <StatTile label="Netto" value={formatCurrency(d?.dividendsNetEur ?? 0)} />
             </div>
             <Button className="w-full" variant="Secondary" onClick={onDownload}>
-              Exportovať pre účtovníctvo
+              ExportovaĹĄ pre ĂşÄŤtovnĂ­ctvo
             </Button>
           </>
         )}

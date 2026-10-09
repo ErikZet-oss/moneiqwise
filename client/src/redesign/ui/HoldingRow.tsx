@@ -26,17 +26,11 @@ export function LotRow({
         ? "text-[var(--rd-text-secondary)]"
         : "text-[var(--rd-profit)]";
   return (
-    <div className="flex min-h-11 w-full items-center gap-2 py-2">
+    <div className="flex min-h-[40px] w-full items-center gap-1.5 py-1.5">
       <Badge label={label} tone={tone} />
-      <p className="min-w-0 flex-1 font-mono text-xs font-medium leading-4 text-[var(--rd-text-secondary)]">
-        {date}
-      </p>
-      <p className="shrink-0 font-mono text-xs font-medium leading-4 text-[var(--rd-text-primary)]">
-        {lot}
-      </p>
-      <p className={cn("shrink-0 text-right font-mono text-xs font-medium leading-4", returnClass)}>
-        {returnLabel}
-      </p>
+      <p className="rd-type-data-sm min-w-0 flex-1 text-[var(--rd-text-secondary)]">{date}</p>
+      <p className="rd-type-data-sm shrink-0 text-[var(--rd-text-primary)]">{lot}</p>
+      <p className={cn("rd-type-data-sm shrink-0 text-right", returnClass)}>{returnLabel}</p>
     </div>
   );
 }
@@ -62,10 +56,10 @@ function AfterHours({
   if (!price && !change) return null;
   return (
     <div className={cn("flex items-center gap-1 text-[var(--rd-text-tertiary)]", className)}>
-      <Moon className="size-3" aria-hidden />
-      <span className="text-xs leading-4">Mimo trhu</span>
-      {price ? <span className="font-mono text-[10px] leading-3 text-[var(--rd-text-primary)]">{price}</span> : null}
-      {change ? <span className="font-mono text-[10px] leading-3">{change}</span> : null}
+      <Moon className="size-2.5" aria-hidden />
+      <span className="rd-type-body-sm">Mimo trhu</span>
+      {price ? <span className="rd-type-data-micro text-[var(--rd-text-primary)]">{price}</span> : null}
+      {change ? <span className="rd-type-data-micro">{change}</span> : null}
     </div>
   );
 }
@@ -88,23 +82,23 @@ export function HoldingRow({
   onTickerClick?: () => void;
 }) {
   return (
-    <div className="flex min-h-11 w-full items-center gap-3 py-3">
+    <div className="flex min-h-[40px] w-full items-center gap-2 py-2.5">
       <Avatar ticker={ticker} />
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           {onTickerClick ? (
-            <button type="button" onClick={onTickerClick} className="font-mono text-sm font-medium leading-5 text-[var(--rd-text-primary)]">
+            <button type="button" onClick={onTickerClick} className="rd-type-data text-[var(--rd-text-primary)]">
               {ticker}
             </button>
           ) : (
-            <p className="font-mono text-sm font-medium leading-5 text-[var(--rd-text-primary)]">{ticker}</p>
+            <p className="rd-type-data text-[var(--rd-text-primary)]">{ticker}</p>
           )}
-          <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">{qty}</p>
+          <p className="rd-type-body-sm text-[var(--rd-text-tertiary)]">{qty}</p>
         </div>
-        <p className="truncate text-xs leading-4 text-[var(--rd-text-secondary)]">{name}</p>
+        <p className="rd-type-body-sm truncate text-[var(--rd-text-secondary)]">{name}</p>
       </div>
-      <div className="flex shrink-0 flex-col items-end gap-1">
-        <p className="font-mono text-sm font-medium leading-5 text-[var(--rd-text-primary)]">{value}</p>
+      <div className="flex shrink-0 flex-col items-end gap-0.5">
+        <p className="rd-type-data text-[var(--rd-text-primary)]">{value}</p>
         <Delta value={delta} trend={trend} />
       </div>
     </div>
@@ -151,50 +145,50 @@ export function HoldingRowExpandable({
   afterHoursChange?: string;
 }) {
   return (
-    <div className="flex w-full flex-col gap-2 py-3">
-      <div className="flex min-h-11 items-center gap-2">
+    <div className="flex w-full flex-col gap-1.5 py-2.5">
+      <div className="flex min-h-[40px] items-center gap-1.5">
         <button
           type="button"
           aria-expanded={expanded}
           aria-label={expanded ? "Zbaliť loty" : "Rozbaliť loty"}
           onClick={onToggle}
-          className="inline-flex size-8 items-center justify-center text-[var(--rd-text-tertiary)]"
+          className="inline-flex size-[30px] items-center justify-center text-[var(--rd-text-tertiary)]"
         >
-          {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+          {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
         </button>
         <Avatar ticker={ticker} />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {onTickerClick ? (
-              <button type="button" onClick={onTickerClick} className="font-mono text-sm font-medium leading-5 text-[var(--rd-text-primary)]">
+              <button type="button" onClick={onTickerClick} className="rd-type-data text-[var(--rd-text-primary)]">
                 {ticker}
               </button>
             ) : (
-              <p className="font-mono text-sm font-medium leading-5 text-[var(--rd-text-primary)]">{ticker}</p>
+              <p className="rd-type-data text-[var(--rd-text-primary)]">{ticker}</p>
             )}
-            <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">{qty}</p>
+            <p className="rd-type-body-sm text-[var(--rd-text-tertiary)]">{qty}</p>
           </div>
-          <p className="truncate text-xs leading-4 text-[var(--rd-text-secondary)]">{name}</p>
+          <p className="rd-type-body-sm truncate text-[var(--rd-text-secondary)]">{name}</p>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          <p className="font-mono text-sm font-medium leading-5 text-[var(--rd-text-primary)]">{value}</p>
+        <div className="flex shrink-0 flex-col items-end gap-0.5">
+          <p className="rd-type-data text-[var(--rd-text-primary)]">{value}</p>
           <Delta value={delta} trend={trend} />
         </div>
       </div>
-      <div className="flex items-center justify-between gap-2 pl-6">
-        <div className="flex min-w-0 items-center gap-3 text-xs leading-4 text-[var(--rd-text-tertiary)]">
+      <div className="flex items-center justify-between gap-2 pl-8">
+        <div className="flex min-w-0 items-center gap-2 rd-type-body-sm text-[var(--rd-text-tertiary)]">
           {avg ? (
             <span>
-              Priem <span className="font-mono text-[10px] leading-3 text-[var(--rd-text-primary)]">{avg}</span>
+              Priem <span className="rd-type-data-micro text-[var(--rd-text-primary)]">{avg}</span>
             </span>
           ) : null}
           {price ? (
             <span>
-              Cena <span className="font-mono text-[10px] leading-3 text-[var(--rd-text-primary)]">{price}</span>{" "}
+              Cena <span className="rd-type-data-micro text-[var(--rd-text-primary)]">{price}</span>{" "}
               {dayChange ? (
                 <span
                   className={cn(
-                    "font-mono text-[10px] leading-3",
+                    "rd-type-data-micro",
                     dayTrend === "Down" ? "text-[var(--rd-loss)]" : dayTrend === "Up" ? "text-[var(--rd-profit)]" : "text-[var(--rd-text-tertiary)]",
                   )}
                 >
@@ -205,12 +199,12 @@ export function HoldingRowExpandable({
           ) : null}
         </div>
         {pl ? (
-          <p className={cn("shrink-0 font-mono text-xs font-medium leading-4", plTrend === "Down" ? "text-[var(--rd-loss)]" : "text-[var(--rd-profit)]")}>
+          <p className={cn("rd-type-data-sm shrink-0", plTrend === "Down" ? "text-[var(--rd-loss)]" : "text-[var(--rd-profit)]")}>
             {pl}
           </p>
         ) : null}
       </div>
-      <AfterHours price={afterHoursPrice} change={afterHoursChange} className="pl-6" />
+      <AfterHours price={afterHoursPrice} change={afterHoursChange} className="pl-8" />
       {expanded && lots.length > 0 ? (
         <div className="pl-2">
           {lots.map((lot) => (
@@ -252,36 +246,41 @@ export function HoldingRowSimple({
   afterHoursChange?: string;
 }) {
   return (
-    <div className="flex w-full flex-col gap-2 py-3">
-      <div className="flex min-h-11 items-center gap-2">
+    <div className="flex w-full flex-col gap-1.5 py-2.5">
+      <div className="flex min-h-[40px] items-center gap-1.5">
         <button
           type="button"
           aria-expanded={expanded}
           aria-label={expanded ? "Zbaliť loty" : "Rozbaliť loty"}
           onClick={onToggle}
-          className="inline-flex size-8 items-center justify-center text-[var(--rd-text-tertiary)]"
+          className="inline-flex size-[30px] items-center justify-center text-[var(--rd-text-tertiary)]"
         >
-          {expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+          {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
         </button>
         <Avatar ticker={ticker} />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p className="min-w-0 flex-1 truncate text-sm font-semibold leading-5 text-[var(--rd-text-primary)]">{name}</p>
+          <div className="flex items-center gap-1.5">
+            <p className="rd-type-body-strong min-w-0 flex-1 truncate text-[var(--rd-text-primary)]">{name}</p>
             <Badge label={assetType} />
-            <p className="shrink-0 font-mono text-sm font-medium leading-5 text-[var(--rd-text-primary)]">{value}</p>
+            <p className="rd-type-data shrink-0 text-[var(--rd-text-primary)]">{value}</p>
           </div>
-          <div className="mt-1 flex items-center gap-1 font-mono text-[10px] leading-3">
-            <p className="min-w-0 flex-1 truncate text-[var(--rd-text-secondary)]">{lot}</p>
+          <div className="mt-0.5 flex items-center gap-1">
+            <p className="rd-type-data-micro min-w-0 flex-1 truncate text-[var(--rd-text-secondary)]">{lot}</p>
             {dayChange ? (
-              <p className={dayTrend === "Down" ? "text-[var(--rd-loss)]" : dayTrend === "Up" ? "text-[var(--rd-profit)]" : "text-[var(--rd-text-secondary)]"}>
+              <p
+                className={cn(
+                  "rd-type-data-micro",
+                  dayTrend === "Down" ? "text-[var(--rd-loss)]" : dayTrend === "Up" ? "text-[var(--rd-profit)]" : "text-[var(--rd-text-secondary)]",
+                )}
+              >
                 {dayChange}
               </p>
             ) : null}
-            {pl ? <p className="text-[var(--rd-profit)]">{pl}</p> : null}
+            {pl ? <p className="rd-type-data-micro text-[var(--rd-profit)]">{pl}</p> : null}
           </div>
         </div>
       </div>
-      <AfterHours price={afterHoursPrice} change={afterHoursChange} className="pl-[68px]" />
+      <AfterHours price={afterHoursPrice} change={afterHoursChange} className="pl-[58px]" />
       {expanded && lots.length > 0 ? (
         <div className="pl-2">
           {lots.map((item) => (

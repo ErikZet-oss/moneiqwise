@@ -46,7 +46,7 @@ export function TickerTape() {
       return (
         <div
           key={`${row.yahoo}${duplicate ? "-dup" : ""}`}
-          className="flex shrink-0 items-center gap-2 font-mono text-[10px] leading-3"
+          className="rd-type-data-micro flex shrink-0 items-center gap-1.5"
         >
           <span className="text-[var(--rd-text-tertiary)]">{row.label}</span>
           <span className="text-[var(--rd-text-primary)]">

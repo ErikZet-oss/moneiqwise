@@ -26,7 +26,7 @@ export function TabBar() {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface)] px-2 pt-2 pb-[max(24px,env(safe-area-inset-bottom))]"
+      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface)] px-1.5 pt-1.5 pb-[max(16px,env(safe-area-inset-bottom))]"
       data-testid="redesign-tab-bar"
       aria-label="Hlavná navigácia"
     >
@@ -38,18 +38,18 @@ export function TabBar() {
             key={tab.id}
             type="button"
             onClick={() => setLocation(tab.href)}
-            className="flex min-h-11 flex-1 flex-col items-center gap-1 py-1"
+            className="flex min-h-[40px] flex-1 flex-col items-center gap-0.5 py-1"
             aria-current={isActive ? "page" : undefined}
             data-testid={`tab-${tab.id}`}
           >
             <Icon
-              className={cn("size-[22px]", isActive ? "text-[var(--rd-profit)]" : "text-[var(--rd-text-tertiary)]")}
+              className={cn("size-[18px]", isActive ? "text-[var(--rd-profit)]" : "text-[var(--rd-text-tertiary)]")}
               strokeWidth={1.75}
             />
             <span
               className={cn(
-                "text-xs leading-4",
-                isActive ? "text-[var(--rd-text-primary)]" : "text-[var(--rd-text-tertiary)]",
+                "rd-type-overline normal-case tracking-normal",
+                isActive ? "font-medium text-[var(--rd-text-primary)]" : "font-medium text-[var(--rd-text-tertiary)]",
               )}
             >
               {tab.label}

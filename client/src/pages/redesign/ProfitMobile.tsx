@@ -56,7 +56,7 @@ export default function ProfitMobile() {
   const { formatCurrency: formatCurrencyRaw } = useCurrency();
   const { hideAmounts } = useChartSettings();
   const { portfolios } = usePortfolio();
-  const formatCurrency = (n: number) => (hideAmounts ? "••••••" : formatCurrencyRaw(n));
+  const formatCurrency = (n: number) => (hideAmounts ? "â€˘â€˘â€˘â€˘â€˘â€˘" : formatCurrencyRaw(n));
   const visibleIds = useMemo(() => portfolios.map((p) => p.id), [portfolios]);
   const [appliedIds, setAppliedIds] = useState<string[]>(() => readStoredIds() ?? []);
   const [draftIds, setDraftIds] = useState<string[]>([]);
@@ -84,10 +84,10 @@ export default function ProfitMobile() {
   const allSelected = appliedIds.length === visibleIds.length && visibleIds.length > 0;
   const portfolioParam = allSelected ? "all" : appliedIds.join(",");
   const label = allSelected
-    ? "Všetky portfóliá"
+    ? "VĹˇetky portfĂłliĂˇ"
     : appliedIds.length === 1
-      ? portfolios.find((p) => p.id === appliedIds[0])?.name || "Portfólio"
-      : `${appliedIds.length} portfóliá`;
+      ? portfolios.find((p) => p.id === appliedIds[0])?.name || "PortfĂłlio"
+      : `${appliedIds.length} portfĂłliĂˇ`;
 
   const { data: perf, isPending } = useQuery<PerformanceResponse>({
     queryKey: ["/api/portfolio-performance", portfolioParam, "v7-twr-spx"],
@@ -120,7 +120,7 @@ export default function ProfitMobile() {
     <div className="bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
       <TopBar
         overline={label}
-        title="Analýza zisku"
+        title="AnalĂ˝za zisku"
         onOverlineClick={() => {
           setDraftIds(appliedIds);
           setPickerOpen(true);
@@ -128,11 +128,11 @@ export default function ProfitMobile() {
       />
       <PageBody>
         <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">
-          Výkonnosť podľa rokov a mesiacov. Ročný prehľad s porovnaním voči S&P 500.
+          VĂ˝konnosĹĄ podÄľa rokov a mesiacov. RoÄŤnĂ˝ prehÄľad s porovnanĂ­m voÄŤi S&P 500.
         </p>
         <div className="flex gap-1">
           <Chip active={mode === "simple"} onClick={() => setMode("simple")}>
-            Jednoduchý %
+            JednoduchĂ˝ %
           </Chip>
           <Chip active={mode === "twr"} onClick={() => setMode("twr")}>
             TWR %
@@ -140,24 +140,24 @@ export default function ProfitMobile() {
         </div>
 
         <Card>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--rd-text-tertiary)]">
-            Priemerné ročné zhodnotenie
+          <p className="rd-type-overline text-[var(--rd-text-tertiary)]">
+            PriemernĂ© roÄŤnĂ© zhodnotenie
           </p>
-          <p className="mt-2 font-mono text-[28px] font-bold leading-[34px] text-[var(--rd-profit)]">
-            {avg != null ? signedPct(avg) : "—"}
+          <p className="mt-2 rd-type-display-lg text-[var(--rd-profit)]">
+            {avg != null ? signedPct(avg) : "â€”"}
           </p>
           <p className="mt-1 text-xs text-[var(--rd-text-tertiary)]">
-            p.a. za {perf?.totals?.yearsSpan != null ? `${perf.totals.yearsSpan.toFixed(1)} r.` : "—"}
+            p.a. za {perf?.totals?.yearsSpan != null ? `${perf.totals.yearsSpan.toFixed(1)} r.` : "â€”"}
           </p>
         </Card>
 
         {isPending ? (
-          <p className="text-sm text-[var(--rd-text-tertiary)]">Načítavam…</p>
+          <p className="text-sm text-[var(--rd-text-tertiary)]">NaÄŤĂ­tavamâ€¦</p>
         ) : years.length === 0 ? (
-          <EmptyState title="Zatiaľ bez výkonnosti" body="Pridaj transakcie alebo vyber iné portfólio." />
+          <EmptyState title="ZatiaÄľ bez vĂ˝konnosti" body="Pridaj transakcie alebo vyber inĂ© portfĂłlio." />
         ) : (
           <Card className="gap-0 p-0">
-            <div className="grid grid-cols-[1fr_1.1fr_0.8fr_0.8fr] gap-2 border-b border-[var(--rd-border-subtle)] px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--rd-text-tertiary)]">
+            <div className="grid grid-cols-[1fr_1.1fr_0.8fr_0.8fr] gap-2 border-b border-[var(--rd-border-subtle)] px-4 py-3 rd-type-overline text-[var(--rd-text-tertiary)]">
               <span>Obdobie</span>
               <span className="text-right">Zisk</span>
               <span className="text-right">%</span>
@@ -175,10 +175,10 @@ export default function ProfitMobile() {
                     {signedMoney(formatCurrency, row.profit)}
                   </span>
                   <span className="text-right font-mono text-xs text-[var(--rd-text-secondary)]">
-                    {pct != null ? signedPct(pct) : "—"}
+                    {pct != null ? signedPct(pct) : "â€”"}
                   </span>
                   <span className="text-right font-mono text-xs text-[var(--rd-text-tertiary)]">
-                    {row.sp500Pct != null ? signedPct(row.sp500Pct) : "—"}
+                    {row.sp500Pct != null ? signedPct(row.sp500Pct) : "â€”"}
                   </span>
                 </div>
               );
@@ -187,7 +187,7 @@ export default function ProfitMobile() {
         )}
 
         <section className="space-y-3">
-          <h3 className="text-[17px] font-semibold leading-6">Realizovaný zisk/strata</h3>
+          <h3 className="rd-type-h2">RealizovanĂ˝ zisk/strata</h3>
           <div className="grid grid-cols-2 gap-3">
             <StatTile label="Dnes" value={formatCurrency(realized?.todayEur ?? 0)} tone={statTone(realized?.todayEur ?? 0)} />
             <StatTile label="Mesiac" value={formatCurrency(realized?.monthEur ?? 0)} tone={statTone(realized?.monthEur ?? 0)} />
@@ -195,14 +195,14 @@ export default function ProfitMobile() {
             <StatTile label="Celkovo" value={formatCurrency(realized?.totalRealizedEur ?? 0)} tone={statTone(realized?.totalRealizedEur ?? 0)} />
           </div>
           <Card className="gap-0 p-0">
-            <p className="px-4 py-3 text-[15px] font-semibold">Podľa tickerov</p>
+            <p className="px-4 py-3 text-[15px] font-semibold">PodÄľa tickerov</p>
             {(realized?.byTicker ?? []).slice(0, 12).map((row) => (
               <div key={row.ticker} className="flex items-center gap-3 border-t border-[var(--rd-border-subtle)] px-4 py-3">
                 <Avatar ticker={row.ticker} />
                 <div className="min-w-0 flex-1">
                   <p className="font-mono text-sm font-medium">{row.ticker}</p>
                   <p className="truncate text-xs text-[var(--rd-text-tertiary)]">
-                    {row.sellCount ?? "—"}× predaj · {row.companyName || row.ticker}
+                    {row.sellCount ?? "â€”"}Ă— predaj Â· {row.companyName || row.ticker}
                   </p>
                 </div>
                 <div className="text-right">
@@ -210,7 +210,7 @@ export default function ProfitMobile() {
                     {signedMoney(formatCurrency, row.realizedEur)}
                   </p>
                   <p className="font-mono text-xs text-[var(--rd-text-tertiary)]">
-                    {row.realizedPct != null ? signedPct(row.realizedPct) : "—"}
+                    {row.realizedPct != null ? signedPct(row.realizedPct) : "â€”"}
                   </p>
                 </div>
               </div>
@@ -219,7 +219,7 @@ export default function ProfitMobile() {
         </section>
       </PageBody>
 
-      <Dialog open={pickerOpen} title="Portfóliá vo výkonnosti" onClose={() => setPickerOpen(false)}>
+      <Dialog open={pickerOpen} title="PortfĂłliĂˇ vo vĂ˝konnosti" onClose={() => setPickerOpen(false)}>
         <div className="mt-3 flex flex-col gap-1">
           {portfolios.map((p) => {
             const on = draftIds.includes(p.id);
@@ -227,14 +227,14 @@ export default function ProfitMobile() {
               <button
                 key={p.id}
                 type="button"
-                className="flex min-h-11 items-center justify-between rounded-[var(--rd-radius-sm)] px-2 text-left text-sm"
+                className="flex min-h-[40px] items-center justify-between rounded-[var(--rd-radius-sm)] px-2 text-left text-sm"
                 onClick={() =>
                   setDraftIds((prev) => (on ? prev.filter((id) => id !== p.id) : [...prev, p.id]))
                 }
               >
                 <span>{p.name}</span>
                 <span className={on ? "text-[var(--rd-profit)]" : "text-[var(--rd-text-tertiary)]"}>
-                  {on ? "✓" : ""}
+                  {on ? "âś“" : ""}
                 </span>
               </button>
             );
@@ -242,14 +242,14 @@ export default function ProfitMobile() {
           <div className="mt-3 flex gap-2">
             <button
               type="button"
-              className="flex-1 min-h-11 rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-subtle)] text-sm"
+              className="flex-1 min-h-[40px] rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-subtle)] text-sm"
               onClick={() => setPickerOpen(false)}
             >
-              Zrušiť
+              ZruĹˇiĹĄ
             </button>
             <button
               type="button"
-              className="flex-1 min-h-11 rounded-[var(--rd-radius-sm)] bg-[var(--rd-profit)] text-sm font-semibold text-[var(--rd-text-on-brand)]"
+              className="flex-1 min-h-[40px] rounded-[var(--rd-radius-sm)] bg-[var(--rd-profit)] text-sm font-semibold text-[var(--rd-text-on-brand)]"
               onClick={() => {
                 setAppliedIds(draftIds.length > 0 ? draftIds : visibleIds);
                 setPickerOpen(false);

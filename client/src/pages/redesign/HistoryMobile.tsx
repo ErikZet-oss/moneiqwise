@@ -29,12 +29,12 @@ import {
 } from "./mobileChrome";
 
 const TYPE_LABEL: Record<string, string> = {
-  BUY: "Nákup",
+  BUY: "NĂˇkup",
   SELL: "Predaj",
   DIVIDEND: "Div",
-  TAX: "Daň",
+  TAX: "DaĹ",
   DEPOSIT: "Vklad",
-  WITHDRAWAL: "Výber",
+  WITHDRAWAL: "VĂ˝ber",
 };
 
 const TYPE_TONE: Record<string, BadgeTone> = {
@@ -47,12 +47,12 @@ const TYPE_TONE: Record<string, BadgeTone> = {
 };
 
 const TYPE_FILTERS = [
-  { value: "all", label: "Všetky" },
-  { value: "BUY", label: "Nákupy" },
+  { value: "all", label: "VĹˇetky" },
+  { value: "BUY", label: "NĂˇkupy" },
   { value: "SELL", label: "Predaje" },
   { value: "DIVIDEND", label: "Div" },
   { value: "DEPOSIT", label: "Vklady" },
-  { value: "WITHDRAWAL", label: "Výbery" },
+  { value: "WITHDRAWAL", label: "VĂ˝bery" },
   { value: "TAX", label: "Dane" },
 ] as const;
 
@@ -74,8 +74,8 @@ export default function HistoryMobile() {
   const { getQueryParam, isAllPortfolios, selectedPortfolio } = usePortfolio();
   const { hideAmounts, toggleHideAmounts } = useChartSettings();
   const portfolioParam = getQueryParam();
-  const overline = isAllPortfolios ? "Všetky portfóliá" : selectedPortfolio?.name || "Portfólio";
-  const mask = (s: string) => (hideAmounts ? "••••••" : s);
+  const overline = isAllPortfolios ? "VĹˇetky portfĂłliĂˇ" : selectedPortfolio?.name || "PortfĂłlio";
+  const mask = (s: string) => (hideAmounts ? "â€˘â€˘â€˘â€˘â€˘â€˘" : s);
 
   const [typeFilter, setTypeFilter] = useState("all");
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
@@ -112,7 +112,7 @@ export default function HistoryMobile() {
       return mask(signedMoney(formatCurrency, Math.abs(value)));
     }
     if (tx.type === "BUY" || tx.type === "TAX" || tx.type === "WITHDRAWAL") {
-      return mask(`−${formatCurrency(Math.abs(value))}`);
+      return mask(`â’${formatCurrency(Math.abs(value))}`);
     }
     return mask(formatCurrency(Math.abs(value)));
   };
@@ -167,18 +167,18 @@ export default function HistoryMobile() {
     <div className="bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
       <TopBar
         overline={overline}
-        title="História"
+        title="HistĂłria"
         onOverlineClick={() => setPickerOpen(true)}
         trailing={
           <div className="flex items-center gap-1">
             <HelpButton
-              title="História"
-              body="Zoznam nákupov, predajov, dividend a peňažných pohybov. Filter podľa typu alebo tickera; sumy môžeš skryť okom."
+              title="HistĂłria"
+              body="Zoznam nĂˇkupov, predajov, dividend a peĹaĹľnĂ˝ch pohybov. Filter podÄľa typu alebo tickera; sumy mĂ´ĹľeĹˇ skryĹĄ okom."
             />
             <button
               type="button"
-              aria-label={hideAmounts ? "Zobraziť sumy" : "Skryť sumy"}
-              className="inline-flex size-9 items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)]"
+              aria-label={hideAmounts ? "ZobraziĹĄ sumy" : "SkryĹĄ sumy"}
+              className="inline-flex size-[30px] items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)]"
               onClick={() => toggleHideAmounts()}
             >
               {hideAmounts ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
@@ -193,7 +193,7 @@ export default function HistoryMobile() {
         <div className="flex gap-2">
           <Button className="flex-1" onClick={() => setAddOpen(true)}>
             <PlusCircle className="size-4" />
-            Pridať
+            PridaĹĄ
           </Button>
           <Button
             variant="Secondary"
@@ -215,9 +215,9 @@ export default function HistoryMobile() {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Hľadať ticker alebo názov…"
+            placeholder="HÄľadaĹĄ ticker alebo nĂˇzovâ€¦"
             className="pl-9"
-            aria-label="Hľadať transakcie"
+            aria-label="HÄľadaĹĄ transakcie"
             mono={false}
           />
         </div>
@@ -232,38 +232,38 @@ export default function HistoryMobile() {
 
         <div className="flex items-center justify-between gap-2">
           <p className="text-xs text-[var(--rd-text-tertiary)]">
-            {filtered.length} z {transactions.length} · netto {mask(signedMoney(formatCurrency, periodTotal))}
+            {filtered.length} z {transactions.length} Â· netto {mask(signedMoney(formatCurrency, periodTotal))}
           </p>
           <div className="flex gap-1">
             <Chip active={sortDir === "desc"} onClick={() => setSortDir("desc")}>
-              Najnovšie
+              NajnovĹˇie
             </Chip>
             <Chip active={sortDir === "asc"} onClick={() => setSortDir("asc")}>
-              Najstaršie
+              NajstarĹˇie
             </Chip>
           </div>
         </div>
 
         {isPending ? (
-          <p className="text-sm text-[var(--rd-text-tertiary)]">Načítavam…</p>
+          <p className="text-sm text-[var(--rd-text-tertiary)]">NaÄŤĂ­tavamâ€¦</p>
         ) : groups.length === 0 ? (
           <EmptyState
-            title="Žiadne transakcie"
-            body="Pridaj nákup, alebo importuj CSV/Excel z brokera."
-            actionLabel="Importovať"
+            title="Ĺ˝iadne transakcie"
+            body="Pridaj nĂˇkup, alebo importuj CSV/Excel z brokera."
+            actionLabel="ImportovaĹĄ"
             onAction={() => setLocation("/import")}
           />
         ) : (
           groups.map(([month, rows]) => (
             <Card key={month} className="gap-0 p-0">
               <div className="flex items-baseline justify-between gap-2 px-4 pb-1 pt-4">
-                <h3 className="text-[15px] font-semibold leading-5">{month}</h3>
+                <h3 className="rd-type-h2">{month}</h3>
                 <p className="font-mono text-xs text-[var(--rd-text-tertiary)]">{rows.length}</p>
               </div>
               <div className="divide-y divide-[var(--rd-border-subtle)] px-4">
                 {rows.map((tx) => {
-                  const ticker = tx.ticker === CASH_FLOW_TICKER ? "CASH" : tx.ticker || "—";
-                  const meta = `${format(new Date(tx.transactionDate), "d. MMM yyyy", { locale: sk })} · ${formatShareQuantitySafe(tx.shares)} ks`;
+                  const ticker = tx.ticker === CASH_FLOW_TICKER ? "CASH" : tx.ticker || "â€”";
+                  const meta = `${format(new Date(tx.transactionDate), "d. MMM yyyy", { locale: sk })} Â· ${formatShareQuantitySafe(tx.shares)} ks`;
                   return (
                     <button
                       key={tx.id}
@@ -292,7 +292,7 @@ export default function HistoryMobile() {
         )}
       </PageBody>
 
-      <Dialog open={addOpen} title="Nová transakcia" body="Pridajte nákup alebo inú transakciu do portfólia." onClose={() => setAddOpen(false)}>
+      <Dialog open={addOpen} title="NovĂˇ transakcia" body="Pridajte nĂˇkup alebo inĂş transakciu do portfĂłlia." onClose={() => setAddOpen(false)}>
         <div className="mt-3 max-h-[60vh] overflow-y-auto">
           <AddTransactionForm embed onSuccessSubmit={() => setAddOpen(false)} />
         </div>
@@ -300,7 +300,7 @@ export default function HistoryMobile() {
 
       <Dialog
         open={!!selected}
-        title={selected ? `${TYPE_LABEL[selected.type] || selected.type} · ${selected.ticker === CASH_FLOW_TICKER ? "CASH" : selected.ticker}` : "Detail"}
+        title={selected ? `${TYPE_LABEL[selected.type] || selected.type} Â· ${selected.ticker === CASH_FLOW_TICKER ? "CASH" : selected.ticker}` : "Detail"}
         onClose={() => setSelected(null)}
       >
         {selected ? (
@@ -312,19 +312,19 @@ export default function HistoryMobile() {
               <p className="text-[var(--rd-text-primary)]">{selected.companyName}</p>
             ) : null}
             <div className="space-y-1 font-mono text-xs">
-              <p>Suma · {amountFor(selected)}</p>
+              <p>Suma Â· {amountFor(selected)}</p>
               <p>
-                Cena ·{" "}
+                Cena Â·{" "}
                 {selected.pricePerShare
                   ? mask(formatCurrency(convertPrice(parseFloat(selected.pricePerShare), txCurrency(selected))))
-                  : "—"}
+                  : "â€”"}
               </p>
-              <p>Množstvo · {formatShareQuantitySafe(selected.shares)} ks</p>
+              <p>MnoĹľstvo Â· {formatShareQuantitySafe(selected.shares)} ks</p>
               <p>
-                Poplatok ·{" "}
+                Poplatok Â·{" "}
                 {mask(formatCurrency(convertPrice(parseFloat(selected.commission || "0"), txCurrency(selected))))}
               </p>
-              <p>Mena · {(selected.currency || "EUR").toUpperCase()}</p>
+              <p>Mena Â· {(selected.currency || "EUR").toUpperCase()}</p>
             </div>
             {selected.ticker && selected.ticker !== CASH_FLOW_TICKER ? (
               <Button
@@ -336,7 +336,7 @@ export default function HistoryMobile() {
                   setLocation(`/asset/${encodeURIComponent(t)}`);
                 }}
               >
-                Otvoriť aktívum
+                OtvoriĹĄ aktĂ­vum
               </Button>
             ) : null}
           </div>

@@ -47,32 +47,32 @@ export function WatchlistCard({
   return (
     <article
       className={cn(
-        "flex w-full flex-col gap-3 overflow-hidden rounded-[var(--rd-radius-md)] border bg-[var(--rd-bg-surface)] p-3",
+        "flex w-full flex-col gap-2 overflow-hidden rounded-[var(--rd-radius-md)] border bg-[var(--rd-bg-surface)] p-3",
         border,
-        view === "Compact" && "gap-0 py-3",
+        view === "Compact" && "gap-0 py-2.5",
         className,
       )}
     >
-      <div className="flex min-h-11 items-center gap-2">
+      <div className="flex min-h-[40px] items-center gap-1.5">
         {view === "Detailed" ? (
-          <GripVertical className="size-5 shrink-0 text-[var(--rd-text-tertiary)]" aria-hidden />
+          <GripVertical className="size-4 shrink-0 text-[var(--rd-text-tertiary)]" aria-hidden />
         ) : null}
         <Avatar ticker={ticker} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1">
             {onOpen ? (
-              <button type="button" onClick={onOpen} className="inline-flex items-center gap-1 font-mono text-sm font-medium leading-5 text-[var(--rd-text-primary)]">
+              <button type="button" onClick={onOpen} className="rd-type-data inline-flex items-center gap-1 text-[var(--rd-text-primary)]">
                 {ticker}
-                <ExternalLink className="size-3 text-[var(--rd-text-tertiary)]" aria-hidden />
+                <ExternalLink className="size-2.5 text-[var(--rd-text-tertiary)]" aria-hidden />
               </button>
             ) : (
-              <p className="font-mono text-sm font-medium leading-5 text-[var(--rd-text-primary)]">{ticker}</p>
+              <p className="rd-type-data text-[var(--rd-text-primary)]">{ticker}</p>
             )}
           </div>
-          <p className="truncate text-xs leading-4 text-[var(--rd-text-secondary)]">{name}</p>
+          <p className="rd-type-body-sm truncate text-[var(--rd-text-secondary)]">{name}</p>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          <p className={cn("font-mono font-medium text-[var(--rd-text-primary)]", view === "Detailed" ? "text-[17px] leading-6" : "text-sm leading-5")}>
+        <div className="flex shrink-0 flex-col items-end gap-0.5">
+          <p className={cn(view === "Detailed" ? "rd-type-data-lg" : "rd-type-data", "text-[var(--rd-text-primary)]")}>
             {price}
           </p>
           <Delta value={delta} trend={trend} />
@@ -80,11 +80,9 @@ export function WatchlistCard({
       </div>
       {view === "Detailed" ? (
         <>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-semibold uppercase leading-[14px] tracking-[0.08em] text-[var(--rd-text-tertiary)]">
-              52W
-            </span>
-            <span className="font-mono text-[10px] leading-3 text-[var(--rd-text-secondary)]">{low}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="rd-type-overline text-[var(--rd-text-tertiary)]">52W</span>
+            <span className="rd-type-data-micro text-[var(--rd-text-secondary)]">{low}</span>
             <span className="relative h-1.5 min-w-0 flex-1 rounded-full bg-[var(--rd-bg-surface-hover)]">
               <span
                 className="absolute inset-y-0 left-0 rounded-full"
@@ -94,23 +92,23 @@ export function WatchlistCard({
                 }}
               />
               <span
-                className="absolute top-1/2 size-2 -translate-y-1/2 rounded-full bg-[var(--rd-text-primary)]"
-                style={{ left: `calc(${marker} - 4px)` }}
+                className="absolute top-1/2 size-1.5 -translate-y-1/2 rounded-full bg-[var(--rd-text-primary)]"
+                style={{ left: `calc(${marker} - 3px)` }}
               />
             </span>
-            <span className="font-mono text-[10px] leading-3 text-[var(--rd-text-secondary)]">{high}</span>
-            <span className="font-mono text-[10px] leading-3 text-[var(--rd-text-primary)]">{Math.round(clamped)}%</span>
+            <span className="rd-type-data-micro text-[var(--rd-text-secondary)]">{high}</span>
+            <span className="rd-type-data-micro text-[var(--rd-text-primary)]">{Math.round(clamped)}%</span>
           </div>
-          <div className="flex items-center gap-3 text-xs leading-4">
+          <div className="flex items-center gap-2 rd-type-body-sm">
             <span className="text-[var(--rd-text-tertiary)]">
-              P/E <span className="font-mono font-medium text-[var(--rd-text-primary)]">{pe ?? "—"}</span>
+              P/E <span className="rd-type-data-sm text-[var(--rd-text-primary)]">{pe ?? "—"}</span>
             </span>
             <span className="text-[var(--rd-text-tertiary)]">
-              Div. <span className="font-mono font-medium text-[var(--rd-text-primary)]">{dividend ?? "—"}</span>
+              Div. <span className="rd-type-data-sm text-[var(--rd-text-primary)]">{dividend ?? "—"}</span>
             </span>
             <span className="ml-auto inline-flex items-center gap-1 text-[var(--rd-text-tertiary)]">
-              <Calendar className="size-3" aria-hidden />
-              Earnings <span className="font-mono font-medium text-[var(--rd-text-primary)]">{earnings ?? "—"}</span>
+              <Calendar className="size-2.5" aria-hidden />
+              Earnings <span className="rd-type-data-sm text-[var(--rd-text-primary)]">{earnings ?? "—"}</span>
             </span>
           </div>
         </>

@@ -18,7 +18,7 @@ export function TopBar({
   return (
     <header
       className={cn(
-        "flex items-center gap-3 bg-[var(--rd-bg-base)] px-4 py-3",
+        "flex items-center gap-2 bg-[var(--rd-bg-base)] px-[var(--rd-page-gutter)] py-2.5",
         className,
       )}
     >
@@ -28,20 +28,16 @@ export function TopBar({
             <button
               type="button"
               onClick={onOverlineClick}
-              className="mb-0.5 inline-flex items-center gap-1 text-[11px] font-semibold uppercase leading-[14px] tracking-[0.08em] text-[var(--rd-text-tertiary)]"
+              className="rd-type-overline mb-0.5 inline-flex items-center gap-1 text-[var(--rd-text-tertiary)]"
             >
               {overline}
               <ChevronDown className="size-3" aria-hidden />
             </button>
           ) : (
-            <p className="mb-0.5 text-[11px] font-semibold uppercase leading-[14px] tracking-[0.08em] text-[var(--rd-text-tertiary)]">
-              {overline}
-            </p>
+            <p className="rd-type-overline mb-0.5 text-[var(--rd-text-tertiary)]">{overline}</p>
           )
         ) : null}
-        <h1 className="truncate text-[22px] font-bold leading-7 tracking-[-0.01em] text-[var(--rd-text-primary)]">
-          {title}
-        </h1>
+        <h1 className="rd-type-h1 truncate text-[var(--rd-text-primary)]">{title}</h1>
       </div>
       {trailing}
     </header>

@@ -23,27 +23,27 @@ const ASSET_TYPE_LABELS: Record<AssetType, string> = {
   DLHOPIS: "Dlhopis",
   KOMODITA: "Komodita",
   FOND: "Fond",
-  HOTOVOST: "Hotovosť",
-  INE: "Iné",
+  HOTOVOST: "HotovosĹĄ",
+  INE: "InĂ©",
 };
 
 const SECTOR_OPTIONS = [
-  "Technológie",
+  "TechnolĂłgie",
   "Financie",
-  "Zdravotníctvo",
+  "ZdravotnĂ­ctvo",
   "Priemysel",
   "Energetika",
-  "Nehnuteľnosti",
-  "Komunikácie",
-  "Spotrebný tovar - cyklický",
-  "Spotrebný tovar - defenzívny",
-  "Materiály",
+  "NehnuteÄľnosti",
+  "KomunikĂˇcie",
+  "SpotrebnĂ˝ tovar - cyklickĂ˝",
+  "SpotrebnĂ˝ tovar - defenzĂ­vny",
+  "MateriĂˇly",
   "Utility",
-  "Hotovosť",
-  "Nezaradené",
+  "HotovosĹĄ",
+  "NezaradenĂ©",
 ];
 
-const COUNTRY_OPTIONS = ["USA", "Európa", "Ázia", "Južná Amerika"];
+const COUNTRY_OPTIONS = ["USA", "EurĂłpa", "Ăzia", "JuĹľnĂˇ Amerika"];
 
 function aggregate(rows: Slice[]): Slice[] {
   const map = new Map<string, number>();
@@ -73,7 +73,7 @@ function DonutCard({
 }) {
   const top = slices.slice(0, 5);
   const rest = slices.slice(5).reduce((sum, slice) => sum + slice.value, 0);
-  const chart = rest > 0 ? [...top, { name: "Ostatné", value: rest }] : top;
+  const chart = rest > 0 ? [...top, { name: "OstatnĂ©", value: rest }] : top;
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? slices : chart;
   const label = (value: number) =>
@@ -81,10 +81,10 @@ function DonutCard({
 
   return (
     <Card>
-      <p className="text-[17px] font-semibold leading-6">{title}</p>
+      <p className="rd-type-h2">{title}</p>
       <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">{subtitle}</p>
       {chart.length === 0 ? (
-        <p className="text-xs text-[var(--rd-text-secondary)]">Zatiaľ nie je čo rozložiť.</p>
+        <p className="text-xs text-[var(--rd-text-secondary)]">ZatiaÄľ nie je ÄŤo rozloĹľiĹĄ.</p>
       ) : (
         <div className="flex items-center gap-3">
           <div className="relative h-36 w-36 shrink-0">
@@ -115,7 +115,7 @@ function DonutCard({
       )}
       {slices.length > 5 ? (
         <button type="button" onClick={() => setExpanded((prev) => !prev)} className="self-start text-[13px] font-medium text-[var(--rd-profit)]">
-          {expanded ? "Zobraziť menej" : `+${slices.length - 5} ďalších`}
+          {expanded ? "ZobraziĹĄ menej" : `+${slices.length - 5} ÄŹalĹˇĂ­ch`}
         </button>
       ) : null}
     </Card>
@@ -131,8 +131,8 @@ export default function AllocationMobile() {
   const [mode, setMode] = useState<"percent" | "value">("percent");
   const [editorRows, setEditorRows] = useState<Record<string, EditorRow>>({});
   const portfolioParam = getQueryParam();
-  const mask = (value: string) => (hideAmounts ? "••••••" : value);
-  const overline = isAllPortfolios ? "Všetky portfóliá" : selectedPortfolio?.name ?? "Portfólio";
+  const mask = (value: string) => (hideAmounts ? "â€˘â€˘â€˘â€˘â€˘â€˘" : value);
+  const overline = isAllPortfolios ? "VĹˇetky portfĂłliĂˇ" : selectedPortfolio?.name ?? "PortfĂłlio";
 
   const { data: holdings, isLoading: holdingsLoading } = useQuery<Holding[]>({
     queryKey: ["/api/holdings", portfolioParam],
@@ -220,10 +220,10 @@ export default function AllocationMobile() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/stocks/metadata"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stocks/asset-profiles/batch"] });
-      toast({ title: "Uložené", description: "Metadáta aktív boli uložené." });
+      toast({ title: "UloĹľenĂ©", description: "MetadĂˇta aktĂ­v boli uloĹľenĂ©." });
     },
     onError: (err: Error) => {
-      toast({ title: "Chyba", description: err.message || "Nepodarilo sa uložiť metadáta aktíva.", variant: "destructive" });
+      toast({ title: "Chyba", description: err.message || "Nepodarilo sa uloĹľiĹĄ metadĂˇta aktĂ­va.", variant: "destructive" });
     },
   });
 
@@ -241,10 +241,10 @@ export default function AllocationMobile() {
     const tickerValues = new Map<string, number>();
     let total = cashValue > 0.005 ? cashValue : 0;
     if (cashValue > 0.005) {
-      tickerValues.set("Hotovosť", cashValue);
-      sectorRows.push({ name: "Hotovosť", value: cashValue });
-      countryRows.push({ name: "—", value: cashValue });
-      typeRows.push({ name: "Hotovosť", value: cashValue });
+      tickerValues.set("HotovosĹĄ", cashValue);
+      sectorRows.push({ name: "HotovosĹĄ", value: cashValue });
+      countryRows.push({ name: "â€”", value: cashValue });
+      typeRows.push({ name: "HotovosĹĄ", value: cashValue });
     }
     for (const holding of holdings ?? []) {
       const key = holding.ticker.toUpperCase();
@@ -261,18 +261,18 @@ export default function AllocationMobile() {
         key === CASH_INTEREST_TICKER
           ? CASH_INTEREST_DISPLAY_NAME
           : pokemon
-            ? holding.companyName || "Pokémon TCG"
+            ? holding.companyName || "PokĂ©mon TCG"
             : holding.ticker;
       const bucket = isAllPortfolios && pokemon ? POKEMON_GROUP_TICKER : name;
       tickerValues.set(bucket, (tickerValues.get(bucket) ?? 0) + value);
-      const profile = profiles[key] ?? profiles[holding.ticker] ?? { sector: "Neznáme", country: "Neznáme", assetType: "AKCIA" as AssetType };
-      sectorRows.push({ name: profile.sector || "Neznáme", value });
-      countryRows.push({ name: profile.country || "Neznáme", value });
-      typeRows.push({ name: ASSET_TYPE_LABELS[profile.assetType] ?? "Iné", value });
+      const profile = profiles[key] ?? profiles[holding.ticker] ?? { sector: "NeznĂˇme", country: "NeznĂˇme", assetType: "AKCIA" as AssetType };
+      sectorRows.push({ name: profile.sector || "NeznĂˇme", value });
+      countryRows.push({ name: profile.country || "NeznĂˇme", value });
+      typeRows.push({ name: ASSET_TYPE_LABELS[profile.assetType] ?? "InĂ©", value });
     }
     return {
       total,
-      byTicker: Array.from(tickerValues.entries()).map(([name, value]) => ({ name: name === POKEMON_GROUP_TICKER ? "Pokémon TCG" : name, value })).sort((a, b) => b.value - a.value),
+      byTicker: Array.from(tickerValues.entries()).map(([name, value]) => ({ name: name === POKEMON_GROUP_TICKER ? "PokĂ©mon TCG" : name, value })).sort((a, b) => b.value - a.value),
       bySector: aggregate(sectorRows),
       byCountry: aggregate(countryRows),
       byType: aggregate(typeRows),
@@ -281,34 +281,34 @@ export default function AllocationMobile() {
 
   return (
     <div>
-      <TopBar overline={overline} title="Rozloženie" onOverlineClick={() => setPickerOpen(true)} />
+      <TopBar overline={overline} title="RozloĹľenie" onOverlineClick={() => setPickerOpen(true)} />
       <PortfolioSwitcher open={pickerOpen} onClose={() => setPickerOpen(false)} />
       <PageBody>
         <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">
-          Podľa tickerov, sektorov, krajín a typu aktíva. Sektor, krajinu a typ vieš manuálne prepísať nižšie.
+          PodÄľa tickerov, sektorov, krajĂ­n a typu aktĂ­va. Sektor, krajinu a typ vieĹˇ manuĂˇlne prepĂ­saĹĄ niĹľĹˇie.
         </p>
         <div className="flex gap-1">
-          <Chip active={mode === "percent"} onClick={() => setMode("percent")}>Percentá</Chip>
+          <Chip active={mode === "percent"} onClick={() => setMode("percent")}>PercentĂˇ</Chip>
           <Chip active={mode === "value"} onClick={() => setMode("value")}>{`Hodnoty (${currency})`}</Chip>
         </div>
         {holdingsLoading || isLoading ? (
-          <Card><p className="text-sm text-[var(--rd-text-secondary)]">Načítavam rozloženie…</p></Card>
+          <Card><p className="text-sm text-[var(--rd-text-secondary)]">NaÄŤĂ­tavam rozloĹľenieâ€¦</p></Card>
         ) : groups.total <= 0 ? (
-          <EmptyState title="Prázdne rozloženie" body="Po nákupe aktív sa tu zobrazia podiely podľa tickeru, sektoru, krajiny a typu." />
+          <EmptyState title="PrĂˇzdne rozloĹľenie" body="Po nĂˇkupe aktĂ­v sa tu zobrazia podiely podÄľa tickeru, sektoru, krajiny a typu." />
         ) : (
           <>
-            <DonutCard title="Podľa akcií" subtitle="Každý ticker + hotovosť" slices={groups.byTicker} total={groups.total} mode={mode} formatCurrency={formatCurrency} mask={mask} />
-            <DonutCard title="Podľa sektorov" subtitle="Odvetvie podľa Yahoo" slices={groups.bySector} total={groups.total} mode={mode} formatCurrency={formatCurrency} mask={mask} />
-            <DonutCard title="Podľa krajín" subtitle="Krajina sídla emitenta" slices={groups.byCountry} total={groups.total} mode={mode} formatCurrency={formatCurrency} mask={mask} />
-            <DonutCard title="Podľa typu" subtitle="Akcia, ETF, krypto…" slices={groups.byType} total={groups.total} mode={mode} formatCurrency={formatCurrency} mask={mask} />
+            <DonutCard title="PodÄľa akciĂ­" subtitle="KaĹľdĂ˝ ticker + hotovosĹĄ" slices={groups.byTicker} total={groups.total} mode={mode} formatCurrency={formatCurrency} mask={mask} />
+            <DonutCard title="PodÄľa sektorov" subtitle="Odvetvie podÄľa Yahoo" slices={groups.bySector} total={groups.total} mode={mode} formatCurrency={formatCurrency} mask={mask} />
+            <DonutCard title="PodÄľa krajĂ­n" subtitle="Krajina sĂ­dla emitenta" slices={groups.byCountry} total={groups.total} mode={mode} formatCurrency={formatCurrency} mask={mask} />
+            <DonutCard title="PodÄľa typu" subtitle="Akcia, ETF, kryptoâ€¦" slices={groups.byType} total={groups.total} mode={mode} formatCurrency={formatCurrency} mask={mask} />
           </>
         )}
 
         {equityTickers.length > 0 ? (
           <Card>
-            <p className="text-[17px] font-semibold leading-6">Manuálne metadáta aktív</p>
+            <p className="rd-type-h2">ManuĂˇlne metadĂˇta aktĂ­v</p>
             <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">
-              Prepíše sektor, krajinu a typ z Yahoo pre vybraný ticker (prázdne = použije sa Yahoo).
+              PrepĂ­Ĺˇe sektor, krajinu a typ z Yahoo pre vybranĂ˝ ticker (prĂˇzdne = pouĹľije sa Yahoo).
             </p>
             {equityTickers.map((ticker) => {
               const row = editorRows[ticker] ?? { sector: "", country: "", assetType: "" as const };
@@ -323,7 +323,7 @@ export default function AllocationMobile() {
               );
             })}
             <Button onClick={() => saveMetadata.mutate(editorRows)} disabled={saveMetadata.isPending}>
-              {saveMetadata.isPending ? "Ukladám…" : "Uložiť všetko"}
+              {saveMetadata.isPending ? "UkladĂˇmâ€¦" : "UloĹľiĹĄ vĹˇetko"}
             </Button>
           </Card>
         ) : null}

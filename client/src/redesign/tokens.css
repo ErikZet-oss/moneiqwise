@@ -1,4 +1,4 @@
-/* Mobile redesign tokens. Applied only while <html data-mobile-ui="redesign">. */
+/* Mobile redesign tokens. Bound to Figma Foundations (compact type/spacing scale). */
 
 [data-mobile-ui="redesign"] {
   --rd-bg-base: #050607;
@@ -32,24 +32,89 @@
   --rd-chart-5: #f0667e;
   --rd-chart-6: #5c6570;
 
+  /* Size · Spacing — 2 · 4 · 6 · 8 · 12 · 14 · 16 · 24 · 32 */
   --rd-space-2: 2px;
+  --rd-space-3xs: 2px;
   --rd-space-4: 4px;
+  --rd-space-2xs: 4px;
+  --rd-space-6: 6px;
+  --rd-space-xs: 6px;
   --rd-space-8: 8px;
+  --rd-space-sm: 8px;
   --rd-space-12: 12px;
+  --rd-space-md: 12px;
+  --rd-space-14: 14px;
+  --rd-space-lg: 14px;
   --rd-space-16: 16px;
-  --rd-space-20: 20px;
+  --rd-space-xl: 16px;
   --rd-space-24: 24px;
+  --rd-space-2xl: 24px;
   --rd-space-32: 32px;
-  --rd-space-40: 40px;
+  --rd-space-3xl: 32px;
+  /* legacy aliases kept for older classnames */
+  --rd-space-20: 16px;
+  --rd-space-40: 32px;
 
+  /* Radius — xs 6 · sm 8 · md 12 · lg 16 · full */
   --rd-radius-xs: 6px;
-  --rd-radius-sm: 10px;
-  --rd-radius-md: 14px;
-  --rd-radius-lg: 20px;
+  --rd-radius-sm: 8px;
+  --rd-radius-md: 12px;
+  --rd-radius-lg: 16px;
   --rd-radius-full: 999px;
 
   --rd-font-sans: "Inter", sans-serif;
   --rd-font-mono: "JetBrains Mono", monospace;
+
+  /* Type scale (size / line-height) */
+  --rd-text-display-hero: 28px;
+  --rd-leading-display-hero: 32px;
+  --rd-tracking-display-hero: -0.56px;
+
+  --rd-text-display-lg: 22px;
+  --rd-leading-display-lg: 26px;
+  --rd-tracking-display-lg: -0.33px;
+
+  --rd-text-h1: 18px;
+  --rd-leading-h1: 22px;
+  --rd-tracking-h1: -0.18px;
+
+  --rd-text-h2: 15px;
+  --rd-leading-h2: 20px;
+  --rd-tracking-h2: -0.075px;
+
+  --rd-text-h3: 13px;
+  --rd-leading-h3: 18px;
+
+  --rd-text-body: 13px;
+  --rd-leading-body: 18px;
+
+  --rd-text-body-sm: 11px;
+  --rd-leading-body-sm: 14px;
+
+  --rd-text-label: 12px;
+  --rd-leading-label: 16px;
+
+  --rd-text-overline: 10px;
+  --rd-leading-overline: 12px;
+  --rd-tracking-overline: 0.8px;
+
+  --rd-text-data-lg: 15px;
+  --rd-leading-data-lg: 20px;
+  --rd-tracking-data-lg: -0.15px;
+
+  --rd-text-data: 13px;
+  --rd-leading-data: 18px;
+
+  --rd-text-data-sm: 11px;
+  --rd-leading-data-sm: 14px;
+
+  --rd-text-data-micro: 10px;
+  --rd-leading-data-micro: 12px;
+
+  --rd-touch-row: 40px;
+  --rd-touch-icon: 30px;
+  --rd-avatar: 28px;
+  --rd-page-gutter: 12px;
 }
 
 /* Scope color/font to redesign surfaces only — never paint classic UI via <html>. */
@@ -57,5 +122,112 @@
 [data-mobile-ui="redesign"] .rd-landing {
   color: var(--rd-text-primary);
   font-family: var(--rd-font-sans);
+  font-size: var(--rd-text-body);
+  line-height: var(--rd-leading-body);
+  -webkit-font-smoothing: antialiased;
 }
 
+[data-mobile-ui="redesign"] .rd-type-display-hero {
+  font-family: var(--rd-font-mono);
+  font-size: var(--rd-text-display-hero);
+  font-weight: 700;
+  line-height: var(--rd-leading-display-hero);
+  letter-spacing: var(--rd-tracking-display-hero);
+}
+
+[data-mobile-ui="redesign"] .rd-type-display-lg {
+  font-family: var(--rd-font-mono);
+  font-size: var(--rd-text-display-lg);
+  font-weight: 700;
+  line-height: var(--rd-leading-display-lg);
+  letter-spacing: var(--rd-tracking-display-lg);
+}
+
+[data-mobile-ui="redesign"] .rd-type-h1 {
+  font-family: var(--rd-font-sans);
+  font-size: var(--rd-text-h1);
+  font-weight: 700;
+  line-height: var(--rd-leading-h1);
+  letter-spacing: var(--rd-tracking-h1);
+}
+
+[data-mobile-ui="redesign"] .rd-type-h2 {
+  font-family: var(--rd-font-sans);
+  font-size: var(--rd-text-h2);
+  font-weight: 600;
+  line-height: var(--rd-leading-h2);
+  letter-spacing: var(--rd-tracking-h2);
+}
+
+[data-mobile-ui="redesign"] .rd-type-h3 {
+  font-family: var(--rd-font-sans);
+  font-size: var(--rd-text-h3);
+  font-weight: 600;
+  line-height: var(--rd-leading-h3);
+}
+
+[data-mobile-ui="redesign"] .rd-type-body {
+  font-family: var(--rd-font-sans);
+  font-size: var(--rd-text-body);
+  font-weight: 400;
+  line-height: var(--rd-leading-body);
+}
+
+[data-mobile-ui="redesign"] .rd-type-body-strong {
+  font-family: var(--rd-font-sans);
+  font-size: var(--rd-text-body);
+  font-weight: 600;
+  line-height: var(--rd-leading-body);
+}
+
+[data-mobile-ui="redesign"] .rd-type-body-sm {
+  font-family: var(--rd-font-sans);
+  font-size: var(--rd-text-body-sm);
+  font-weight: 400;
+  line-height: var(--rd-leading-body-sm);
+}
+
+[data-mobile-ui="redesign"] .rd-type-label {
+  font-family: var(--rd-font-sans);
+  font-size: var(--rd-text-label);
+  font-weight: 500;
+  line-height: var(--rd-leading-label);
+}
+
+[data-mobile-ui="redesign"] .rd-type-overline {
+  font-family: var(--rd-font-sans);
+  font-size: var(--rd-text-overline);
+  font-weight: 600;
+  line-height: var(--rd-leading-overline);
+  letter-spacing: var(--rd-tracking-overline);
+  text-transform: uppercase;
+}
+
+[data-mobile-ui="redesign"] .rd-type-data-lg {
+  font-family: var(--rd-font-mono);
+  font-size: var(--rd-text-data-lg);
+  font-weight: 500;
+  line-height: var(--rd-leading-data-lg);
+  letter-spacing: var(--rd-tracking-data-lg);
+}
+
+[data-mobile-ui="redesign"] .rd-type-data {
+  font-family: var(--rd-font-mono);
+  font-size: var(--rd-text-data);
+  font-weight: 500;
+  line-height: var(--rd-leading-data);
+}
+
+[data-mobile-ui="redesign"] .rd-type-data-sm {
+  font-family: var(--rd-font-mono);
+  font-size: var(--rd-text-data-sm);
+  font-weight: 500;
+  line-height: var(--rd-leading-data-sm);
+}
+
+[data-mobile-ui="redesign"] .rd-type-data-micro {
+  font-family: var(--rd-font-mono);
+  font-size: var(--rd-text-data-micro);
+  font-weight: 400;
+  line-height: var(--rd-leading-data-micro);
+}

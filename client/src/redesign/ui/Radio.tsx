@@ -14,7 +14,7 @@ export function Radio({
   onChange: (value: string) => void;
 }) {
   return (
-    <label className="flex min-h-11 items-center gap-3 text-sm leading-5 text-[var(--rd-text-primary)]">
+    <label className="flex min-h-[40px] items-center gap-2 text-[13px] leading-[18px] text-[var(--rd-text-primary)]">
       <input
         type="radio"
         className="sr-only"

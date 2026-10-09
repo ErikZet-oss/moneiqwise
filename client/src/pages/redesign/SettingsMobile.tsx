@@ -67,13 +67,13 @@ interface PasskeyItem {
 }
 
 const BROKER_OPTIONS = [
-  { value: "none", label: "Žiadny broker" },
+  { value: "none", label: "Ĺ˝iadny broker" },
   ...BROKER_CODES.map((code) => ({ value: code, label: BROKER_CATALOG[code].name })),
 ];
 
 const CURRENCY_OPTIONS = [
   { value: "EUR", label: "EUR - Euro" },
-  { value: "USD", label: "USD - Americký dolár" },
+  { value: "USD", label: "USD - AmerickĂ˝ dolĂˇr" },
 ];
 
 const MOVERS_COUNT_OPTIONS = [
@@ -83,14 +83,14 @@ const MOVERS_COUNT_OPTIONS = [
 ];
 
 function formatPasskeyDate(value: string | null) {
-  if (!value) return "—";
+  if (!value) return "â€”";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
+  if (Number.isNaN(date.getTime())) return "â€”";
   return date.toLocaleString("sk-SK", { dateStyle: "medium", timeStyle: "short" });
 }
 
 function brokerLabel(code: BrokerCode | null) {
-  if (!code) return "Žiadny broker";
+  if (!code) return "Ĺ˝iadny broker";
   return BROKER_CATALOG[code]?.name ?? code;
 }
 
@@ -186,12 +186,12 @@ export default function SettingsMobile() {
     onSuccess: async () => {
       await refetchSnapshotDev();
       queryClient.invalidateQueries({ queryKey: ["/api/portfolio/history"] });
-      toast({ title: "Developer", description: "Snapshot backfill dokončený." });
+      toast({ title: "Developer", description: "Snapshot backfill dokonÄŤenĂ˝." });
     },
     onError: (error: Error) => {
       toast({
         title: "Developer",
-        description: error.message || "Nepodarilo sa spraviť backfill snapshotov.",
+        description: error.message || "Nepodarilo sa spraviĹĄ backfill snapshotov.",
         variant: "destructive",
       });
     },
@@ -208,10 +208,10 @@ export default function SettingsMobile() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/holdings"] });
-      toast({ title: "Uložené", description: "Nastavenia boli úspešne uložené." });
+      toast({ title: "UloĹľenĂ©", description: "Nastavenia boli ĂşspeĹˇne uloĹľenĂ©." });
     },
     onError: () => {
-      toast({ title: "Chyba", description: "Nepodarilo sa uložiť nastavenia.", variant: "destructive" });
+      toast({ title: "Chyba", description: "Nepodarilo sa uloĹľiĹĄ nastavenia.", variant: "destructive" });
     },
   });
 
@@ -222,19 +222,19 @@ export default function SettingsMobile() {
         options?: Parameters<typeof startRegistration>[0]["optionsJSON"];
       };
       if (!optionsPayload.options) {
-        throw new Error("Server nevrátil challenge pre registráciu passkey.");
+        throw new Error("Server nevrĂˇtil challenge pre registrĂˇciu passkey.");
       }
       const passkeyResponse = await startRegistration({ optionsJSON: optionsPayload.options });
       await apiRequest("POST", "/api/auth/passkeys/verify/register", { response: passkeyResponse });
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/passkeys"] });
-      toast({ title: "Passkey pridaný", description: "Prihlásenie cez WebAuthn je pripravené." });
+      toast({ title: "Passkey pridanĂ˝", description: "PrihlĂˇsenie cez WebAuthn je pripravenĂ©." });
     },
     onError: (error: Error) => {
       toast({
-        title: "Registrácia passkey zlyhala",
-        description: error.message || "Skúste to znova.",
+        title: "RegistrĂˇcia passkey zlyhala",
+        description: error.message || "SkĂşste to znova.",
         variant: "destructive",
       });
     },
@@ -247,12 +247,12 @@ export default function SettingsMobile() {
     onSuccess: async () => {
       setDeletingPasskeyId(null);
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/passkeys"] });
-      toast({ title: "Passkey odstránený", description: "Vybraný passkey bol zmazaný." });
+      toast({ title: "Passkey odstrĂˇnenĂ˝", description: "VybranĂ˝ passkey bol zmazanĂ˝." });
     },
     onError: (error: Error) => {
       toast({
-        title: "Odstránenie passkey zlyhalo",
-        description: error.message || "Skúste to znova.",
+        title: "OdstrĂˇnenie passkey zlyhalo",
+        description: error.message || "SkĂşste to znova.",
         variant: "destructive",
       });
     },
@@ -268,7 +268,7 @@ export default function SettingsMobile() {
       });
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
-        throw new Error(error.message || "Nepodarilo sa vymazať dáta");
+        throw new Error(error.message || "Nepodarilo sa vymazaĹĄ dĂˇta");
       }
       return response.json() as Promise<{
         transactionsDeleted: number;
@@ -278,8 +278,8 @@ export default function SettingsMobile() {
     },
     onSuccess: (data) => {
       toast({
-        title: "Všetko vymazané",
-        description: `Vymazaných ${data.transactionsDeleted} transakcií, ${data.holdingsDeleted} holdingov, ${data.optionTradesDeleted} opčných obchodov.`,
+        title: "VĹˇetko vymazanĂ©",
+        description: `VymazanĂ˝ch ${data.transactionsDeleted} transakciĂ­, ${data.holdingsDeleted} holdingov, ${data.optionTradesDeleted} opÄŤnĂ˝ch obchodov.`,
       });
       queryClient.clear();
       setWipeDialogOpen(false);
@@ -298,7 +298,7 @@ export default function SettingsMobile() {
       });
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
-        throw new Error((err as { message?: string }).message || "Nepodarilo sa vyčistiť záznamy");
+        throw new Error((err as { message?: string }).message || "Nepodarilo sa vyÄŤistiĹĄ zĂˇznamy");
       }
       return response.json() as Promise<{
         transactionsDeleted: number;
@@ -308,7 +308,7 @@ export default function SettingsMobile() {
       }>;
     },
     onSuccess: (data) => {
-      toast({ title: "Osireté záznamy odstránené", description: data.message });
+      toast({ title: "OsiretĂ© zĂˇznamy odstrĂˇnenĂ©", description: data.message });
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/holdings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/overview"] });
@@ -335,12 +335,12 @@ export default function SettingsMobile() {
       queryClient.invalidateQueries({ queryKey: ["/api/pnl-breakdown"] });
       queryClient.invalidateQueries({ queryKey: ["/api/portfolio-history"] });
       queryClient.invalidateQueries({ queryKey: ["/api/twr"] });
-      toast({ title: "Hotovo", description: data.message || "Realizované zisky boli prepočítané." });
+      toast({ title: "Hotovo", description: data.message || "RealizovanĂ© zisky boli prepoÄŤĂ­tanĂ©." });
     },
     onError: () => {
       toast({
         title: "Chyba",
-        description: "Nepodarilo sa prepočítať realizované zisky.",
+        description: "Nepodarilo sa prepoÄŤĂ­taĹĄ realizovanĂ© zisky.",
         variant: "destructive",
       });
     },
@@ -354,7 +354,7 @@ export default function SettingsMobile() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error((err as { message?: string }).message || "Nepodarilo sa stiahnuť audit.");
+        throw new Error((err as { message?: string }).message || "Nepodarilo sa stiahnuĹĄ audit.");
       }
       const blob = await res.blob();
       const cd = res.headers.get("Content-Disposition");
@@ -367,11 +367,11 @@ export default function SettingsMobile() {
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
-      toast({ title: "Stiahnuté", description: "Auditný Excel je pripravený na kontrolu výpočtov." });
+      toast({ title: "StiahnutĂ©", description: "AuditnĂ˝ Excel je pripravenĂ˝ na kontrolu vĂ˝poÄŤtov." });
     } catch (e) {
       toast({
         title: "Chyba",
-        description: e instanceof Error ? e.message : "Nepodarilo sa stiahnuť súbor.",
+        description: e instanceof Error ? e.message : "Nepodarilo sa stiahnuĹĄ sĂşbor.",
         variant: "destructive",
       });
     } finally {
@@ -390,7 +390,7 @@ export default function SettingsMobile() {
     try {
       await reorderPortfolios(ids);
     } catch (err) {
-      const msg = err instanceof Error && err.message.trim() ? err.message : "Nepodarilo sa uložiť poradie portfólií.";
+      const msg = err instanceof Error && err.message.trim() ? err.message : "Nepodarilo sa uloĹľiĹĄ poradie portfĂłliĂ­.";
       toast({ title: "Chyba", description: msg, variant: "destructive" });
     } finally {
       setReorderingPortfolio(false);
@@ -402,11 +402,11 @@ export default function SettingsMobile() {
     setIsCreating(true);
     try {
       await createPortfolio(newPortfolioName.trim(), newPortfolioBroker);
-      toast({ title: "Vytvorené", description: "Nové portfólio bolo úspešne vytvorené." });
+      toast({ title: "VytvorenĂ©", description: "NovĂ© portfĂłlio bolo ĂşspeĹˇne vytvorenĂ©." });
       setNewPortfolioName("");
       setNewPortfolioBroker(undefined);
     } catch (error) {
-      const msg = error instanceof Error && error.message.trim() ? error.message : "Nepodarilo sa vytvoriť portfólio.";
+      const msg = error instanceof Error && error.message.trim() ? error.message : "Nepodarilo sa vytvoriĹĄ portfĂłlio.";
       toast({ title: "Chyba", description: msg, variant: "destructive" });
     } finally {
       setIsCreating(false);
@@ -418,10 +418,10 @@ export default function SettingsMobile() {
     setIsUpdating(true);
     try {
       await updatePortfolio(editingPortfolio.id, editingPortfolio.name.trim(), editingPortfolio.brokerCode);
-      toast({ title: "Uložené", description: "Portfólio bolo úspešne aktualizované." });
+      toast({ title: "UloĹľenĂ©", description: "PortfĂłlio bolo ĂşspeĹˇne aktualizovanĂ©." });
       setEditingPortfolio(null);
     } catch {
-      toast({ title: "Chyba", description: "Nepodarilo sa aktualizovať portfólio.", variant: "destructive" });
+      toast({ title: "Chyba", description: "Nepodarilo sa aktualizovaĹĄ portfĂłlio.", variant: "destructive" });
     } finally {
       setIsUpdating(false);
     }
@@ -432,13 +432,13 @@ export default function SettingsMobile() {
     try {
       await setPortfolioHidden(id, !currentlyHidden);
       toast({
-        title: currentlyHidden ? "Odkryté" : "Skryté",
+        title: currentlyHidden ? "OdkrytĂ©" : "SkrytĂ©",
         description: currentlyHidden
-          ? "Portfólio je opäť viditeľné v celej aplikácii."
-          : "Portfólio je skryté. Transakcie ostávajú uložené a môžete ho kedykoľvek odkryť.",
+          ? "PortfĂłlio je opĂ¤ĹĄ viditeÄľnĂ© v celej aplikĂˇcii."
+          : "PortfĂłlio je skrytĂ©. Transakcie ostĂˇvajĂş uloĹľenĂ© a mĂ´Ĺľete ho kedykoÄľvek odkryĹĄ.",
       });
     } catch {
-      toast({ title: "Chyba", description: "Nepodarilo sa zmeniť viditeľnosť portfólia.", variant: "destructive" });
+      toast({ title: "Chyba", description: "Nepodarilo sa zmeniĹĄ viditeÄľnosĹĄ portfĂłlia.", variant: "destructive" });
     } finally {
       setTogglingHiddenId(null);
     }
@@ -449,10 +449,10 @@ export default function SettingsMobile() {
     setIsDeleting(true);
     try {
       await deletePortfolio(deletePortfolioId);
-      toast({ title: "Vymazané", description: "Portfólio a všetky jeho transakcie boli vymazané." });
+      toast({ title: "VymazanĂ©", description: "PortfĂłlio a vĹˇetky jeho transakcie boli vymazanĂ©." });
       setDeletePortfolioId(null);
     } catch {
-      toast({ title: "Chyba", description: "Nepodarilo sa vymazať portfólio.", variant: "destructive" });
+      toast({ title: "Chyba", description: "Nepodarilo sa vymazaĹĄ portfĂłlio.", variant: "destructive" });
     } finally {
       setIsDeleting(false);
     }
@@ -469,35 +469,35 @@ export default function SettingsMobile() {
 
   return (
     <div className="bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
-      <TopBar overline="Údaje" title="Nastavenia" />
+      <TopBar overline="Ăšdaje" title="Nastavenia" />
       <div className="space-y-4 px-4 pb-6">
         <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">
-          Portfóliá, zobrazenie a mena pre prehľad.
+          PortfĂłliĂˇ, zobrazenie a mena pre prehÄľad.
         </p>
 
         {isLoading ? (
-          <p className="text-sm leading-5 text-[var(--rd-text-secondary)]">Načítavam nastavenia…</p>
+          <p className="text-sm leading-5 text-[var(--rd-text-secondary)]">NaÄŤĂ­tavam nastaveniaâ€¦</p>
         ) : (
           <>
             <section className="space-y-2">
               <SectionHeader title="Passkeys (WebAuthn)" />
               <Card>
                 <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">
-                  Prihlasovanie pomocou odtlačku prsta, Face ID alebo PIN-u zariadenia bez zadávania hesla.
+                  Prihlasovanie pomocou odtlaÄŤku prsta, Face ID alebo PIN-u zariadenia bez zadĂˇvania hesla.
                 </p>
                 {!passkeysSupported ? (
                   <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">
-                    Tento prehliadač alebo zariadenie nepodporuje WebAuthn passkeys.
+                    Tento prehliadaÄŤ alebo zariadenie nepodporuje WebAuthn passkeys.
                   </p>
                 ) : null}
                 <SettingToggle
-                  label="Vyžadovať passkey pri štarte appky"
-                  hint="Po otvorení appky sa pred vstupom vyžiada odtlačok/Face ID/PIN."
+                  label="VyĹľadovaĹĄ passkey pri Ĺˇtarte appky"
+                  hint="Po otvorenĂ­ appky sa pred vstupom vyĹľiada odtlaÄŤok/Face ID/PIN."
                   checked={settings?.passkeyStartupLockEnabled !== false}
                   disabled={updateSettingsMutation.isPending}
                   onCheckedChange={(checked) => updateSettingsMutation.mutate({ passkeyStartupLockEnabled: checked })}
                 />
-                <ListRow label="Registrované passkeys" value={String(passkeys.length)} showChevron={false} />
+                <ListRow label="RegistrovanĂ© passkeys" value={String(passkeys.length)} showChevron={false} />
                 <Button
                   variant="Secondary"
                   className="w-full"
@@ -505,12 +505,12 @@ export default function SettingsMobile() {
                   disabled={!passkeysSupported || registerPasskeyMutation.isPending}
                   data-testid="button-register-passkey"
                 >
-                  {registerPasskeyMutation.isPending ? "Registrujem..." : "Pridať passkey"}
+                  {registerPasskeyMutation.isPending ? "Registrujem..." : "PridaĹĄ passkey"}
                 </Button>
                 {passkeysLoading ? (
-                  <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">Načítavam passkeys...</p>
+                  <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">NaÄŤĂ­tavam passkeys...</p>
                 ) : passkeys.length === 0 ? (
-                  <EmptyState title="Zatiaľ nemáte žiadny passkey." body="Pridajte passkey tlačidlom vyššie." />
+                  <EmptyState title="ZatiaÄľ nemĂˇte Ĺľiadny passkey." body="Pridajte passkey tlaÄŤidlom vyĹˇĹˇie." />
                 ) : (
                   <div className="flex flex-col">
                     {passkeys.map((passkey, index) => (
@@ -519,14 +519,14 @@ export default function SettingsMobile() {
                           <div className="min-w-0">
                             <p className="text-sm font-semibold leading-5">{passkey.label?.trim() || `Passkey #${index + 1}`}</p>
                             <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">
-                              Typ: {passkey.deviceType === "multiDevice" ? "Synchronizovaný" : "Lokálny"} · Záloha:{" "}
-                              {passkey.backedUp ? "áno" : "nie"}
+                              Typ: {passkey.deviceType === "multiDevice" ? "SynchronizovanĂ˝" : "LokĂˇlny"} Â· ZĂˇloha:{" "}
+                              {passkey.backedUp ? "Ăˇno" : "nie"}
                             </p>
                             <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">
-                              Vytvorený: {formatPasskeyDate(passkey.createdAt)}
+                              VytvorenĂ˝: {formatPasskeyDate(passkey.createdAt)}
                             </p>
                             <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">
-                              Naposledy použitý: {formatPasskeyDate(passkey.lastUsedAt)}
+                              Naposledy pouĹľitĂ˝: {formatPasskeyDate(passkey.lastUsedAt)}
                             </p>
                           </div>
                           <Button
@@ -539,7 +539,7 @@ export default function SettingsMobile() {
                             }}
                             data-testid={`button-delete-passkey-${passkey.id}`}
                           >
-                            {deletePasskeyMutation.isPending && deletingPasskeyId === passkey.id ? "Mažem..." : "Odstrániť"}
+                            {deletePasskeyMutation.isPending && deletingPasskeyId === passkey.id ? "MaĹľem..." : "OdstrĂˇniĹĄ"}
                           </Button>
                         </div>
                       </div>
@@ -550,14 +550,14 @@ export default function SettingsMobile() {
             </section>
 
             <section className="space-y-2">
-              <SectionHeader title="Správa portfólií" />
+              <SectionHeader title="SprĂˇva portfĂłliĂ­" />
               <Card>
                 <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">
-                  Vytvárajte a spravujte svoje investičné portfóliá. Poradie v zozname určuje aj poradie v menu aplikácie.
+                  VytvĂˇrajte a spravujte svoje investiÄŤnĂ© portfĂłliĂˇ. Poradie v zozname urÄŤuje aj poradie v menu aplikĂˇcie.
                 </p>
                 <Input
-                  label="Názov nového portfólia"
-                  placeholder="napr. Dlhodobé"
+                  label="NĂˇzov novĂ©ho portfĂłlia"
+                  placeholder="napr. DlhodobĂ©"
                   value={newPortfolioName}
                   onChange={(e) => setNewPortfolioName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && void handleCreatePortfolio()}
@@ -570,8 +570,8 @@ export default function SettingsMobile() {
                   onChange={(value) => {
                     const code = value === "none" ? undefined : (value as BrokerCode);
                     setNewPortfolioBroker(code);
-                    if (code === "silver" && !newPortfolioName.trim()) setNewPortfolioName("Strieborné mince");
-                    if (code === "pokemon" && !newPortfolioName.trim()) setNewPortfolioName("Pokémon TCG");
+                    if (code === "silver" && !newPortfolioName.trim()) setNewPortfolioName("StriebornĂ© mince");
+                    if (code === "pokemon" && !newPortfolioName.trim()) setNewPortfolioName("PokĂ©mon TCG");
                   }}
                 />
                 <Button
@@ -580,10 +580,10 @@ export default function SettingsMobile() {
                   disabled={!newPortfolioName.trim() || isCreating}
                   data-testid="button-create-portfolio"
                 >
-                  {isCreating ? "Vytváram..." : "Vytvoriť portfólio"}
+                  {isCreating ? "VytvĂˇram..." : "VytvoriĹĄ portfĂłlio"}
                 </Button>
                 {allPortfolios.length === 0 ? (
-                  <EmptyState title="Zatiaľ nemáte žiadne portfóliá." body="Zadajte názov a vytvorte prvé portfólio." />
+                  <EmptyState title="ZatiaÄľ nemĂˇte Ĺľiadne portfĂłliĂˇ." body="Zadajte nĂˇzov a vytvorte prvĂ© portfĂłlio." />
                 ) : (
                   <div className="flex flex-col gap-3 border-t border-[var(--rd-border-subtle)] pt-3">
                     {allPortfolios.map((portfolio, index) => (
@@ -593,34 +593,34 @@ export default function SettingsMobile() {
                             {portfolio.name}
                           </p>
                           <div className="mt-1 flex flex-wrap items-center gap-2">
-                            {portfolio.isDefault ? <Badge label="Predvolené" tone="Profit" /> : null}
-                            {portfolio.isHidden ? <Badge label="Skryté" tone="Neutral" /> : null}
+                            {portfolio.isDefault ? <Badge label="PredvolenĂ©" tone="Profit" /> : null}
+                            {portfolio.isHidden ? <Badge label="SkrytĂ©" tone="Neutral" /> : null}
                             <span className="text-xs leading-4 text-[var(--rd-text-tertiary)]">{brokerLabel(portfolio.brokerCode)}</span>
                           </div>
                         </div>
                         <IconButton
-                          label="Posunúť nahor"
+                          label="PosunĂşĹĄ nahor"
                           disabled={index === 0 || reorderingPortfolio}
                           onClick={() => void handleMovePortfolio(index, "up")}
                         >
                           <ChevronUp className="size-4" />
                         </IconButton>
                         <IconButton
-                          label="Posunúť nadol"
+                          label="PosunĂşĹĄ nadol"
                           disabled={index === allPortfolios.length - 1 || reorderingPortfolio}
                           onClick={() => void handleMovePortfolio(index, "down")}
                         >
                           <ChevronDown className="size-4" />
                         </IconButton>
                         <IconButton
-                          label={portfolio.isHidden ? "Odkryť portfólio" : "Skryť portfólio"}
+                          label={portfolio.isHidden ? "OdkryĹĄ portfĂłlio" : "SkryĹĄ portfĂłlio"}
                           disabled={togglingHiddenId === portfolio.id}
                           onClick={() => void handleToggleHidden(portfolio.id, !!portfolio.isHidden)}
                         >
                           {portfolio.isHidden ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                         </IconButton>
                         <IconButton
-                          label="Upraviť portfólio"
+                          label="UpraviĹĄ portfĂłlio"
                           onClick={() =>
                             setEditingPortfolio({
                               id: portfolio.id,
@@ -632,7 +632,7 @@ export default function SettingsMobile() {
                           <Pencil className="size-4" />
                         </IconButton>
                         {allPortfolios.length > 1 ? (
-                          <IconButton label="Vymazať portfólio" onClick={() => setDeletePortfolioId(portfolio.id)}>
+                          <IconButton label="VymazaĹĄ portfĂłlio" onClick={() => setDeletePortfolioId(portfolio.id)}>
                             <Trash2 className="size-4 text-[var(--rd-loss)]" />
                           </IconButton>
                         ) : null}
@@ -647,7 +647,7 @@ export default function SettingsMobile() {
               <SectionHeader title="Mena zobrazenia" />
               <Card>
                 <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">
-                  Mena, v ktorej sa zobrazujú všetky hodnoty. Ceny amerických akcií sa prepočítajú aktuálnym kurzom.
+                  Mena, v ktorej sa zobrazujĂş vĹˇetky hodnoty. Ceny americkĂ˝ch akciĂ­ sa prepoÄŤĂ­tajĂş aktuĂˇlnym kurzom.
                 </p>
                 <Select
                   label="Mena"
@@ -661,29 +661,29 @@ export default function SettingsMobile() {
                 />
                 {exchangeRate ? (
                   <ListRow
-                    label="Aktuálny kurz (ECB, každú hodinu)"
+                    label="AktuĂˇlny kurz (ECB, kaĹľdĂş hodinu)"
                     value={`1 EUR = ${exchangeRate.eurToUsd.toFixed(4)} USD`}
                     showChevron={false}
                   />
                 ) : (
-                  <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">Kurz ECB sa načítava…</p>
+                  <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">Kurz ECB sa naÄŤĂ­tavaâ€¦</p>
                 )}
               </Card>
             </section>
 
             <section className="space-y-2">
-              <SectionHeader title="Priemerné nákupné ceny" />
+              <SectionHeader title="PriemernĂ© nĂˇkupnĂ© ceny" />
               <Card>
                 <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">
-                  Mena, v ktorej sa zobrazí priemerná nákupná cena (prepočet cez kurz z ECB).
+                  Mena, v ktorej sa zobrazĂ­ priemernĂˇ nĂˇkupnĂˇ cena (prepoÄŤet cez kurz z ECB).
                 </p>
                 <Select
-                  label="Mena nákupných cien"
+                  label="Mena nĂˇkupnĂ˝ch cien"
                   value={averageCostValue}
                   options={[
-                    { value: "same-as-display", label: `Rovnaká ako mena zobrazenia (${displayCurrency})` },
-                    { value: "EUR", label: "EUR — Euro" },
-                    { value: "USD", label: "USD — Americký dolár" },
+                    { value: "same-as-display", label: `RovnakĂˇ ako mena zobrazenia (${displayCurrency})` },
+                    { value: "EUR", label: "EUR â€” Euro" },
+                    { value: "USD", label: "USD â€” AmerickĂ˝ dolĂˇr" },
                   ]}
                   onChange={(value) => {
                     if (value === "same-as-display") {
@@ -697,14 +697,14 @@ export default function SettingsMobile() {
             </section>
 
             <section className="space-y-2">
-              <SectionHeader title="Zobrazenie na prehľade" />
+              <SectionHeader title="Zobrazenie na prehÄľade" />
               <Card>
                 <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">
-                  Globálne voľby pre Prehľad. Poradie a zapínanie widgetov upravíte aj priamo na Prehľade (ikona pera).
+                  GlobĂˇlne voÄľby pre PrehÄľad. Poradie a zapĂ­nanie widgetov upravĂ­te aj priamo na PrehÄľade (ikona pera).
                 </p>
                 <SettingToggle
-                  label="Zobraziť graf"
-                  hint="Graf zobrazuje vývoj hodnoty portfólia v čase"
+                  label="ZobraziĹĄ graf"
+                  hint="Graf zobrazuje vĂ˝voj hodnoty portfĂłlia v ÄŤase"
                   checked={showChart}
                   onCheckedChange={setShowChart}
                 />
@@ -712,19 +712,19 @@ export default function SettingsMobile() {
                   <>
                     <SettingToggle
                       label="Interakcia s grafom"
-                      hint="Zobraziť hodnotu pri dotyku/kliknutí na graf"
+                      hint="ZobraziĹĄ hodnotu pri dotyku/kliknutĂ­ na graf"
                       checked={showTooltip}
                       onCheckedChange={setShowTooltip}
                     />
                     <SettingToggle
                       label="Porovnanie s indexom"
-                      hint="Oranžová krivka vs. portfólio — obidve v % od začiatku obdobia"
+                      hint="OranĹľovĂˇ krivka vs. portfĂłlio â€” obidve v % od zaÄŤiatku obdobia"
                       checked={showChartBenchmark}
                       onCheckedChange={setShowChartBenchmark}
                     />
                     {showChartBenchmark ? (
                       <Select
-                        label="Porovnať s"
+                        label="PorovnaĹĄ s"
                         value={chartBenchmarkId}
                         options={CHART_BENCHMARK_OPTIONS.map((opt) => ({ value: opt.id, label: opt.label }))}
                         onChange={(value) => setChartBenchmarkId(value as ChartBenchmarkId)}
@@ -733,20 +733,20 @@ export default function SettingsMobile() {
                   </>
                 ) : null}
                 <SettingToggle
-                  label="Novinky k vašim aktívam"
-                  hint="Sekcia s aktuálnymi správami pre tickery vo vašom portfóliu"
+                  label="Novinky k vaĹˇim aktĂ­vam"
+                  hint="Sekcia s aktuĂˇlnymi sprĂˇvami pre tickery vo vaĹˇom portfĂłliu"
                   checked={showNews}
                   onCheckedChange={setShowNews}
                 />
                 <SettingToggle
-                  label="Najsilnejšie a najslabšie dnes"
-                  hint="Rebríček denných % zmien, iba na hlavnom Prehľade"
+                  label="NajsilnejĹˇie a najslabĹˇie dnes"
+                  hint="RebrĂ­ÄŤek dennĂ˝ch % zmien, iba na hlavnom PrehÄľade"
                   checked={showDailyMovers}
                   onCheckedChange={setShowDailyMovers}
                 />
                 {showDailyMovers ? (
                   <Select
-                    label="Počet pozícií v rebríčku"
+                    label="PoÄŤet pozĂ­ciĂ­ v rebrĂ­ÄŤku"
                     value={String(dailyMoversCount)}
                     options={MOVERS_COUNT_OPTIONS}
                     onChange={(value) => {
@@ -758,26 +758,26 @@ export default function SettingsMobile() {
                   />
                 ) : null}
                 <SettingToggle
-                  label="Skryť sumy"
-                  hint="Nahradiť peňažné hodnoty hviezdičkami (••••••)"
+                  label="SkryĹĄ sumy"
+                  hint="NahradiĹĄ peĹaĹľnĂ© hodnoty hviezdiÄŤkami (â€˘â€˘â€˘â€˘â€˘â€˘)"
                   checked={hideAmounts}
                   onCheckedChange={setHideAmounts}
                 />
                 <SettingToggle
-                  label="ATH popup po prihlásení"
-                  hint="Gratulačné okno, keď portfólio dosiahne nové ATH"
+                  label="ATH popup po prihlĂˇsenĂ­"
+                  hint="GratulaÄŤnĂ© okno, keÄŹ portfĂłlio dosiahne novĂ© ATH"
                   checked={showAthPopup}
                   onCheckedChange={setShowAthPopup}
                 />
                 <SettingToggle
-                  label="Popup dnešných udalostí"
-                  hint="Okno s dnešnými udalosťami z trhového kalendára"
+                  label="Popup dneĹˇnĂ˝ch udalostĂ­"
+                  hint="Okno s dneĹˇnĂ˝mi udalosĹĄami z trhovĂ©ho kalendĂˇra"
                   checked={showCalendarEventsPopup}
                   onCheckedChange={setShowCalendarEventsPopup}
                 />
                 <SettingToggle
                   label="Popup zmeny analyst ratingu"
-                  hint="Okno, keď analytik zmení ohodnotenie aktíva vo vašom portfóliu"
+                  hint="Okno, keÄŹ analytik zmenĂ­ ohodnotenie aktĂ­va vo vaĹˇom portfĂłliu"
                   checked={showAnalystRatingPopup}
                   onCheckedChange={setShowAnalystRatingPopup}
                 />
@@ -785,10 +785,10 @@ export default function SettingsMobile() {
             </section>
 
             <section className="space-y-2">
-              <SectionHeader title="Prepočet realizovaného zisku" />
+              <SectionHeader title="PrepoÄŤet realizovanĂ©ho zisku" />
               <Card>
                 <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">
-                  Prepočíta realizovaný zisk/stratu pre všetky SELL transakcie podľa histórie nákupov. Potrebné len pre staršie transakcie.
+                  PrepoÄŤĂ­ta realizovanĂ˝ zisk/stratu pre vĹˇetky SELL transakcie podÄľa histĂłrie nĂˇkupov. PotrebnĂ© len pre starĹˇie transakcie.
                 </p>
                 <Button
                   variant="Secondary"
@@ -797,16 +797,16 @@ export default function SettingsMobile() {
                   onClick={() => recalculateMutation.mutate()}
                   data-testid="button-recalculate-gains"
                 >
-                  {recalculateMutation.isPending ? "Prepočítavam..." : "Prepočítať realizovaný zisk"}
+                  {recalculateMutation.isPending ? "PrepoÄŤĂ­tavam..." : "PrepoÄŤĂ­taĹĄ realizovanĂ˝ zisk"}
                 </Button>
               </Card>
             </section>
 
             <section className="space-y-2">
-              <SectionHeader title="Údržba údajov" />
+              <SectionHeader title="ĂšdrĹľba Ăşdajov" />
               <Card>
                 <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">
-                  Odstráni transakcie, holdingy a opčné obchody, ktoré nie sú prepojené na žiadne portfólio. Aktívne portfóliá a ich riadky ostanú.
+                  OdstrĂˇni transakcie, holdingy a opÄŤnĂ© obchody, ktorĂ© nie sĂş prepojenĂ© na Ĺľiadne portfĂłlio. AktĂ­vne portfĂłliĂˇ a ich riadky ostanĂş.
                 </p>
                 <Button
                   variant="Secondary"
@@ -815,7 +815,7 @@ export default function SettingsMobile() {
                   onClick={() => orphanCleanupMutation.mutate()}
                   data-testid="button-cleanup-orphans"
                 >
-                  {orphanCleanupMutation.isPending ? "Čistím…" : "Odstrániť osireté záznamy"}
+                  {orphanCleanupMutation.isPending ? "ÄŚistĂ­mâ€¦" : "OdstrĂˇniĹĄ osiretĂ© zĂˇznamy"}
                 </Button>
               </Card>
             </section>
@@ -824,18 +824,18 @@ export default function SettingsMobile() {
               <SectionHeader title="Developer" />
               <Card>
                 <div className="flex items-center gap-2">
-                  <p className="min-w-0 flex-1 text-sm font-semibold leading-5">Audit výpočtov (Excel)</p>
+                  <p className="min-w-0 flex-1 text-sm font-semibold leading-5">Audit vĂ˝poÄŤtov (Excel)</p>
                   <button
                     type="button"
-                    aria-label="Čo obsahuje auditný Excel"
+                    aria-label="ÄŚo obsahuje auditnĂ˝ Excel"
                     onClick={() => setAuditHelpOpen(true)}
-                    className="inline-flex size-9 items-center justify-center text-[var(--rd-info)]"
+                    className="inline-flex size-[30px] items-center justify-center text-[var(--rd-info)]"
                   >
                     <CircleHelp className="size-4" />
                   </button>
                 </div>
                 <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">
-                  XLSX so všetkými transakciami, denným priebehom MTM a TWR, kurzami ECB a FIFO súhrnmi.
+                  XLSX so vĹˇetkĂ˝mi transakciami, dennĂ˝m priebehom MTM a TWR, kurzami ECB a FIFO sĂşhrnmi.
                 </p>
                 <Button
                   variant="Secondary"
@@ -844,13 +844,13 @@ export default function SettingsMobile() {
                   onClick={() => void downloadCalculationAudit()}
                   data-testid="button-dev-download-calculation-audit"
                 >
-                  {auditDownloadLoading ? "Generujem…" : "Stiahnuť audit výpočtov"}
+                  {auditDownloadLoading ? "Generujemâ€¦" : "StiahnuĹĄ audit vĂ˝poÄŤtov"}
                 </Button>
                 <Select
-                  label="Snapshoty histórie portfólia"
+                  label="Snapshoty histĂłrie portfĂłlia"
                   value={devSnapshotScope}
                   options={[
-                    { value: "all", label: "Všetky portfóliá (all)" },
+                    { value: "all", label: "VĹˇetky portfĂłliĂˇ (all)" },
                     ...allPortfolios.map((p) => ({ value: p.id, label: p.name })),
                   ]}
                   onChange={setDevSnapshotScope}
@@ -863,7 +863,7 @@ export default function SettingsMobile() {
                     onClick={() => void refetchSnapshotDev()}
                     data-testid="button-dev-refresh-snapshots"
                   >
-                    {snapshotDevLoading ? "Načítavam…" : "Obnoviť"}
+                    {snapshotDevLoading ? "NaÄŤĂ­tavamâ€¦" : "ObnoviĹĄ"}
                   </Button>
                   <Button
                     variant="Secondary"
@@ -872,24 +872,24 @@ export default function SettingsMobile() {
                     onClick={() => backfillSnapshotsMutation.mutate()}
                     data-testid="button-dev-backfill-snapshots"
                   >
-                    {backfillSnapshotsMutation.isPending ? "Backfill…" : "Spustiť backfill"}
+                    {backfillSnapshotsMutation.isPending ? "Backfillâ€¦" : "SpustiĹĄ backfill"}
                   </Button>
                 </div>
-                <ListRow label="Source" value={snapshotDevData?.source ?? "—"} showChevron={false} />
+                <ListRow label="Source" value={snapshotDevData?.source ?? "â€”"} showChevron={false} />
                 <ListRow
                   label="Rozsah"
-                  value={`${snapshotDevData?.startIso ?? "—"} → ${snapshotDevData?.endIso ?? "—"}`}
+                  value={`${snapshotDevData?.startIso ?? "â€”"} â†’ ${snapshotDevData?.endIso ?? "â€”"}`}
                   showChevron={false}
                 />
-                <ListRow label="Počet bodov" value={String(snapshotDevData?.points?.length ?? 0)} showChevron={false} />
+                <ListRow label="PoÄŤet bodov" value={String(snapshotDevData?.points?.length ?? 0)} showChevron={false} />
                 {snapshotPoints.length === 0 ? (
-                  <EmptyState title="Zatiaľ žiadne snapshot body." body="Obnovte náhľad alebo spustite backfill." />
+                  <EmptyState title="ZatiaÄľ Ĺľiadne snapshot body." body="Obnovte nĂˇhÄľad alebo spustite backfill." />
                 ) : (
                   <div className="max-h-64 overflow-auto rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-subtle)]">
                     <table className="w-full text-xs">
                       <thead className="sticky top-0 bg-[var(--rd-bg-surface-raised)]">
                         <tr className="text-left text-[var(--rd-text-tertiary)]">
-                          <th className="px-2 py-2 font-medium">Dátum</th>
+                          <th className="px-2 py-2 font-medium">DĂˇtum</th>
                           <th className="px-2 py-2 text-right font-medium">Total EUR</th>
                           <th className="px-2 py-2 text-right font-medium">Invested</th>
                           <th className="px-2 py-2 text-right font-medium">Daily</th>
@@ -912,10 +912,10 @@ export default function SettingsMobile() {
             </section>
 
             <section className="space-y-2">
-              <SectionHeader title="Nebezpečná zóna" />
+              <SectionHeader title="NebezpeÄŤnĂˇ zĂłna" />
               <Card className="border-[var(--rd-loss-dim)]">
                 <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">
-                  Nezvratné operácie nad vašimi dátami. Vymaže všetky transakcie, holdingy a opčné obchody naprieč portfóliami; portfóliá a API kľúče zostanú.
+                  NezvratnĂ© operĂˇcie nad vaĹˇimi dĂˇtami. VymaĹľe vĹˇetky transakcie, holdingy a opÄŤnĂ© obchody naprieÄŤ portfĂłliami; portfĂłliĂˇ a API kÄľĂşÄŤe zostanĂş.
                 </p>
                 <Button
                   variant="Secondary"
@@ -926,7 +926,7 @@ export default function SettingsMobile() {
                   }}
                   data-testid="button-open-wipe-dialog"
                 >
-                  Vymazať všetky transakcie
+                  VymazaĹĄ vĹˇetky transakcie
                 </Button>
               </Card>
             </section>
@@ -936,15 +936,15 @@ export default function SettingsMobile() {
 
       <Dialog
         open={!!editingPortfolio}
-        title="Upraviť portfólio"
-        body="Upravte názov a brokera pre toto portfólio."
+        title="UpraviĹĄ portfĂłlio"
+        body="Upravte nĂˇzov a brokera pre toto portfĂłlio."
         onClose={() => {
           if (!isUpdating) setEditingPortfolio(null);
         }}
       >
         <div className="mt-3 space-y-3">
           <Input
-            label="Názov portfólia"
+            label="NĂˇzov portfĂłlia"
             value={editingPortfolio?.name || ""}
             onChange={(e) => setEditingPortfolio((prev) => (prev ? { ...prev, name: e.target.value } : null))}
             data-testid="input-edit-portfolio-name"
@@ -961,7 +961,7 @@ export default function SettingsMobile() {
           />
           <div className="flex gap-2">
             <Button variant="Secondary" className="flex-1" onClick={() => setEditingPortfolio(null)} disabled={isUpdating}>
-              Zrušiť
+              ZruĹˇiĹĄ
             </Button>
             <Button
               className="flex-1"
@@ -969,7 +969,7 @@ export default function SettingsMobile() {
               disabled={!editingPortfolio?.name.trim() || isUpdating}
               data-testid="button-save-portfolio-name"
             >
-              {isUpdating ? "Ukladám..." : "Uložiť"}
+              {isUpdating ? "UkladĂˇm..." : "UloĹľiĹĄ"}
             </Button>
           </div>
         </div>
@@ -977,22 +977,22 @@ export default function SettingsMobile() {
 
       <Dialog
         open={!!deletePortfolioId}
-        title="Vymazať portfólio"
+        title="VymazaĹĄ portfĂłlio"
         onClose={() => {
           if (!isDeleting) setDeletePortfolioId(null);
         }}
       >
         <div className="mt-3 space-y-3">
           <p className="text-sm leading-5 text-[var(--rd-text-secondary)]">
-            Naozaj chcete vymazať {deleteTarget ? `„${deleteTarget.name}"` : "toto portfólio"}? Všetky transakcie, holdings a opcie v tomto portfóliu budú natrvalo vymazané. Táto akcia je nevratná.
+            Naozaj chcete vymazaĹĄ {deleteTarget ? `â€ž${deleteTarget.name}"` : "toto portfĂłlio"}? VĹˇetky transakcie, holdings a opcie v tomto portfĂłliu budĂş natrvalo vymazanĂ©. TĂˇto akcia je nevratnĂˇ.
             {deleteTarget?.isDefault
-              ? " Keďže ide o hlavné portfólio, automaticky sa ním stane iné z vašich portfólií."
+              ? " KeÄŹĹľe ide o hlavnĂ© portfĂłlio, automaticky sa nĂ­m stane inĂ© z vaĹˇich portfĂłliĂ­."
               : ""}{" "}
-            Ak chcete dáta len skryť z prehľadu a zachovať ich, použite ikonu oka.
+            Ak chcete dĂˇta len skryĹĄ z prehÄľadu a zachovaĹĄ ich, pouĹľite ikonu oka.
           </p>
           <div className="flex gap-2">
             <Button variant="Secondary" className="flex-1" onClick={() => setDeletePortfolioId(null)} disabled={isDeleting}>
-              Zrušiť
+              ZruĹˇiĹĄ
             </Button>
             <Button
               variant="Secondary"
@@ -1001,7 +1001,7 @@ export default function SettingsMobile() {
               disabled={isDeleting}
               data-testid="button-confirm-delete-portfolio"
             >
-              {isDeleting ? "Mažem..." : "Vymazať"}
+              {isDeleting ? "MaĹľem..." : "VymazaĹĄ"}
             </Button>
           </div>
         </div>
@@ -1009,7 +1009,7 @@ export default function SettingsMobile() {
 
       <Dialog
         open={wipeDialogOpen}
-        title="Naozaj vymazať všetky dáta?"
+        title="Naozaj vymazaĹĄ vĹˇetky dĂˇta?"
         onClose={() => {
           if (!wipeAllDataMutation.isPending) {
             setWipeDialogOpen(false);
@@ -1018,19 +1018,19 @@ export default function SettingsMobile() {
         }}
       >
         <div className="mt-3 space-y-3">
-          <p className="text-sm leading-5 text-[var(--rd-text-secondary)]">Touto akciou natrvalo zmažete:</p>
+          <p className="text-sm leading-5 text-[var(--rd-text-secondary)]">Touto akciou natrvalo zmaĹľete:</p>
           <ul className="list-disc space-y-1 pl-5 text-sm leading-5 text-[var(--rd-text-secondary)]">
-            <li>všetky transakcie (BUY, SELL, dividendy, dane) zo všetkých portfólií</li>
-            <li>všetky holdingy (aktuálne pozície)</li>
-            <li>všetky opčné obchody</li>
-            <li>aj tzv. nezaradené záznamy bez portfólia</li>
+            <li>vĹˇetky transakcie (BUY, SELL, dividendy, dane) zo vĹˇetkĂ˝ch portfĂłliĂ­</li>
+            <li>vĹˇetky holdingy (aktuĂˇlne pozĂ­cie)</li>
+            <li>vĹˇetky opÄŤnĂ© obchody</li>
+            <li>aj tzv. nezaradenĂ© zĂˇznamy bez portfĂłlia</li>
           </ul>
           <p className="text-sm leading-5 text-[var(--rd-text-secondary)]">
-            Portfóliá, nastavenia meny, API kľúče a prihlásenie zostanú. Po vymazaní môžete naimportovať dáta odznova.
+            PortfĂłliĂˇ, nastavenia meny, API kÄľĂşÄŤe a prihlĂˇsenie zostanĂş. Po vymazanĂ­ mĂ´Ĺľete naimportovaĹĄ dĂˇta odznova.
           </p>
-          <p className="text-sm leading-5 text-[var(--rd-loss)]">Túto akciu nie je možné vrátiť späť.</p>
+          <p className="text-sm leading-5 text-[var(--rd-loss)]">TĂşto akciu nie je moĹľnĂ© vrĂˇtiĹĄ spĂ¤ĹĄ.</p>
           <Input
-            label="Na potvrdenie napíšte: VYMAZAT VSETKO"
+            label="Na potvrdenie napĂ­Ĺˇte: VYMAZAT VSETKO"
             value={wipeConfirmText}
             onChange={(e) => setWipeConfirmText(e.target.value)}
             placeholder="VYMAZAT VSETKO"
@@ -1047,7 +1047,7 @@ export default function SettingsMobile() {
                 setWipeConfirmText("");
               }}
             >
-              Zrušiť
+              ZruĹˇiĹĄ
             </Button>
             <Button
               variant="Secondary"
@@ -1056,23 +1056,23 @@ export default function SettingsMobile() {
               onClick={() => wipeAllDataMutation.mutate()}
               data-testid="button-confirm-wipe"
             >
-              {wipeAllDataMutation.isPending ? "Mažem..." : "Áno, vymazať všetko"}
+              {wipeAllDataMutation.isPending ? "MaĹľem..." : "Ăno, vymazaĹĄ vĹˇetko"}
             </Button>
           </div>
         </div>
       </Dialog>
 
-      <Dialog open={auditHelpOpen} title="Čo obsahuje auditný Excel" onClose={() => setAuditHelpOpen(false)}>
+      <Dialog open={auditHelpOpen} title="ÄŚo obsahuje auditnĂ˝ Excel" onClose={() => setAuditHelpOpen(false)}>
         <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-5 text-[var(--rd-text-secondary)]">
-          <li>Meta – portfólio, mena z nastavení, čas generovania, stručná metodika.</li>
-          <li>Kurzy_ECB_snapshot – kurzy použité pri exporte (Frankfurter/ECB logika ako pri prepočtoch).</li>
+          <li>Meta â€“ portfĂłlio, mena z nastavenĂ­, ÄŤas generovania, struÄŤnĂˇ metodika.</li>
+          <li>Kurzy_ECB_snapshot â€“ kurzy pouĹľitĂ© pri exporte (Frankfurter/ECB logika ako pri prepoÄŤtoch).</li>
           <li>
-            Transakcie – kompletný výpis z DB (dátum, typ, ticker, množstvo, cena, provízia, meny, kurz, baseCurrencyAmount, eurPerUnit, realizedGain, externé ID).
+            Transakcie â€“ kompletnĂ˝ vĂ˝pis z DB (dĂˇtum, typ, ticker, mnoĹľstvo, cena, provĂ­zia, meny, kurz, baseCurrencyAmount, eurPerUnit, realizedGain, externĂ© ID).
           </li>
           <li>
-            Denne_MTMTWR – deň po dni: celková hodnota a čisté vklady v zvolenej mene, denný rozdiel, kumulatívne % portfólia a S&amp;P.
+            Denne_MTMTWR â€“ deĹ po dni: celkovĂˇ hodnota a ÄŤistĂ© vklady v zvolenej mene, dennĂ˝ rozdiel, kumulatĂ­vne % portfĂłlia a S&amp;P.
           </li>
-          <li>FIFO – realizácia podľa roka/mesiaca, súhrn podľa tickeru, otvorené loty, celkový súhrn v EUR.</li>
+          <li>FIFO â€“ realizĂˇcia podÄľa roka/mesiaca, sĂşhrn podÄľa tickeru, otvorenĂ© loty, celkovĂ˝ sĂşhrn v EUR.</li>
         </ul>
       </Dialog>
     </div>

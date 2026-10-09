@@ -231,7 +231,7 @@ function NavGroup({
 
 function IconBubble({ icon }: { icon: ReactNode }) {
   return (
-    <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-[var(--rd-radius-sm)] bg-[var(--rd-bg-surface-raised)] text-[var(--rd-text-secondary)]">
+    <span className="inline-flex size-[30px] shrink-0 items-center justify-center rounded-[var(--rd-radius-sm)] bg-[var(--rd-bg-surface-raised)] text-[var(--rd-text-secondary)]">
       {icon}
     </span>
   );
