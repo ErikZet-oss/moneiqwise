@@ -156,6 +156,7 @@ export default function GoalTrackerMobile() {
     (selectedMonthKey ? projection.find((point) => point.monthKey === selectedMonthKey) : null) ?? yearRows[0] ?? null;
   const overline = isAllPortfolios ? "Všetky portfóliá" : selectedPortfolio?.name ?? "Portfólio";
   const hitLabel = summary.goalHitDate ? new Date(summary.goalHitDate).toLocaleDateString("sk-SK") : "—";
+  const currentMonthKey = monthKeyFromDate(new Date());
 
   return (
     <div className="bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
@@ -326,11 +327,11 @@ export default function GoalTrackerMobile() {
               <p className="min-w-0 flex-1 rd-type-h2">Mesačný kalendár</p>
               <HelpButton
                 title="Ako čítať mesačný grid"
-                body="Klikni na mesiac a uvidíš porovnanie cieľovej a reálnej hodnoty. Zelená = nad cieľom, červená = pod cieľom."
+                body="Na bunke je plánovaná hodnota na koniec mesiaca. Po prechode mesiaca: zelená = realita ≥ plán, červená = realita pod plánom. Budúce mesiace zostávajú sivé."
               />
             </div>
             <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">
-              Klikni na mesiac a uvidíš porovnanie cieľovej a reálnej hodnoty.
+              Číslo = koľko by si mal mať na konci mesiaca. Zelená = mesiac splnený.
             </p>
           </div>
           <Select
@@ -342,18 +343,21 @@ export default function GoalTrackerMobile() {
           <div className="grid grid-cols-4 gap-2">
             {Array.from({ length: 12 }, (_, month) => {
               const row = yearRows.find((point) => point.month === month) ?? null;
-              const diff = row && row.actualValue != null ? row.actualValue - goalAmount : null;
+              const monthPassed = row != null && row.monthKey < currentMonthKey;
+              const met =
+                monthPassed && row.actualValue != null ? row.actualValue >= row.targetValue : null;
               const active = selectedDetail?.monthKey === row?.monthKey;
               const tone =
-                diff == null
-                  ? "border-[var(--rd-border-subtle)] text-[var(--rd-text-tertiary)]"
-                  : diff >= 0
-                    ? "border-[var(--rd-profit)] text-[var(--rd-profit)]"
-                    : "border-[var(--rd-loss)] text-[var(--rd-loss)]";
-              const cellLabel =
-                diff == null
-                  ? "Bez reality"
-                  : `${diff >= 0 ? "✓ +" : "✕ −"}${formatCurrency(Math.abs(diff))}`;
+                met === true
+                  ? "border-[var(--rd-profit)] bg-[var(--rd-profit-dim)] text-[var(--rd-profit)]"
+                  : met === false
+                    ? "border-[var(--rd-loss)] bg-[var(--rd-loss-dim)] text-[var(--rd-loss)]"
+                    : "border-[var(--rd-border-subtle)] text-[var(--rd-text-tertiary)]";
+              const cellLabel = row
+                ? formatCurrency(row.targetValue)
+                : "—";
+              const statusHint =
+                met === true ? "Splnené" : met === false ? "Nesplnené" : monthPassed ? "Bez dát" : "Plán";
               return (
                 <button
                   key={`${effectiveSelectedYear}-${month}`}
@@ -362,7 +366,8 @@ export default function GoalTrackerMobile() {
                   className={`min-h-[64px] rounded-[var(--rd-radius-sm)] border bg-[var(--rd-bg-surface-raised)] px-2 py-2 text-left ${tone} ${active ? "ring-1 ring-[var(--rd-text-primary)]" : ""}`}
                 >
                   <p className="text-xs font-medium text-[var(--rd-text-primary)]">{MONTHS_SK[month]}</p>
-                  <p className="mt-1 font-mono text-[10px] leading-3">{cellLabel}</p>
+                  <p className="mt-1 font-mono text-[10px] leading-3 tabular-nums">{cellLabel}</p>
+                  <p className="mt-0.5 text-[9px] leading-3 opacity-80">{statusHint}</p>
                 </button>
               );
             })}
@@ -372,20 +377,20 @@ export default function GoalTrackerMobile() {
               <p className="text-sm font-semibold">
                 {MONTHS_SK[selectedDetail.month]} {selectedDetail.year}
               </p>
-              <KvRow label="Cieľová suma" value={formatCurrency(goalAmount)} />
-              <KvRow label="Potrebná hodnota pre cieľ" value={formatCurrency(selectedDetail.targetValue)} />
+              <KvRow label="Finálny cieľ (celkový)" value={formatCurrency(goalAmount)} />
+              <KvRow label="Plán na koniec mesiaca" value={formatCurrency(selectedDetail.targetValue)} />
               <KvRow
                 label="Tvoja reálna hodnota"
                 value={selectedDetail.actualValue != null ? formatCurrency(selectedDetail.actualValue) : "Bez dát"}
               />
               <KvRow
-                label="Stav voči cieľu"
+                label="Stav voči mesačnému plánu"
                 value={
                   selectedDetail.actualValue != null
-                    ? signedMoney(formatCurrency, selectedDetail.actualValue - goalAmount)
+                    ? signedMoney(formatCurrency, selectedDetail.actualValue - selectedDetail.targetValue)
                     : "—"
                 }
-                tone={toneOf((selectedDetail.actualValue ?? 0) - goalAmount)}
+                tone={toneOf((selectedDetail.actualValue ?? 0) - selectedDetail.targetValue)}
               />
             </div>
           ) : null}
