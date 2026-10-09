@@ -23,27 +23,27 @@ const ASSET_TYPE_LABELS: Record<AssetType, string> = {
   DLHOPIS: "Dlhopis",
   KOMODITA: "Komodita",
   FOND: "Fond",
-  HOTOVOST: "HotovosĹĄ",
-  INE: "InĂ©",
+  HOTOVOST: "Hotovosť",
+  INE: "Iné",
 };
 
 const SECTOR_OPTIONS = [
-  "TechnolĂłgie",
+  "Technológie",
   "Financie",
-  "ZdravotnĂ­ctvo",
+  "Zdravotníctvo",
   "Priemysel",
   "Energetika",
-  "NehnuteÄľnosti",
-  "KomunikĂˇcie",
-  "SpotrebnĂ˝ tovar - cyklickĂ˝",
-  "SpotrebnĂ˝ tovar - defenzĂ­vny",
-  "MateriĂˇly",
+  "Nehnuteľnosti",
+  "Komunikácie",
+  "Spotrebný tovar - cyklický",
+  "Spotrebný tovar - defenzívny",
+  "Materiály",
   "Utility",
-  "HotovosĹĄ",
-  "NezaradenĂ©",
+  "Hotovosť",
+  "Nezaradené",
 ];
 
-const COUNTRY_OPTIONS = ["USA", "EurĂłpa", "Ăzia", "JuĹľnĂˇ Amerika"];
+const COUNTRY_OPTIONS = ["USA", "Európa", "Ázia", "Južná Amerika"];
 
 function aggregate(rows: Slice[]): Slice[] {
   const map = new Map<string, number>();
@@ -73,49 +73,78 @@ function DonutCard({
 }) {
   const top = slices.slice(0, 5);
   const rest = slices.slice(5).reduce((sum, slice) => sum + slice.value, 0);
-  const chart = rest > 0 ? [...top, { name: "OstatnĂ©", value: rest }] : top;
+  const chart = rest > 0 ? [...top, { name: "Ostatné", value: rest }] : top;
   const [expanded, setExpanded] = useState(false);
   const visible = expanded ? slices : chart;
+  const pct = (value: number) => (total > 0 ? Math.round((value / total) * 100) : 0);
   const label = (value: number) =>
-    mode === "percent" ? `${total > 0 ? Math.round((value / total) * 100) : 0}%` : mask(formatCurrency(value));
+    mode === "percent" ? `${pct(value)}%` : mask(formatCurrency(value));
 
   return (
-    <Card>
-      <p className="rd-type-h2">{title}</p>
-      <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">{subtitle}</p>
+    <Card className="gap-2">
+      <div className="flex flex-col gap-1">
+        <p className="rd-type-h2">{title}</p>
+        <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">{subtitle}</p>
+      </div>
       {chart.length === 0 ? (
-        <p className="text-xs text-[var(--rd-text-secondary)]">ZatiaÄľ nie je ÄŤo rozloĹľiĹĄ.</p>
+        <p className="text-xs text-[var(--rd-text-secondary)]">Zatiaľ nie je čo rozložiť.</p>
       ) : (
-        <div className="flex items-center gap-3">
-          <div className="relative h-36 w-36 shrink-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={chart} dataKey="value" innerRadius={42} outerRadius={64} paddingAngle={2} stroke="none">
-                  {chart.map((slice, index) => (
-                    <Cell key={slice.name} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                  ))}
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--rd-text-tertiary)]">Celkom</p>
-              <p className="font-mono text-xs font-medium">{mask(formatCurrency(total))}</p>
+        <>
+          <div className="flex w-full items-start justify-center">
+            <div className="relative size-[148px] shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={chart} dataKey="value" innerRadius={48} outerRadius={70} paddingAngle={2} stroke="none">
+                    {chart.map((slice, index) => (
+                      <Cell key={slice.name} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--rd-text-tertiary)]">
+                  Celkom
+                </p>
+                <p className="font-mono text-[11px] font-medium leading-[14px] text-[var(--rd-text-primary)]">
+                  {mask(formatCurrency(total))}
+                </p>
+              </div>
             </div>
           </div>
-          <ul className="min-w-0 flex-1">
-            {visible.map((slice, index) => (
-              <li key={slice.name} className="flex min-h-8 items-center gap-2 text-xs">
-                <i className="size-2 shrink-0 rounded-full" style={{ background: CHART_COLORS[index % CHART_COLORS.length] }} />
-                <span className="min-w-0 flex-1 truncate text-[var(--rd-text-secondary)]">{slice.name}</span>
-                <span className="font-mono text-[var(--rd-text-primary)]">{label(slice.value)}</span>
-              </li>
-            ))}
+          <ul className="flex w-full flex-col gap-2">
+            {visible.map((slice, index) => {
+              const color = CHART_COLORS[index % CHART_COLORS.length];
+              const widthPct = pct(slice.value);
+              return (
+                <li key={slice.name} className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <i className="size-2 shrink-0 rounded-full" style={{ background: color }} />
+                    <span className="min-w-0 flex-1 truncate text-[11px] leading-[14px] text-[var(--rd-text-secondary)]">
+                      {slice.name}
+                    </span>
+                    <span className="font-mono text-[11px] font-medium leading-[14px] text-[var(--rd-text-primary)]">
+                      {label(slice.value)}
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--rd-bg-surface-hover)]">
+                    <div
+                      className="h-full rounded-full"
+                      style={{ width: `${Math.min(100, Math.max(0, widthPct))}%`, background: color }}
+                    />
+                  </div>
+                </li>
+              );
+            })}
           </ul>
-        </div>
+        </>
       )}
       {slices.length > 5 ? (
-        <button type="button" onClick={() => setExpanded((prev) => !prev)} className="self-start text-[13px] font-medium text-[var(--rd-profit)]">
-          {expanded ? "ZobraziĹĄ menej" : `+${slices.length - 5} ÄŹalĹˇĂ­ch`}
+        <button
+          type="button"
+          onClick={() => setExpanded((prev) => !prev)}
+          className="self-start text-[13px] font-medium text-[var(--rd-profit)]"
+        >
+          {expanded ? "Zobraziť menej" : `+${slices.length - 5} ďalších`}
         </button>
       ) : null}
     </Card>
@@ -131,8 +160,8 @@ export default function AllocationMobile() {
   const [mode, setMode] = useState<"percent" | "value">("percent");
   const [editorRows, setEditorRows] = useState<Record<string, EditorRow>>({});
   const portfolioParam = getQueryParam();
-  const mask = (value: string) => (hideAmounts ? "â€˘â€˘â€˘â€˘â€˘â€˘" : value);
-  const overline = isAllPortfolios ? "VĹˇetky portfĂłliĂˇ" : selectedPortfolio?.name ?? "PortfĂłlio";
+  const mask = (value: string) => (hideAmounts ? "••••••" : value);
+  const overline = isAllPortfolios ? "Všetky portfóliá" : selectedPortfolio?.name ?? "Portfólio";
 
   const { data: holdings, isLoading: holdingsLoading } = useQuery<Holding[]>({
     queryKey: ["/api/holdings", portfolioParam],
@@ -220,10 +249,10 @@ export default function AllocationMobile() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/stocks/metadata"] });
       queryClient.invalidateQueries({ queryKey: ["/api/stocks/asset-profiles/batch"] });
-      toast({ title: "UloĹľenĂ©", description: "MetadĂˇta aktĂ­v boli uloĹľenĂ©." });
+      toast({ title: "Uložené", description: "Metadáta aktív boli uložené." });
     },
     onError: (err: Error) => {
-      toast({ title: "Chyba", description: err.message || "Nepodarilo sa uloĹľiĹĄ metadĂˇta aktĂ­va.", variant: "destructive" });
+      toast({ title: "Chyba", description: err.message || "Nepodarilo sa uložiť metadáta aktíva.", variant: "destructive" });
     },
   });
 
@@ -241,10 +270,10 @@ export default function AllocationMobile() {
     const tickerValues = new Map<string, number>();
     let total = cashValue > 0.005 ? cashValue : 0;
     if (cashValue > 0.005) {
-      tickerValues.set("HotovosĹĄ", cashValue);
-      sectorRows.push({ name: "HotovosĹĄ", value: cashValue });
-      countryRows.push({ name: "â€”", value: cashValue });
-      typeRows.push({ name: "HotovosĹĄ", value: cashValue });
+      tickerValues.set("Hotovosť", cashValue);
+      sectorRows.push({ name: "Hotovosť", value: cashValue });
+      countryRows.push({ name: "—", value: cashValue });
+      typeRows.push({ name: "Hotovosť", value: cashValue });
     }
     for (const holding of holdings ?? []) {
       const key = holding.ticker.toUpperCase();
@@ -261,18 +290,18 @@ export default function AllocationMobile() {
         key === CASH_INTEREST_TICKER
           ? CASH_INTEREST_DISPLAY_NAME
           : pokemon
-            ? holding.companyName || "PokĂ©mon TCG"
+            ? holding.companyName || "Pokémon TCG"
             : holding.ticker;
       const bucket = isAllPortfolios && pokemon ? POKEMON_GROUP_TICKER : name;
       tickerValues.set(bucket, (tickerValues.get(bucket) ?? 0) + value);
-      const profile = profiles[key] ?? profiles[holding.ticker] ?? { sector: "NeznĂˇme", country: "NeznĂˇme", assetType: "AKCIA" as AssetType };
-      sectorRows.push({ name: profile.sector || "NeznĂˇme", value });
-      countryRows.push({ name: profile.country || "NeznĂˇme", value });
-      typeRows.push({ name: ASSET_TYPE_LABELS[profile.assetType] ?? "InĂ©", value });
+      const profile = profiles[key] ?? profiles[holding.ticker] ?? { sector: "Neznáme", country: "Neznáme", assetType: "AKCIA" as AssetType };
+      sectorRows.push({ name: profile.sector || "Neznáme", value });
+      countryRows.push({ name: profile.country || "Neznáme", value });
+      typeRows.push({ name: ASSET_TYPE_LABELS[profile.assetType] ?? "Iné", value });
     }
     return {
       total,
-      byTicker: Array.from(tickerValues.entries()).map(([name, value]) => ({ name: name === POKEMON_GROUP_TICKER ? "PokĂ©mon TCG" : name, value })).sort((a, b) => b.value - a.value),
+      byTicker: Array.from(tickerValues.entries()).map(([name, value]) => ({ name: name === POKEMON_GROUP_TICKER ? "Pokémon TCG" : name, value })).sort((a, b) => b.value - a.value),
       bySector: aggregate(sectorRows),
       byCountry: aggregate(countryRows),
       byType: aggregate(typeRows),
@@ -280,51 +309,119 @@ export default function AllocationMobile() {
   }, [holdings, quotes, profiles, cashValue, convertPrice, getTickerCurrency, isAllPortfolios]);
 
   return (
-    <div>
-      <TopBar overline={overline} title="RozloĹľenie" onOverlineClick={() => setPickerOpen(true)} />
+    <div className="bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
+      <TopBar overline={overline} title="Rozloženie" onOverlineClick={() => setPickerOpen(true)} />
       <PortfolioSwitcher open={pickerOpen} onClose={() => setPickerOpen(false)} />
       <PageBody>
         <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">
-          PodÄľa tickerov, sektorov, krajĂ­n a typu aktĂ­va. Sektor, krajinu a typ vieĹˇ manuĂˇlne prepĂ­saĹĄ niĹľĹˇie.
+          Podľa tickerov, sektorov, krajín a typu aktíva. Sektor, krajinu a typ vieš manuálne prepísať nižšie.
         </p>
         <div className="flex gap-1">
-          <Chip active={mode === "percent"} onClick={() => setMode("percent")}>PercentĂˇ</Chip>
-          <Chip active={mode === "value"} onClick={() => setMode("value")}>{`Hodnoty (${currency})`}</Chip>
+          <Chip active={mode === "percent"} onClick={() => setMode("percent")}>
+            Percentá
+          </Chip>
+          <Chip active={mode === "value"} onClick={() => setMode("value")}>
+            {`Hodnoty (${currency})`}
+          </Chip>
         </div>
         {holdingsLoading || isLoading ? (
-          <Card><p className="text-sm text-[var(--rd-text-secondary)]">NaÄŤĂ­tavam rozloĹľenieâ€¦</p></Card>
+          <Card>
+            <p className="text-sm text-[var(--rd-text-secondary)]">Načítavam rozloženie…</p>
+          </Card>
         ) : groups.total <= 0 ? (
-          <EmptyState title="PrĂˇzdne rozloĹľenie" body="Po nĂˇkupe aktĂ­v sa tu zobrazia podiely podÄľa tickeru, sektoru, krajiny a typu." />
+          <EmptyState
+            title="Prázdne rozloženie"
+            body="Po nákupe aktív sa tu zobrazia podiely podľa tickeru, sektoru, krajiny a typu."
+          />
         ) : (
           <>
-            <DonutCard title="PodÄľa akciĂ­" subtitle="KaĹľdĂ˝ ticker + hotovosĹĄ" slices={groups.byTicker} total={groups.total} mode={mode} formatCurrency={formatCurrency} mask={mask} />
-            <DonutCard title="PodÄľa sektorov" subtitle="Odvetvie podÄľa Yahoo" slices={groups.bySector} total={groups.total} mode={mode} formatCurrency={formatCurrency} mask={mask} />
-            <DonutCard title="PodÄľa krajĂ­n" subtitle="Krajina sĂ­dla emitenta" slices={groups.byCountry} total={groups.total} mode={mode} formatCurrency={formatCurrency} mask={mask} />
-            <DonutCard title="PodÄľa typu" subtitle="Akcia, ETF, kryptoâ€¦" slices={groups.byType} total={groups.total} mode={mode} formatCurrency={formatCurrency} mask={mask} />
+            <DonutCard
+              title="Podľa akcií"
+              subtitle="Každý ticker + hotovosť"
+              slices={groups.byTicker}
+              total={groups.total}
+              mode={mode}
+              formatCurrency={formatCurrency}
+              mask={mask}
+            />
+            <DonutCard
+              title="Podľa sektorov"
+              subtitle="Odvetvie podľa Yahoo"
+              slices={groups.bySector}
+              total={groups.total}
+              mode={mode}
+              formatCurrency={formatCurrency}
+              mask={mask}
+            />
+            <DonutCard
+              title="Podľa krajín"
+              subtitle="Krajina sídla emitenta"
+              slices={groups.byCountry}
+              total={groups.total}
+              mode={mode}
+              formatCurrency={formatCurrency}
+              mask={mask}
+            />
+            <DonutCard
+              title="Podľa typu"
+              subtitle="Akcia, ETF, krypto…"
+              slices={groups.byType}
+              total={groups.total}
+              mode={mode}
+              formatCurrency={formatCurrency}
+              mask={mask}
+            />
           </>
         )}
 
         {equityTickers.length > 0 ? (
-          <Card>
-            <p className="rd-type-h2">ManuĂˇlne metadĂˇta aktĂ­v</p>
-            <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">
-              PrepĂ­Ĺˇe sektor, krajinu a typ z Yahoo pre vybranĂ˝ ticker (prĂˇzdne = pouĹľije sa Yahoo).
-            </p>
+          <Card className="gap-3">
+            <div className="flex flex-col gap-1">
+              <p className="rd-type-h2">Manuálne metadáta aktív</p>
+              <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">
+                Prepíše sektor, krajinu a typ z Yahoo pre vybraný ticker (prázdne = použije sa Yahoo).
+              </p>
+            </div>
+            <Button onClick={() => saveMetadata.mutate(editorRows)} disabled={saveMetadata.isPending}>
+              {saveMetadata.isPending ? "Ukladám…" : "Uložiť všetko"}
+            </Button>
             {equityTickers.map((ticker) => {
               const row = editorRows[ticker] ?? { sector: "", country: "", assetType: "" as const };
-              const set = (patch: Partial<EditorRow>) => setEditorRows((prev) => ({ ...prev, [ticker]: { ...row, ...patch } }));
+              const set = (patch: Partial<EditorRow>) =>
+                setEditorRows((prev) => ({ ...prev, [ticker]: { ...row, ...patch } }));
               return (
                 <div key={ticker} className="flex flex-col gap-2 border-t border-[var(--rd-border-subtle)] pt-3">
                   <p className="font-mono text-sm font-medium">{ticker}</p>
-                  <Select label="Sektor" value={row.sector || "auto"} onChange={(value) => set({ sector: value === "auto" ? "" : value })} options={[{ value: "auto", label: "Automaticky" }, ...SECTOR_OPTIONS.map((option) => ({ value: option, label: option }))]} />
-                  <Select label="Krajina" value={row.country || "auto"} onChange={(value) => set({ country: value === "auto" ? "" : value })} options={[{ value: "auto", label: "Automaticky" }, ...COUNTRY_OPTIONS.map((option) => ({ value: option, label: option }))]} />
-                  <Select label="Typ" value={row.assetType || "auto"} onChange={(value) => set({ assetType: value === "auto" ? "" : (value as AssetType) })} options={[{ value: "auto", label: "Automaticky" }, ...Object.entries(ASSET_TYPE_LABELS).map(([value, label]) => ({ value, label }))]} />
+                  <Select
+                    label="Sektor"
+                    value={row.sector || "auto"}
+                    onChange={(value) => set({ sector: value === "auto" ? "" : value })}
+                    options={[
+                      { value: "auto", label: "Automaticky" },
+                      ...SECTOR_OPTIONS.map((option) => ({ value: option, label: option })),
+                    ]}
+                  />
+                  <Select
+                    label="Krajina"
+                    value={row.country || "auto"}
+                    onChange={(value) => set({ country: value === "auto" ? "" : value })}
+                    options={[
+                      { value: "auto", label: "Automaticky" },
+                      ...COUNTRY_OPTIONS.map((option) => ({ value: option, label: option })),
+                    ]}
+                  />
+                  <Select
+                    label="Typ"
+                    value={row.assetType || "auto"}
+                    onChange={(value) => set({ assetType: value === "auto" ? "" : (value as AssetType) })}
+                    options={[
+                      { value: "auto", label: "Automaticky" },
+                      ...Object.entries(ASSET_TYPE_LABELS).map(([value, label]) => ({ value, label })),
+                    ]}
+                  />
                 </div>
               );
             })}
-            <Button onClick={() => saveMetadata.mutate(editorRows)} disabled={saveMetadata.isPending}>
-              {saveMetadata.isPending ? "UkladĂˇmâ€¦" : "UloĹľiĹĄ vĹˇetko"}
-            </Button>
           </Card>
         ) : null}
       </PageBody>
