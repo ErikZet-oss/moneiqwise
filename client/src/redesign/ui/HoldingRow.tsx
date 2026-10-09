@@ -342,11 +342,14 @@ export function HoldingRowSimple({
                 type="button"
                 onClick={onNameClick}
                 className={cn(typeName, "min-w-0 flex-1 truncate text-left text-[var(--rd-text-primary)]")}
+                title={name}
               >
-                {name}
+                {ticker}
               </button>
             ) : (
-              <p className={cn(typeName, "min-w-0 flex-1 truncate text-[var(--rd-text-primary)]")}>{name}</p>
+              <p className={cn(typeName, "min-w-0 flex-1 truncate text-[var(--rd-text-primary)]")} title={name}>
+                {ticker}
+              </p>
             )}
             <Badge label={assetType} className="shrink-0" />
             <p className={cn(typeValue, "shrink-0 text-[var(--rd-text-primary)]")}>{value}</p>
