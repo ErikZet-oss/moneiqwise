@@ -14,14 +14,87 @@ const SIZE = {
   lg: { w: 240, stroke: 18, font: "text-4xl", sub: "text-sm" },
 } as const;
 
-/** Score 0–100 → red → amber → green (matches profit/loss greens in light theme). */
+/** Figma redesign tokens: loss → warning → profit. */
+const SCORE_RGB = {
+  loss: [240, 102, 126] as const, // --rd-loss #f0667e
+  warning: [242, 184, 75] as const, // --rd-warning #f2b84b
+  profit: [47, 218, 184] as const, // --rd-profit #2fdab8
+};
+
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t;
+}
+
+function mixRgb(
+  a: readonly [number, number, number],
+  b: readonly [number, number, number],
+  t: number,
+): string {
+  const tt = Math.max(0, Math.min(1, t));
+  const r = Math.round(lerp(a[0], b[0], tt));
+  const g = Math.round(lerp(a[1], b[1], tt));
+  const bl = Math.round(lerp(a[2], b[2], tt));
+  return `rgb(${r} ${g} ${bl})`;
+}
+
+/** Score 0–100 → red → amber → green (Figma health-score-bar / score-factor). */
 export function scoreToBarColor(score: number): string {
   const t = Math.max(0, Math.min(100, score)) / 100;
-  // Hue: 0 (red) → 38 (amber) → 142 (green)
-  const hue = t < 0.5 ? t * 2 * 38 : 38 + (t - 0.5) * 2 * (142 - 38);
-  const sat = 78 - t * 8;
-  const light = 52 - t * 6;
-  return `hsl(${hue.toFixed(1)} ${sat.toFixed(0)}% ${light.toFixed(0)}%)`;
+  if (t < 0.5) return mixRgb(SCORE_RGB.loss, SCORE_RGB.warning, t * 2);
+  return mixRgb(SCORE_RGB.warning, SCORE_RGB.profit, (t - 0.5) * 2);
+}
+
+/** Horizontal 6px pill bar — Figma `health-score-bar`. */
+export function HealthScoreBar({
+  score,
+  className,
+  interactive = false,
+  onClick,
+  "aria-label": ariaLabel,
+}: {
+  score: number | null;
+  className?: string;
+  interactive?: boolean;
+  onClick?: () => void;
+  "aria-label"?: string;
+}) {
+  const value = score == null ? 0 : Math.max(0, Math.min(100, score));
+  const fill = score == null ? 0 : value;
+  const color = score == null ? "var(--rd-text-tertiary, hsl(0 0% 45%))" : scoreToBarColor(value);
+  const trackClass = cn(
+    "relative h-1.5 w-full overflow-hidden rounded-full bg-[var(--rd-bg-surface-hover,#272c32)]",
+    className,
+  );
+  const fillEl = (
+    <span
+      className="absolute inset-y-0 left-0 rounded-full transition-[width,background-color] duration-500 ease-out"
+      style={{ width: `${fill}%`, backgroundColor: color }}
+      aria-hidden
+    />
+  );
+
+  if (interactive || onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={ariaLabel}
+        className={cn(
+          trackClass,
+          "cursor-pointer outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-[var(--rd-ai,#b48ce0)]",
+        )}
+        data-testid="health-score-bar"
+      >
+        {fillEl}
+      </button>
+    );
+  }
+
+  return (
+    <div className={trackClass} data-testid="health-score-bar" role="meter" aria-valuenow={value} aria-valuemin={0} aria-valuemax={100} aria-label={ariaLabel}>
+      {fillEl}
+    </div>
+  );
 }
 
 function polar(cx: number, cy: number, r: number, angleRad: number) {

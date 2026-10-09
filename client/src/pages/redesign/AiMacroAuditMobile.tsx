@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { format } from "date-fns";
+import { sk } from "date-fns/locale";
 import { ChevronDown, ExternalLink, Lightbulb, Newspaper, ShieldAlert, Sparkles, Target } from "lucide-react";
+import { HealthScoreBar, scoreToBarColor } from "@/components/AiMacroScoreGauge";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -17,6 +20,13 @@ import {
 import { cn } from "@/lib/utils";
 import { Badge, Button, Card, Dialog, EmptyState, TopBar, type BadgeTone } from "@/redesign/ui";
 import { PageBody } from "./mobileChrome";
+
+const SCORE_FACTOR_META = [
+  { key: "sectorConcentration" as const, title: "Sektorová koncentrácia" },
+  { key: "fedSensitivity" as const, title: "Citlivosť na Fed" },
+  { key: "newsSentiment" as const, title: "News & sentiment" },
+  { key: "inflationResilience" as const, title: "Inflačná odolnosť" },
+];
 
 function impactTone(impact: AiAuditorImpact): BadgeTone {
   if (impact === "positive") return "Profit";
@@ -184,53 +194,82 @@ export default function AiMacroAuditMobile() {
           />
         ) : (
           <>
-            <Card className="gap-2 p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="rd-type-overline text-[var(--rd-text-tertiary)]">Health score</p>
-                  <button
-                    type="button"
-                    className="mt-1 text-left"
-                    onClick={() => setScoreOpen((v) => !v)}
-                    aria-expanded={scoreOpen}
-                    data-testid="button-ai-macro-score-expand"
-                  >
-                    <span className="rd-type-display-hero text-[var(--rd-ai)]">
-                      {analysis.healthScore}
-                    </span>
-                    <span className="text-lg text-[var(--rd-text-tertiary)]"> / 100</span>
-                  </button>
-                  <p className="mt-0.5 rd-type-body-sm text-[var(--rd-text-secondary)]">
-                    {analysis.healthLabel}
-                  </p>
-                </div>
+            <Card className="gap-2 p-3" data-testid="card-ai-macro-health">
+              <p className="rd-type-overline uppercase tracking-[0.08em] text-[var(--rd-text-tertiary)]">
+                Portfolio Health · Macro factors score
+              </p>
+              {data?.run?.createdAt ? (
+                <p className="rd-type-body-sm text-[var(--rd-text-tertiary)]">
+                  Posledný update:{" "}
+                  {format(new Date(data.run.createdAt), "d. M. yyyy HH:mm", { locale: sk })}
+                </p>
+              ) : null}
+              <div className="flex items-end gap-1.5">
+                <span
+                  className="rd-type-display-hero tabular-nums"
+                  style={{ color: scoreToBarColor(analysis.healthScore) }}
+                  data-testid="health-score-value"
+                >
+                  {analysis.healthScore}
+                </span>
+                <span className="pb-0.5 rd-type-h2 text-[var(--rd-text-tertiary)]">/ 100</span>
+              </div>
+              <HealthScoreBar
+                score={analysis.healthScore}
+                interactive
+                aria-label={
+                  scoreOpen
+                    ? "Skryť rozklad skóre"
+                    : "Zobraziť rozklad skóre"
+                }
+                onClick={() => setScoreOpen((v) => !v)}
+              />
+              <p className="rd-type-body-sm text-[var(--rd-text-secondary)]" data-testid="health-score-label">
+                {analysis.healthLabel}
+              </p>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rd-type-label text-[var(--rd-text-secondary)]"
+                onClick={() => setScoreOpen((v) => !v)}
+                aria-expanded={scoreOpen}
+                data-testid="button-ai-macro-score-expand"
+              >
+                {scoreOpen ? "Skryť rozklad skóre" : "Rozklikni — rozklad skóre"}
                 <ChevronDown
                   className={cn(
-                    "mt-2 size-4 shrink-0 text-[var(--rd-text-tertiary)] transition-transform",
+                    "size-3 transition-transform",
                     scoreOpen && "rotate-180",
                   )}
                   aria-hidden
                 />
-              </div>
+              </button>
               {scoreOpen ? (
-                <div className="grid grid-cols-2 gap-2">
-                  {(
-                    [
-                      ["sectorConcentration", "Sektorová koncentrácia"],
-                      ["fedSensitivity", "Citlivosť na Fed"],
-                      ["newsSentiment", "News & sentiment"],
-                      ["inflationResilience", "Inflačná odolnosť"],
-                    ] as const
-                  ).map(([key, title]) => {
-                    const factor = analysis.scoreBreakdown[key];
+                <div className="flex flex-col gap-2 pt-1">
+                  {SCORE_FACTOR_META.map((meta) => {
+                    const factor = analysis.scoreBreakdown[meta.key];
+                    const color = scoreToBarColor(factor.score);
                     return (
                       <div
-                        key={key}
-                        className="rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface)] p-2"
+                        key={meta.key}
+                        className="flex flex-col gap-1.5 rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)] p-3"
+                        data-testid={`ai-macro-score-factor-${meta.key}`}
                       >
-                        <p className="rd-type-data-sm text-[var(--rd-ai)]">{factor.score}/100</p>
-                        <p className="rd-type-overline text-[var(--rd-text-primary)]">{title}</p>
-                        <p className="mt-0.5 rd-type-body-sm text-[var(--rd-text-tertiary)]">
+                        <div className="flex items-center gap-1.5">
+                          <p className="min-w-0 flex-1 rd-type-body-strong text-[var(--rd-text-primary)]">
+                            {meta.title}
+                          </p>
+                          <p
+                            className="shrink-0 rd-type-data-lg tabular-nums"
+                            style={{ color }}
+                          >
+                            {factor.score}
+                          </p>
+                          <p className="shrink-0 rd-type-body-sm text-[var(--rd-text-tertiary)]">
+                            / 100
+                          </p>
+                        </div>
+                        <HealthScoreBar score={factor.score} />
+                        <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">
                           {factor.detail}
                         </p>
                       </div>
