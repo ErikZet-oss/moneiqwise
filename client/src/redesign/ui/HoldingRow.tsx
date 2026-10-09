@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ChevronDown, ChevronRight, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar } from "./Avatar";
@@ -254,9 +255,13 @@ export function HoldingRowSimple({
   dayChange,
   dayTrend = "Flat",
   pl,
+  plTrend = "Flat",
+  expandable = true,
   expanded = false,
   onToggle,
+  onNameClick,
   lots = [],
+  lotsSlot,
   afterHoursPrice,
   afterHoursChange,
   afterHoursTrend = "Flat",
@@ -268,46 +273,70 @@ export function HoldingRowSimple({
   lot: string;
   dayChange?: string;
   dayTrend?: DeltaTrend;
+  /** e.g. "+2 711,68 € (+120.46%)" */
   pl?: string;
+  plTrend?: DeltaTrend;
+  expandable?: boolean;
   expanded?: boolean;
   onToggle?: () => void;
+  onNameClick?: () => void;
   lots?: HoldingLot[];
+  /** Lazy-loaded lots panel (preferred over static `lots`). */
+  lotsSlot?: ReactNode;
   afterHoursPrice?: string;
   afterHoursChange?: string;
   afterHoursTrend?: DeltaTrend;
 }) {
+  const plClass =
+    plTrend === "Down"
+      ? "text-[var(--rd-loss)]"
+      : plTrend === "Up"
+        ? "text-[var(--rd-profit)]"
+        : "text-[var(--rd-text-secondary)]";
+  const dayClass =
+    dayTrend === "Down"
+      ? "text-[var(--rd-loss)]"
+      : dayTrend === "Up"
+        ? "text-[var(--rd-profit)]"
+        : "text-[var(--rd-text-secondary)]";
+
   return (
-    <div className="flex w-full flex-col gap-1.5 py-2.5">
-      <div className="flex min-h-[40px] items-center gap-1.5">
-        <button
-          type="button"
-          aria-expanded={expanded}
-          aria-label={expanded ? "Zbaliť loty" : "Rozbaliť loty"}
-          onClick={onToggle}
-          className="inline-flex size-[30px] items-center justify-center text-[var(--rd-text-tertiary)]"
-        >
-          {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
-        </button>
+    <div className="flex w-full flex-col gap-1.5 py-2">
+      <div className="flex items-center gap-1.5">
+        {expandable ? (
+          <button
+            type="button"
+            aria-expanded={expanded}
+            aria-label={expanded ? "Zbaliť loty" : "Rozbaliť loty"}
+            onClick={onToggle}
+            className="inline-flex size-4 shrink-0 items-center justify-center text-[var(--rd-text-tertiary)]"
+          >
+            {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+          </button>
+        ) : (
+          <span className="inline-block size-4 shrink-0" aria-hidden />
+        )}
         <Avatar ticker={ticker} />
-        <div className="min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex items-center gap-1.5">
-            <p className="rd-type-body-strong min-w-0 flex-1 truncate text-[var(--rd-text-primary)]">{name}</p>
-            <Badge label={assetType} />
+            {onNameClick ? (
+              <button
+                type="button"
+                onClick={onNameClick}
+                className="rd-type-body-strong min-w-0 flex-1 truncate text-left text-[var(--rd-text-primary)]"
+              >
+                {name}
+              </button>
+            ) : (
+              <p className="rd-type-body-strong min-w-0 flex-1 truncate text-[var(--rd-text-primary)]">{name}</p>
+            )}
+            <Badge label={assetType} className="shrink-0" />
             <p className="rd-type-data shrink-0 text-[var(--rd-text-primary)]">{value}</p>
           </div>
-          <div className="mt-0.5 flex items-center gap-1">
+          <div className="flex items-center gap-1">
             <p className="rd-type-data-micro min-w-0 flex-1 truncate text-[var(--rd-text-secondary)]">{lot}</p>
-            {dayChange ? (
-              <p
-                className={cn(
-                  "rd-type-data-micro",
-                  dayTrend === "Down" ? "text-[var(--rd-loss)]" : dayTrend === "Up" ? "text-[var(--rd-profit)]" : "text-[var(--rd-text-secondary)]",
-                )}
-              >
-                {dayChange}
-              </p>
-            ) : null}
-            {pl ? <p className="rd-type-data-micro text-[var(--rd-profit)]">{pl}</p> : null}
+            {dayChange ? <p className={cn("rd-type-data-micro shrink-0", dayClass)}>{dayChange}</p> : null}
+            {pl ? <p className={cn("rd-type-data-micro shrink-0 text-right", plClass)}>{pl}</p> : null}
           </div>
         </div>
       </div>
@@ -315,10 +344,11 @@ export function HoldingRowSimple({
         price={afterHoursPrice}
         change={afterHoursChange}
         changeTrend={afterHoursTrend}
-        className="pl-[58px]"
+        className="pl-[68px]"
       />
-      {expanded && lots.length > 0 ? (
+      {expanded ? (
         <div className="pl-2">
+          {lotsSlot}
           {lots.map((item) => (
             <LotRow key={`${item.date}-${item.lot}`} {...item} />
           ))}

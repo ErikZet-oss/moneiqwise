@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { sk } from "date-fns/locale";
 import {
   Area,
@@ -24,7 +24,11 @@ import {
 } from "lucide-react";
 import type { HoldingWithCostCurrency } from "@shared/holdingCostCurrency";
 import type { BrokerCode } from "@shared/schema";
-import { CASH_INTEREST_DISPLAY_NAME, CASH_INTEREST_TICKER } from "@shared/tickerCurrency";
+import {
+  CASH_INTEREST_DISPLAY_NAME,
+  CASH_INTEREST_TICKER,
+  type QuoteCurrency,
+} from "@shared/tickerCurrency";
 import { BrokerLogo } from "@/components/BrokerLogo";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
@@ -52,12 +56,14 @@ import {
   EmptyState,
   HoldingRow,
   HoldingRowSimple,
+  LotRow,
   NewsRow,
   SectionHeader,
   StatTile,
   TopBar,
   trendFromNumber,
   type DeltaTrend,
+  type HoldingLot,
 } from "@/redesign/ui";
 import {
   HelpButton,
@@ -140,16 +146,145 @@ function holdingName(h: HoldingWithCostCurrency) {
 }
 
 function simpleBadge(h: HoldingWithCostCurrency) {
+  const t = h.ticker.toUpperCase();
+  if (t === CASH_INTEREST_TICKER || t === "CASH") return "Hotovosť";
   const name = (h.companyName || "").toLowerCase();
-  if (/\betf\b/.test(name)) return "ETF";
+  if (/\betf\b/.test(name) || /\betc\b/.test(name)) return "ETF";
   return "Akcie";
+}
+
+function canExpandLots(h: HoldingWithCostCurrency) {
+  const t = h.ticker.toUpperCase();
+  if (t === "CASH" || t === CASH_INTEREST_TICKER) return false;
+  const shares = parseFloat(h.shares);
+  return Number.isFinite(shares) && shares > 0;
+}
+
+type OpenFifoLot = {
+  acquiredAt: string;
+  remainingShares: number;
+  pricePerShareLocal: number;
+  purchaseCurrency: string;
+  investedAmountEur?: number;
+};
+
+function SimpleLotsPanel({
+  portfolioPath,
+  ticker,
+  shares,
+  currentPrice,
+  investedDisplay,
+  mask,
+  formatAverageCostCurrency,
+  convertPrice,
+  convertAverageCostPrice,
+}: {
+  portfolioPath: string;
+  ticker: string;
+  shares: number;
+  currentPrice: number;
+  investedDisplay: number;
+  mask: (s: string) => string;
+  formatAverageCostCurrency: (n: number) => string;
+  convertPrice: (n: number, from: QuoteCurrency) => number;
+  convertAverageCostPrice: (n: number, from: QuoteCurrency) => number;
+}) {
+  const { data, isLoading, isError } = useQuery<{ lots: OpenFifoLot[] }>({
+    queryKey: ["/api/portfolios", portfolioPath, "asset-lots", ticker],
+    queryFn: async () => {
+      const seg =
+        portfolioPath === "all" || portfolioPath === "unassigned"
+          ? portfolioPath
+          : encodeURIComponent(portfolioPath);
+      const res = await fetch(
+        `/api/portfolios/${seg}/asset-lots?ticker=${encodeURIComponent(ticker)}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) throw new Error("asset-lots");
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+
+  if (isLoading) {
+    return <p className="rd-type-body-sm py-1 text-[var(--rd-text-tertiary)]">Načítavam nákupy…</p>;
+  }
+  if (isError) {
+    return <p className="rd-type-body-sm py-1 text-[var(--rd-loss)]">Nákupy sa nepodarilo načítať.</p>;
+  }
+
+  const lots = data?.lots ?? [];
+  if (lots.length === 0) {
+    return <p className="rd-type-body-sm py-1 text-[var(--rd-text-tertiary)]">Žiadne otvorené nákupné dávky.</p>;
+  }
+
+  const singleCovers =
+    lots.length === 1 &&
+    Math.abs(lots[0]!.remainingShares - shares) <= Math.max(1e-4, shares * 1e-2);
+
+  const rows: HoldingLot[] = lots.map((lot) => {
+    const ccyRaw = (lot.purchaseCurrency || "EUR").toUpperCase();
+    const ccy: QuoteCurrency =
+      ccyRaw === "USD" ||
+      ccyRaw === "GBP" ||
+      ccyRaw === "CZK" ||
+      ccyRaw === "PLN" ||
+      ccyRaw === "HKD" ||
+      ccyRaw === "EUR"
+        ? ccyRaw
+        : "EUR";
+    const openPrice = convertAverageCostPrice(lot.pricePerShareLocal, ccy);
+    const investedEur =
+      lot.investedAmountEur != null && Number.isFinite(lot.investedAmountEur)
+        ? lot.investedAmountEur
+        : null;
+    const investedFromLot = investedEur != null ? convertPrice(investedEur, "EUR") : null;
+    const invested =
+      singleCovers && investedDisplay > 0 ? investedDisplay : investedFromLot;
+    const lotValue =
+      currentPrice > 0 && Number.isFinite(currentPrice) ? lot.remainingShares * currentPrice : null;
+    const lotGain = lotValue != null && invested != null ? lotValue - invested : null;
+    const lotGainPct =
+      lotGain != null && invested != null && Math.abs(invested) > 1e-9
+        ? (lotGain / invested) * 100
+        : null;
+    let dateLabel = lot.acquiredAt;
+    try {
+      dateLabel = format(parseISO(`${lot.acquiredAt}T12:00:00Z`), "d. M. yyyy", { locale: sk });
+    } catch {
+      /* keep */
+    }
+    return {
+      date: dateLabel,
+      lot: `${formatShareQuantity(lot.remainingShares)} @ ${mask(formatAverageCostCurrency(openPrice))}`,
+      returnLabel: lotGainPct != null ? signedPct(lotGainPct) : "—",
+      trend: trendFromNumber(lotGainPct ?? 0),
+      label: "Nákup",
+      tone: "Profit" as const,
+    };
+  });
+
+  return (
+    <>
+      {rows.map((lotRow, idx) => (
+        <LotRow key={`${lotRow.date}-${lotRow.lot}-${idx}`} {...lotRow} />
+      ))}
+    </>
+  );
 }
 
 export default function DashboardMobile() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
-  const { convertPrice, getTickerCurrency, resolveHoldingCostCurrency, pnlInvestedForDisplay, formatCurrency } =
-    useCurrency();
+  const {
+    convertPrice,
+    convertAverageCostPrice,
+    getTickerCurrency,
+    resolveHoldingCostCurrency,
+    pnlInvestedForDisplay,
+    formatCurrency,
+    formatAverageCostCurrency,
+  } = useCurrency();
   const { getQueryParam, selectedPortfolio, isAllPortfolios, portfolios } = usePortfolio();
   const {
     hideAmounts,
@@ -182,6 +317,7 @@ export default function DashboardMobile() {
   const [draftSortBy, setDraftSortBy] = useState<MobileAssetsSortBy>(mobileAssetsSortBy);
   const [draftSortOrder, setDraftSortOrder] = useState<"asc" | "desc">(mobileAssetsSortOrder);
   const [holdingsLimit, setHoldingsLimit] = useState(10);
+  const [expandedHoldingId, setExpandedHoldingId] = useState<string | null>(null);
 
   const { data: holdings = [], isLoading: holdingsLoading } = useQuery<HoldingWithCostCurrency[]>({
     queryKey: ["/api/holdings", portfolioParam],
@@ -421,7 +557,9 @@ export default function DashboardMobile() {
         dayTrendSource,
         avg,
         price: rthPrice,
+        valuationPrice: price,
         shares,
+        invested,
         showAfterHours,
         afterHoursPrice: showAfterHours && hasExtPrice ? extPrice : null,
         afterHoursPct: showAfterHours ? (quote?.preMarketChangePercent ?? null) : null,
@@ -873,31 +1011,33 @@ export default function DashboardMobile() {
       case "holdings":
         return frame(
           <Card className="gap-0 p-0">
-            <div className="flex items-start gap-2 p-4 pb-2">
-              <div className="min-w-0 flex-1">
+            <div className="flex flex-col gap-1.5 p-4 pb-2">
+              <div className="min-w-0">
                 <SectionHeader title="Prehľad aktív" />
-                <p className="text-xs text-[var(--rd-text-tertiary)]">Vaše aktuálne držané akcie (EUR)</p>
+                <p className="rd-type-body-sm text-[var(--rd-text-tertiary)]">Vaše aktuálne držané akcie (EUR)</p>
               </div>
-              <button
-                type="button"
-                className="inline-flex h-[30px] items-center gap-1.5 rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-subtle)] [background-image:var(--rd-bg-surface-gradient)] px-2.5 text-[12px] font-medium text-[var(--rd-text-primary)]"
-                onClick={() => setViewOpen(true)}
-              >
-                <LayoutList className="size-3.5" />
-                Zobrazenie
-              </button>
-              <button
-                type="button"
-                className="inline-flex h-[30px] items-center gap-1.5 rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-subtle)] [background-image:var(--rd-bg-surface-gradient)] px-2.5 text-[12px] font-medium text-[var(--rd-text-primary)]"
-                onClick={() => {
-                  setDraftSortBy(mobileAssetsSortBy);
-                  setDraftSortOrder(mobileAssetsSortOrder);
-                  setSortOpen(true);
-                }}
-              >
-                <ArrowDownUp className="size-3.5" />
-                Zoradiť
-              </button>
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  className="inline-flex h-[30px] items-center gap-1.5 rounded-full border border-[var(--rd-border-strong)] [background-image:var(--rd-bg-surface-gradient)] px-2 text-[12px] font-medium text-[var(--rd-text-primary)]"
+                  onClick={() => setViewOpen(true)}
+                >
+                  <LayoutList className="size-3.5" />
+                  Zobrazenie
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex h-[30px] items-center gap-1.5 rounded-full border border-[var(--rd-border-strong)] [background-image:var(--rd-bg-surface-gradient)] px-2 text-[12px] font-medium text-[var(--rd-text-primary)]"
+                  onClick={() => {
+                    setDraftSortBy(mobileAssetsSortBy);
+                    setDraftSortOrder(mobileAssetsSortOrder);
+                    setSortOpen(true);
+                  }}
+                >
+                  <ArrowDownUp className="size-3.5" />
+                  Zoradiť
+                </button>
+              </div>
             </div>
             {holdingsLoading ? (
               <p className="px-4 pb-4 text-sm text-[var(--rd-text-tertiary)]">Načítavam…</p>
@@ -909,37 +1049,68 @@ export default function DashboardMobile() {
               <div className="divide-y divide-[var(--rd-border-subtle)] px-4">
                 {enrichedHoldings.slice(0, holdingsLimit).map((row) => {
                   const h = row.holding;
+                  const rowKey = h.id || h.ticker;
                   const afterHoursPrice =
-                    row.afterHoursPrice != null ? mask(formatCurrency(row.afterHoursPrice)) : undefined;
+                    row.showAfterHours && row.afterHoursPrice != null
+                      ? mask(formatCurrency(row.afterHoursPrice))
+                      : undefined;
                   const afterHoursChange =
-                    row.afterHoursPct != null ? signedPct(row.afterHoursPct) : undefined;
+                    row.showAfterHours && row.afterHoursPct != null
+                      ? signedPct(row.afterHoursPct)
+                      : undefined;
                   if (mobileAssetsView === "simple") {
+                    const expandable = canExpandLots(h);
+                    const expanded = expandable && expandedHoldingId === rowKey;
+                    const lotsPath = isAllPortfolios
+                      ? "all"
+                      : h.portfolioId
+                        ? h.portfolioId
+                        : "unassigned";
                     return (
-                      <button
-                        key={h.id || h.ticker}
-                        type="button"
-                        className="w-full text-left"
-                        onClick={() => setLocation(`/asset/${encodeURIComponent(h.ticker)}`)}
-                      >
-                        <HoldingRowSimple
-                          ticker={h.ticker}
-                          name={holdingName(h)}
-                          assetType={simpleBadge(h)}
-                          value={mask(formatCurrency(row.value))}
-                          lot={`${formatShareQuantity(row.shares)} @ ${mask(formatCurrency(row.avg))}`}
-                          dayChange={signedPct(row.dayPct)}
-                          dayTrend={trendFromNumber(row.dayTrendSource)}
-                          pl={mask(signedMoney(formatCurrency, row.gain))}
-                          afterHoursPrice={afterHoursPrice}
-                          afterHoursChange={afterHoursChange}
-                          afterHoursTrend={row.afterHoursTrend}
-                        />
-                      </button>
+                      <HoldingRowSimple
+                        key={rowKey}
+                        ticker={h.ticker}
+                        name={holdingName(h)}
+                        assetType={simpleBadge(h)}
+                        value={mask(formatCurrency(row.value))}
+                        lot={`${formatShareQuantity(row.shares)} @ ${mask(formatAverageCostCurrency(row.avg))}`}
+                        dayChange={signedPct(row.dayPct)}
+                        dayTrend={trendFromNumber(row.dayTrendSource)}
+                        pl={`${mask(signedMoney(formatCurrency, row.gain))} (${signedPct(row.gainPct)})`}
+                        plTrend={trendFromNumber(row.gain)}
+                        expandable={expandable}
+                        expanded={expanded}
+                        onToggle={
+                          expandable
+                            ? () =>
+                                setExpandedHoldingId((cur) => (cur === rowKey ? null : rowKey))
+                            : undefined
+                        }
+                        onNameClick={() => setLocation(`/asset/${encodeURIComponent(h.ticker)}`)}
+                        afterHoursPrice={afterHoursPrice}
+                        afterHoursChange={afterHoursChange}
+                        afterHoursTrend={row.afterHoursTrend}
+                        lotsSlot={
+                          expanded ? (
+                            <SimpleLotsPanel
+                              portfolioPath={lotsPath}
+                              ticker={h.ticker}
+                              shares={row.shares}
+                              currentPrice={row.valuationPrice}
+                              investedDisplay={row.invested}
+                              mask={mask}
+                              formatAverageCostCurrency={formatAverageCostCurrency}
+                              convertPrice={convertPrice}
+                              convertAverageCostPrice={convertAverageCostPrice}
+                            />
+                          ) : null
+                        }
+                      />
                     );
                   }
                   return (
                     <HoldingRow
-                      key={h.id || h.ticker}
+                      key={rowKey}
                       ticker={h.ticker}
                       name={holdingName(h)}
                       qty={`${formatShareQuantity(row.shares)} ks`}
@@ -1193,7 +1364,7 @@ export default function DashboardMobile() {
         </div>
       </Dialog>
 
-      <Dialog open={viewOpen} title="Zobrazenie aktív" onClose={() => setViewOpen(false)}>
+      <Dialog open={viewOpen} title="Zobrazenie" onClose={() => setViewOpen(false)}>
         <div className="mt-3 space-y-2">
           <button
             type="button"
