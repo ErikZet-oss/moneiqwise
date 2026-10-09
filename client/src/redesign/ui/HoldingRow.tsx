@@ -47,19 +47,27 @@ export type HoldingLot = {
 function AfterHours({
   price,
   change,
+  changeTrend = "Flat",
   className,
 }: {
   price?: string;
   change?: string;
+  changeTrend?: DeltaTrend;
   className?: string;
 }) {
   if (!price && !change) return null;
+  const changeClass =
+    changeTrend === "Down"
+      ? "text-[var(--rd-loss)]"
+      : changeTrend === "Up"
+        ? "text-[var(--rd-profit)]"
+        : "text-[var(--rd-text-tertiary)]";
   return (
     <div className={cn("flex items-center gap-1 text-[var(--rd-text-tertiary)]", className)}>
-      <Moon className="size-2.5" aria-hidden />
+      <Moon className="size-2.5 shrink-0 text-[var(--rd-warning)]" aria-hidden />
       <span className="rd-type-body-sm">Mimo trhu</span>
       {price ? <span className="rd-type-data-micro text-[var(--rd-text-primary)]">{price}</span> : null}
-      {change ? <span className="rd-type-data-micro">{change}</span> : null}
+      {change ? <span className={cn("rd-type-data-micro", changeClass)}>{change}</span> : null}
     </div>
   );
 }
@@ -72,6 +80,9 @@ export function HoldingRow({
   delta,
   trend = "Flat",
   onTickerClick,
+  afterHoursPrice,
+  afterHoursChange,
+  afterHoursTrend = "Flat",
 }: {
   ticker: string;
   name: string;
@@ -80,27 +91,38 @@ export function HoldingRow({
   delta: string;
   trend?: DeltaTrend;
   onTickerClick?: () => void;
+  afterHoursPrice?: string;
+  afterHoursChange?: string;
+  afterHoursTrend?: DeltaTrend;
 }) {
   return (
-    <div className="flex min-h-[40px] w-full items-center gap-2 py-2.5">
-      <Avatar ticker={ticker} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          {onTickerClick ? (
-            <button type="button" onClick={onTickerClick} className="rd-type-data text-[var(--rd-text-primary)]">
-              {ticker}
-            </button>
-          ) : (
-            <p className="rd-type-data text-[var(--rd-text-primary)]">{ticker}</p>
-          )}
-          <p className="rd-type-body-sm text-[var(--rd-text-tertiary)]">{qty}</p>
+    <div className="flex w-full flex-col gap-1 py-2.5">
+      <div className="flex min-h-[40px] w-full items-center gap-2">
+        <Avatar ticker={ticker} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            {onTickerClick ? (
+              <button type="button" onClick={onTickerClick} className="rd-type-data text-[var(--rd-text-primary)]">
+                {ticker}
+              </button>
+            ) : (
+              <p className="rd-type-data text-[var(--rd-text-primary)]">{ticker}</p>
+            )}
+            <p className="rd-type-body-sm text-[var(--rd-text-tertiary)]">{qty}</p>
+          </div>
+          <p className="rd-type-body-sm truncate text-[var(--rd-text-secondary)]">{name}</p>
         </div>
-        <p className="rd-type-body-sm truncate text-[var(--rd-text-secondary)]">{name}</p>
+        <div className="flex shrink-0 flex-col items-end gap-0.5">
+          <p className="rd-type-data text-[var(--rd-text-primary)]">{value}</p>
+          <Delta value={delta} trend={trend} />
+        </div>
       </div>
-      <div className="flex shrink-0 flex-col items-end gap-0.5">
-        <p className="rd-type-data text-[var(--rd-text-primary)]">{value}</p>
-        <Delta value={delta} trend={trend} />
-      </div>
+      <AfterHours
+        price={afterHoursPrice}
+        change={afterHoursChange}
+        changeTrend={afterHoursTrend}
+        className="pl-[36px]"
+      />
     </div>
   );
 }
@@ -124,6 +146,7 @@ export function HoldingRowExpandable({
   lots = [],
   afterHoursPrice,
   afterHoursChange,
+  afterHoursTrend = "Flat",
 }: {
   ticker: string;
   name: string;
@@ -143,6 +166,7 @@ export function HoldingRowExpandable({
   lots?: HoldingLot[];
   afterHoursPrice?: string;
   afterHoursChange?: string;
+  afterHoursTrend?: DeltaTrend;
 }) {
   return (
     <div className="flex w-full flex-col gap-1.5 py-2.5">
@@ -204,7 +228,12 @@ export function HoldingRowExpandable({
           </p>
         ) : null}
       </div>
-      <AfterHours price={afterHoursPrice} change={afterHoursChange} className="pl-8" />
+      <AfterHours
+        price={afterHoursPrice}
+        change={afterHoursChange}
+        changeTrend={afterHoursTrend}
+        className="pl-8"
+      />
       {expanded && lots.length > 0 ? (
         <div className="pl-2">
           {lots.map((lot) => (
@@ -230,6 +259,7 @@ export function HoldingRowSimple({
   lots = [],
   afterHoursPrice,
   afterHoursChange,
+  afterHoursTrend = "Flat",
 }: {
   ticker: string;
   name: string;
@@ -244,6 +274,7 @@ export function HoldingRowSimple({
   lots?: HoldingLot[];
   afterHoursPrice?: string;
   afterHoursChange?: string;
+  afterHoursTrend?: DeltaTrend;
 }) {
   return (
     <div className="flex w-full flex-col gap-1.5 py-2.5">
@@ -280,7 +311,12 @@ export function HoldingRowSimple({
           </div>
         </div>
       </div>
-      <AfterHours price={afterHoursPrice} change={afterHoursChange} className="pl-[58px]" />
+      <AfterHours
+        price={afterHoursPrice}
+        change={afterHoursChange}
+        changeTrend={afterHoursTrend}
+        className="pl-[58px]"
+      />
       {expanded && lots.length > 0 ? (
         <div className="pl-2">
           {lots.map((item) => (

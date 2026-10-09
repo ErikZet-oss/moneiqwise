@@ -16,12 +16,16 @@ import {
   Check,
   Eye,
   EyeOff,
+  Layers,
   LayoutList,
+  Moon,
   Pencil,
   RefreshCw,
 } from "lucide-react";
 import type { HoldingWithCostCurrency } from "@shared/holdingCostCurrency";
+import type { BrokerCode } from "@shared/schema";
 import { CASH_INTEREST_DISPLAY_NAME, CASH_INTEREST_TICKER } from "@shared/tickerCurrency";
+import { BrokerLogo } from "@/components/BrokerLogo";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings, type MobileAssetsSortBy } from "@/hooks/useChartSettings";
@@ -34,6 +38,7 @@ import {
   getQuoteRefreshIntervalMs,
   getQuoteStaleTimeMs,
   getUsMarketSessionState,
+  shouldShowExtendedQuote,
   shouldUseExtendedQuotes,
 } from "@/lib/usMarketSession";
 import { formatShareQuantity } from "@/lib/utils";
@@ -52,6 +57,7 @@ import {
   StatTile,
   TopBar,
   trendFromNumber,
+  type DeltaTrend,
 } from "@/redesign/ui";
 import {
   HelpButton,
@@ -70,9 +76,33 @@ type StockQuote = {
   change: number;
   changePercent: number;
   preMarketPrice?: number | null;
+  preMarketChange?: number | null;
   preMarketChangePercent?: number | null;
   marketState?: string | null;
 };
+
+function PortfolioMark({
+  isAll,
+  brokerCode,
+  size = 28,
+}: {
+  isAll: boolean;
+  brokerCode?: BrokerCode | null;
+  size?: number;
+}) {
+  if (!isAll && brokerCode) {
+    return <BrokerLogo brokerCode={brokerCode} size={size >= 28 ? "sm" : "xs"} />;
+  }
+  return (
+    <div
+      className="inline-flex shrink-0 items-center justify-center rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)] text-[var(--rd-text-secondary)]"
+      style={{ width: size, height: size }}
+      aria-hidden
+    >
+      <Layers className={size >= 28 ? "size-4" : "size-3.5"} />
+    </div>
+  );
+}
 
 type RealizedRes = { realizedGainTotal?: number; totalRealized?: number };
 type DividendsRes = { totalNet?: number };
@@ -343,22 +373,60 @@ export default function DashboardMobile() {
     pnlInvestedForDisplay,
   ]);
 
+  const usSessionState = getUsMarketSessionState();
+
   const enrichedHoldings = useMemo(() => {
     const rows = holdings.map((h) => {
       const quote = quotes[h.ticker];
       const shares = parseFloat(h.shares);
       const cur = getTickerCurrency(h.ticker);
       const invested = pnlInvestedForDisplay(h);
+      const rthPrice = quote && quote.price > 0 ? convertPrice(quote.price, cur) : 0;
+      const extRaw = quote?.preMarketPrice;
+      const extPrice =
+        extRaw != null && Number.isFinite(extRaw) && extRaw > 0 ? convertPrice(extRaw, cur) : null;
+      const showExtended = shouldShowExtendedQuote(
+        usSessionState,
+        quote?.marketState,
+        quote?.preMarketChangePercent,
+      );
+      const hasExtPrice = extPrice != null && Number.isFinite(extPrice) && extPrice > 0;
+      const showAfterHours =
+        showExtended &&
+        (hasExtPrice || (quote?.preMarketChangePercent != null && Number.isFinite(quote.preMarketChangePercent)));
+      const useExtValuation = shouldUseExtendedQuotes(usSessionState) && hasExtPrice;
+      const price = useExtValuation ? (extPrice as number) : rthPrice;
       const value =
-        quote && quote.price > 0
-          ? shares * convertPrice(quote.price, cur)
+        price > 0
+          ? shares * price
           : convertPrice(parseFloat(h.totalInvested), resolveHoldingCostCurrency(h));
       const gain = value - invested;
       const gainPct = invested > 0 ? (gain / invested) * 100 : 0;
-      const dayPct = quote?.changePercent ?? 0;
+      const dayPct = showExtended
+        ? (quote?.preMarketChangePercent ?? quote?.changePercent ?? 0)
+        : (quote?.changePercent ?? 0);
+      const dayTrendSource = showExtended
+        ? (quote?.preMarketChange ?? quote?.preMarketChangePercent ?? 0)
+        : (quote?.change ?? quote?.changePercent ?? 0);
       const avg = convertPrice(parseFloat(h.averageCost || "0"), resolveHoldingCostCurrency(h));
-      const price = quote && quote.price > 0 ? convertPrice(quote.price, cur) : 0;
-      return { holding: h, value, gain, gainPct, dayPct, avg, price, shares };
+      const afterHoursTrend: DeltaTrend = trendFromNumber(
+        quote?.preMarketChange ?? quote?.preMarketChangePercent ?? 0,
+      );
+      return {
+        holding: h,
+        value,
+        gain,
+        gainPct,
+        dayPct,
+        dayTrendSource,
+        avg,
+        price: rthPrice,
+        shares,
+        showAfterHours,
+        afterHoursPrice: showAfterHours && hasExtPrice ? extPrice : null,
+        afterHoursPct: showAfterHours ? (quote?.preMarketChangePercent ?? null) : null,
+        afterHoursTrend,
+      };
     });
 
     const dir = mobileAssetsSortOrder === "asc" ? 1 : -1;
@@ -372,6 +440,7 @@ export default function DashboardMobile() {
   }, [
     holdings,
     quotes,
+    usSessionState,
     mobileAssetsSortBy,
     mobileAssetsSortOrder,
     convertPrice,
@@ -383,11 +452,17 @@ export default function DashboardMobile() {
   const movers = useMemo(() => {
     const list = enrichedHoldings
       .filter((r) => Number.isFinite(r.dayPct) && r.dayPct !== 0)
-      .map((r) => ({
-        ticker: r.holding.ticker,
-        pct: r.dayPct,
-        amount: r.shares * convertPrice(quotes[r.holding.ticker]?.change ?? 0, getTickerCurrency(r.holding.ticker)),
-      }));
+      .map((r) => {
+        const q = quotes[r.holding.ticker];
+        const cur = getTickerCurrency(r.holding.ticker);
+        const ch = r.showAfterHours ? (q?.preMarketChange ?? 0) : (q?.change ?? 0);
+        return {
+          ticker: r.holding.ticker,
+          pct: r.dayPct,
+          amount: r.shares * convertPrice(ch, cur),
+          showMoon: r.showAfterHours,
+        };
+      });
     const gainers = [...list].sort((a, b) => b.pct - a.pct).slice(0, 5);
     const losers = [...list].sort((a, b) => a.pct - b.pct).slice(0, 5);
     return { gainers, losers };
@@ -467,7 +542,15 @@ export default function DashboardMobile() {
       case "summary":
         return frame(
           <Card>
-            <div className="flex items-start justify-between gap-2">
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 text-left"
+              onClick={() => setPickerOpen(true)}
+            >
+              <PortfolioMark isAll={isAllPortfolios} brokerCode={selectedPortfolio?.brokerCode} />
+              <p className="min-w-0 flex-1 truncate rd-type-h2 text-[var(--rd-text-primary)]">{overline}</p>
+            </button>
+            <div className="mt-3 flex items-start justify-between gap-2">
               <div>
                 <p className="rd-type-overline text-[var(--rd-text-tertiary)]">
                   Celková hodnota
@@ -740,7 +823,10 @@ export default function DashboardMobile() {
                   >
                     <span className="w-4 rd-type-data-sm text-[var(--rd-text-tertiary)]">{i + 1}.</span>
                     <span className="min-w-0 flex-1 truncate rd-type-data">{m.ticker}</span>
-                    <Delta trend="Up" value={signedPct(m.pct)} />
+                    <span className="inline-flex items-center gap-1">
+                      {m.showMoon ? <Moon className="size-2.5 text-[var(--rd-warning)]" aria-hidden /> : null}
+                      <Delta trend="Up" value={signedPct(m.pct)} />
+                    </span>
                   </button>
                 ))}
               </div>
@@ -769,7 +855,10 @@ export default function DashboardMobile() {
                   >
                     <span className="w-4 rd-type-data-sm text-[var(--rd-text-tertiary)]">{i + 1}.</span>
                     <span className="min-w-0 flex-1 truncate rd-type-data">{m.ticker}</span>
-                    <Delta trend="Down" value={signedPct(m.pct)} />
+                    <span className="inline-flex items-center gap-1">
+                      {m.showMoon ? <Moon className="size-2.5 text-[var(--rd-warning)]" aria-hidden /> : null}
+                      <Delta trend="Down" value={signedPct(m.pct)} />
+                    </span>
                   </button>
                 ))}
               </div>
@@ -820,6 +909,10 @@ export default function DashboardMobile() {
               <div className="divide-y divide-[var(--rd-border-subtle)] px-4">
                 {enrichedHoldings.slice(0, holdingsLimit).map((row) => {
                   const h = row.holding;
+                  const afterHoursPrice =
+                    row.afterHoursPrice != null ? mask(formatCurrency(row.afterHoursPrice)) : undefined;
+                  const afterHoursChange =
+                    row.afterHoursPct != null ? signedPct(row.afterHoursPct) : undefined;
                   if (mobileAssetsView === "simple") {
                     return (
                       <button
@@ -835,8 +928,11 @@ export default function DashboardMobile() {
                           value={mask(formatCurrency(row.value))}
                           lot={`${formatShareQuantity(row.shares)} @ ${mask(formatCurrency(row.avg))}`}
                           dayChange={signedPct(row.dayPct)}
-                          dayTrend={trendFromNumber(row.dayPct)}
+                          dayTrend={trendFromNumber(row.dayTrendSource)}
                           pl={mask(signedMoney(formatCurrency, row.gain))}
+                          afterHoursPrice={afterHoursPrice}
+                          afterHoursChange={afterHoursChange}
+                          afterHoursTrend={row.afterHoursTrend}
                         />
                       </button>
                     );
@@ -851,6 +947,9 @@ export default function DashboardMobile() {
                       delta={`${signedPct(row.gainPct)} · ${mask(signedMoney(formatCurrency, row.gain))}`}
                       trend={trendFromNumber(row.gain)}
                       onTickerClick={() => setLocation(`/asset/${encodeURIComponent(h.ticker)}`)}
+                      afterHoursPrice={afterHoursPrice}
+                      afterHoursChange={afterHoursChange}
+                      afterHoursTrend={row.afterHoursTrend}
                     />
                   );
                 })}
@@ -1005,6 +1104,16 @@ export default function DashboardMobile() {
           overline={overline}
           title="Prehľad"
           onOverlineClick={() => setPickerOpen(true)}
+          leading={
+            <button
+              type="button"
+              aria-label="Vybrať portfólio"
+              className="inline-flex"
+              onClick={() => setPickerOpen(true)}
+            >
+              <PortfolioMark isAll={isAllPortfolios} brokerCode={selectedPortfolio?.brokerCode} size={28} />
+            </button>
+          }
           trailing={
             <div className="flex items-center gap-1">
               <HelpButton

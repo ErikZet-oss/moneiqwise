@@ -7,12 +7,14 @@ export function TopBar({
   overline,
   onOverlineClick,
   className,
+  leading,
   trailing,
 }: {
   title: string;
   overline?: string;
   onOverlineClick?: () => void;
   className?: string;
+  leading?: ReactNode;
   trailing?: ReactNode;
 }) {
   return (
@@ -22,6 +24,7 @@ export function TopBar({
         className,
       )}
     >
+      {leading ? <div className="shrink-0">{leading}</div> : null}
       <div className="min-w-0 flex-1">
         {overline ? (
           onOverlineClick ? (

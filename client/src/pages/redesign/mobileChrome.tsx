@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
-import { CircleHelp, RefreshCw } from "lucide-react";
+import { CircleHelp, Layers, RefreshCw } from "lucide-react";
+import { BrokerLogo } from "@/components/BrokerLogo";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { Dialog } from "@/redesign/ui";
 import { cn } from "@/lib/utils";
@@ -41,13 +42,13 @@ export function toneOf(value: number): "neutral" | "up" | "down" {
 }
 
 export function signedMoney(formatCurrency: (n: number) => string, value: number): string {
-  const sign = value > 0 ? "+" : value < 0 ? "â’" : "";
+  const sign = value > 0 ? "+" : value < 0 ? "−" : "";
   return `${sign}${formatCurrency(Math.abs(value))}`;
 }
 
 export function signedPct(value: number, digits = 2): string {
-  if (!Number.isFinite(value)) return "â€”";
-  const sign = value > 0 ? "+" : value < 0 ? "â’" : "";
+  if (!Number.isFinite(value)) return "—";
+  const sign = value > 0 ? "+" : value < 0 ? "−" : "";
   return `${sign}${Math.abs(value).toFixed(digits)}%`;
 }
 
@@ -104,17 +105,20 @@ export function PortfolioSwitcher({
     onClose();
   };
   return (
-    <Dialog open={open} title="PortfĂłlio" body="VĂ˝ber je zdieÄľanĂ˝ s ostatnĂ˝mi obrazovkami." onClose={onClose}>
-      <div className="mt-3 flex flex-col">
+    <Dialog open={open} title="Portfólio" body="Výber je zdieľaný s ostatnými obrazovkami." onClose={onClose}>
+      <div className="mt-3 flex flex-col gap-1">
         <button
           type="button"
           onClick={() => pick("all")}
           className={cn(
-            "min-h-[40px] rounded-[var(--rd-radius-sm)] px-2 text-left text-sm",
+            "flex min-h-[40px] items-center gap-2 rounded-[var(--rd-radius-sm)] px-2 text-left text-sm",
             selectedPortfolioId === "all" ? "text-[var(--rd-profit)]" : "text-[var(--rd-text-primary)]",
           )}
         >
-          VĹˇetky portfĂłliĂˇ
+          <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)] text-[var(--rd-text-secondary)]">
+            <Layers className="size-3.5" aria-hidden />
+          </span>
+          Všetky portfóliá
         </button>
         {portfolios.map((portfolio) => (
           <button
@@ -122,10 +126,17 @@ export function PortfolioSwitcher({
             type="button"
             onClick={() => pick(portfolio.id)}
             className={cn(
-              "min-h-[40px] rounded-[var(--rd-radius-sm)] px-2 text-left text-sm",
+              "flex min-h-[40px] items-center gap-2 rounded-[var(--rd-radius-sm)] px-2 text-left text-sm",
               selectedPortfolioId === portfolio.id ? "text-[var(--rd-profit)]" : "text-[var(--rd-text-primary)]",
             )}
           >
+            {portfolio.brokerCode ? (
+              <BrokerLogo brokerCode={portfolio.brokerCode} size="xs" />
+            ) : (
+              <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)] text-[var(--rd-text-secondary)]">
+                <Layers className="size-3" aria-hidden />
+              </span>
+            )}
             {portfolio.name}
           </button>
         ))}
