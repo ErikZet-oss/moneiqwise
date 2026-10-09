@@ -13,6 +13,8 @@ import {
 } from "recharts";
 import {
   ArrowDownUp,
+  ArrowLeftRight,
+  Calendar,
   Check,
   Eye,
   EyeOff,
@@ -21,6 +23,8 @@ import {
   Moon,
   Pencil,
   RefreshCw,
+  TrendingDown,
+  TrendingUp,
 } from "lucide-react";
 import type { HoldingWithCostCurrency } from "@shared/holdingCostCurrency";
 import type { BrokerCode } from "@shared/schema";
@@ -46,7 +50,7 @@ import {
   shouldShowExtendedQuote,
   shouldUseExtendedQuotes,
 } from "@/lib/usMarketSession";
-import { formatShareQuantity } from "@/lib/utils";
+import { cn, formatShareQuantity } from "@/lib/utils";
 import {
   Avatar,
   Button,
@@ -55,7 +59,7 @@ import {
   Delta,
   Dialog,
   EmptyState,
-  HoldingRow,
+  HoldingRowExpandable,
   HoldingRowSimple,
   LotRow,
   NewsRow,
@@ -67,9 +71,8 @@ import {
   type HoldingLot,
 } from "@/redesign/ui";
 import {
+  CHART_COLORS,
   HelpButton,
-  IconButton,
-  KvRow,
   PageBody,
   PortfolioSwitcher,
   signedMoney,
@@ -126,8 +129,56 @@ const CHART_RANGES = [
   { v: "3m", label: "3M" },
   { v: "6m", label: "6M" },
   { v: "ytd", label: "YTD" },
-  { v: "all", label: "Všetko" },
+  { v: "all", label: "Vše" },
 ] as const;
+
+const ALLOCATION_TABS = [
+  { id: "type", label: "Typ" },
+  { id: "positions", label: "Pozície" },
+  { id: "sector", label: "Sektor" },
+  { id: "region", label: "Región" },
+] as const;
+
+function extendedSessionShortLabel(state: ReturnType<typeof getUsMarketSessionState>) {
+  switch (state) {
+    case "POST_MARKET":
+      return "Po zatvorení";
+    case "OVERNIGHT":
+      return "Overnight";
+    case "PRE_MARKET":
+      return "Pred open";
+    default:
+      return getExtendedSessionLabel(state).replace(/:$/, "");
+  }
+}
+
+function MetricRow({
+  label,
+  amount,
+  amountTone = "neutral",
+  pct,
+  pctTrend,
+}: {
+  label: ReactNode;
+  amount?: string;
+  amountTone?: "neutral" | "up" | "down";
+  pct?: string;
+  pctTrend?: DeltaTrend;
+}) {
+  const amountClass =
+    amountTone === "up"
+      ? "text-[var(--rd-profit)]"
+      : amountTone === "down"
+        ? "text-[var(--rd-loss)]"
+        : "text-[var(--rd-text-primary)]";
+  return (
+    <div className="flex items-center gap-1.5">
+      <div className="rd-type-body-sm min-w-0 flex-1 truncate text-[var(--rd-text-secondary)]">{label}</div>
+      {amount ? <p className={cn("rd-type-data-sm shrink-0", amountClass)}>{amount}</p> : null}
+      {pct ? <Delta value={pct} trend={pctTrend ?? "Flat"} /> : null}
+    </div>
+  );
+}
 
 async function fetchQuotes(tickers: string[], refresh: boolean) {
   const res = await fetch("/api/stocks/quotes/batch", {
@@ -278,6 +329,8 @@ export default function DashboardMobile() {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const {
+    currency,
+    setCurrency,
     convertPrice,
     convertAverageCostPrice,
     getTickerCurrency,
@@ -319,6 +372,7 @@ export default function DashboardMobile() {
   const [draftSortOrder, setDraftSortOrder] = useState<"asc" | "desc">(mobileAssetsSortOrder);
   const [holdingsLimit, setHoldingsLimit] = useState(10);
   const [expandedHoldingId, setExpandedHoldingId] = useState<string | null>(null);
+  const [allocationTab, setAllocationTab] = useState<(typeof ALLOCATION_TABS)[number]["id"]>("positions");
 
   const { data: holdings = [], isLoading: holdingsLoading } = useQuery<HoldingWithCostCurrency[]>({
     queryKey: ["/api/holdings", portfolioParam],
@@ -481,7 +535,6 @@ export default function DashboardMobile() {
     const totalProfit = unrealized + stockRealized + optionsRealized + dividendGain;
     const totalValue = stockValue + cashValue;
     const dailyPct = stockValue - dailyChange > 0 ? (dailyChange / (stockValue - dailyChange)) * 100 : 0;
-    const live = getUsMarketSessionState() === "LIVE";
 
     return {
       totalValue,
@@ -494,8 +547,8 @@ export default function DashboardMobile() {
       optionsRealized,
       totalProfit,
       totalProfitPercent: totalInvested > 0 ? (totalProfit / totalInvested) * 100 : 0,
-      dailyChange: live ? dailyChange : 0,
-      dailyChangePercent: live ? dailyPct : 0,
+      dailyChange,
+      dailyChangePercent: dailyPct,
     };
   }, [
     holdings,
@@ -727,93 +780,127 @@ export default function DashboardMobile() {
     );
 
     switch (id) {
-      case "summary":
+      case "summary": {
+        const periodLabel =
+          chartRange === "all"
+            ? "Za celé obdobie"
+            : `Za ${CHART_RANGES.find((r) => r.v === chartRange)?.label ?? chartRange}`;
+        const showExtendedRow = shouldUseExtendedQuotes(usSessionState);
         return frame(
-          <Card>
+          <Card className="gap-2">
             <button
               type="button"
-              className="flex w-full items-center gap-2 text-left"
+              className="flex w-full items-center gap-1.5 text-left"
               onClick={() => setPickerOpen(true)}
             >
               <PortfolioMark isAll={isAllPortfolios} brokerCode={selectedPortfolio?.brokerCode} />
               <p className="min-w-0 flex-1 truncate rd-type-h2 text-[var(--rd-text-primary)]">{overline}</p>
             </button>
-            <div className="mt-3 flex items-start justify-between gap-2">
-              <div>
-                <p className="rd-type-overline text-[var(--rd-text-tertiary)]">
-                  Celková hodnota
-                </p>
-                <p className="mt-1 rd-type-display-hero">
-                  {mask(formatCurrency(metrics.totalValue))}
-                </p>
+
+            <div className="flex items-center gap-1.5">
+              <p className="rd-type-overline text-[var(--rd-text-tertiary)]">Celková hodnota</p>
+              <span className="[&_button]:size-3.5 [&_svg]:size-3.5">
+                <HelpButton
+                  title="Celková hodnota"
+                  body="Súčet aktuálnej trhovej hodnoty všetkých pozícií vrátane hotovosti."
+                />
+              </span>
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-label={hideAmounts ? "Zobraziť sumy" : "Skryť sumy"}
+                  className="inline-flex text-[var(--rd-text-secondary)]"
+                  onClick={() => toggleHideAmounts()}
+                >
+                  {hideAmounts ? <EyeOff className="size-[18px]" /> : <Eye className="size-[18px]" />}
+                </button>
               </div>
-              <IconButton label="Obnoviť kotácie" onClick={() => void refreshQuotes()} spinning={quotesFetching}>
-                <RefreshCw className={`size-[18px] ${quotesFetching ? "animate-spin" : ""}`} />
-              </IconButton>
             </div>
-            <div className="mt-3 space-y-2">
-              <KvRow label="Celkový profit" value={mask(signedMoney(formatCurrency, metrics.totalProfit))} tone={toneOf(metrics.totalProfit)} />
-              <KvRow label="" value={signedPct(metrics.totalProfitPercent)} tone={toneOf(metrics.totalProfitPercent)} />
-              {usSessionState === "LIVE" ? (
-                <>
-                  <KvRow
-                    label="Denná zmena"
-                    value={mask(signedMoney(formatCurrency, metrics.dailyChange))}
-                    tone={toneOf(metrics.dailyChange)}
-                  />
-                  <KvRow
-                    label=""
-                    value={signedPct(metrics.dailyChangePercent)}
-                    tone={toneOf(metrics.dailyChangePercent)}
-                  />
-                </>
-              ) : shouldUseExtendedQuotes(usSessionState) ? (
-                <>
-                  <KvRow
-                    label={
-                      <span className="inline-flex items-center gap-1">
-                        <Moon className="size-3 text-[var(--rd-warning)]" aria-hidden />
-                        {getExtendedSessionLabel(usSessionState)}
-                      </span>
-                    }
-                    value={
-                      preOpenPreview.available
-                        ? mask(signedMoney(formatCurrency, preOpenPreview.amount))
-                        : "bez dát"
-                    }
-                    tone={preOpenPreview.available ? toneOf(preOpenPreview.amount) : "neutral"}
-                  />
-                  {preOpenPreview.available ? (
-                    <KvRow
-                      label=""
-                      value={signedPct(preOpenPreview.percent)}
-                      tone={toneOf(preOpenPreview.percent)}
-                    />
-                  ) : null}
-                </>
-              ) : usSessionState === "CLOSED" ? (
-                <KvRow label="Denná zmena" value="Trh uzatvorený" tone="neutral" />
+
+            <div className="flex items-center gap-2">
+              <p className="min-w-0 flex-1 rd-type-display-hero tracking-tight">
+                {mask(formatCurrency(metrics.totalValue))}
+              </p>
+              <button
+                type="button"
+                aria-label="Obnoviť kotácie"
+                className="inline-flex shrink-0 text-[var(--rd-text-secondary)]"
+                onClick={() => void refreshQuotes()}
+              >
+                <RefreshCw className={cn("size-[18px]", quotesFetching && "animate-spin")} />
+              </button>
+              <button
+                type="button"
+                aria-label="Prepnúť menu"
+                className="inline-flex h-6 shrink-0 items-center gap-1 rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)] px-1.5"
+                onClick={() => setCurrency(currency === "EUR" ? "USD" : "EUR")}
+              >
+                <span className="rd-type-data-sm text-[var(--rd-text-secondary)]">{currency}</span>
+                <ArrowLeftRight className="size-3 text-[var(--rd-text-tertiary)]" />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <MetricRow
+                label="Celkový profit"
+                amount={mask(signedMoney(formatCurrency, metrics.totalProfit))}
+                amountTone={toneOf(metrics.totalProfit)}
+                pct={signedPct(metrics.totalProfitPercent)}
+                pctTrend={trendFromNumber(metrics.totalProfitPercent)}
+              />
+              <MetricRow
+                label="Denná zmena"
+                amount={mask(signedMoney(formatCurrency, metrics.dailyChange))}
+                amountTone={toneOf(metrics.dailyChange)}
+                pct={signedPct(metrics.dailyChangePercent)}
+                pctTrend={trendFromNumber(metrics.dailyChangePercent)}
+              />
+              <MetricRow
+                label="Nerealizovaný zisk"
+                amount={mask(signedMoney(formatCurrency, metrics.unrealized))}
+                amountTone={toneOf(metrics.unrealized)}
+              />
+              <MetricRow label="Hotovosť" amount={mask(formatCurrency(metrics.cashValue))} />
+              {showExtendedRow ? (
+                <MetricRow
+                  label={
+                    <span className="inline-flex items-center gap-1">
+                      <Moon className="size-[11px] text-[var(--rd-warning)]" aria-hidden />
+                      {extendedSessionShortLabel(usSessionState)}
+                    </span>
+                  }
+                  amount={
+                    preOpenPreview.available
+                      ? mask(signedMoney(formatCurrency, preOpenPreview.amount))
+                      : "bez dát"
+                  }
+                  amountTone={preOpenPreview.available ? toneOf(preOpenPreview.amount) : "neutral"}
+                  pct={preOpenPreview.available ? signedPct(preOpenPreview.percent) : undefined}
+                  pctTrend={
+                    preOpenPreview.available ? trendFromNumber(preOpenPreview.percent) : undefined
+                  }
+                />
               ) : null}
-              <KvRow label="Nerealizovaný zisk" value={mask(signedMoney(formatCurrency, metrics.unrealized))} tone={toneOf(metrics.unrealized)} />
-              <KvRow label="Hotovosť" value={mask(formatCurrency(metrics.cashValue))} />
             </div>
+
             {isVisible("chart") || editing ? (
-              <div className="mt-4">
-                <div className="mb-2 flex flex-wrap gap-1">
-                  {CHART_RANGES.map((r) => (
-                    <Chip key={r.v} active={chartRange === r.v} onClick={() => setChartRange(r.v)}>
-                      {r.label}
-                    </Chip>
-                  ))}
-                </div>
-                <div className="h-40 w-full">
+              <div className="flex flex-col gap-2">
+                <div className="h-[120px] w-full">
                   {chartPoints.length > 1 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <ComposedChart data={chartPoints}>
                         <defs>
                           <linearGradient id="rd-dash-fill" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor={chartProfit ? "var(--rd-profit)" : "var(--rd-loss)"} stopOpacity={0.26} />
-                            <stop offset="100%" stopColor={chartProfit ? "var(--rd-profit)" : "var(--rd-loss)"} stopOpacity={0} />
+                            <stop
+                              offset="0%"
+                              stopColor={chartProfit ? "var(--rd-profit)" : "var(--rd-loss)"}
+                              stopOpacity={0.26}
+                            />
+                            <stop
+                              offset="100%"
+                              stopColor={chartProfit ? "var(--rd-profit)" : "var(--rd-loss)"}
+                              stopOpacity={0}
+                            />
                           </linearGradient>
                         </defs>
                         <XAxis dataKey="date" hide />
@@ -850,13 +937,30 @@ export default function DashboardMobile() {
                     </div>
                   )}
                 </div>
-                <p className="mt-2 rd-type-data text-[var(--rd-text-secondary)]">
-                  Za obdobie · {mask(signedMoney(formatCurrency, metrics.totalProfit))} · {signedPct(metrics.totalProfitPercent)}
-                </p>
+                <MetricRow
+                  label={
+                    <span className="inline-flex items-center gap-1.5">
+                      <Calendar className="size-[18px] text-[var(--rd-text-tertiary)]" aria-hidden />
+                      {periodLabel}
+                    </span>
+                  }
+                  amount={mask(signedMoney(formatCurrency, metrics.totalProfit))}
+                  amountTone={toneOf(metrics.totalProfit)}
+                  pct={signedPct(metrics.totalProfitPercent)}
+                  pctTrend={trendFromNumber(metrics.totalProfitPercent)}
+                />
+                <div className="flex items-center justify-between gap-0.5">
+                  {CHART_RANGES.map((r) => (
+                    <Chip key={r.v} active={chartRange === r.v} onClick={() => setChartRange(r.v)}>
+                      {r.label}
+                    </Chip>
+                  ))}
+                </div>
               </div>
             ) : null}
           </Card>,
         );
+      }
 
       case "chart":
         return null;
@@ -1013,87 +1117,100 @@ export default function DashboardMobile() {
           { skipChrome: true },
         );
 
-      case "dailyGainers":
+      case "dailyGainers": {
+        const marketClosedBadge = shouldUseExtendedQuotes(usSessionState);
+        const renderMoverCol = (
+          title: string,
+          rows: typeof movers.gainers,
+          trend: "Up" | "Down",
+          visibleId: "dailyGainers" | "dailyLosers",
+        ) => (
+          <div className={cn("min-w-0 flex-1", editing && !isVisible(visibleId) ? "opacity-40" : undefined)}>
+            <div className="mb-2 flex items-center gap-1.5">
+              {editing ? (
+                <button
+                  type="button"
+                  aria-label={title}
+                  className="inline-flex size-4 items-center justify-center"
+                  onClick={() => toggleVisible(visibleId)}
+                >
+                  {isVisible(visibleId) ? (
+                    <Eye className="size-3.5" />
+                  ) : (
+                    <EyeOff className="size-3.5 text-[var(--rd-text-tertiary)]" />
+                  )}
+                </button>
+              ) : trend === "Up" ? (
+                <TrendingUp className="size-4 text-[var(--rd-profit)]" aria-hidden />
+              ) : (
+                <TrendingDown className="size-4 text-[var(--rd-loss)]" aria-hidden />
+              )}
+              <p className="min-w-0 flex-1 rd-type-body-strong text-[var(--rd-text-primary)]">{title}</p>
+              {marketClosedBadge ? (
+                <span className="inline-flex items-center rounded-full bg-[var(--rd-warning-dim)] px-1.5 py-0.5">
+                  <Moon className="size-2.5 text-[var(--rd-warning)]" aria-hidden />
+                </span>
+              ) : null}
+              <span className="[&_button]:size-4 [&_svg]:size-3.5">
+                <HelpButton
+                  title={title}
+                  body="Poradie podľa dennej zmeny. Mimo RTH sa berie pred/po-obchodná kotácia, ak je dostupná."
+                />
+              </span>
+            </div>
+            {(editing || isVisible(visibleId)) && rows.length === 0 ? (
+              <p className="rd-type-body-sm text-[var(--rd-text-tertiary)]">—</p>
+            ) : null}
+            {(editing || isVisible(visibleId) ? rows : []).map((m, i) => (
+              <button
+                key={m.ticker}
+                type="button"
+                className="flex w-full items-center gap-1.5 py-1 text-left"
+                onClick={() => setLocation(`/asset/${encodeURIComponent(m.ticker)}`)}
+              >
+                <span className="w-3.5 shrink-0 rd-type-data-micro text-[var(--rd-text-tertiary)]">
+                  {i + 1}.
+                </span>
+                <span className="min-w-0 flex-1 truncate rd-type-body-strong text-[var(--rd-text-primary)]">
+                  {m.ticker}
+                </span>
+                <span className="flex shrink-0 flex-col items-end">
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-0.5 rd-type-data-sm",
+                      trend === "Up" ? "text-[var(--rd-profit)]" : "text-[var(--rd-loss)]",
+                    )}
+                  >
+                    {m.showMoon ? (
+                      <Moon className="size-2.5 text-[var(--rd-warning)]" aria-hidden />
+                    ) : null}
+                    {signedPct(m.pct)}
+                  </span>
+                  <span className="rd-type-data-micro text-[var(--rd-text-tertiary)]">
+                    {mask(signedMoney(formatCurrency, m.amount))}
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+        );
         return frame(
-          <Card>
-            <SectionHeader title="Denné pohyby" />
-            <p className="text-xs text-[var(--rd-text-tertiary)]">
-              Zmena podľa režimu trhu (RTH vs pre/post market).
-            </p>
-            <div className="mt-2 grid grid-cols-2 gap-3">
-              <div className={editing && !isVisible("dailyGainers") ? "opacity-40" : undefined}>
-                <div className="mb-2 flex items-center gap-1">
-                  {editing ? (
-                    <button
-                      type="button"
-                      aria-label="Najlepšie"
-                      className="inline-flex size-7 items-center justify-center"
-                      onClick={() => toggleVisible("dailyGainers")}
-                    >
-                      {isVisible("dailyGainers") ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5 text-[var(--rd-text-tertiary)]" />}
-                    </button>
-                  ) : null}
-                  <p className="rd-type-overline text-[var(--rd-text-tertiary)]">
-                    Najlepšie
-                  </p>
-                </div>
-                {(editing || isVisible("dailyGainers")) && movers.gainers.length === 0 ? (
-                  <p className="text-xs text-[var(--rd-text-tertiary)]">—</p>
-                ) : null}
-                {(editing || isVisible("dailyGainers") ? movers.gainers : []).map((m, i) => (
-                  <button
-                    key={m.ticker}
-                    type="button"
-                    className="flex w-full items-center gap-2 py-2 text-left"
-                    onClick={() => setLocation(`/asset/${encodeURIComponent(m.ticker)}`)}
-                  >
-                    <span className="w-4 rd-type-data-sm text-[var(--rd-text-tertiary)]">{i + 1}.</span>
-                    <Avatar ticker={m.ticker} />
-                    <span className="min-w-0 flex-1 truncate rd-type-data">{m.ticker}</span>
-                    <span className="inline-flex items-center gap-1">
-                      {m.showMoon ? <Moon className="size-2.5 text-[var(--rd-warning)]" aria-hidden /> : null}
-                      <Delta trend="Up" value={signedPct(m.pct)} />
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <div className={editing && !isVisible("dailyLosers") ? "opacity-40" : undefined}>
-                <div className="mb-2 flex items-center gap-1">
-                  {editing ? (
-                    <button
-                      type="button"
-                      aria-label="Najhoršie"
-                      className="inline-flex size-7 items-center justify-center"
-                      onClick={() => toggleVisible("dailyLosers")}
-                    >
-                      {isVisible("dailyLosers") ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5 text-[var(--rd-text-tertiary)]" />}
-                    </button>
-                  ) : null}
-                  <p className="rd-type-overline text-[var(--rd-text-tertiary)]">
-                    Najhoršie
-                  </p>
-                </div>
-                {(editing || isVisible("dailyLosers") ? movers.losers : []).map((m, i) => (
-                  <button
-                    key={m.ticker}
-                    type="button"
-                    className="flex w-full items-center gap-2 py-2 text-left"
-                    onClick={() => setLocation(`/asset/${encodeURIComponent(m.ticker)}`)}
-                  >
-                    <span className="w-4 rd-type-data-sm text-[var(--rd-text-tertiary)]">{i + 1}.</span>
-                    <Avatar ticker={m.ticker} />
-                    <span className="min-w-0 flex-1 truncate rd-type-data">{m.ticker}</span>
-                    <span className="inline-flex items-center gap-1">
-                      {m.showMoon ? <Moon className="size-2.5 text-[var(--rd-warning)]" aria-hidden /> : null}
-                      <Delta trend="Down" value={signedPct(m.pct)} />
-                    </span>
-                  </button>
-                ))}
-              </div>
+          <Card className="gap-2">
+            <div>
+              <SectionHeader title="Denné pohyby" />
+              <p className="rd-type-body-sm text-[var(--rd-text-tertiary)]">
+                Zmena podľa režimu trhu (RTH vs pre/post market).
+              </p>
+            </div>
+            <div className="flex gap-2">
+              {renderMoverCol("Najlepšie", movers.gainers, "Up", "dailyGainers")}
+              <div className="w-px shrink-0 self-stretch bg-[var(--rd-border-subtle)]" />
+              {renderMoverCol("Najhoršie", movers.losers, "Down", "dailyLosers")}
             </div>
           </Card>,
           { skipChrome: true },
         );
+      }
 
       case "dailyLosers":
         return null;
@@ -1199,20 +1316,54 @@ export default function DashboardMobile() {
                       />
                     );
                   }
+                  const expandable = canExpandLots(h);
+                  const expanded = expandable && expandedHoldingId === rowKey;
+                  const lotsPath = isAllPortfolios
+                    ? "all"
+                    : h.portfolioId
+                      ? h.portfolioId
+                      : "unassigned";
                   return (
-                    <HoldingRow
+                    <HoldingRowExpandable
                       key={rowKey}
                       ticker={h.ticker}
                       name={holdingName(h)}
                       qty={`${formatShareQuantity(row.shares)} ks`}
                       value={mask(formatCurrency(row.value))}
-                      delta={`${signedPct(row.gainPct)} · ${mask(signedMoney(formatCurrency, row.gain))}`}
-                      trend={trendFromNumber(row.gain)}
+                      delta={signedPct(row.gainPct)}
+                      trend={trendFromNumber(row.gainPct)}
+                      avg={mask(formatAverageCostCurrency(row.avg))}
+                      price={mask(formatCurrency(row.price))}
+                      dayChange={signedPct(row.dayPct)}
+                      dayTrend={trendFromNumber(row.dayTrendSource)}
+                      pl={mask(signedMoney(formatCurrency, row.gain))}
+                      plTrend={trendFromNumber(row.gain)}
                       imageUrl={h.tcgImageUrl}
+                      expanded={expanded}
+                      onToggle={
+                        expandable
+                          ? () => setExpandedHoldingId((cur) => (cur === rowKey ? null : rowKey))
+                          : undefined
+                      }
                       onTickerClick={() => setLocation(`/asset/${encodeURIComponent(h.ticker)}`)}
                       afterHoursPrice={afterHoursPrice}
                       afterHoursChange={afterHoursChange}
                       afterHoursTrend={row.afterHoursTrend}
+                      lotsSlot={
+                        expanded ? (
+                          <SimpleLotsPanel
+                            portfolioPath={lotsPath}
+                            ticker={h.ticker}
+                            shares={row.shares}
+                            currentPrice={row.valuationPrice}
+                            investedDisplay={row.invested}
+                            mask={mask}
+                            formatAverageCostCurrency={formatAverageCostCurrency}
+                            convertPrice={convertPrice}
+                            convertAverageCostPrice={convertAverageCostPrice}
+                          />
+                        ) : null
+                      }
                     />
                   );
                 })}
@@ -1230,33 +1381,98 @@ export default function DashboardMobile() {
           </Card>,
         );
 
-      case "allocation":
+      case "allocation": {
+        const topPct = allocation.reduce((s, a) => s + a.pct, 0);
+        const otherPct = Math.max(0, 100 - topPct);
+        const slices =
+          allocation.length === 0
+            ? []
+            : [
+                ...allocation.map((a, i) => ({
+                  key: a.ticker,
+                  label: a.ticker,
+                  pct: a.pct,
+                  color: CHART_COLORS[i % CHART_COLORS.length]!,
+                })),
+                ...(otherPct > 0.05
+                  ? [
+                      {
+                        key: "other",
+                        label: "Ostatné",
+                        pct: otherPct,
+                        color: CHART_COLORS[5] ?? "var(--rd-chart-6)",
+                      },
+                    ]
+                  : []),
+              ];
+        let cursor = 0;
+        const conic = slices
+          .map((s) => {
+            const start = cursor;
+            cursor += s.pct;
+            return `${s.color} ${start}% ${cursor}%`;
+          })
+          .join(", ");
         return frame(
-          <Card>
-            <div className="flex items-center justify-between gap-2">
-              <SectionHeader title="Alokácia" />
-              <button
-                type="button"
-                className="text-sm font-medium text-[var(--rd-profit)]"
-                onClick={() => setLocation("/allocation")}
-              >
-                Viac
-              </button>
-            </div>
-            <div className="mt-2 space-y-2">
-              {allocation.map((a) => (
-                <div key={a.ticker} className="flex items-center gap-2">
-                  <Avatar ticker={a.ticker} companyName={a.name} imageUrl={a.imageUrl} />
-                  <p className="min-w-0 flex-1 rd-type-data">{a.ticker}</p>
-                  <p className="rd-type-data text-[var(--rd-text-secondary)]">{a.pct.toFixed(1)}%</p>
-                </div>
+          <Card className="gap-2">
+            <SectionHeader title="Alokácia" action="Viac" onAction={() => setLocation("/allocation")} />
+            <div className="flex flex-wrap gap-1">
+              {ALLOCATION_TABS.map((tab) => (
+                <Chip
+                  key={tab.id}
+                  active={allocationTab === tab.id}
+                  onClick={() => {
+                    if (tab.id === "positions") {
+                      setAllocationTab(tab.id);
+                      return;
+                    }
+                    setLocation("/allocation");
+                  }}
+                >
+                  {tab.label}
+                </Chip>
               ))}
-              {allocation.length === 0 ? (
-                <p className="text-xs text-[var(--rd-text-tertiary)]">Bez alokácie</p>
-              ) : null}
             </div>
+            {slices.length === 0 ? (
+              <p className="rd-type-body-sm text-[var(--rd-text-tertiary)]">Bez alokácie</p>
+            ) : (
+              <div className="flex items-center gap-3">
+                <div
+                  className="relative size-[116px] shrink-0 rounded-full"
+                  style={{
+                    background: `conic-gradient(${conic || "var(--rd-border-subtle) 0 100%"})`,
+                  }}
+                  aria-hidden
+                >
+                  <div className="absolute inset-[18%] flex flex-col items-center justify-center rounded-full bg-[var(--rd-bg-surface)]">
+                    <p className="rd-type-overline text-[var(--rd-text-tertiary)]">Celkom</p>
+                    <p className="rd-type-data-sm text-[var(--rd-text-primary)]">
+                      {mask(formatCurrency(metrics.stockValue))}
+                    </p>
+                  </div>
+                </div>
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  {slices.map((s) => (
+                    <div key={s.key} className="flex items-center gap-1.5">
+                      <span
+                        className="size-2 shrink-0 rounded-full"
+                        style={{ background: s.color }}
+                        aria-hidden
+                      />
+                      <p className="min-w-0 flex-1 truncate rd-type-body-sm text-[var(--rd-text-secondary)]">
+                        {s.label}
+                      </p>
+                      <p className="rd-type-data-sm shrink-0 text-[var(--rd-text-primary)]">
+                        {s.pct.toFixed(1)}%
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </Card>,
         );
+      }
 
       case "news":
         return frame(
@@ -1378,28 +1594,14 @@ export default function DashboardMobile() {
             </button>
           }
           trailing={
-            <div className="flex items-center gap-1">
-              <HelpButton
-                title="Prehľad"
-                body="Súhrn portfólia, graf, držané aktíva a widgety. Poradie a viditeľnosť upravíš perom."
-              />
-              <button
-                type="button"
-                aria-label={hideAmounts ? "Zobraziť sumy" : "Skryť sumy"}
-                className="inline-flex size-[30px] items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)]"
-                onClick={() => toggleHideAmounts()}
-              >
-                {hideAmounts ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-              </button>
-              <button
-                type="button"
-                aria-label="Upraviť prehľad"
-                className="inline-flex size-[30px] items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)]"
-                onClick={() => setEditing(true)}
-              >
-                <Pencil className="size-4" />
-              </button>
-            </div>
+            <button
+              type="button"
+              aria-label="Upraviť prehľad"
+              className="inline-flex size-[30px] items-center justify-center text-[var(--rd-text-secondary)]"
+              onClick={() => setEditing(true)}
+            >
+              <Pencil className="size-[18px]" />
+            </button>
           }
         />
       )}

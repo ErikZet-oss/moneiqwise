@@ -148,6 +148,7 @@ export function HoldingRowExpandable({
   onTickerClick,
   imageUrl,
   lots = [],
+  lotsSlot,
   afterHoursPrice,
   afterHoursChange,
   afterHoursTrend = "Flat",
@@ -169,6 +170,7 @@ export function HoldingRowExpandable({
   onTickerClick?: () => void;
   imageUrl?: string | null;
   lots?: HoldingLot[];
+  lotsSlot?: ReactNode;
   afterHoursPrice?: string;
   afterHoursChange?: string;
   afterHoursTrend?: DeltaTrend;
@@ -239,8 +241,9 @@ export function HoldingRowExpandable({
         changeTrend={afterHoursTrend}
         className="pl-8"
       />
-      {expanded && lots.length > 0 ? (
+      {expanded ? (
         <div className="pl-2">
+          {lotsSlot}
           {lots.map((lot) => (
             <LotRow key={`${lot.date}-${lot.lot}`} {...lot} />
           ))}
