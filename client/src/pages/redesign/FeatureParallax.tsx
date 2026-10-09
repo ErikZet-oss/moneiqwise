@@ -1,4 +1,4 @@
-import { useEffect, useRef, type CSSProperties } from "react";
+import { useEffect, useRef } from "react";
 
 const FEATURES = [
   {
@@ -38,27 +38,55 @@ const FEATURES = [
   },
 ] as const;
 
+const PHONE_SLIDE_X = 160;
+const PHONE_SLIDE_Y = 40;
+const TEXT_SLIDE_Y = 24;
+
 /**
  * Login feature parallax — CSS phone frame + Figma @2x screen exports.
- * Scroll uses capture so it works when the page scrolls inside a nested container.
+ * Transforms are applied in JS (Safari/iOS often ignores CSS calc with custom props).
+ * Listens on the login scroller + capture-phase document scroll + touchmove.
  */
 export function FeatureParallax() {
-  const refs = useRef<(HTMLElement | null)[]>([]);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const sectionRefs = useRef<(HTMLElement | null)[]>([]);
 
   useEffect(() => {
     const reduceQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     let raf = 0;
 
+    const apply = (section: HTMLElement, p: number, dir: number) => {
+      const phone = section.querySelector<HTMLElement>("[data-parallax-phone]");
+      const text = section.querySelector<HTMLElement>("[data-parallax-text]");
+      if (phone) {
+        const x = (1 - p) * PHONE_SLIDE_X * dir;
+        const y = (1 - p) * PHONE_SLIDE_Y;
+        phone.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
+        phone.style.opacity = String(0.4 + 0.6 * p);
+      }
+      if (text) {
+        const textP = Math.min(1, p * 2);
+        const y = (1 - textP) * TEXT_SLIDE_Y;
+        text.style.transform = `translate3d(0, ${y.toFixed(1)}px, 0)`;
+        text.style.opacity = String(textP);
+      }
+    };
+
     const update = () => {
       raf = 0;
       const reduce = reduceQuery.matches;
-      const vh = window.innerHeight;
-      for (const el of refs.current) {
+      const vh = window.innerHeight || document.documentElement.clientHeight || 1;
+      for (const el of sectionRefs.current) {
         if (!el) continue;
+        const dir = Number(el.dataset.dir || 1);
+        if (reduce) {
+          apply(el, 1, dir);
+          continue;
+        }
         const top = el.getBoundingClientRect().top;
-        // 0 = section just entered bottom, 1 = its top is at 35% of viewport height
-        const p = reduce ? 1 : Math.min(1, Math.max(0, (vh - top) / (vh * 0.65)));
-        el.style.setProperty("--p", p.toFixed(3));
+        // 0 = section just entered at bottom, 1 = top near 35% of viewport
+        const p = Math.min(1, Math.max(0, (vh - top) / (vh * 0.65)));
+        apply(el, p, dir);
       }
     };
 
@@ -66,42 +94,52 @@ export function FeatureParallax() {
       if (!raf) raf = requestAnimationFrame(update);
     };
 
+    const scroller =
+      rootRef.current?.closest<HTMLElement>("[data-redesign-login-scroll]") ??
+      document.querySelector<HTMLElement>("[data-redesign-login-scroll]");
+
+    // capture=true catches nested overflow scrollers; touchmove covers iOS rubber-band gaps
     document.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", onScroll);
+    window.addEventListener("orientationchange", onScroll);
+    scroller?.addEventListener("scroll", onScroll, { passive: true });
+    scroller?.addEventListener("touchmove", onScroll, { passive: true });
     reduceQuery.addEventListener("change", onScroll);
+
+    // first paint after layout
     update();
+    const kick = window.setTimeout(update, 50);
+
     return () => {
+      window.clearTimeout(kick);
       document.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onScroll);
+      window.removeEventListener("orientationchange", onScroll);
+      scroller?.removeEventListener("scroll", onScroll);
+      scroller?.removeEventListener("touchmove", onScroll);
       reduceQuery.removeEventListener("change", onScroll);
       cancelAnimationFrame(raf);
     };
   }, []);
 
   return (
-    <div className="overflow-x-hidden" id="rd-login-features">
+    <div ref={rootRef} className="overflow-x-hidden" id="rd-login-features">
       {FEATURES.map((feature, i) => {
         const fromLeft = i % 2 === 1;
+        const dir = fromLeft ? -1 : 1;
         return (
           <section
             key={feature.title}
             ref={(el) => {
-              refs.current[i] = el;
+              sectionRefs.current[i] = el;
             }}
+            data-dir={dir}
             className="relative h-[560px]"
-            style={
-              {
-                ["--p" as string]: 0,
-                ["--dir" as string]: fromLeft ? -1 : 1,
-              } as CSSProperties
-            }
           >
             <div
-              className={`absolute top-[190px] w-[196px] ${fromLeft ? "right-4" : "left-6"}`}
-              style={{
-                opacity: "clamp(0, calc(var(--p) * 2), 1)",
-                transform: "translateY(calc((1 - min(1, var(--p) * 2)) * 24px))",
-              }}
+              data-parallax-text
+              className={`absolute top-[190px] w-[196px] will-change-transform ${fromLeft ? "right-4" : "left-6"}`}
+              style={{ opacity: 0, transform: `translate3d(0, ${TEXT_SLIDE_Y}px, 0)` }}
             >
               <div className="font-mono text-[11px] leading-[14px] text-[var(--rd-profit)]">
                 {String(i + 1).padStart(2, "0")} / 07
@@ -113,13 +151,13 @@ export function FeatureParallax() {
             </div>
 
             <div
+              data-parallax-phone
               className={`absolute top-[60px] h-[440px] w-[211px] overflow-hidden rounded-[34px] border-2 border-[var(--rd-border-strong)] bg-[var(--rd-bg-base)] shadow-[0_0_40px_rgba(47,218,184,0.18)] will-change-transform ${
                 fromLeft ? "left-[-70px]" : "right-[-70px]"
               }`}
               style={{
-                opacity: "calc(0.4 + 0.6 * var(--p))",
-                transform:
-                  "translate3d(calc((1 - var(--p)) * 160px * var(--dir)), calc((1 - var(--p)) * 40px), 0)",
+                opacity: 0.4,
+                transform: `translate3d(${PHONE_SLIDE_X * dir}px, ${PHONE_SLIDE_Y}px, 0)`,
               }}
             >
               <img

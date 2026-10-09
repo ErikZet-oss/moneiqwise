@@ -31,7 +31,7 @@ export function RedesignLanding({ auth }: { auth: LandingAuth }) {
   return (
     <div
       data-redesign-login-scroll
-      className="rd-landing h-dvh overflow-y-auto overflow-x-hidden bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]"
+      className="rd-landing h-dvh overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)] [-webkit-overflow-scrolling:touch]"
     >
       <Hero auth={auth} onScrollToFeatures={scrollToFeatures} />
       <section className="px-6 pb-2 pt-8">
