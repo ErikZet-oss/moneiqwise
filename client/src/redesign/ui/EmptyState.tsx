@@ -4,11 +4,12 @@ import { Button, type RedesignButtonVariant } from "./Button";
 
 export function EmptyState({
   title = "Zatiaľ žiadne dáta",
-  body = "Popis prázdneho stavu a čo má používateľ urobiť ďalej.",
+  body,
   actionLabel,
   onAction,
   actionVariant = "Secondary",
   icon,
+  children,
 }: {
   title?: string;
   body?: string;
@@ -16,19 +17,21 @@ export function EmptyState({
   onAction?: () => void;
   actionVariant?: RedesignButtonVariant;
   icon?: ReactNode;
+  children?: ReactNode;
 }) {
   return (
-    <div className="flex w-full flex-col items-center gap-2 rounded-[var(--rd-radius-md)] border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface)] p-5 text-center [background-image:var(--rd-bg-surface-gradient)]">
-      <div className="flex size-10 items-center justify-center rounded-full bg-[var(--rd-bg-surface-raised)] text-[var(--rd-text-secondary)]">
-        {icon ?? <LineChart className="size-4" aria-hidden />}
+    <div className="flex w-full flex-col items-center gap-1.5 rounded-[var(--rd-radius-md)] border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface)] p-4 text-center [background-image:var(--rd-bg-surface-gradient)]">
+      <div className="flex size-11 items-center justify-center rounded-full bg-[var(--rd-bg-surface-raised)] text-[var(--rd-text-secondary)]">
+        {icon ?? <LineChart className="size-5" aria-hidden />}
       </div>
-      <p className="rd-type-h2 text-[var(--rd-text-primary)]">{title}</p>
-      <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">{body}</p>
+      <p className="rd-type-h3 text-[var(--rd-text-primary)]">{title}</p>
+      {body ? <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">{body}</p> : null}
       {actionLabel && onAction ? (
         <Button variant={actionVariant} onClick={onAction}>
           {actionLabel}
         </Button>
       ) : null}
+      {children}
     </div>
   );
 }

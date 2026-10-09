@@ -20,6 +20,7 @@ import {
 } from "@/redesign/ui";
 import type { BadgeTone, StatTone } from "@/redesign/ui";
 import type { OptionTrade } from "@shared/schema";
+import { PageBody } from "./mobileChrome";
 
 interface OptionStats {
   totalTrades: number;
@@ -309,12 +310,12 @@ export default function OptionsMobile() {
   return (
     <div className="bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
       <TopBar overline="Opčné obchody" title="Opcie" />
-      <div className="flex flex-col gap-4 px-4 pb-8">
-        <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">Sledovanie opčných obchodov</p>
+      <PageBody className="pb-8">
+        <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">Sledovanie opčných obchodov</p>
         <Button className="w-full" onClick={() => setAddOpen(true)}>
           Nová opcia
         </Button>
-        <div className="flex gap-2">
+        <div className="flex gap-1.5">
           <Button variant="Secondary" className="min-w-0 flex-1 px-2" onClick={() => setImportOpen(true)}>
             Import
           </Button>
@@ -327,9 +328,9 @@ export default function OptionsMobile() {
         </div>
 
         {statsLoading ? (
-          <p className="text-xs text-[var(--rd-text-secondary)]">Načítavam súhrn…</p>
+          <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">Načítavam súhrn…</p>
         ) : stats ? (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-2">
             <StatTile
               label="Celkový zisk"
               value={formatUSD(gain)}
@@ -357,25 +358,24 @@ export default function OptionsMobile() {
           </div>
 
           {tradesLoading ? (
-            <p className="text-xs text-[var(--rd-text-secondary)]">Načítavam obchody…</p>
+            <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">Načítavam obchody…</p>
           ) : filteredTrades.length === 0 ? (
-            <div className="flex flex-col items-center gap-3">
-              <EmptyState
-                title={
-                  filter === "all"
-                    ? "Zatiaľ nemáte žiadne opčné obchody"
-                    : filter === "open"
-                      ? "Nemáte žiadne otvorené pozície"
-                      : "Nemáte žiadne uzatvorené pozície"
-                }
-                body={
-                  portfolioScope !== "all"
-                    ? "Obchody označené ako Nezaradené sa zobrazia aj vo vybranom portfóliu."
-                    : ""
-                }
-              />
+            <EmptyState
+              title={
+                filter === "all"
+                  ? "Zatiaľ nemáte žiadne opčné obchody"
+                  : filter === "open"
+                    ? "Nemáte žiadne otvorené pozície"
+                    : "Nemáte žiadne uzatvorené pozície"
+              }
+              body={
+                portfolioScope !== "all"
+                  ? "Obchody označené ako Nezaradené sa zobrazia aj vo vybranom portfóliu."
+                  : undefined
+              }
+            >
               {filter === "all" ? (
-                <div className="flex w-full gap-2">
+                <div className="flex w-full gap-1.5 pt-1.5">
                   <Button variant="Secondary" className="min-w-0 flex-1" onClick={() => setAddOpen(true)}>
                     Pridať obchod
                   </Button>
@@ -384,7 +384,7 @@ export default function OptionsMobile() {
                   </Button>
                 </div>
               ) : null}
-            </div>
+            </EmptyState>
           ) : (
             <div className="flex flex-col gap-3">
               {filteredTrades.map((trade) => {
@@ -453,7 +453,7 @@ export default function OptionsMobile() {
             </div>
           )}
         </Card>
-      </div>
+      </PageBody>
 
       <Dialog open={addOpen} title="Pridať opčný obchod" body="Zadajte detaily vášho opčného obchodu" onClose={() => setAddOpen(false)}>
         {addOpen ? (

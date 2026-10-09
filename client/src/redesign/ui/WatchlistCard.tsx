@@ -17,6 +17,7 @@ export function WatchlistCard({
   dividend,
   earnings,
   onOpen,
+  onSelect,
   className,
 }: {
   view?: "Detailed" | "Compact";
@@ -33,6 +34,7 @@ export function WatchlistCard({
   dividend?: string;
   earnings?: string;
   onOpen?: () => void;
+  onSelect?: () => void;
   className?: string;
 }) {
   const border =
@@ -43,27 +45,46 @@ export function WatchlistCard({
         : "border-[var(--rd-border-subtle)]";
   const clamped = Math.min(100, Math.max(0, position));
   const marker = `${clamped}%`;
+  const compact = view === "Compact";
 
   return (
     <article
       className={cn(
-        "flex w-full flex-col gap-2 overflow-hidden rounded-[var(--rd-radius-md)] border bg-[var(--rd-bg-surface)] p-3 [background-image:var(--rd-bg-surface-gradient)]",
+        "flex w-full flex-col gap-2 overflow-hidden rounded-[var(--rd-radius-md)] border bg-[var(--rd-bg-surface)] p-2 [background-image:var(--rd-bg-surface-gradient)]",
         border,
-        view === "Compact" && "gap-0 py-2.5",
+        onSelect && "cursor-pointer",
         className,
       )}
+      onClick={onSelect}
+      onKeyDown={
+        onSelect
+          ? (event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onSelect();
+              }
+            }
+          : undefined
+      }
+      role={onSelect ? "button" : undefined}
+      tabIndex={onSelect ? 0 : undefined}
     >
       <div className="flex min-h-[40px] items-center gap-1.5">
-        {view === "Detailed" ? (
-          <GripVertical className="size-4 shrink-0 text-[var(--rd-text-tertiary)]" aria-hidden />
-        ) : null}
+        <GripVertical className="size-5 shrink-0 text-[var(--rd-text-tertiary)]" aria-hidden />
         <Avatar ticker={ticker} companyName={name} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1">
             {onOpen ? (
-              <button type="button" onClick={onOpen} className="rd-type-data inline-flex items-center gap-1 text-[var(--rd-text-primary)]">
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpen();
+                }}
+                className="rd-type-data inline-flex items-center gap-1 text-[var(--rd-text-primary)]"
+              >
                 {ticker}
-                <ExternalLink className="size-2.5 text-[var(--rd-text-tertiary)]" aria-hidden />
+                <ExternalLink className="size-3 text-[var(--rd-text-tertiary)]" aria-hidden />
               </button>
             ) : (
               <p className="rd-type-data text-[var(--rd-text-primary)]">{ticker}</p>
@@ -71,14 +92,19 @@ export function WatchlistCard({
           </div>
           <p className="rd-type-body-sm truncate text-[var(--rd-text-secondary)]">{name}</p>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-0.5">
-          <p className={cn(view === "Detailed" ? "rd-type-data-lg" : "rd-type-data", "text-[var(--rd-text-primary)]")}>
-            {price}
-          </p>
-          <Delta value={delta} trend={trend} />
-        </div>
+        {compact ? (
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Delta value={delta} trend={trend} />
+            <p className="rd-type-data text-[var(--rd-text-primary)]">{price}</p>
+          </div>
+        ) : (
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <p className="rd-type-data-lg text-[var(--rd-text-primary)]">{price}</p>
+            <Delta value={delta} trend={trend} />
+          </div>
+        )}
       </div>
-      {view === "Detailed" ? (
+      {compact ? null : (
         <>
           <div className="flex items-center gap-1.5">
             <span className="rd-type-overline text-[var(--rd-text-tertiary)]">52W</span>
@@ -107,12 +133,12 @@ export function WatchlistCard({
               Div. <span className="rd-type-data-sm text-[var(--rd-text-primary)]">{dividend ?? "—"}</span>
             </span>
             <span className="ml-auto inline-flex items-center gap-1 text-[var(--rd-text-tertiary)]">
-              <Calendar className="size-2.5" aria-hidden />
+              <Calendar className="size-3" aria-hidden />
               Earnings <span className="rd-type-data-sm text-[var(--rd-text-primary)]">{earnings ?? "—"}</span>
             </span>
           </div>
         </>
-      ) : null}
+      )}
     </article>
   );
 }

@@ -42,6 +42,7 @@ import {
 } from "@/redesign/ui";
 import type { Currency } from "@shared/schema";
 import type { QuoteCurrency } from "@shared/tickerCurrency";
+import { PageBody } from "./mobileChrome";
 
 type WatchlistItem = {
   id: string;
@@ -452,12 +453,12 @@ export default function WatchlistMobile() {
   return (
     <div className="bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
       <TopBar overline="Sledované akcie" title="Watchlist" />
-      <div className="flex flex-col gap-3 px-4 pb-8">
-        <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">
+      <PageBody className="gap-2 pb-8">
+        <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">
           Sledované akcie s metrikami, cieľovou cenou a poznámkami
         </p>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <div className="flex items-center gap-1" aria-label="Mena zobrazenia cien">
             <Chip active={displayCurrency === "USD"} onClick={() => setWatchlistDisplayCurrency("USD")}>
               USD
@@ -467,7 +468,7 @@ export default function WatchlistMobile() {
             </Chip>
           </div>
           <div
-            className="ml-auto inline-flex items-center gap-1 rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface)] p-1"
+            className="ml-auto inline-flex items-center gap-1 rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface)] p-1 [background-image:var(--rd-bg-surface-gradient)]"
             aria-label="Režim zobrazenia watchlistu"
           >
             <button
@@ -597,7 +598,7 @@ export default function WatchlistMobile() {
         ) : (
           <>
             {canReorder ? (
-              <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">
+              <p className="rd-type-body-sm text-[var(--rd-text-tertiary)]">
                 Podržte ikonu vľavo (~1 s) a presuňte kartu hore/dole pre zmenu poradia.
               </p>
             ) : null}
@@ -609,7 +610,7 @@ export default function WatchlistMobile() {
               onDragEnd={handleDragEnd}
             >
               <SortableContext items={filteredItems.map((item) => item.id)} strategy={verticalListSortingStrategy}>
-                <div className={cn("flex flex-col gap-3", showSearchResults && "opacity-40")}>
+                <div className={cn("flex flex-col gap-2", showSearchResults && "opacity-40")}>
                   {filteredItems.map((item) => {
                     const quote = quotes[item.ticker];
                     const showOffHours = shouldShowExtendedQuote(
@@ -661,24 +662,8 @@ export default function WatchlistMobile() {
                           dividend={divYield != null ? `${divYield.toFixed(2)}%` : "—"}
                           earnings={earningsDate ? formatEarningsDate(earningsDate) : "—"}
                           onOpen={() => window.open(yahooFinanceUrl(item.ticker), "_blank", "noopener,noreferrer")}
+                          onSelect={() => openEdit(item)}
                         />
-                        <div className="mt-1 flex justify-end gap-1">
-                          <Button
-                            variant="Ghost"
-                            className="min-h-0 px-2 py-1 text-xs"
-                            onClick={() => openEdit(item)}
-                          >
-                            Upraviť
-                          </Button>
-                          <Button
-                            variant="Ghost"
-                            className="min-h-0 px-2 py-1 text-xs"
-                            onClick={() => removeMutation.mutate(item.ticker)}
-                            disabled={removeMutation.isPending}
-                          >
-                            Odstrániť
-                          </Button>
-                        </div>
                       </SortableWatchCard>
                     );
                   })}
@@ -687,7 +672,7 @@ export default function WatchlistMobile() {
             </DndContext>
           </>
         )}
-      </div>
+      </PageBody>
 
       <Dialog
         open={!!editItem}
