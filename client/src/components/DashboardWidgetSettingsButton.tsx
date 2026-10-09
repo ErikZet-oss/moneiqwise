@@ -192,7 +192,7 @@ export function DashboardWidgetSettingsButton({ id }: Props) {
             <div className="space-y-0.5">
               <Label className="text-sm font-medium">Zobrazenie aktív (mobil)</Label>
               <p className="text-[11px] text-muted-foreground leading-snug">
-                Podrobný zoznam alebo jednoduchý prehľad
+                Podrobné, jednoduché alebo kompaktné zobrazenie
               </p>
             </div>
             <Select
@@ -208,6 +208,7 @@ export function DashboardWidgetSettingsButton({ id }: Props) {
               <SelectContent>
                 <SelectItem value="detailed">Podrobné</SelectItem>
                 <SelectItem value="simple">Jednoduché</SelectItem>
+                <SelectItem value="compact">Kompaktné</SelectItem>
               </SelectContent>
             </Select>
           </div>

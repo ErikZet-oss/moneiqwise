@@ -15,6 +15,8 @@ const typeMeta = "text-[11px] font-normal leading-[14px]";
 const typeDataSm = "text-[11px] font-medium leading-[14px] tabular-nums";
 /** Figma Data/Micro — lot line, prices (10/12, 500). */
 const typeMicro = "text-[10px] font-medium leading-[12px] tabular-nums";
+/** Figma Label/Overline — compact column headers (10/12, 600). */
+const typeOverline = "text-[10px] font-semibold leading-[12px]";
 
 export function LotRow({
   label = "Nákup",
@@ -56,6 +58,12 @@ export type HoldingLot = {
   tone?: BadgeTone;
 };
 
+function trendClass(trend: DeltaTrend) {
+  if (trend === "Down") return "text-[var(--rd-loss)]";
+  if (trend === "Up") return "text-[var(--rd-profit)]";
+  return "text-[var(--rd-text-secondary)]";
+}
+
 function AfterHoursLine({
   price,
   change,
@@ -70,32 +78,50 @@ function AfterHoursLine({
   className?: string;
 }) {
   if (!price && !change) return null;
-  const changeClass =
-    changeTrend === "Down"
-      ? "text-[var(--rd-loss)]"
-      : changeTrend === "Up"
-        ? "text-[var(--rd-profit)]"
-        : "text-[var(--rd-text-tertiary)]";
   return (
     <div className={cn("flex items-center gap-1", className)}>
       <Moon className="size-3 shrink-0 text-[var(--rd-warning)]" aria-hidden />
       {showLabel ? <span className={cn(typeMeta, "text-[var(--rd-text-tertiary)]")}>Mimo trhu</span> : null}
       {price ? <span className={cn(typeMicro, "text-[var(--rd-text-primary)]")}>{price}</span> : null}
-      {change ? <span className={cn(typeMicro, changeClass)}>{change}</span> : null}
+      {change ? <span className={cn(typeMicro, trendClass(changeTrend))}>{change}</span> : null}
     </div>
+  );
+}
+
+/** Inline moon + % for Jednoduché (Figma: only when market is closed). */
+function AfterHoursInline({
+  change,
+  changeTrend = "Flat",
+}: {
+  change?: string;
+  changeTrend?: DeltaTrend;
+}) {
+  if (!change) return null;
+  return (
+    <span className="inline-flex shrink-0 items-center gap-0.5">
+      <Moon className="size-2.5 shrink-0 text-[var(--rd-warning)]" aria-hidden />
+      <span className={cn(typeDataSm, "whitespace-nowrap", trendClass(changeTrend))}>{change}</span>
+    </span>
   );
 }
 
 function ExpandChevron({
   expanded,
   onToggle,
+  size = "md",
 }: {
   expanded: boolean;
   onToggle?: () => void;
+  size?: "sm" | "md";
 }) {
-  const icon = expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />;
+  const box = size === "sm" ? "size-3" : "size-4";
+  const icon = expanded ? (
+    <ChevronDown className={box} />
+  ) : (
+    <ChevronRight className={box} />
+  );
   if (!onToggle) {
-    return <span className="inline-flex size-4 shrink-0 items-center justify-center" aria-hidden />;
+    return <span className={cn("inline-flex shrink-0 items-center justify-center", box)} aria-hidden />;
   }
   return (
     <button
@@ -103,7 +129,10 @@ function ExpandChevron({
       aria-expanded={expanded}
       aria-label={expanded ? "Zbaliť loty" : "Rozbaliť loty"}
       onClick={onToggle}
-      className="inline-flex size-4 shrink-0 items-center justify-center text-[var(--rd-text-tertiary)]"
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center text-[var(--rd-text-tertiary)]",
+        box,
+      )}
     >
       {icon}
     </button>
@@ -211,13 +240,6 @@ export function HoldingRowExpandable({
   afterHoursChange?: string;
   afterHoursTrend?: DeltaTrend;
 }) {
-  const plClass =
-    plTrend === "Down"
-      ? "text-[var(--rd-loss)]"
-      : plTrend === "Up"
-        ? "text-[var(--rd-profit)]"
-        : "text-[var(--rd-text-secondary)]";
-
   return (
     <div className="flex w-full flex-col gap-1.5 py-2" data-testid={`row-holding-${ticker}`}>
       <div className="flex items-center gap-1.5">
@@ -260,7 +282,7 @@ export function HoldingRowExpandable({
             </span>
           ) : null}
         </div>
-        {pl ? <p className={cn(typeDataSm, "shrink-0", plClass)}>{pl}</p> : null}
+        {pl ? <p className={cn(typeDataSm, "shrink-0", trendClass(plTrend))}>{pl}</p> : null}
       </div>
       {expanded ? (
         <div className="pl-1.5">
@@ -274,15 +296,14 @@ export function HoldingRowExpandable({
   );
 }
 
+/** Figma Holding row / Simple — Jednoduché: logo, ticker, ks/priem, hodnota, zisk €/%, AH %. */
 export function HoldingRowSimple({
   ticker,
   name,
-  assetType = "Akcie",
   value,
   lot,
-  dayChange,
-  dayTrend = "Flat",
-  pl,
+  plEur,
+  plPercent,
   plTrend = "Flat",
   expandable = true,
   expanded = false,
@@ -291,19 +312,22 @@ export function HoldingRowSimple({
   imageUrl,
   lots = [],
   lotsSlot,
-  afterHoursPrice,
   afterHoursChange,
   afterHoursTrend = "Flat",
+  /** @deprecated kept for callers; not shown in Figma Jednoduché */
+  assetType: _assetType,
+  dayChange: _dayChange,
+  dayTrend: _dayTrend,
+  pl: legacyPl,
+  afterHoursPrice: _afterHoursPrice,
 }: {
   ticker: string;
   name: string;
-  assetType?: string;
   value: string;
+  /** e.g. "16 ks / 132,19 €" */
   lot: string;
-  dayChange?: string;
-  dayTrend?: DeltaTrend;
-  /** e.g. "+2 711,68 € (+120.46%)" */
-  pl?: string;
+  plEur?: string;
+  plPercent?: string;
   plTrend?: DeltaTrend;
   expandable?: boolean;
   expanded?: boolean;
@@ -311,62 +335,139 @@ export function HoldingRowSimple({
   onNameClick?: () => void;
   imageUrl?: string | null;
   lots?: HoldingLot[];
-  /** Lazy-loaded lots panel (preferred over static `lots`). */
   lotsSlot?: ReactNode;
-  afterHoursPrice?: string;
   afterHoursChange?: string;
   afterHoursTrend?: DeltaTrend;
+  assetType?: string;
+  dayChange?: string;
+  dayTrend?: DeltaTrend;
+  /** Legacy combined string — used only if plEur/plPercent omitted */
+  pl?: string;
+  afterHoursPrice?: string;
 }) {
-  const plClass =
-    plTrend === "Down"
-      ? "text-[var(--rd-loss)]"
-      : plTrend === "Up"
-        ? "text-[var(--rd-profit)]"
-        : "text-[var(--rd-text-secondary)]";
-  const dayClass =
-    dayTrend === "Down"
-      ? "text-[var(--rd-loss)]"
-      : dayTrend === "Up"
-        ? "text-[var(--rd-profit)]"
-        : "text-[var(--rd-text-secondary)]";
+  const plEurText = plEur ?? legacyPl;
+  const plClass = trendClass(plTrend);
 
   return (
     <div className="flex w-full flex-col gap-1.5 py-2" data-testid={`row-holding-${ticker}`}>
-      <div className="flex items-center gap-1.5">
-        <ExpandChevron expanded={expanded} onToggle={expandable ? onToggle : undefined} />
+      <div className="flex items-center gap-2">
+        <ExpandChevron expanded={expanded} onToggle={expandable ? onToggle : undefined} size="sm" />
         <Avatar ticker={ticker} companyName={name} imageUrl={imageUrl} />
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5 overflow-hidden">
+          {onNameClick ? (
+            <button
+              type="button"
+              onClick={onNameClick}
+              className={cn(typeName, "truncate text-left text-[var(--rd-text-primary)]")}
+              title={name}
+            >
+              {ticker}
+            </button>
+          ) : (
+            <p className={cn(typeName, "truncate text-[var(--rd-text-primary)]")} title={name}>
+              {ticker}
+            </p>
+          )}
+          <p className={cn(typeMeta, "truncate text-[var(--rd-text-tertiary)]")}>{lot}</p>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-0.5 overflow-hidden">
+          <p className={cn(typeValue, "whitespace-nowrap text-[var(--rd-text-primary)]")}>{value}</p>
           <div className="flex items-center gap-1.5">
-            {onNameClick ? (
-              <button
-                type="button"
-                onClick={onNameClick}
-                className={cn(typeName, "min-w-0 flex-1 truncate text-left text-[var(--rd-text-primary)]")}
-                title={name}
-              >
-                {ticker}
-              </button>
-            ) : (
-              <p className={cn(typeName, "min-w-0 flex-1 truncate text-[var(--rd-text-primary)]")} title={name}>
-                {ticker}
-              </p>
-            )}
-            <Badge label={assetType} className="shrink-0" />
-            <p className={cn(typeValue, "shrink-0 text-[var(--rd-text-primary)]")}>{value}</p>
-          </div>
-          <div className="flex items-center gap-1">
-            <p className={cn(typeMicro, "min-w-0 flex-1 truncate text-[var(--rd-text-secondary)]")}>{lot}</p>
-            {dayChange ? <p className={cn(typeMicro, "shrink-0", dayClass)}>{dayChange}</p> : null}
-            {pl ? <p className={cn(typeMicro, "shrink-0 text-right", plClass)}>{pl}</p> : null}
+            {plEurText ? (
+              <p className={cn(typeDataSm, "whitespace-nowrap", plClass)}>{plEurText}</p>
+            ) : null}
+            {plPercent ? (
+              <p className={cn(typeDataSm, "whitespace-nowrap", plClass)}>{plPercent}</p>
+            ) : null}
+            <AfterHoursInline change={afterHoursChange} changeTrend={afterHoursTrend} />
           </div>
         </div>
       </div>
-      <AfterHoursLine
-        price={afterHoursPrice}
-        change={afterHoursChange}
-        changeTrend={afterHoursTrend}
-        className="pl-[68px]"
-      />
+      {expanded ? (
+        <div className="pl-1.5">
+          {lotsSlot}
+          {lots.map((item) => (
+            <LotRow key={`${item.date}-${item.lot}`} {...item} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Column labels above Kompaktné list (Figma columns-header). */
+export function HoldingCompactColumns() {
+  return (
+    <div className="flex items-center gap-2 pb-1 pl-5">
+      <p className={cn(typeOverline, "min-w-0 flex-1 text-[var(--rd-text-tertiary)]")}>Aktívum</p>
+      <p className={cn(typeOverline, "w-[62px] shrink-0 text-right text-[var(--rd-text-tertiary)]")}>
+        Zisk %
+      </p>
+      <p className={cn(typeOverline, "w-[78px] shrink-0 text-right text-[var(--rd-text-tertiary)]")}>
+        Zisk €
+      </p>
+      <p className={cn(typeOverline, "w-20 shrink-0 text-right text-[var(--rd-text-tertiary)]")}>
+        Hodnota
+      </p>
+    </div>
+  );
+}
+
+/** Figma Holding row / Compact — bez loga, 1 riadok: ticker · zisk% · zisk€ · hodnota. */
+export function HoldingRowCompact({
+  ticker,
+  name,
+  value,
+  plEur,
+  plPercent,
+  plTrend = "Flat",
+  expandable = true,
+  expanded = false,
+  onToggle,
+  onTickerClick,
+  lots = [],
+  lotsSlot,
+}: {
+  ticker: string;
+  name?: string;
+  value: string;
+  plEur?: string;
+  plPercent?: string;
+  plTrend?: DeltaTrend;
+  expandable?: boolean;
+  expanded?: boolean;
+  onToggle?: () => void;
+  onTickerClick?: () => void;
+  lots?: HoldingLot[];
+  lotsSlot?: ReactNode;
+}) {
+  const plClass = trendClass(plTrend);
+
+  return (
+    <div className="flex w-full flex-col" data-testid={`row-holding-${ticker}`}>
+      <div className="flex items-center gap-2 py-1.5">
+        <ExpandChevron expanded={expanded} onToggle={expandable ? onToggle : undefined} size="sm" />
+        {onTickerClick ? (
+          <button
+            type="button"
+            onClick={onTickerClick}
+            className={cn(typeName, "min-w-0 flex-1 truncate text-left text-[var(--rd-text-primary)]")}
+            title={name ?? ticker}
+          >
+            {ticker}
+          </button>
+        ) : (
+          <p
+            className={cn(typeName, "min-w-0 flex-1 truncate text-[var(--rd-text-primary)]")}
+            title={name ?? ticker}
+          >
+            {ticker}
+          </p>
+        )}
+        <p className={cn(typeDataSm, "w-[62px] shrink-0 text-right", plClass)}>{plPercent ?? "—"}</p>
+        <p className={cn(typeDataSm, "w-[78px] shrink-0 text-right", plClass)}>{plEur ?? "—"}</p>
+        <p className={cn(typeValue, "w-20 shrink-0 text-right text-[var(--rd-text-primary)]")}>{value}</p>
+      </div>
       {expanded ? (
         <div className="pl-1.5">
           {lotsSlot}

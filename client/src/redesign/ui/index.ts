@@ -9,7 +9,14 @@ export { Avatar } from "./Avatar";
 export { SectionHeader } from "./SectionHeader";
 export { StatTile } from "./StatTile";
 export type { StatTone } from "./StatTile";
-export { HoldingRow, HoldingRowExpandable, HoldingRowSimple, LotRow } from "./HoldingRow";
+export {
+  HoldingCompactColumns,
+  HoldingRow,
+  HoldingRowCompact,
+  HoldingRowExpandable,
+  HoldingRowSimple,
+  LotRow,
+} from "./HoldingRow";
 export type { HoldingLot } from "./HoldingRow";
 export { TransactionRow } from "./TransactionRow";
 export { NewsRow } from "./NewsRow";

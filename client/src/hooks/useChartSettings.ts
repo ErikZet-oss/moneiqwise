@@ -11,8 +11,8 @@ export type DailyMoversDisplayCount = 1 | 3 | 5;
 /** Mobilný „Prehľad aktív“ — pole zoradenia (zodpovedá stĺpcom v desktop tabuľke). */
 export type MobileAssetsSortBy = "name" | "value" | "netProfit" | "gainPercent";
 
-/** Mobilný „Prehľad aktív“ — podrobný zoznam vs. jednoduchý (dva riadky ako XTB). */
-export type MobileAssetsView = "detailed" | "simple";
+/** Mobilný „Prehľad aktív“ — podrobný / jednoduchý / kompaktný (Figma). */
+export type MobileAssetsView = "detailed" | "simple" | "compact";
 
 export type { ChartBenchmarkId };
 
@@ -74,7 +74,7 @@ function normalizeMobileAssetsSortOrder(raw: unknown): "asc" | "desc" {
 }
 
 function normalizeMobileAssetsView(raw: unknown): MobileAssetsView {
-  if (raw === "detailed" || raw === "simple") return raw;
+  if (raw === "detailed" || raw === "simple" || raw === "compact") return raw;
   return defaultSettings.mobileAssetsView;
 }
 

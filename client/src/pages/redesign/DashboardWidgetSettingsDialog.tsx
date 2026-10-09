@@ -144,7 +144,7 @@ export function DashboardWidgetSettingsDialog({
             <div>
               <p className="rd-type-body-strong text-[var(--rd-text-primary)]">Zobrazenie aktív (mobil)</p>
               <p className="rd-type-body-sm text-[var(--rd-text-tertiary)]">
-                Podrobný zoznam alebo jednoduchý prehľad
+                Podrobné, jednoduché alebo kompaktné zobrazenie
               </p>
             </div>
             <Select
@@ -152,6 +152,7 @@ export function DashboardWidgetSettingsDialog({
               options={[
                 { value: "detailed", label: "Podrobné" },
                 { value: "simple", label: "Jednoduché" },
+                { value: "compact", label: "Kompaktné" },
               ]}
               onChange={(value) => setMobileAssetsView(value as MobileAssetsView)}
             />

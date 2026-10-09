@@ -3855,9 +3855,16 @@ function DashboardClassic() {
                         <RadioGroupItem value="detailed" id="mobile-view-detailed" />
                         <span className="text-sm font-normal">Podrobné</span>
                       </label>
-                      <label htmlFor="mobile-view-simple" className="flex cursor-pointer items-center gap-3 py-2.5">
+                      <label
+                        htmlFor="mobile-view-simple"
+                        className="flex cursor-pointer items-center gap-3 border-b border-border py-2.5"
+                      >
                         <RadioGroupItem value="simple" id="mobile-view-simple" />
                         <span className="text-sm font-normal">Jednoduché</span>
+                      </label>
+                      <label htmlFor="mobile-view-compact" className="flex cursor-pointer items-center gap-3 py-2.5">
+                        <RadioGroupItem value="compact" id="mobile-view-compact" />
+                        <span className="text-sm font-normal">Kompaktné</span>
                       </label>
                     </RadioGroup>
                   </PopoverContent>
@@ -3948,31 +3955,15 @@ function DashboardClassic() {
                     setExpandedMobileHoldingId((prev) => (prev === holding.id ? null : holding.id));
                   };
 
-                  const simpleDailyPctEl =
-                    hideMarketSession || !quote
-                      ? null
-                      : usSessionState === "LIVE" && Number.isFinite(quote.changePercent)
-                        ? (
-                            <span className={`text-[8px] tabular-nums ${getChangeColor(quote.change)}`}>
-                              {formatPercent(quote.changePercent)}
-                            </span>
-                          )
-                        : showOffHoursDailyChange
-                          ? (
-                              <span
-                                className={`text-[8px] tabular-nums inline-flex items-center gap-0.5 ${getChangeColor(quote.preMarketChange ?? 0)}`}
-                              >
-                                <Moon className={`h-2 w-2 shrink-0 ${premarketMoonClass}`} aria-hidden />
-                                {formatPercent(quote.preMarketChangePercent ?? 0)}
-                              </span>
-                            )
-                          : Number.isFinite(quote.changePercent)
-                            ? (
-                                <span className={`text-[8px] tabular-nums ${getChangeColor(quote.change)}`}>
-                                  {formatPercent(quote.changePercent)}
-                                </span>
-                              )
-                            : null;
+                  const simpleAfterHoursEl =
+                    !hideMarketSession && showOffHoursDailyChange && quote ? (
+                      <span
+                        className={`inline-flex items-center gap-0.5 text-[11px] font-medium tabular-nums ${getChangeColor(quote.preMarketChange ?? 0)}`}
+                      >
+                        <Moon className={`h-2.5 w-2.5 shrink-0 ${premarketMoonClass}`} aria-hidden />
+                        {formatPercent(quote.preMarketChangePercent ?? 0)}
+                      </span>
+                    ) : null;
 
                   return (
                     <div
@@ -4000,7 +3991,39 @@ function DashboardClassic() {
                         }
                       }}
                     >
-                      {mobileAssetsView === "simple" ? (
+                      {mobileAssetsView === "compact" ? (
+                        <div className="flex items-center gap-2 min-h-[30px]">
+                          {canExpandLots || isPokemonGroup ? (
+                            <ChevronDown
+                              className={`h-3 w-3 shrink-0 text-muted-foreground transition-transform ${(isPokemonGroup ? pokemonGroupOpen : isLotsExpanded) ? "" : "-rotate-90"}`}
+                              aria-hidden
+                            />
+                          ) : (
+                            <span className="w-3 shrink-0" aria-hidden />
+                          )}
+                          <button
+                            type="button"
+                            className="min-w-0 flex-1 truncate text-left text-xs font-semibold hover:text-primary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openAssetDetail();
+                            }}
+                            data-testid={`button-mobile-asset-name-${holding.ticker}`}
+                          >
+                            {assetTickerLabel(holding)}
+                          </button>
+                          <span className={`w-[62px] shrink-0 text-right text-[11px] font-medium tabular-nums ${getChangeColor(gainLoss)}`}>
+                            {formatPercent(gainLossPercent)}
+                          </span>
+                          <span className={`w-[78px] shrink-0 text-right text-[11px] font-medium tabular-nums ${getChangeColor(gainLoss)}`}>
+                            {gainLoss > 0 ? "+" : ""}
+                            {maskAmount(formatCurrency(gainLoss))}
+                          </span>
+                          <span className="w-20 shrink-0 text-right text-xs font-semibold tabular-nums">
+                            {maskAmount(formatCurrency(currentValue))}
+                          </span>
+                        </div>
+                      ) : mobileAssetsView === "simple" ? (
                         <div className="flex gap-2 items-start">
                           <div className="shrink-0 pt-0.5 flex items-center gap-0.5">
                             {canExpandLots || isPokemonGroup ? (
@@ -4026,33 +4049,27 @@ function DashboardClassic() {
                               >
                                 {mobileSimpleAssetDisplayName(holding)}
                               </button>
-                              <Badge
-                                variant="secondary"
-                                className="shrink-0 px-1.5 py-0 text-[9px] font-normal leading-none text-muted-foreground border border-border/80"
-                              >
-                                {mobileSimpleAssetBadgeLabel(holding)}
-                              </Badge>
                             </div>
-                            <div className="flex items-center justify-between gap-1.5 text-[9px] text-muted-foreground tabular-nums min-w-0">
+                            <div className="flex items-center justify-between gap-1.5 text-[11px] text-muted-foreground tabular-nums min-w-0">
                               <span className="truncate min-w-0">
-                                {formatShareQuantity(shares)} @{" "}
+                                {formatShareQuantity(shares)} ks /{" "}
                                 {maskAmount(formatAverageCostCurrency(avgCostForDisplay))}
                               </span>
-                              {simpleDailyPctEl != null ? (
-                                <span className="shrink-0">{simpleDailyPctEl}</span>
-                              ) : null}
                             </div>
                           </div>
-                          <div className="text-right shrink-0 flex flex-col items-end gap-0.5 max-w-[46%]">
+                          <div className="text-right shrink-0 flex flex-col items-end gap-0.5 max-w-[50%]">
                             <div className="text-xs font-semibold tabular-nums leading-tight">
                               {maskAmount(formatCurrency(currentValue))}
                             </div>
                             <div
-                              className={`text-[10px] font-medium tabular-nums leading-tight ${getChangeColor(gainLoss)}`}
+                              className={`flex items-center gap-1.5 text-[11px] font-medium tabular-nums leading-tight ${getChangeColor(gainLoss)}`}
                             >
-                              {gainLoss > 0 ? "+" : ""}
-                              {maskAmount(formatCurrency(gainLoss))}{" "}
-                              <span className="whitespace-nowrap">({formatPercent(gainLossPercent)})</span>
+                              <span>
+                                {gainLoss > 0 ? "+" : ""}
+                                {maskAmount(formatCurrency(gainLoss))}
+                              </span>
+                              <span className="whitespace-nowrap">{formatPercent(gainLossPercent)}</span>
+                              {simpleAfterHoursEl}
                             </div>
                           </div>
                         </div>
