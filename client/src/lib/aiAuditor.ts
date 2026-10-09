@@ -192,5 +192,9 @@ export function ensureAnalysisShape(raw: AiAuditorAnalysis | null | undefined): 
       portfolioImpactDetail: n.portfolioImpactDetail || n.whyItMatters || "",
       sourceUrl: n.sourceUrl ?? null,
     })),
+    recommendations: Array.isArray(raw.recommendations) ? raw.recommendations : [],
+    summaryOneLiner:
+      String(raw.summaryOneLiner || "").trim() ||
+      "Analýza portfólia voči aktuálnemu makro prostrediu.",
   };
 }

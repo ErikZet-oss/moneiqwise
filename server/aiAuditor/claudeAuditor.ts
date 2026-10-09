@@ -211,7 +211,11 @@ function resolveNewsUrl(
   return byTicker?.link || null;
 }
 
-function normalizeAnalysis(raw: any, ctx: AiBotRunContext): AiAuditorAnalysis {
+function normalizeAnalysis(rawInput: any, ctx: AiBotRunContext): AiAuditorAnalysis {
+  const raw =
+    rawInput?.analysis && typeof rawInput.analysis === "object" && !Array.isArray(rawInput.analysis)
+      ? rawInput.analysis
+      : rawInput;
   const scoreRaw = Number(raw?.healthScore);
   const healthScore = Number.isFinite(scoreRaw)
     ? Math.max(0, Math.min(100, Math.round(scoreRaw)))
@@ -227,43 +231,75 @@ function normalizeAnalysis(raw: any, ctx: AiBotRunContext): AiAuditorAnalysis {
         .slice(0, 6)
     : [];
 
-  const newsSentiment: AiAuditorNewsItem[] = Array.isArray(raw?.newsSentiment)
+  const newsRaw = Array.isArray(raw?.newsSentiment)
     ? raw.newsSentiment
-        .map((n: any) => {
-          const ticker = String(n?.ticker || "").toUpperCase().trim();
-          const headline = String(n?.headline || "").trim();
-          const whyItMatters = String(n?.whyItMatters || "").trim();
-          const portfolioImpactDetail =
-            String(n?.portfolioImpactDetail || "").trim() || whyItMatters;
-          return {
-            ticker,
-            headline,
-            sentiment: asSentiment(n?.sentiment),
-            whyItMatters,
-            portfolioImpactDetail,
-            sourceUrl: resolveNewsUrl(ticker, headline, n?.sourceUrl, ctx),
-          };
-        })
-        .filter((n: AiAuditorNewsItem) => n.ticker && n.headline)
-        .slice(0, 8)
-    : [];
+    : Array.isArray(raw?.news)
+      ? raw.news
+      : Array.isArray(raw?.sentiment)
+        ? raw.sentiment
+        : [];
+  let newsSentiment: AiAuditorNewsItem[] = newsRaw
+    .map((n: any) => {
+      const ticker = String(n?.ticker || n?.symbol || "").toUpperCase().trim();
+      const headline = String(n?.headline || n?.title || n?.summary || "").trim();
+      const whyItMatters = String(
+        n?.whyItMatters || n?.why || n?.rationale || n?.detail || "",
+      ).trim();
+      const portfolioImpactDetail =
+        String(n?.portfolioImpactDetail || n?.impact || "").trim() || whyItMatters;
+      return {
+        ticker,
+        headline,
+        sentiment: asSentiment(n?.sentiment),
+        whyItMatters,
+        portfolioImpactDetail,
+        sourceUrl: resolveNewsUrl(ticker, headline, n?.sourceUrl ?? n?.url, ctx),
+      };
+    })
+    .filter((n: AiAuditorNewsItem) => n.ticker && n.headline)
+    .slice(0, 8);
 
-  const recommendations: AiAuditorRecommendation[] = Array.isArray(raw?.recommendations)
+  // If the model omitted news (truncation / wrong keys), seed from context headlines.
+  if (newsSentiment.length === 0 && Array.isArray(ctx.news) && ctx.news.length > 0) {
+    newsSentiment = ctx.news
+      .slice(0, 6)
+      .map((n) => {
+        const ticker = String(n.ticker || n.query || "").toUpperCase().trim();
+        const headline = String(n.title || "").trim();
+        const summary = String(n.summary || "").trim();
+        return {
+          ticker,
+          headline,
+          sentiment: "neutral" as const,
+          whyItMatters: summary || "Aktuálna správa viazaná na portfólio / makrostory.",
+          portfolioImpactDetail: summary,
+          sourceUrl: resolveNewsUrl(ticker, headline, n.link || null, ctx),
+        };
+      })
+      .filter((n: AiAuditorNewsItem) => n.ticker && n.headline);
+  }
+
+  const recsRaw = Array.isArray(raw?.recommendations)
     ? raw.recommendations
-        .map((r: any) => {
-          const p = String(r?.priority || "medium").toLowerCase();
-          return {
-            title: String(r?.title || "").trim(),
-            detail: String(r?.detail || "").trim(),
-            priority: (p === "high" || p === "low" ? p : "medium") as
-              | "high"
-              | "medium"
-              | "low",
-          };
-        })
-        .filter((r: AiAuditorRecommendation) => r.title && r.detail)
-        .slice(0, 4)
-    : [];
+    : Array.isArray(raw?.recs)
+      ? raw.recs
+      : Array.isArray(raw?.tips)
+        ? raw.tips
+        : [];
+  const recommendations: AiAuditorRecommendation[] = recsRaw
+    .map((r: any) => {
+      const p = String(r?.priority || "medium").toLowerCase();
+      return {
+        title: String(r?.title || r?.name || r?.action || "").trim(),
+        detail: String(r?.detail || r?.text || r?.description || r?.body || "").trim(),
+        priority: (p === "high" || p === "low" ? p : "medium") as
+          | "high"
+          | "medium"
+          | "low",
+      };
+    })
+    .filter((r: AiAuditorRecommendation) => r.title && r.detail)
+    .slice(0, 4);
 
   const fedRates = asMacroBlock(
     raw?.macroStress?.fedRates,
@@ -370,11 +406,25 @@ Pri správach použi sourceUrl z recentNews.link, ak sedí headline; inak null.
 portfolioImpactDetail: spomeň váhu tickera v portfóliu (weightPct) a približný dopad na hodnotu portfólia v EUR (totalMarketValue × weight).
 deepDive: 2–4 vety so scenárom (napr. −10 % Nasdaq). mitigation: jeden konkrétny krok.`;
 
-  const user = `Vyhodnoť portfólio a vráť JSON s kľúčmi:
+  // newsSentiment + recommendations early so truncation (max_tokens) does not drop them.
+  const user = `Vyhodnoť portfólio a vráť JSON s kľúčmi (v tomto poradí — najprv správy a tipy):
 {
   "healthScore": 0-100,
   "healthLabel": "krátky status",
   "summaryOneLiner": "1 úderná veta",
+  "newsSentiment": [
+    {
+      "ticker": "NVDA",
+      "headline": "...",
+      "sentiment": "positive|neutral|negative",
+      "whyItMatters": "1–2 vety na kartu",
+      "portfolioImpactDetail": "váha v portfóliu + dopad v EUR + prečo to bolí/pomáha",
+      "sourceUrl": "https://... alebo null"
+    }
+  ],
+  "recommendations": [
+    { "title": "...", "detail": "...", "priority": "high|medium|low" }
+  ],
   "scoreBreakdown": {
     "sectorConcentration": { "score": 0-100, "detail": "prečo toto skóre (koncentrácia)" },
     "fedSensitivity": { "score": 0-100, "detail": "citlivosť rastových titulov na sadzby" },
@@ -385,7 +435,7 @@ deepDive: 2–4 vety so scenárom (napr. −10 % Nasdaq). mitigation: jeden konk
     "fedRates": {
       "impact": "positive|neutral|negative|mixed",
       "detail": "krátky súhrn na karte",
-      "deepDive": "scenáre a dopad na portfólio",
+      "deepDive": "scenáre a dopad na portfólio (max 3 vety)",
       "mitigation": "konkrétny krok na zníženie rizika"
     },
     "inflation": {
@@ -401,22 +451,9 @@ deepDive: 2–4 vety so scenárom (napr. −10 % Nasdaq). mitigation: jeden konk
       "mitigation": "...",
       "topSectors": [{ "name": "...", "weightPct": 12.5 }]
     }
-  },
-  "newsSentiment": [
-    {
-      "ticker": "NVDA",
-      "headline": "...",
-      "sentiment": "positive|neutral|negative",
-      "whyItMatters": "1–2 vety na kartu",
-      "portfolioImpactDetail": "váha v portfóliu + dopad v EUR + prečo to bolí/pomáha",
-      "sourceUrl": "https://... alebo null"
-    }
-  ],
-  "recommendations": [
-    { "title": "...", "detail": "...", "priority": "high|medium|low" }
-  ]
+  }
 }
-Presne 3–4 recommendations. newsSentiment max 6 položiek viazaných na holdings.
+Presne 3–4 recommendations. newsSentiment max 6 položiek viazaných na holdings (povinné, ak recentNews nie je prázdne).
 DÁTA:
 ${JSON.stringify(userPayload)}`;
 
@@ -424,7 +461,7 @@ ${JSON.stringify(userPayload)}`;
     // Newer Claude models reject `temperature` ("temp is deprecated for this model").
     const msg = await client.messages.create({
       model: AI_AUDITOR_MODEL,
-      max_tokens: 6144,
+      max_tokens: 8192,
       system,
       messages: [{ role: "user", content: user }],
     });
@@ -432,6 +469,9 @@ ${JSON.stringify(userPayload)}`;
       .filter((b): b is Anthropic.TextBlock => b.type === "text")
       .map((b) => b.text)
       .join("\n");
+    if (msg.stop_reason === "max_tokens") {
+      console.warn("[ai-auditor] Claude response truncated (max_tokens); normalizing partial JSON");
+    }
     const parsed = extractJsonObject(text);
     return normalizeAnalysis(parsed, ctx);
   } catch (err) {
