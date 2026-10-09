@@ -484,7 +484,7 @@ export default function DashboardMobile() {
     },
   });
 
-  const historyRange = chartRange === "1d" || chartRange === "1w" ? "1m" : chartRange === "all" ? "all" : chartRange;
+  const historyRange = chartRange === "all" ? "all" : chartRange;
   const { data: history } = useQuery<{ points: HistoryPoint[] }>({
     queryKey: ["/api/portfolio-history", portfolioParam, historyRange],
     queryFn: async () => {
@@ -901,6 +901,29 @@ export default function DashboardMobile() {
     return null;
   }, [chartSeries]);
 
+  /** Zhodnotenie portfólia za zvolené obdobie grafu (nie vždy celkový profit). */
+  const periodChange = useMemo(() => {
+    if (chartRange === "all") {
+      return { amount: metrics.totalProfit, percent: metrics.totalProfitPercent };
+    }
+    if (chartSeries.length < 2) {
+      return { amount: metrics.totalProfit, percent: metrics.totalProfitPercent };
+    }
+    const first = chartSeries[0]!;
+    const last = chartSeries[chartSeries.length - 1]!;
+    const netInflow = last.netInvested - first.netInvested;
+    const amount = last.totalValue - first.totalValue - netInflow;
+    const baseline = first.totalValue + Math.max(netInflow, 0);
+    const fromSeriesPct = last.portfolioPct;
+    const percent =
+      hasBenchData && Number.isFinite(fromSeriesPct)
+        ? fromSeriesPct
+        : baseline > 1e-9
+          ? (amount / baseline) * 100
+          : 0;
+    return { amount, percent };
+  }, [chartRange, chartSeries, hasBenchData, metrics.totalProfit, metrics.totalProfitPercent]);
+
   const renderWidget = (id: DashboardWidgetId) => {
     if (!editing && !isVisible(id)) return null;
 
@@ -1166,7 +1189,7 @@ export default function DashboardMobile() {
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5" data-testid="chart-period-returns">
                   {benchPeriodReturn != null ? (
                     <div className="flex min-w-0 flex-1 items-center gap-1.5">
                       <span
@@ -1178,7 +1201,7 @@ export default function DashboardMobile() {
                         {benchLabel}
                       </span>
                       <span
-                        className="shrink-0 rd-type-data-sm"
+                        className="shrink-0 rd-type-data-sm tabular-nums"
                         style={{ color: "var(--rd-chart-benchmark)" }}
                       >
                         {benchPeriodReturn >= 0 ? "+" : ""}
@@ -1190,19 +1213,19 @@ export default function DashboardMobile() {
                   )}
                   <span
                     className={cn(
-                      "shrink-0 rd-type-data-sm",
-                      toneOf(metrics.totalProfit) === "up"
+                      "shrink-0 rd-type-data-sm tabular-nums",
+                      toneOf(periodChange.amount) === "up"
                         ? "text-[var(--rd-profit)]"
-                        : toneOf(metrics.totalProfit) === "down"
+                        : toneOf(periodChange.amount) === "down"
                           ? "text-[var(--rd-loss)]"
                           : "text-[var(--rd-text-primary)]",
                     )}
                   >
-                    {mask(signedMoney(formatCurrency, metrics.totalProfit))}
+                    {mask(signedMoney(formatCurrency, periodChange.amount))}
                   </span>
                   <Delta
-                    value={signedPct(metrics.totalProfitPercent)}
-                    trend={trendFromNumber(metrics.totalProfitPercent)}
+                    value={signedPct(periodChange.percent)}
+                    trend={trendFromNumber(periodChange.percent)}
                   />
                 </div>
                 <div className="flex items-center justify-between gap-0.5">
