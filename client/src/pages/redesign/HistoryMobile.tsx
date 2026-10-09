@@ -3,9 +3,10 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 import { sk } from "date-fns/locale";
-import { ArrowDownUp, Check, Pencil, PlusCircle, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Pencil, PlusCircle, Trash2 } from "lucide-react";
 import type { Transaction } from "@shared/schema";
 import { CASH_FLOW_TICKER } from "@shared/schema";
+import { CASH_INTEREST_DISPLAY_NAME, CASH_INTEREST_TICKER } from "@shared/tickerCurrency";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
@@ -47,11 +48,31 @@ const TYPE_FILTERS = [
   { value: "all", label: "Všetky" },
   { value: "BUY", label: "Nákupy" },
   { value: "SELL", label: "Predaje" },
-  { value: "DIVIDEND", label: "Div" },
+  { value: "DIVIDEND", label: "Dividendy" },
   { value: "DEPOSIT", label: "Vklady" },
   { value: "WITHDRAWAL", label: "Výbery" },
-  { value: "TAX", label: "Dane" },
 ] as const;
+
+type SortField =
+  | "transactionDate"
+  | "type"
+  | "ticker"
+  | "shares"
+  | "pricePerShare"
+  | "commission"
+  | "total"
+  | "realizedGain";
+
+const SORT_OPTIONS: Array<{ value: SortField; label: string }> = [
+  { value: "transactionDate", label: "Dátum" },
+  { value: "type", label: "Typ" },
+  { value: "ticker", label: "Ticker" },
+  { value: "shares", label: "Počet kusov" },
+  { value: "pricePerShare", label: "Cena/ks" },
+  { value: "commission", label: "Poplatky" },
+  { value: "total", label: "Celkom" },
+  { value: "realizedGain", label: "Realiz. zisk" },
+];
 
 function formatShareQuantitySafe(raw: string | null | undefined): string {
   const n = parseFloat(raw || "0");
@@ -84,6 +105,8 @@ export default function HistoryMobile() {
   const mask = (s: string) => (hideAmounts ? "••••••" : s);
 
   const [typeFilter, setTypeFilter] = useState("all");
+  const [tickerFilter, setTickerFilter] = useState("all");
+  const [sortField, setSortField] = useState<SortField>("transactionDate");
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
   const [addOpen, setAddOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -100,6 +123,52 @@ export default function HistoryMobile() {
       return res.json();
     },
   });
+
+  const { data: sellGainsPayload } = useQuery<{
+    gains: Record<string, number>;
+    bySell?: Record<string, { gainEur: number; costEur: number; pct: number | null }>;
+  }>({
+    queryKey: ["/api/sell-realized-gains", portfolioParam],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/sell-realized-gains?portfolio=${encodeURIComponent(portfolioParam)}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) throw new Error("sell realized gains");
+      return res.json();
+    },
+    enabled: transactions.length > 0,
+    staleTime: 60 * 1000,
+  });
+
+  const gainEurBySellId = useMemo(() => {
+    const m = new Map<string, number>();
+    const bySell = sellGainsPayload?.bySell;
+    if (bySell) {
+      for (const [id, row] of Object.entries(bySell)) {
+        if (row && Number.isFinite(row.gainEur)) m.set(id, row.gainEur);
+      }
+      return m;
+    }
+    const gains = sellGainsPayload?.gains;
+    if (gains) {
+      for (const [id, value] of Object.entries(gains)) {
+        if (Number.isFinite(value)) m.set(id, value);
+      }
+    }
+    return m;
+  }, [sellGainsPayload]);
+
+  const uniqueTickers = useMemo(
+    () => Array.from(new Set(transactions.map((tx) => tx.ticker).filter(Boolean))).sort(),
+    [transactions],
+  );
+
+  const tickerFilterLabel = (ticker: string) => {
+    if (ticker === CASH_FLOW_TICKER) return "Hotovosť (vklady/výbery)";
+    if (ticker.toUpperCase() === CASH_INTEREST_TICKER) return CASH_INTEREST_DISPLAY_NAME;
+    return ticker;
+  };
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => apiRequest("DELETE", `/api/transactions/${id}`),
@@ -146,15 +215,59 @@ export default function HistoryMobile() {
   };
 
   const filtered = useMemo(() => {
-    let list = [...transactions];
-    if (typeFilter !== "all") list = list.filter((tx) => tx.type === typeFilter);
-    list.sort((a, b) => {
-      const da = new Date(a.transactionDate).getTime();
-      const db = new Date(b.transactionDate).getTime();
-      return sortDir === "desc" ? db - da : da - db;
+    const list = transactions.filter((tx) => {
+      if (typeFilter !== "all" && tx.type !== typeFilter) return false;
+      if (tickerFilter !== "all" && tx.ticker !== tickerFilter) return false;
+      return true;
     });
-    return list;
-  }, [transactions, typeFilter, sortDir]);
+
+    const dir = sortDir === "asc" ? 1 : -1;
+    const txTotal = (tx: Transaction) => {
+      const shares = parseFloat(String(tx.shares ?? "0"));
+      const price = parseFloat(String(tx.pricePerShare ?? "0"));
+      const commission = parseFloat(String(tx.commission ?? "0"));
+      if (!Number.isFinite(shares) || !Number.isFinite(price)) return 0;
+      const gross = shares * price;
+      if (tx.type === "DIVIDEND") return gross - (Number.isFinite(commission) ? commission : 0);
+      if (tx.type === "DEPOSIT" || tx.type === "WITHDRAWAL") return gross;
+      if (tx.type === "BUY") return gross + (Number.isFinite(commission) ? commission : 0);
+      return gross - (Number.isFinite(commission) ? commission : 0);
+    };
+    const realizedAmount = (tx: Transaction) => {
+      if (tx.type !== "SELL") return 0;
+      const eur = gainEurBySellId.get(tx.id);
+      return eur != null && Number.isFinite(eur) ? eur : 0;
+    };
+    const getKey = (tx: Transaction): string | number => {
+      switch (sortField) {
+        case "transactionDate":
+          return new Date(tx.transactionDate).getTime();
+        case "type":
+          return tx.type || "";
+        case "ticker":
+          return tx.ticker || "";
+        case "shares":
+          return parseFloat(String(tx.shares ?? "0")) || 0;
+        case "pricePerShare":
+          return parseFloat(String(tx.pricePerShare ?? "0")) || 0;
+        case "commission":
+          return parseFloat(String(tx.commission ?? "0")) || 0;
+        case "total":
+          return txTotal(tx);
+        case "realizedGain":
+          return realizedAmount(tx);
+        default:
+          return 0;
+      }
+    };
+
+    return [...list].sort((a, b) => {
+      const av = getKey(a);
+      const bv = getKey(b);
+      if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
+      return String(av).localeCompare(String(bv), "sk") * dir;
+    });
+  }, [transactions, typeFilter, tickerFilter, sortField, sortDir, gainEurBySellId]);
 
   const groups = useMemo(() => {
     const map = new Map<string, Transaction[]>();
@@ -214,7 +327,7 @@ export default function HistoryMobile() {
           </Button>
         </div>
 
-        <Card className="gap-2">
+        <Card className="gap-2" data-name="Card/Filters">
           <div className="grid grid-cols-2 gap-2">
             <Select
               label="Typ"
@@ -223,20 +336,36 @@ export default function HistoryMobile() {
               options={TYPE_FILTERS.map((f) => ({ value: f.value, label: f.label }))}
             />
             <Select
-              label="Zoradiť"
-              value="date"
-              onChange={() => undefined}
-              options={[{ value: "date", label: "Dátum" }]}
+              label="Akcia"
+              value={tickerFilter}
+              onChange={setTickerFilter}
+              options={[
+                { value: "all", label: "Všetky" },
+                ...uniqueTickers.map((ticker) => ({
+                  value: ticker,
+                  label: tickerFilterLabel(ticker),
+                })),
+              ]}
             />
           </div>
-          <button
-            type="button"
-            onClick={() => setSortDir((prev) => (prev === "desc" ? "asc" : "desc"))}
-            className="inline-flex min-h-[32px] w-full items-center justify-center gap-1.5 rounded-full border border-[var(--rd-border-strong)] bg-[var(--rd-bg-surface-raised)] px-2 text-xs font-medium text-[var(--rd-text-primary)]"
-          >
-            <ArrowDownUp className="size-3.5" />
-            {sortDir === "desc" ? "Zostupne" : "Vzostupne"}
-          </button>
+          <div className="flex items-end gap-2">
+            <Select
+              className="min-w-0 flex-1"
+              label="Zoradiť"
+              value={sortField}
+              onChange={(value) => setSortField(value as SortField)}
+              options={SORT_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+            />
+            <button
+              type="button"
+              data-testid="button-sort-direction"
+              onClick={() => setSortDir((prev) => (prev === "desc" ? "asc" : "desc"))}
+              className="inline-flex h-[34px] shrink-0 items-center justify-center gap-1.5 rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-strong)] bg-[var(--rd-bg-surface-raised)] px-2 text-xs font-medium text-[var(--rd-text-primary)]"
+            >
+              {sortDir === "desc" ? <ArrowDown className="size-3.5" /> : <ArrowUp className="size-3.5" />}
+              {sortDir === "desc" ? "Zostupne" : "Vzostupne"}
+            </button>
+          </div>
         </Card>
 
         {selectedIds.size > 0 ? (
