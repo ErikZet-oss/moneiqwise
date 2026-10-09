@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { format, parseISO } from "date-fns";
+import { format, parse, parseISO } from "date-fns";
 import { sk } from "date-fns/locale";
 import {
   Area,
@@ -138,7 +138,21 @@ type OptionsSummary = { totalTrades?: number | string; totalRealizedGain?: strin
 type HistoryPoint = { date: string; totalValue: number; netInvested: number };
 type NewsItem = { ticker: string; title: string; publisher?: string; publishedAt?: string; link?: string };
 type EarningsItem = { ticker: string; date: string; companyName?: string };
-type MacroItem = { date: string; title: string };
+type EarningsRes = { next: EarningsItem | null; all: EarningsItem[] };
+type MacroItem = { date: string; title: string; shortLabel?: string; code?: string };
+type MacroRes = { next: MacroItem | null; all: MacroItem[] };
+
+function formatDashDate(isoDate: string): string {
+  try {
+    return format(parse(isoDate, "yyyy-MM-dd", new Date()), "d. MMM yyyy", { locale: sk });
+  } catch {
+    try {
+      return format(parseISO(isoDate), "d. MMM yyyy", { locale: sk });
+    } catch {
+      return isoDate;
+    }
+  }
+}
 
 const CHART_RANGES = [
   { v: "1d", label: "1D" },
@@ -397,6 +411,9 @@ export default function DashboardMobile() {
   const [expandedHoldingId, setExpandedHoldingId] = useState<string | null>(null);
   const [allocationTab, setAllocationTab] = useState<(typeof ALLOCATION_TABS)[number]["id"]>("positions");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [earningsIndex, setEarningsIndex] = useState(0);
+  const [topPositionIndex, setTopPositionIndex] = useState(0);
+  const [macroIndex, setMacroIndex] = useState(0);
 
   const { data: holdings = [], isLoading: holdingsLoading } = useQuery<HoldingWithCostCurrency[]>({
     queryKey: ["/api/holdings", portfolioParam],
@@ -529,27 +546,43 @@ export default function DashboardMobile() {
     },
   });
 
-  const { data: earnings = [] } = useQuery<EarningsItem[]>({
+  const showRadarGroup =
+    editing || isVisible("earnings") || isVisible("topPosition") || isVisible("macroEvent");
+
+  const { data: earningsRes } = useQuery<EarningsRes>({
     queryKey: ["/api/holdings/next-earnings", portfolioParam],
-    enabled: isVisible("earnings"),
+    enabled: showRadarGroup && (editing || isVisible("earnings")),
+    staleTime: 45 * 60 * 1000,
     queryFn: async () => {
       const res = await fetch(`/api/holdings/next-earnings?portfolio=${encodeURIComponent(portfolioParam)}`, {
         credentials: "include",
       });
-      if (!res.ok) return [];
-      return res.json();
+      if (!res.ok) return { next: null, all: [] };
+      const data = (await res.json()) as EarningsRes;
+      return {
+        next: data?.next ?? null,
+        all: Array.isArray(data?.all) ? data.all : [],
+      };
     },
   });
 
-  const { data: macro = [] } = useQuery<MacroItem[]>({
+  const { data: macroRes } = useQuery<MacroRes>({
     queryKey: ["/api/macro-events/upcoming"],
-    enabled: isVisible("macroEvent"),
+    enabled: showRadarGroup && (editing || isVisible("macroEvent")),
+    staleTime: 12 * 60 * 60 * 1000,
     queryFn: async () => {
       const res = await fetch("/api/macro-events/upcoming", { credentials: "include" });
-      if (!res.ok) return [];
-      return res.json();
+      if (!res.ok) return { next: null, all: [] };
+      const data = (await res.json()) as MacroRes;
+      return {
+        next: data?.next ?? null,
+        all: Array.isArray(data?.all) ? data.all : [],
+      };
     },
   });
+
+  const earningsItems = earningsRes?.all ?? [];
+  const macroItems = macroRes?.all ?? [];
 
   const cashValue = useMemo(() => {
     if (isAllPortfolios) {
@@ -764,15 +797,36 @@ export default function DashboardMobile() {
     return { gainers, losers };
   }, [enrichedHoldings, quotes, convertPrice, getTickerCurrency, dailyMoversCount]);
 
-  const topPosition = useMemo(() => {
-    if (metrics.stockValue <= 0) return null;
-    const top = [...enrichedHoldings].sort((a, b) => b.value - a.value)[0];
-    if (!top) return null;
-    return {
-      ticker: top.holding.ticker,
-      pct: (top.value / metrics.stockValue) * 100,
-    };
+  const topPositions = useMemo(() => {
+    if (metrics.stockValue <= 0) return [];
+    return [...enrichedHoldings]
+      .filter((row) => row.value > 0)
+      .sort((a, b) => b.value - a.value)
+      .map((row) => ({
+        ticker: row.holding.ticker,
+        companyName: row.holding.companyName,
+        pct: (row.value / metrics.stockValue) * 100,
+      }));
   }, [enrichedHoldings, metrics.stockValue]);
+
+  const currentEarnings =
+    earningsItems.length > 0 ? earningsItems[earningsIndex % earningsItems.length]! : null;
+  const currentTopPosition =
+    topPositions.length > 0 ? topPositions[topPositionIndex % topPositions.length]! : null;
+  const currentMacro =
+    macroItems.length > 0 ? macroItems[macroIndex % macroItems.length]! : null;
+
+  useEffect(() => {
+    setEarningsIndex(0);
+  }, [earningsRes]);
+
+  useEffect(() => {
+    setMacroIndex(0);
+  }, [macroRes]);
+
+  useEffect(() => {
+    setTopPositionIndex(0);
+  }, [topPositions]);
 
   const ytd = useMemo(() => {
     const pts = ytdHistory?.points ?? [];
@@ -1284,87 +1338,155 @@ export default function DashboardMobile() {
       case "topPosition":
       case "macroEvent":
         return frame(
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-1.5">
             {(editing || isVisible("earnings")) ? (
               <div
-                className={`flex min-h-9 items-center gap-3 rounded-[var(--rd-radius-md)] border border-[color:color-mix(in_srgb,var(--rd-warning)_35%,transparent)] bg-[var(--rd-warning-dim)] px-3 ${
-                  editing && !isVisible("earnings") ? "opacity-40" : ""
-                }`}
+                className={cn(
+                  "flex min-h-9 items-center gap-1.5 rounded-[var(--rd-radius-md)] border border-[var(--rd-warning)] bg-[var(--rd-warning-dim)] p-2",
+                  editing && !isVisible("earnings") ? "opacity-40" : undefined,
+                )}
               >
                 {editing ? (
                   <button
                     type="button"
                     aria-label="Earnings"
-                    className="inline-flex size-8 items-center justify-center"
+                    className="inline-flex size-[18px] shrink-0 items-center justify-center"
                     onClick={() => toggleVisible("earnings")}
                   >
-                    {isVisible("earnings") ? <Eye className="size-4" /> : <EyeOff className="size-4 text-[var(--rd-text-tertiary)]" />}
+                    {isVisible("earnings") ? (
+                      <Eye className="size-4 text-[var(--rd-warning)]" />
+                    ) : (
+                      <EyeOff className="size-4 text-[var(--rd-text-tertiary)]" />
+                    )}
                   </button>
                 ) : (
-                  <span className="rd-type-overline shrink-0 text-[var(--rd-warning)]">Earnings</span>
+                  <Calendar className="size-[18px] shrink-0 text-[var(--rd-warning)]" aria-hidden />
                 )}
-                <p className="rd-type-data min-w-0 flex-1 truncate text-[var(--rd-text-primary)]">
-                  {earnings[0]?.ticker || "—"}
-                </p>
-                <p className="rd-type-data-sm shrink-0 text-[var(--rd-text-primary)]">
-                  {earnings[0]?.date
-                    ? format(new Date(earnings[0].date), "d. MMM yyyy", { locale: sk })
-                    : "Žiadne nadchádzajúce"}
-                </p>
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                  disabled={!currentEarnings}
+                  onClick={() => {
+                    if (!currentEarnings) return;
+                    setLocation(`/asset/${encodeURIComponent(currentEarnings.ticker)}`);
+                  }}
+                >
+                  <span className="rd-type-overline shrink-0 text-[var(--rd-warning)]">Earnings</span>
+                  <span className="min-w-0 flex-1 truncate rd-type-body-strong text-[var(--rd-text-primary)]">
+                    {currentEarnings?.ticker || "—"}
+                  </span>
+                  <span className="shrink-0 rd-type-body-strong text-[var(--rd-text-primary)]">
+                    {currentEarnings?.date ? formatDashDate(currentEarnings.date) : "Žiadne nadchádzajúce"}
+                  </span>
+                </button>
+                {earningsItems.length > 1 ? (
+                  <button
+                    type="button"
+                    aria-label="Ďalší earnings"
+                    className="inline-flex size-4 shrink-0 items-center justify-center text-[var(--rd-warning)]"
+                    onClick={() => setEarningsIndex((prev) => (prev + 1) % earningsItems.length)}
+                  >
+                    <ChevronRight className="size-4" />
+                  </button>
+                ) : null}
               </div>
             ) : null}
-            {(editing || (isVisible("topPosition") && topPosition)) ? (
+
+            {(editing || isVisible("topPosition")) ? (
               <div
-                className={`flex min-h-9 items-center gap-3 rounded-[var(--rd-radius-md)] border border-[color:color-mix(in_srgb,var(--rd-profit)_35%,transparent)] bg-[var(--rd-profit-dim)] px-3 ${
-                  editing && !isVisible("topPosition") ? "opacity-40" : ""
-                }`}
+                className={cn(
+                  "flex min-h-9 items-center gap-1.5 rounded-[var(--rd-radius-md)] border border-[var(--rd-profit)] bg-[var(--rd-profit-dim)] p-2",
+                  editing && !isVisible("topPosition") ? "opacity-40" : undefined,
+                )}
               >
                 {editing ? (
                   <button
                     type="button"
                     aria-label="Pozícia"
-                    className="inline-flex size-8 items-center justify-center"
+                    className="inline-flex size-[18px] shrink-0 items-center justify-center"
                     onClick={() => toggleVisible("topPosition")}
                   >
-                    {isVisible("topPosition") ? <Eye className="size-4" /> : <EyeOff className="size-4 text-[var(--rd-text-tertiary)]" />}
+                    {isVisible("topPosition") ? (
+                      <Eye className="size-4 text-[var(--rd-profit)]" />
+                    ) : (
+                      <EyeOff className="size-4 text-[var(--rd-text-tertiary)]" />
+                    )}
                   </button>
                 ) : (
-                  <span className="rd-type-overline shrink-0 text-[var(--rd-profit)]">Pozícia</span>
+                  <TrendingUp className="size-[18px] shrink-0 text-[var(--rd-profit)]" aria-hidden />
                 )}
-                <p className="rd-type-data min-w-0 flex-1 truncate text-[var(--rd-text-primary)]">
-                  {topPosition?.ticker || "—"}
-                </p>
-                <p className="rd-type-data-sm shrink-0 text-[var(--rd-text-primary)]">
-                  {topPosition ? `${topPosition.pct.toFixed(2)}%` : "—"}
-                </p>
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                  disabled={!currentTopPosition}
+                  onClick={() => {
+                    if (!currentTopPosition) return;
+                    setLocation(`/asset/${encodeURIComponent(currentTopPosition.ticker)}`);
+                  }}
+                >
+                  <span className="rd-type-overline shrink-0 text-[var(--rd-profit)]">Pozícia</span>
+                  <span className="min-w-0 flex-1 truncate rd-type-body-strong text-[var(--rd-text-primary)]">
+                    {currentTopPosition?.ticker || "—"}
+                  </span>
+                  <span className="shrink-0 rd-type-body-strong text-[var(--rd-text-primary)]">
+                    {currentTopPosition ? `${currentTopPosition.pct.toFixed(2)}%` : "—"}
+                  </span>
+                </button>
+                {topPositions.length > 1 ? (
+                  <button
+                    type="button"
+                    aria-label="Ďalšia pozícia"
+                    className="inline-flex size-4 shrink-0 items-center justify-center text-[var(--rd-profit)]"
+                    onClick={() => setTopPositionIndex((prev) => (prev + 1) % topPositions.length)}
+                  >
+                    <ChevronRight className="size-4" />
+                  </button>
+                ) : null}
               </div>
             ) : null}
+
             {(editing || isVisible("macroEvent")) ? (
               <div
-                className={`flex min-h-9 items-center gap-3 rounded-[var(--rd-radius-md)] border border-[color:color-mix(in_srgb,var(--rd-info)_35%,transparent)] bg-[var(--rd-info-dim)] px-3 ${
-                  editing && !isVisible("macroEvent") ? "opacity-40" : ""
-                }`}
+                className={cn(
+                  "flex min-h-9 items-center gap-1.5 rounded-[var(--rd-radius-md)] border border-[var(--rd-info)] bg-[var(--rd-info-dim)] p-2",
+                  editing && !isVisible("macroEvent") ? "opacity-40" : undefined,
+                )}
               >
                 {editing ? (
                   <button
                     type="button"
                     aria-label="Udalosť"
-                    className="inline-flex size-8 items-center justify-center"
+                    className="inline-flex size-[18px] shrink-0 items-center justify-center"
                     onClick={() => toggleVisible("macroEvent")}
                   >
-                    {isVisible("macroEvent") ? <Eye className="size-4" /> : <EyeOff className="size-4 text-[var(--rd-text-tertiary)]" />}
+                    {isVisible("macroEvent") ? (
+                      <Eye className="size-4 text-[var(--rd-info)]" />
+                    ) : (
+                      <EyeOff className="size-4 text-[var(--rd-text-tertiary)]" />
+                    )}
                   </button>
                 ) : (
-                  <span className="rd-type-overline shrink-0 text-[var(--rd-info)]">Udalosť</span>
+                  <Calendar className="size-[18px] shrink-0 text-[var(--rd-info)]" aria-hidden />
                 )}
-                <p className="rd-type-body-strong min-w-0 flex-1 truncate text-[var(--rd-text-primary)]">
-                  {macro[0]?.title || "—"}
-                </p>
-                <p className="rd-type-data-sm shrink-0 text-[var(--rd-text-primary)]">
-                  {macro[0]?.date
-                    ? format(new Date(macro[0].date), "d. MMM yyyy", { locale: sk })
-                    : "Bez najbližšej udalosti"}
-                </p>
+                <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                  <span className="rd-type-overline shrink-0 text-[var(--rd-info)]">Udalosť</span>
+                  <span className="min-w-0 flex-1 truncate rd-type-body-strong text-[var(--rd-text-primary)]">
+                    {currentMacro?.shortLabel || currentMacro?.title || "—"}
+                  </span>
+                  <span className="shrink-0 rd-type-body-strong text-[var(--rd-text-primary)]">
+                    {currentMacro?.date ? formatDashDate(currentMacro.date) : "Bez najbližšej udalosti"}
+                  </span>
+                </div>
+                {macroItems.length > 1 ? (
+                  <button
+                    type="button"
+                    aria-label="Ďalšia makro udalosť"
+                    className="inline-flex size-4 shrink-0 items-center justify-center text-[var(--rd-info)]"
+                    onClick={() => setMacroIndex((prev) => (prev + 1) % macroItems.length)}
+                  >
+                    <ChevronRight className="size-4" />
+                  </button>
+                ) : null}
               </div>
             ) : null}
           </div>,
