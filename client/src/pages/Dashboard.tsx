@@ -17,6 +17,7 @@ import {
 import { format, parse, parseISO, startOfDay } from "date-fns";
 import { sk } from "date-fns/locale";
 import { queryClient } from "@/lib/queryClient";
+import { fetchUpcomingEnvelope } from "@/lib/upcomingEvents";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -1356,32 +1357,26 @@ function DashboardClassic() {
     data: holdingsNextEarnings,
     dataUpdatedAt: earningsUpdatedAt,
     isFetched: earningsCalendarFetched,
-  } = useQuery<HoldingsNextEarningsRes>({
+  } = useQuery({
     queryKey: ["/api/holdings/next-earnings", portfolioParam],
-    queryFn: async () => {
-      const res = await fetch(
+    queryFn: () =>
+      fetchUpcomingEnvelope<HoldingsNextEarningsRes["all"][number]>(
         `/api/holdings/next-earnings?portfolio=${encodeURIComponent(portfolioParam)}`,
-        { credentials: "include" },
-      );
-      if (!res.ok) throw new Error("next earnings");
-      return res.json();
-    },
+      ),
     staleTime: 45 * 60 * 1000,
+    refetchOnMount: "always",
     enabled: dashboardSecondaryReady,
   });
 
   const { data: upcomingDividendsCalendar, isFetched: dividendsCalendarFetched } =
-    useQuery<UpcomingDividendsCalendarRes>({
+    useQuery({
       queryKey: ["/api/dividends/upcoming", portfolioParam, "dashboard-popup"],
-      queryFn: async () => {
-        const res = await fetch(
+      queryFn: () =>
+        fetchUpcomingEnvelope<NonNullable<UpcomingDividendsCalendarRes["all"]>[number]>(
           `/api/dividends/upcoming?portfolio=${encodeURIComponent(portfolioParam)}`,
-          { credentials: "include" },
-        );
-        if (!res.ok) throw new Error("upcoming dividends");
-        return res.json();
-      },
+        ),
       staleTime: 45 * 60 * 1000,
+      refetchOnMount: "always",
       enabled: dashboardSecondaryReady,
     });
 
@@ -1389,14 +1384,12 @@ function DashboardClassic() {
     data: upcomingMacroEvents,
     dataUpdatedAt: macroEventsUpdatedAt,
     isFetched: macroCalendarFetched,
-  } = useQuery<UpcomingMacroEventsRes>({
+  } = useQuery({
     queryKey: ["/api/macro-events/upcoming"],
-    queryFn: async () => {
-      const res = await fetch("/api/macro-events/upcoming", { credentials: "include" });
-      if (!res.ok) throw new Error("macro events");
-      return res.json();
-    },
-    staleTime: 12 * 60 * 60 * 1000,
+    queryFn: () =>
+      fetchUpcomingEnvelope<UpcomingMacroEventsRes["all"][number]>("/api/macro-events/upcoming"),
+    staleTime: 30 * 60 * 1000,
+    refetchOnMount: "always",
     enabled: dashboardSecondaryReady,
   });
 

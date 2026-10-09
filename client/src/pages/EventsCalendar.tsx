@@ -25,6 +25,7 @@ import { HelpTip } from "@/components/HelpTip";
 import { useMobileRedesign } from "@/hooks/useMobileUi";
 import EventsCalendarMobile from "@/pages/redesign/EventsCalendarMobile";
 import { CompanyLogo } from "@/components/CompanyLogo";
+import { fetchUpcomingEnvelope } from "@/lib/upcomingEvents";
 
 type EarningsSession = "BMO" | "AMC" | null;
 type EventType = "earnings" | "dividend" | "macro";
@@ -146,40 +147,32 @@ function EventsCalendarClassic() {
   const [daySheetOpen, setDaySheetOpen] = useState(false);
   const [selectedDay, setSelectedDay] = useState<{ day: Date; events: CalendarEvent[] } | null>(null);
 
-  const { data: earnings, isLoading: earningsLoading } = useQuery<EarningsRes>({
+  const { data: earnings, isLoading: earningsLoading } = useQuery({
     queryKey: ["/api/holdings/next-earnings", portfolioParam],
-    queryFn: async () => {
-      const res = await fetch(
+    queryFn: () =>
+      fetchUpcomingEnvelope<EarningsRes["all"][number]>(
         `/api/holdings/next-earnings?portfolio=${encodeURIComponent(portfolioParam)}`,
-        { credentials: "include" },
-      );
-      if (!res.ok) throw new Error("earnings");
-      return res.json();
-    },
+      ),
     staleTime: 45 * 60 * 1000,
+    refetchOnMount: "always",
   });
 
-  const { data: dividends, isLoading: dividendsLoading } = useQuery<DivRes>({
+  const { data: dividends, isLoading: dividendsLoading } = useQuery({
     queryKey: ["/api/dividends/upcoming", portfolioParam],
-    queryFn: async () => {
-      const res = await fetch(
+    queryFn: () =>
+      fetchUpcomingEnvelope<NonNullable<DivRes["all"]>[number]>(
         `/api/dividends/upcoming?portfolio=${encodeURIComponent(portfolioParam)}`,
-        { credentials: "include" },
-      );
-      if (!res.ok) throw new Error("dividends");
-      return res.json();
-    },
+      ),
     staleTime: 45 * 60 * 1000,
+    refetchOnMount: "always",
   });
 
-  const { data: macro, isLoading: macroLoading } = useQuery<MacroRes>({
+  const { data: macro, isLoading: macroLoading } = useQuery({
     queryKey: ["/api/macro-events/upcoming"],
-    queryFn: async () => {
-      const res = await fetch("/api/macro-events/upcoming", { credentials: "include" });
-      if (!res.ok) throw new Error("macro");
-      return res.json();
-    },
-    staleTime: 12 * 60 * 60 * 1000,
+    queryFn: () =>
+      fetchUpcomingEnvelope<MacroRes["all"][number]>("/api/macro-events/upcoming"),
+    staleTime: 30 * 60 * 1000,
+    refetchOnMount: "always",
   });
 
   const allEvents = useMemo(() => {

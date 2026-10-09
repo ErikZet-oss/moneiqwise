@@ -67,6 +67,7 @@ import {
   shouldShowExtendedQuote,
   shouldUseExtendedQuotes,
 } from "@/lib/usMarketSession";
+import { fetchUpcomingEnvelope } from "@/lib/upcomingEvents";
 import { cn, formatShareQuantity } from "@/lib/utils";
 import {
   Avatar,
@@ -138,9 +139,7 @@ type OptionsSummary = { totalTrades?: number | string; totalRealizedGain?: strin
 type HistoryPoint = { date: string; totalValue: number; netInvested: number };
 type NewsItem = { ticker: string; title: string; publisher?: string; publishedAt?: string; link?: string };
 type EarningsItem = { ticker: string; date: string; companyName?: string };
-type EarningsRes = { next: EarningsItem | null; all: EarningsItem[] };
 type MacroItem = { date: string; title: string; shortLabel?: string; code?: string };
-type MacroRes = { next: MacroItem | null; all: MacroItem[] };
 
 function formatDashDate(isoDate: string): string {
   try {
@@ -549,36 +548,23 @@ export default function DashboardMobile() {
   const showRadarGroup =
     editing || isVisible("earnings") || isVisible("topPosition") || isVisible("macroEvent");
 
-  const { data: earningsRes } = useQuery<EarningsRes>({
+  const { data: earningsRes } = useQuery({
     queryKey: ["/api/holdings/next-earnings", portfolioParam],
     enabled: showRadarGroup && (editing || isVisible("earnings")),
     staleTime: 45 * 60 * 1000,
-    queryFn: async () => {
-      const res = await fetch(`/api/holdings/next-earnings?portfolio=${encodeURIComponent(portfolioParam)}`, {
-        credentials: "include",
-      });
-      if (!res.ok) return { next: null, all: [] };
-      const data = (await res.json()) as EarningsRes;
-      return {
-        next: data?.next ?? null,
-        all: Array.isArray(data?.all) ? data.all : [],
-      };
-    },
+    refetchOnMount: "always",
+    queryFn: () =>
+      fetchUpcomingEnvelope<EarningsItem>(
+        `/api/holdings/next-earnings?portfolio=${encodeURIComponent(portfolioParam)}`,
+      ),
   });
 
-  const { data: macroRes } = useQuery<MacroRes>({
+  const { data: macroRes } = useQuery({
     queryKey: ["/api/macro-events/upcoming"],
     enabled: showRadarGroup && (editing || isVisible("macroEvent")),
-    staleTime: 12 * 60 * 60 * 1000,
-    queryFn: async () => {
-      const res = await fetch("/api/macro-events/upcoming", { credentials: "include" });
-      if (!res.ok) return { next: null, all: [] };
-      const data = (await res.json()) as MacroRes;
-      return {
-        next: data?.next ?? null,
-        all: Array.isArray(data?.all) ? data.all : [],
-      };
-    },
+    staleTime: 30 * 60 * 1000,
+    refetchOnMount: "always",
+    queryFn: () => fetchUpcomingEnvelope<MacroItem>("/api/macro-events/upcoming"),
   });
 
   const earningsItems = earningsRes?.all ?? [];

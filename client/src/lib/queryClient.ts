@@ -80,6 +80,10 @@ function shouldSkipPersistQueryKey(keyStr: string): boolean {
   // Alerty sa menia často (radar) — persistovaný prázdny inbox vs. badge ≠ 0.
   if (keyStr.includes("/api/ai-bot/alerts")) return true;
   if (keyStr.includes("/api/sell-realized-gains")) return true;
+  // Kalendár / radar — nesmie sa persistovať prázdne/poškodené envelope ({ all }).
+  if (keyStr.includes("/api/macro-events")) return true;
+  if (keyStr.includes("/api/holdings/next-earnings")) return true;
+  if (keyStr.includes("/api/dividends/upcoming")) return true;
   return false;
 }
 

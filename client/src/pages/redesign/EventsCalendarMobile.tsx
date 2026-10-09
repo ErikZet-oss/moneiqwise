@@ -17,6 +17,7 @@ import {
 import { sk } from "date-fns/locale";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { usePortfolio } from "@/hooks/usePortfolio";
+import { fetchUpcomingEnvelope } from "@/lib/upcomingEvents";
 import { Avatar, Badge, Card, Dialog, TopBar } from "@/redesign/ui";
 import { cn } from "@/lib/utils";
 import { HelpButton, PageBody } from "./mobileChrome";
@@ -167,51 +168,50 @@ export default function EventsCalendarMobile() {
   const [showMacro, setShowMacro] = useState(true);
   const [dayKey, setDayKey] = useState<string | null>(null);
 
-  const { data: earnings } = useQuery<{
-    all?: Array<{ ticker: string; date: string; companyName?: string; session?: EarningsSession }>;
-  }>({
+  type EarningsRow = {
+    ticker: string;
+    date: string;
+    companyName?: string;
+    session?: EarningsSession;
+  };
+  type DividendRow = {
+    ticker: string;
+    date: string;
+    companyName?: string;
+    kind?: "ex_dividend" | "payout";
+    estimatedGrossInUserCcy?: number | null;
+  };
+  type MacroRow = { date: string; title: string; shortLabel?: string; code?: string };
+
+  const { data: earnings, isError: earningsError, isFetching: earningsFetching } = useQuery({
     queryKey: ["/api/holdings/next-earnings", portfolioParam],
-    queryFn: async () => {
-      const res = await fetch(`/api/holdings/next-earnings?portfolio=${encodeURIComponent(portfolioParam)}`, {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("earnings");
-      return res.json();
-    },
+    queryFn: () =>
+      fetchUpcomingEnvelope<EarningsRow>(
+        `/api/holdings/next-earnings?portfolio=${encodeURIComponent(portfolioParam)}`,
+      ),
     staleTime: 45 * 60 * 1000,
+    refetchOnMount: "always",
   });
 
-  const { data: dividends } = useQuery<{
-    all?: Array<{
-      ticker: string;
-      date: string;
-      companyName?: string;
-      kind?: "ex_dividend" | "payout";
-      estimatedGrossInUserCcy?: number | null;
-    }>;
-  }>({
+  const { data: dividends, isError: dividendsError, isFetching: dividendsFetching } = useQuery({
     queryKey: ["/api/dividends/upcoming", portfolioParam],
-    queryFn: async () => {
-      const res = await fetch(`/api/dividends/upcoming?portfolio=${encodeURIComponent(portfolioParam)}`, {
-        credentials: "include",
-      });
-      if (!res.ok) throw new Error("dividends");
-      return res.json();
-    },
+    queryFn: () =>
+      fetchUpcomingEnvelope<DividendRow>(
+        `/api/dividends/upcoming?portfolio=${encodeURIComponent(portfolioParam)}`,
+      ),
     staleTime: 45 * 60 * 1000,
+    refetchOnMount: "always",
   });
 
-  const { data: macro } = useQuery<{
-    all?: Array<{ date: string; title: string; shortLabel?: string; code?: string }>;
-  }>({
+  const { data: macro, isError: macroError, isFetching: macroFetching } = useQuery({
     queryKey: ["/api/macro-events/upcoming"],
-    queryFn: async () => {
-      const res = await fetch("/api/macro-events/upcoming", { credentials: "include" });
-      if (!res.ok) throw new Error("macro");
-      return res.json();
-    },
-    staleTime: 12 * 60 * 60 * 1000,
+    queryFn: () => fetchUpcomingEnvelope<MacroRow>("/api/macro-events/upcoming"),
+    staleTime: 30 * 60 * 1000,
+    refetchOnMount: "always",
   });
+
+  const calendarLoading = earningsFetching || dividendsFetching || macroFetching;
+  const calendarError = earningsError || dividendsError || macroError;
 
   const events = useMemo(() => {
     const list: CalEvent[] = [];
@@ -429,7 +429,13 @@ export default function EventsCalendarMobile() {
             </span>
           </div>
 
-          {upcomingInMonth.length === 0 ? (
+          {calendarLoading && upcomingInMonth.length === 0 ? (
+            <p className="py-2 text-[11px] text-[var(--rd-text-tertiary)]">Načítavam udalosti…</p>
+          ) : calendarError && upcomingInMonth.length === 0 ? (
+            <p className="py-2 text-[11px] text-[var(--rd-loss)]">
+              Udalosti sa nepodarilo načítať. Skús obnoviť stránku.
+            </p>
+          ) : upcomingInMonth.length === 0 ? (
             <p className="py-2 text-[11px] text-[var(--rd-text-tertiary)]">
               V tomto mesiaci nie sú udalosti pre aktívne filtre.
             </p>

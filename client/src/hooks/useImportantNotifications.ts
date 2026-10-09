@@ -10,6 +10,7 @@ import {
   type OwnershipAlertItem,
   type PortfolioNotificationItem,
 } from "@/lib/importantNotifications";
+import { fetchUpcomingEnvelope } from "@/lib/upcomingEvents";
 
 type HoldingLike = { ticker: string; shares: string; companyName?: string | null };
 type QuoteLike = { changePercent?: number };
@@ -89,42 +90,34 @@ export function useImportantNotifications({
     })),
   });
 
-  const { data: nextEarnings } = useQuery<EarningsRes>({
+  const { data: nextEarnings } = useQuery({
     queryKey: ["/api/holdings/next-earnings", portfolioParam, "notifications"],
-    queryFn: async () => {
-      const res = await fetch(
+    queryFn: () =>
+      fetchUpcomingEnvelope<NonNullable<EarningsRes["all"]>[number]>(
         `/api/holdings/next-earnings?portfolio=${encodeURIComponent(portfolioParam)}`,
-        { credentials: "include" },
-      );
-      if (!res.ok) throw new Error("next earnings");
-      return res.json();
-    },
+      ),
     staleTime: 45 * 60 * 1000,
+    refetchOnMount: "always",
     enabled,
   });
 
-  const { data: upcomingDividends } = useQuery<DividendsRes>({
+  const { data: upcomingDividends } = useQuery({
     queryKey: ["/api/dividends/upcoming", portfolioParam, "notifications"],
-    queryFn: async () => {
-      const res = await fetch(
+    queryFn: () =>
+      fetchUpcomingEnvelope<NonNullable<DividendsRes["all"]>[number]>(
         `/api/dividends/upcoming?portfolio=${encodeURIComponent(portfolioParam)}`,
-        { credentials: "include" },
-      );
-      if (!res.ok) throw new Error("upcoming dividends");
-      return res.json();
-    },
+      ),
     staleTime: 45 * 60 * 1000,
+    refetchOnMount: "always",
     enabled,
   });
 
-  const { data: upcomingMacro } = useQuery<MacroRes>({
+  const { data: upcomingMacro } = useQuery({
     queryKey: ["/api/macro-events/upcoming", "notifications"],
-    queryFn: async () => {
-      const res = await fetch("/api/macro-events/upcoming", { credentials: "include" });
-      if (!res.ok) throw new Error("macro events");
-      return res.json();
-    },
-    staleTime: 12 * 60 * 60 * 1000,
+    queryFn: () =>
+      fetchUpcomingEnvelope<NonNullable<MacroRes["all"]>[number]>("/api/macro-events/upcoming"),
+    staleTime: 30 * 60 * 1000,
+    refetchOnMount: "always",
     enabled,
   });
 
