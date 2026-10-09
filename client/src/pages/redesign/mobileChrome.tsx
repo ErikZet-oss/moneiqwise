@@ -76,7 +76,15 @@ export function IconButton({
   );
 }
 
-export function HelpButton({ title, body }: { title: string; body: string }) {
+export function HelpButton({
+  title,
+  body,
+  compact = false,
+}: {
+  title: string;
+  body: string;
+  compact?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -84,7 +92,11 @@ export function HelpButton({ title, body }: { title: string; body: string }) {
         type="button"
         aria-label={title}
         onClick={() => setOpen(true)}
-        className="inline-flex size-[30px] shrink-0 items-center justify-center text-[var(--rd-text-tertiary)]"
+        className={
+          compact
+            ? "inline-flex size-4 shrink-0 items-center justify-center text-[var(--rd-text-tertiary)]"
+            : "inline-flex size-[30px] shrink-0 items-center justify-center text-[var(--rd-text-tertiary)]"
+        }
       >
         <CircleHelp className="size-3.5" />
       </button>
