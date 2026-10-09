@@ -6,6 +6,7 @@ import { sk } from "date-fns/locale";
 import {
   Area,
   ComposedChart,
+  Line,
   ResponsiveContainer,
   Tooltip as RTooltip,
   XAxis,
@@ -23,6 +24,7 @@ import {
   Layers,
   LayoutList,
   Moon,
+  MoreHorizontal,
   Pencil,
   RefreshCw,
   TrendingDown,
@@ -44,6 +46,16 @@ import {
   DASHBOARD_WIDGET_META,
   type DashboardWidgetId,
 } from "@/lib/dashboardLayout";
+import {
+  buildComparisonPctSeries,
+  chartBenchmarkLabel,
+  chartBenchmarkStroke,
+  type BenchmarkHistoryRes,
+} from "@/lib/chartBenchmarks";
+import {
+  DashboardWidgetSettingsDialog,
+  DASHBOARD_WIDGETS_WITH_SETTINGS,
+} from "./DashboardWidgetSettingsDialog";
 import {
   getExtendedSessionLabel,
   getQuoteRefreshIntervalMs,
@@ -348,6 +360,10 @@ export default function DashboardMobile() {
     mobileAssetsSortBy,
     mobileAssetsSortOrder,
     mobileAssetsView,
+    showTooltip,
+    showChartBenchmark,
+    chartBenchmarkId,
+    dailyMoversCount,
     setMobileAssetsSortBy,
     setMobileAssetsSortOrder,
     setMobileAssetsView,
@@ -368,6 +384,7 @@ export default function DashboardMobile() {
   const overline = isAllPortfolios ? "Všetky portfóliá" : selectedPortfolio?.name || "Portfólio";
 
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [settingsWidgetId, setSettingsWidgetId] = useState<DashboardWidgetId | null>(null);
   const [chartRange, setChartRange] = useState<(typeof CHART_RANGES)[number]["v"]>("all");
   const [sortOpen, setSortOpen] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
@@ -447,6 +464,29 @@ export default function DashboardMobile() {
       return res.json();
     },
     staleTime: 5 * 60 * 1000,
+  });
+
+  const historyPoints = history?.points ?? [];
+  const benchFrom = historyPoints[0]?.date;
+  const benchTo = historyPoints[historyPoints.length - 1]?.date;
+
+  const { data: benchmarkHistory } = useQuery<BenchmarkHistoryRes>({
+    queryKey: ["/api/benchmark/history", chartBenchmarkId, benchFrom, benchTo],
+    enabled:
+      showChartBenchmark &&
+      !!benchFrom &&
+      !!benchTo &&
+      historyPoints.length > 1 &&
+      (isVisible("chart") || editing),
+    staleTime: 30 * 60 * 1000,
+    queryFn: async () => {
+      const params = new URLSearchParams({ id: chartBenchmarkId });
+      if (benchFrom) params.set("from", benchFrom);
+      if (benchTo) params.set("to", benchTo);
+      const res = await fetch(`/api/benchmark/history?${params}`, { credentials: "include" });
+      if (!res.ok) throw new Error("benchmark");
+      return res.json();
+    },
   });
 
   const { data: ytdHistory } = useQuery<{
@@ -705,10 +745,10 @@ export default function DashboardMobile() {
           showMoon: r.showAfterHours,
         };
       });
-    const gainers = [...list].sort((a, b) => b.pct - a.pct).slice(0, 5);
-    const losers = [...list].sort((a, b) => a.pct - b.pct).slice(0, 5);
+    const gainers = [...list].sort((a, b) => b.pct - a.pct).slice(0, dailyMoversCount);
+    const losers = [...list].sort((a, b) => a.pct - b.pct).slice(0, dailyMoversCount);
     return { gainers, losers };
-  }, [enrichedHoldings, quotes, convertPrice, getTickerCurrency]);
+  }, [enrichedHoldings, quotes, convertPrice, getTickerCurrency, dailyMoversCount]);
 
   const topPosition = useMemo(() => {
     if (metrics.stockValue <= 0) return null;
@@ -752,35 +792,116 @@ export default function DashboardMobile() {
     });
   }, [queryClient, tickers]);
 
-  const chartPoints = history?.points ?? [];
+  const chartPoints = historyPoints;
+  const showBenchLine =
+    showChartBenchmark && !!benchmarkHistory?.points?.length && chartPoints.length > 1;
+
+  const chartSeries = useMemo(() => {
+    if (chartPoints.length === 0) return [];
+    const dates = chartPoints.map((p) => p.date);
+    const values = chartPoints.map((p) => p.totalValue);
+    const invested = chartPoints.map((p) => p.netInvested);
+
+    if (showBenchLine && benchmarkHistory?.points?.length) {
+      const closes = new Map<string, number>();
+      for (const pt of benchmarkHistory.points) {
+        if (Number.isFinite(pt.close) && pt.close > 0) closes.set(pt.date, pt.close);
+      }
+      const comparison = buildComparisonPctSeries(dates, values, invested, closes);
+      const from = comparison.startIndex;
+      return dates.slice(from).map((date, j) => {
+        const i = from + j;
+        return {
+          date,
+          totalValue: values[i]!,
+          netInvested: invested[i]!,
+          portfolioPct: comparison.points[i]!.portfolioPct,
+          benchmarkPct: comparison.points[i]!.benchmarkPct,
+        };
+      });
+    }
+
+    return chartPoints.map((p) => ({
+      date: p.date,
+      totalValue: p.totalValue,
+      netInvested: p.netInvested,
+      portfolioPct: 0,
+      benchmarkPct: null as number | null,
+    }));
+  }, [chartPoints, showBenchLine, benchmarkHistory?.points]);
+
   const chartProfit =
-    chartPoints.length > 0
-      ? chartPoints[chartPoints.length - 1]!.totalValue >= chartPoints[chartPoints.length - 1]!.netInvested
+    chartSeries.length > 0
+      ? showBenchLine
+        ? (chartSeries[chartSeries.length - 1]!.portfolioPct ?? 0) >= 0
+        : chartSeries[chartSeries.length - 1]!.totalValue >= chartSeries[chartSeries.length - 1]!.netInvested
       : metrics.totalProfit >= 0;
+
+  const benchLabel = chartBenchmarkLabel(chartBenchmarkId);
+  const benchColor = chartBenchmarkStroke("dark");
+  const benchPeriodReturn = useMemo(() => {
+    if (!showBenchLine || chartSeries.length === 0) return null;
+    for (let i = chartSeries.length - 1; i >= 0; i -= 1) {
+      const pct = chartSeries[i]!.benchmarkPct;
+      if (pct != null && Number.isFinite(pct)) return pct;
+    }
+    return null;
+  }, [chartSeries, showBenchLine]);
 
   const renderWidget = (id: DashboardWidgetId) => {
     if (!editing && !isVisible(id)) return null;
 
-    const frame = (body: ReactNode, opts?: { skipChrome?: boolean }) => (
-      <div key={id} className="relative">
-        {editing && !opts?.skipChrome ? (
-          <div className="mb-2 flex items-center gap-2">
-            <button
-              type="button"
-              aria-label={visible[id] ? "Skryť" : "Zobraziť"}
-              className="inline-flex size-[30px] items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)]"
-              onClick={() => toggleVisible(id)}
-            >
-              {visible[id] ? <Eye className="size-4" /> : <EyeOff className="size-4 text-[var(--rd-text-tertiary)]" />}
-            </button>
-            <p className="text-xs font-medium text-[var(--rd-text-secondary)]">
-              {DASHBOARD_WIDGET_META[id].label}
-            </p>
+    const frame = (
+      body: ReactNode,
+      opts?: { skipChrome?: boolean; chromeId?: DashboardWidgetId; chromeLabel?: string },
+    ) => {
+      const chromeId = opts?.chromeId ?? id;
+      const hasSettings = DASHBOARD_WIDGETS_WITH_SETTINGS.has(chromeId);
+      return (
+        <div key={id} className="relative">
+          {editing && !opts?.skipChrome ? (
+            <div className="mb-2 flex items-center gap-2">
+              <p className="min-w-0 flex-1 text-xs font-medium text-[var(--rd-text-secondary)]">
+                {opts?.chromeLabel ?? DASHBOARD_WIDGET_META[chromeId].label}
+              </p>
+              {hasSettings ? (
+                <button
+                  type="button"
+                  aria-label={`Nastavenia: ${DASHBOARD_WIDGET_META[chromeId].label}`}
+                  className="inline-flex size-[30px] items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)] text-[var(--rd-text-secondary)]"
+                  onClick={() => setSettingsWidgetId(chromeId)}
+                >
+                  <MoreHorizontal className="size-4" />
+                </button>
+              ) : null}
+              {!DASHBOARD_WIDGET_META[chromeId].required ? (
+                <button
+                  type="button"
+                  aria-label={visible[chromeId] ? "Skryť" : "Zobraziť"}
+                  className="inline-flex size-[30px] items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)]"
+                  onClick={() => toggleVisible(chromeId)}
+                >
+                  {visible[chromeId] ? (
+                    <Eye className="size-4" />
+                  ) : (
+                    <EyeOff className="size-4 text-[var(--rd-text-tertiary)]" />
+                  )}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          <div
+            className={
+              editing && !opts?.skipChrome && !visible[chromeId] && !DASHBOARD_WIDGET_META[chromeId].required
+                ? "opacity-40"
+                : undefined
+            }
+          >
+            {body}
           </div>
-        ) : null}
-        <div className={editing && !opts?.skipChrome && !visible[id] ? "opacity-40" : undefined}>{body}</div>
-      </div>
-    );
+        </div>
+      );
+    };
 
     switch (id) {
       case "summary": {
@@ -887,11 +1008,48 @@ export default function DashboardMobile() {
             </div>
 
             {isVisible("chart") || editing ? (
-              <div className="flex flex-col gap-2">
+              <div className={cn("flex flex-col gap-2", editing && !isVisible("chart") ? "opacity-40" : undefined)}>
+                {editing ? (
+                  <div className="flex items-center gap-2">
+                    <p className="min-w-0 flex-1 text-xs font-medium text-[var(--rd-text-secondary)]">
+                      {DASHBOARD_WIDGET_META.chart.label}
+                    </p>
+                    <button
+                      type="button"
+                      aria-label="Nastavenia: Graf"
+                      className="inline-flex size-[30px] items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)] text-[var(--rd-text-secondary)]"
+                      onClick={() => setSettingsWidgetId("chart")}
+                    >
+                      <MoreHorizontal className="size-4" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={isVisible("chart") ? "Skryť graf" : "Zobraziť graf"}
+                      className="inline-flex size-[30px] items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)]"
+                      onClick={() => toggleVisible("chart")}
+                    >
+                      {isVisible("chart") ? (
+                        <Eye className="size-4" />
+                      ) : (
+                        <EyeOff className="size-4 text-[var(--rd-text-tertiary)]" />
+                      )}
+                    </button>
+                  </div>
+                ) : null}
+                {showBenchLine && benchPeriodReturn != null ? (
+                  <p className="rd-type-body-sm text-[var(--rd-text-tertiary)]">
+                    <span style={{ color: benchColor }}>{benchLabel}</span>
+                    {" "}
+                    <span className="rd-type-data-sm" style={{ color: benchColor }}>
+                      {benchPeriodReturn >= 0 ? "+" : ""}
+                      {benchPeriodReturn.toFixed(1)}%
+                    </span>
+                  </p>
+                ) : null}
                 <div className="h-[120px] w-full">
-                  {chartPoints.length > 1 ? (
+                  {chartSeries.length > 1 ? (
                     <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={chartPoints}>
+                      <ComposedChart data={chartSeries}>
                         <defs>
                           <linearGradient id="rd-dash-fill" x1="0" y1="0" x2="0" y2="1">
                             <stop
@@ -908,30 +1066,59 @@ export default function DashboardMobile() {
                         </defs>
                         <XAxis dataKey="date" hide />
                         <YAxis hide domain={["dataMin", "dataMax"]} />
-                        <RTooltip
-                          contentStyle={{
-                            background: "var(--rd-bg-surface-raised)",
-                            border: "1px solid var(--rd-border-subtle)",
-                            borderRadius: 10,
-                            fontSize: 12,
-                          }}
-                          labelFormatter={(v) => {
-                            try {
-                              return format(new Date(String(v)), "d. M. yyyy", { locale: sk });
-                            } catch {
-                              return String(v);
-                            }
-                          }}
-                          formatter={(value: number) => [mask(formatCurrency(value)), "Hodnota"]}
-                        />
-                        <Area
-                          type="monotone"
-                          dataKey="totalValue"
-                          stroke={chartProfit ? "var(--rd-profit)" : "var(--rd-loss)"}
-                          fill="url(#rd-dash-fill)"
-                          strokeWidth={2}
-                          dot={false}
-                        />
+                        {showTooltip ? (
+                          <RTooltip
+                            contentStyle={{
+                              background: "var(--rd-bg-surface-raised)",
+                              border: "1px solid var(--rd-border-subtle)",
+                              borderRadius: 10,
+                              fontSize: 12,
+                            }}
+                            labelFormatter={(v) => {
+                              try {
+                                return format(new Date(String(v)), "d. M. yyyy", { locale: sk });
+                              } catch {
+                                return String(v);
+                              }
+                            }}
+                            formatter={(value: number, name: string) => {
+                              if (showBenchLine) {
+                                const label = name === "benchmarkPct" ? benchLabel : "Portfólio";
+                                return [`${value >= 0 ? "+" : ""}${value.toFixed(2)}%`, label];
+                              }
+                              return [mask(formatCurrency(value)), "Hodnota"];
+                            }}
+                          />
+                        ) : null}
+                        {showBenchLine ? (
+                          <>
+                            <Area
+                              type="monotone"
+                              dataKey="portfolioPct"
+                              stroke={chartProfit ? "var(--rd-profit)" : "var(--rd-loss)"}
+                              fill="url(#rd-dash-fill)"
+                              strokeWidth={2}
+                              dot={false}
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="benchmarkPct"
+                              stroke={benchColor}
+                              strokeWidth={2}
+                              dot={false}
+                              connectNulls
+                            />
+                          </>
+                        ) : (
+                          <Area
+                            type="monotone"
+                            dataKey="totalValue"
+                            stroke={chartProfit ? "var(--rd-profit)" : "var(--rd-loss)"}
+                            fill="url(#rd-dash-fill)"
+                            strokeWidth={2}
+                            dot={false}
+                          />
+                        )}
                       </ComposedChart>
                     </ResponsiveContainer>
                   ) : (
@@ -1235,7 +1422,21 @@ export default function DashboardMobile() {
         return frame(
           <Card className="gap-2">
             <div>
-              <SectionHeader title="Denné pohyby" />
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <SectionHeader title="Denné pohyby" />
+                </div>
+                {editing ? (
+                  <button
+                    type="button"
+                    aria-label="Nastavenia: Denné pohyby"
+                    className="inline-flex size-[30px] shrink-0 items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)] text-[var(--rd-text-secondary)]"
+                    onClick={() => setSettingsWidgetId("dailyGainers")}
+                  >
+                    <MoreHorizontal className="size-4" />
+                  </button>
+                ) : null}
+              </div>
               <p className="rd-type-body-sm text-[var(--rd-text-tertiary)]">
                 Zmena podľa režimu trhu (RTH vs pre/post market).
               </p>
@@ -1638,12 +1839,17 @@ export default function DashboardMobile() {
 
       <PageBody>
         {editing ? (
-          <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">
-            Oko skryje/zobrazí widget. Poradie zatiaľ uprav v klasickom režime alebo v Nastaveniach.
+          <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">
+            Oko skryje/zobrazí widget. Trojbodkové menu otvorí nastavenia (napr. porovnanie s indexom).
           </p>
         ) : null}
         {widgets}
       </PageBody>
+
+      <DashboardWidgetSettingsDialog
+        widgetId={settingsWidgetId}
+        onClose={() => setSettingsWidgetId(null)}
+      />
 
       <Dialog open={sortOpen} title="Zoradiť aktíva" onClose={() => setSortOpen(false)}>
         <div className="mt-3 space-y-2">

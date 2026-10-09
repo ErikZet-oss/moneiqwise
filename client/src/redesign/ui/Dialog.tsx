@@ -7,12 +7,14 @@ export function Dialog({
   body,
   onClose,
   children,
+  showHelpIcon = true,
 }: {
   open: boolean;
   title: string;
   body?: string;
   onClose: () => void;
   children?: ReactNode;
+  showHelpIcon?: boolean;
 }) {
   if (!open) return null;
   return (
@@ -25,7 +27,7 @@ export function Dialog({
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mb-2 flex items-center gap-2">
-          <CircleHelp className="size-4 shrink-0 text-[var(--rd-info)]" aria-hidden />
+          {showHelpIcon ? <CircleHelp className="size-4 shrink-0 text-[var(--rd-info)]" aria-hidden /> : null}
           <h2 id="rd-dialog-title" className="rd-type-h2 min-w-0 flex-1 text-[var(--rd-text-primary)]">
             {title}
           </h2>
