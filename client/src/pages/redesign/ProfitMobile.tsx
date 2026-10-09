@@ -37,20 +37,35 @@ type PerformanceResponse = {
   totals: PeriodStats | null;
 };
 
-type RealizedResponse = {
-  totalRealizedEur: number;
-  byTicker?: Array<{
-    ticker: string;
-    companyName?: string | null;
-    realizedEur: number;
-    realizedPct?: number | null;
-    sellCount?: number;
-    shares?: number;
-  }>;
-  todayEur?: number;
-  monthEur?: number;
-  ytdEur?: number;
+type RealizedTickerRow = {
+  ticker: string;
+  companyName?: string | null;
+  totalGain: number;
+  totalCost?: number;
+  totalSold?: number;
+  transactions?: number;
+  totalSharesSold?: number;
 };
+
+type RealizedResponse = {
+  totalRealized: number;
+  realizedGainTotal?: number;
+  closeTradeNetEur?: number;
+  realizedToday: number;
+  realizedThisMonth: number;
+  realizedYTD: number;
+  byTicker?: RealizedTickerRow[];
+  transactionCount?: number;
+};
+
+function realizedSaleReturnPct(totalGain: number, totalCost: number): number | null {
+  if (!(totalCost > 0) || !Number.isFinite(totalGain)) return null;
+  return (totalGain / totalCost) * 100;
+}
+
+function safeNum(value: unknown, fallback = 0): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
 
 function annualizePercentReturn(cumulativePct: number, startIso: string, endIso: string): number | null {
   if (!Number.isFinite(cumulativePct) || !startIso || !endIso || startIso > endIso) return null;
@@ -84,16 +99,29 @@ function readStoredIds(): string[] | null {
 }
 
 function monthIndexFromPeriod(row: PeriodStats): number | null {
-  const d = new Date(`${row.startDate}T12:00:00`);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.getMonth();
+  // Prefer YYYY-MM-DD string parse (no timezone surprises) over Date().
+  const iso = (row.startDate || "").slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    const month = Number(iso.slice(5, 7));
+    if (month >= 1 && month <= 12) return month - 1;
+  }
+  const labelMatch = /^(\d{1,2})\/(\d{4})$/.exec((row.label || "").trim());
+  if (labelMatch) {
+    const month = Number(labelMatch[1]);
+    if (month >= 1 && month <= 12) return month - 1;
+  }
+  return null;
 }
 
 export default function ProfitMobile() {
   const { formatCurrency: formatCurrencyRaw } = useCurrency();
   const { hideAmounts } = useChartSettings();
   const { portfolios } = usePortfolio();
-  const formatCurrency = (n: number) => (hideAmounts ? "••••••" : formatCurrencyRaw(n));
+  const formatCurrency = (n: number) => {
+    if (hideAmounts) return "••••••";
+    if (!Number.isFinite(n)) return "—";
+    return formatCurrencyRaw(n);
+  };
   const visibleIds = useMemo(() => portfolios.map((p) => p.id), [portfolios]);
   const [appliedIds, setAppliedIds] = useState<string[]>(() => readStoredIds() ?? []);
   const [draftIds, setDraftIds] = useState<string[]>([]);
@@ -151,7 +179,15 @@ export default function ProfitMobile() {
     enabled: appliedIds.length > 0,
   });
 
-  const years = perf?.years ?? [];
+  const years = useMemo(
+    () =>
+      (perf?.years ?? []).map((y) => ({
+        ...y,
+        year: Number(y.year),
+        months: Array.isArray(y.months) ? y.months : [],
+      })),
+    [perf?.years],
+  );
   const effectiveYear =
     selectedYear != null && years.some((y) => y.year === selectedYear)
       ? selectedYear
@@ -159,9 +195,40 @@ export default function ProfitMobile() {
   const yearRow = years.find((y) => y.year === effectiveYear) ?? null;
 
   const pctFor = (row: PeriodStats): number | null => {
-    if (mode === "twr") return typeof row.twrPercentReturn === "number" ? row.twrPercentReturn : null;
-    return Number.isFinite(row.percentReturn) ? row.percentReturn : null;
+    if (mode === "twr") {
+      return typeof row.twrPercentReturn === "number" && Number.isFinite(row.twrPercentReturn)
+        ? row.twrPercentReturn
+        : null;
+    }
+    return typeof row.percentReturn === "number" && Number.isFinite(row.percentReturn)
+      ? row.percentReturn
+      : null;
   };
+
+  const realizedToday = safeNum(realized?.realizedToday);
+  const realizedMonth = safeNum(realized?.realizedThisMonth);
+  const realizedYtd = safeNum(realized?.realizedYTD);
+  const realizedTotal = safeNum(
+    realized?.realizedGainTotal ?? realized?.totalRealized,
+  );
+  const tickerRows = useMemo(() => {
+    const rows = realized?.byTicker ?? [];
+    return rows.map((row) => {
+      const totalGain = safeNum(row.totalGain);
+      const totalCost =
+        typeof row.totalCost === "number" && Number.isFinite(row.totalCost)
+          ? row.totalCost
+          : Math.max(0, safeNum(row.totalSold) - totalGain);
+      return {
+        ticker: row.ticker,
+        companyName: row.companyName,
+        totalGain,
+        sellCount: row.transactions,
+        shares: row.totalSharesSold,
+        returnPct: realizedSaleReturnPct(totalGain, totalCost),
+      };
+    });
+  }, [realized?.byTicker]);
 
   const annualized = useMemo(() => {
     if (!perf?.totals) return null;
@@ -366,37 +433,37 @@ export default function ProfitMobile() {
           <div className="grid grid-cols-2 gap-2">
             <StatTile
               label="Dnes"
-              value={formatCurrency(realized?.todayEur ?? 0)}
+              value={formatCurrency(realizedToday)}
               sub="realizované"
-              tone={statTone(realized?.todayEur ?? 0)}
+              tone={statTone(realizedToday)}
             />
             <StatTile
               label="Mesiac"
-              value={formatCurrency(realized?.monthEur ?? 0)}
+              value={formatCurrency(realizedMonth)}
               sub={monthSub}
-              tone={statTone(realized?.monthEur ?? 0)}
+              tone={statTone(realizedMonth)}
             />
             <StatTile
               label="YTD"
-              value={signedMoney(formatCurrency, realized?.ytdEur ?? 0)}
+              value={signedMoney(formatCurrency, realizedYtd)}
               sub={ytdSub}
-              tone={statTone(realized?.ytdEur ?? 0)}
+              tone={statTone(realizedYtd)}
             />
             <StatTile
               label="Celkovo"
-              value={signedMoney(formatCurrency, realized?.totalRealizedEur ?? 0)}
+              value={signedMoney(formatCurrency, realizedTotal)}
               sub="od začiatku"
-              tone={statTone(realized?.totalRealizedEur ?? 0)}
+              tone={statTone(realizedTotal)}
             />
           </div>
         </Card>
 
         <Card className="gap-1">
           <p className="rd-type-h2">Podľa tickerov</p>
-          {(realized?.byTicker ?? []).length === 0 ? (
+          {tickerRows.length === 0 ? (
             <p className="text-xs text-[var(--rd-text-tertiary)]">Zatiaľ žiadne realizované predaje.</p>
           ) : (
-            (realized?.byTicker ?? []).slice(0, 20).map((row, index) => (
+            tickerRows.slice(0, 20).map((row, index) => (
               <div key={row.ticker}>
                 {index > 0 ? <div className="h-px w-full bg-[var(--rd-border-subtle)]" /> : null}
                 <div className="flex items-center gap-2 py-2">
@@ -414,13 +481,19 @@ export default function ProfitMobile() {
                     </p>
                   </div>
                   <div className="flex flex-col items-end gap-1">
-                    <p className="font-mono text-[13px] font-semibold leading-[18px] text-[var(--rd-text-primary)]">
-                      {signedMoney(formatCurrency, row.realizedEur)}
+                    <p
+                      className={`font-mono text-[13px] font-semibold leading-[18px] ${
+                        toneOf(row.totalGain) === "down"
+                          ? "text-[var(--rd-loss)]"
+                          : "text-[var(--rd-profit)]"
+                      }`}
+                    >
+                      {signedMoney(formatCurrency, row.totalGain)}
                     </p>
-                    {row.realizedPct != null ? (
+                    {row.returnPct != null ? (
                       <Badge
-                        label={signedPct(row.realizedPct)}
-                        tone={row.realizedPct >= 0 ? "Profit" : "Loss"}
+                        label={signedPct(row.returnPct)}
+                        tone={row.returnPct >= 0 ? "Profit" : "Loss"}
                       />
                     ) : null}
                   </div>

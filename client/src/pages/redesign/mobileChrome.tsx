@@ -42,6 +42,7 @@ export function toneOf(value: number): "neutral" | "up" | "down" {
 }
 
 export function signedMoney(formatCurrency: (n: number) => string, value: number): string {
+  if (!Number.isFinite(value)) return "—";
   const sign = value > 0 ? "+" : value < 0 ? "−" : "";
   return `${sign}${formatCurrency(Math.abs(value))}`;
 }
