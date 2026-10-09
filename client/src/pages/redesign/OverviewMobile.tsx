@@ -1,13 +1,13 @@
-import { useCallback, useMemo, useState, type MouseEvent } from "react";
+import { useCallback, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { ChevronRight, Loader2, RefreshCw } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import type { OptionTrade } from "@shared/schema";
 import type { HoldingWithCostCurrency } from "@shared/holdingCostCurrency";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
-import { Badge, Card, EmptyState, StatTile, TopBar } from "@/redesign/ui";
+import { Badge, Card, EmptyState, TopBar } from "@/redesign/ui";
 import { IconButton, KvRow, PageBody, signedMoney, signedPct, toneOf } from "./mobileChrome";
 
 interface StockQuote {
@@ -351,6 +351,48 @@ export default function OverviewMobile() {
     setLocation("/");
   };
 
+  const renderMetricBody = (metrics: Metrics) => (
+    <>
+      <p className="rd-type-display-lg text-[var(--rd-text-primary)]">
+        {mask(formatCurrency(metrics.totalValue))}
+      </p>
+      <KvRow label="Hotovosť" value={mask(formatCurrency(metrics.cashValue))} />
+      <div className="h-px w-full bg-[var(--rd-border-subtle)]" />
+      <KvRow
+        label="Celkový zisk"
+        value={`${mask(signedMoney(formatCurrency, metrics.totalProfit))} · ${signedPct(metrics.totalProfitPercent)}`}
+        tone={toneOf(metrics.totalProfit)}
+      />
+      <KvRow
+        label="Nerealizovaný"
+        value={mask(signedMoney(formatCurrency, metrics.unrealizedGain))}
+        tone={toneOf(metrics.unrealizedGain)}
+      />
+      <KvRow
+        label="Realizovaný"
+        value={mask(signedMoney(formatCurrency, metrics.realizedGain))}
+        tone={toneOf(metrics.realizedGain)}
+      />
+      <KvRow
+        label="Denná zmena"
+        value={`${mask(signedMoney(formatCurrency, metrics.dailyChange))} · ${signedPct(metrics.dailyChangePercent)}`}
+        tone={toneOf(metrics.dailyChange)}
+      />
+      <KvRow
+        label="Pasívny príjem"
+        value={`${signedPct(metrics.passiveIncomePercent)} (${mask(formatCurrency(metrics.passiveIncome))})`}
+      />
+    </>
+  );
+
+  const renderCardHeader = (title: ReactNode, ytd: number | null | undefined, trailing?: ReactNode) => (
+    <div className="flex items-center gap-1.5">
+      <p className="min-w-0 flex-1 rd-type-h2 text-[var(--rd-text-primary)]">{title}</p>
+      {ytd != null ? <Badge label={`YTD ${signedPct(ytd)}`} tone={ytd >= 0 ? "Profit" : "Loss"} /> : null}
+      {trailing}
+    </div>
+  );
+
   return (
     <div className="bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
       <TopBar overline="Prehľad portfólií" title="Portfóliá" />
@@ -375,64 +417,9 @@ export default function OverviewMobile() {
         ) : (
           <>
             <Card className="gap-1.5">
-              <div className="flex items-center gap-1.5">
-                <p className="min-w-0 flex-1 rd-type-overline text-[var(--rd-text-tertiary)]">
-                  Celková hodnota
-                </p>
-                {weightedYtd != null ? (
-                  <Badge label={`YTD ${signedPct(weightedYtd)}`} tone={weightedYtd >= 0 ? "Profit" : "Loss"} />
-                ) : null}
-              </div>
-              <p className="rd-type-display-hero text-[var(--rd-text-primary)]">
-                {mask(formatCurrency(aggregated.totalValue))}
-              </p>
-              <KvRow label="Investované" value={mask(formatCurrency(aggregated.totalInvested))} />
-              <KvRow label="Hotovosť" value={mask(formatCurrency(aggregated.cashValue))} />
+              {renderCardHeader("Všetky portfóliá", weightedYtd)}
+              {renderMetricBody(aggregated)}
             </Card>
-
-            <div className="grid grid-cols-2 gap-2">
-              <StatTile
-                label="Celkový zisk"
-                value={mask(signedMoney(formatCurrency, aggregated.totalProfit))}
-                sub={signedPct(aggregated.totalProfitPercent)}
-                tone={
-                  toneOf(aggregated.totalProfit) === "down"
-                    ? "Down"
-                    : toneOf(aggregated.totalProfit) === "up"
-                      ? "Up"
-                      : "Neutral"
-                }
-              />
-              <StatTile
-                label="Denná zmena"
-                value={mask(signedMoney(formatCurrency, aggregated.dailyChange))}
-                sub={signedPct(aggregated.dailyChangePercent)}
-                tone={
-                  toneOf(aggregated.dailyChange) === "down"
-                    ? "Down"
-                    : toneOf(aggregated.dailyChange) === "up"
-                      ? "Up"
-                      : "Neutral"
-                }
-              />
-              <StatTile
-                label="Nerealizovaný"
-                value={mask(signedMoney(formatCurrency, aggregated.unrealizedGain))}
-                sub="otvorené pozície"
-                tone={toneOf(aggregated.unrealizedGain) === "down" ? "Down" : "Up"}
-              />
-              <StatTile
-                label="Realizovaný"
-                value={mask(signedMoney(formatCurrency, aggregated.realizedGain))}
-                sub="z predajov"
-                tone={toneOf(aggregated.realizedGain) === "down" ? "Down" : "Up"}
-              />
-            </div>
-            <StatTile
-              label="Pasívny príjem"
-              value={mask(formatCurrency(aggregated.passiveIncome))}
-              sub={signedPct(aggregated.passiveIncomePercent)}
-            />
 
             <p className="rd-type-overline text-[var(--rd-text-tertiary)]">Portfóliá</p>
             {portfolios.map((portfolio) => {
@@ -440,61 +427,36 @@ export default function OverviewMobile() {
               const ytd = ytdByPortfolioId[portfolio.id];
               if (!metrics) return null;
               return (
-                <Card key={portfolio.id} className="gap-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <p className="min-w-0 flex-1 rd-type-h2">{portfolio.name}</p>
-                    {ytd != null ? (
-                      <Badge label={`YTD ${signedPct(ytd)}`} tone={ytd >= 0 ? "Profit" : "Loss"} />
-                    ) : null}
+                <Card
+                  key={portfolio.id}
+                  role="button"
+                  tabIndex={0}
+                  className="cursor-pointer gap-1.5"
+                  onClick={() => openPortfolio(portfolio.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openPortfolio(portfolio.id);
+                    }
+                  }}
+                >
+                  {renderCardHeader(
+                    portfolio.name,
+                    ytd,
                     <button
                       type="button"
                       aria-label="Obnoviť ceny a dennú zmenu"
                       onClick={(event) => void refreshOne(portfolio.id, event)}
-                      className="inline-flex size-8 items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)]"
+                      className="inline-flex size-8 shrink-0 items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)]"
                     >
                       {refreshingId === portfolio.id ? (
                         <Loader2 className="size-4 animate-spin" />
                       ) : (
                         <RefreshCw className="size-4" />
                       )}
-                    </button>
-                  </div>
-                  <p className="rd-type-display-lg">{mask(formatCurrency(metrics.totalValue))}</p>
-                  <KvRow label="Investované" value={mask(formatCurrency(metrics.totalInvested))} />
-                  <KvRow label="Hotovosť" value={mask(formatCurrency(metrics.cashValue))} />
-                  <div className="h-px w-full bg-[var(--rd-border-subtle)]" />
-                  <KvRow
-                    label="Celkový zisk"
-                    value={`${mask(signedMoney(formatCurrency, metrics.totalProfit))} · ${signedPct(metrics.totalProfitPercent)}`}
-                    tone={toneOf(metrics.totalProfit)}
-                  />
-                  <KvRow
-                    label="Nerealizovaný"
-                    value={mask(signedMoney(formatCurrency, metrics.unrealizedGain))}
-                    tone={toneOf(metrics.unrealizedGain)}
-                  />
-                  <KvRow
-                    label="Realizovaný"
-                    value={mask(signedMoney(formatCurrency, metrics.realizedGain))}
-                    tone={toneOf(metrics.realizedGain)}
-                  />
-                  <KvRow
-                    label="Denná zmena"
-                    value={`${mask(signedMoney(formatCurrency, metrics.dailyChange))} · ${signedPct(metrics.dailyChangePercent)}`}
-                    tone={toneOf(metrics.dailyChange)}
-                  />
-                  <KvRow
-                    label="Pasívny príjem"
-                    value={`${signedPct(metrics.passiveIncomePercent)} (${mask(formatCurrency(metrics.passiveIncome))})`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => openPortfolio(portfolio.id)}
-                    className="inline-flex min-h-4 items-center justify-end gap-1 self-end text-xs font-medium leading-4 text-[var(--rd-profit)]"
-                  >
-                    Otvoriť portfólio
-                    <ChevronRight className="size-3.5" />
-                  </button>
+                    </button>,
+                  )}
+                  {renderMetricBody(metrics)}
                 </Card>
               );
             })}
