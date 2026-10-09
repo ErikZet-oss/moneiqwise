@@ -16,6 +16,8 @@ import {
   ArrowLeftRight,
   Calendar,
   Check,
+  ChevronRight,
+  CircleHelp,
   Eye,
   EyeOff,
   Layers,
@@ -53,6 +55,7 @@ import {
 import { cn, formatShareQuantity } from "@/lib/utils";
 import {
   Avatar,
+  Badge,
   Button,
   Card,
   Chip,
@@ -967,64 +970,99 @@ export default function DashboardMobile() {
 
       case "realizedDividends":
         return frame(
-          <div className="grid grid-cols-2 gap-3">
-            <button type="button" className="text-left" onClick={() => setLocation("/profit")}>
+          <div className="flex gap-2">
+            <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setLocation("/profit")}>
               <StatTile
                 label="Realizovaný zisk"
                 value={mask(formatCurrency(metrics.stockRealized))}
                 tone={metrics.stockRealized >= 0 ? "Up" : "Down"}
+                sub={
+                  <span className="inline-flex items-center gap-1">
+                    <CircleHelp className="size-3" aria-hidden />
+                    info
+                  </span>
+                }
               />
             </button>
-            <button type="button" className="text-left" onClick={() => setLocation("/dividends")}>
+            <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setLocation("/dividends")}>
               <StatTile
                 label="Dividendy (spolu)"
                 value={mask(signedMoney(formatCurrency, metrics.dividendGain))}
                 tone="Up"
-                sub="Detail ›"
+                sub={
+                  <span className="inline-flex items-center gap-0.5">
+                    Detail
+                    <ChevronRight className="size-3.5" aria-hidden />
+                  </span>
+                }
               />
             </button>
           </div>,
         );
 
-      case "ytdBenchmark":
+      case "ytdBenchmark": {
+        const barMax = ytd ? Math.max(Math.abs(ytd.portfolio), Math.abs(ytd.sp500), 1) : 1;
         return frame(
-          <Card>
-            <SectionHeader title="YTD vs S&P 500" />
+          <Card className="gap-2">
+            <div className="flex items-center gap-1.5">
+              <p className="min-w-0 flex-1 rd-type-h2 text-[var(--rd-text-primary)]">YTD vs S&P 500</p>
+              {ytd ? (
+                <Badge
+                  label={`Alpha ${signedPct(ytd.alpha)}`}
+                  tone={ytd.alpha >= 0 ? "Profit" : "Loss"}
+                />
+              ) : null}
+            </div>
             {ytd ? (
-              <>
-                <p className="rd-type-data text-[var(--rd-profit)]">Alpha {signedPct(ytd.alpha)}</p>
-                <div className="mt-3 space-y-3">
-                  <div>
-                    <div className="mb-1 flex justify-between text-xs">
-                      <span className="text-[var(--rd-text-secondary)]">Moje YTD</span>
-                      <span className="rd-type-data">{signedPct(ytd.portfolio)}</span>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-[var(--rd-bg-surface-hover)]">
-                      <div
-                        className="h-full rounded-full bg-[var(--rd-profit)]"
-                        style={{ width: `${Math.min(100, Math.max(0, Math.abs(ytd.portfolio)))}%` }}
-                      />
-                    </div>
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="min-w-0 flex-1 rd-type-body-sm text-[var(--rd-text-secondary)]">
+                      Moje YTD
+                    </span>
+                    <span
+                      className={cn(
+                        "rd-type-data shrink-0",
+                        ytd.portfolio >= 0 ? "text-[var(--rd-profit)]" : "text-[var(--rd-loss)]",
+                      )}
+                    >
+                      {signedPct(ytd.portfolio)}
+                    </span>
                   </div>
-                  <div>
-                    <div className="mb-1 flex justify-between text-xs">
-                      <span className="text-[var(--rd-text-secondary)]">S&P 500 YTD</span>
-                      <span className="rd-type-data">{signedPct(ytd.sp500)}</span>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-[var(--rd-bg-surface-hover)]">
-                      <div
-                        className="h-full rounded-full bg-[var(--rd-chart-4)]"
-                        style={{ width: `${Math.min(100, Math.max(0, Math.abs(ytd.sp500)))}%` }}
-                      />
-                    </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-[var(--rd-bg-surface-hover)]">
+                    <div
+                      className="h-full rounded-full bg-[var(--rd-profit)]"
+                      style={{
+                        width: `${Math.min(100, (Math.abs(ytd.portfolio) / barMax) * 100)}%`,
+                      }}
+                    />
                   </div>
                 </div>
-              </>
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="min-w-0 flex-1 rd-type-body-sm text-[var(--rd-text-secondary)]">
+                      S&P 500 YTD
+                    </span>
+                    <span className="rd-type-data shrink-0 text-[var(--rd-chart-benchmark)]">
+                      {signedPct(ytd.sp500)}
+                    </span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-[var(--rd-bg-surface-hover)]">
+                    <div
+                      className="h-full rounded-full bg-[var(--rd-chart-benchmark)]"
+                      style={{
+                        width: `${Math.min(100, (Math.abs(ytd.sp500) / barMax) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
             ) : (
-              <p className="text-xs text-[var(--rd-text-tertiary)]">YTD porovnanie sa načítava…</p>
+              <p className="rd-type-body-sm text-[var(--rd-text-tertiary)]">YTD porovnanie sa načítava…</p>
             )}
           </Card>,
         );
+      }
 
       case "earnings":
       case "topPosition":

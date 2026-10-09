@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 export type StatTone = "Neutral" | "Up" | "Down";
@@ -17,20 +18,22 @@ export function StatTile({
 }: {
   label: string;
   value: string;
-  sub?: string;
+  sub?: ReactNode;
   tone?: StatTone;
   className?: string;
 }) {
   return (
     <div
       className={cn(
-        "flex min-w-0 flex-col gap-1 rounded-[var(--rd-radius-md)] border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface)] p-3 [background-image:var(--rd-bg-surface-gradient)]",
+        "flex min-w-0 flex-col gap-1 rounded-[var(--rd-radius-md)] border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface)] p-2 [background-image:var(--rd-bg-surface-gradient)]",
         className,
       )}
     >
       <p className="rd-type-overline truncate text-[var(--rd-text-tertiary)]">{label}</p>
-      <p className={cn("rd-type-data-lg truncate", valueClass[tone])}>{value}</p>
-      {sub ? <p className="rd-type-data-sm truncate text-[var(--rd-text-secondary)]">{sub}</p> : null}
+      <p className={cn("rd-type-data-lg truncate tracking-[-0.15px]", valueClass[tone])}>{value}</p>
+      {sub ? (
+        <div className="rd-type-data-sm truncate text-[var(--rd-text-secondary)]">{sub}</div>
+      ) : null}
     </div>
   );
 }
