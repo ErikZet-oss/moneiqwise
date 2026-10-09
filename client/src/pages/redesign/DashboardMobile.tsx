@@ -15,6 +15,7 @@ import {
 import {
   ArrowDownUp,
   ArrowLeftRight,
+  Bell,
   Calendar,
   Check,
   ChevronRight,
@@ -42,6 +43,8 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings, type MobileAssetsSortBy } from "@/hooks/useChartSettings";
 import { useDashboardLayout } from "@/hooks/useDashboardLayout";
+import { useImportantNotifications } from "@/hooks/useImportantNotifications";
+import { ImportantNotificationsDialog } from "./ImportantNotificationsDialog";
 import {
   DASHBOARD_WIDGET_META,
   type DashboardWidgetId,
@@ -393,6 +396,7 @@ export default function DashboardMobile() {
   const [holdingsLimit, setHoldingsLimit] = useState(10);
   const [expandedHoldingId, setExpandedHoldingId] = useState<string | null>(null);
   const [allocationTab, setAllocationTab] = useState<(typeof ALLOCATION_TABS)[number]["id"]>("positions");
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   const { data: holdings = [], isLoading: holdingsLoading } = useQuery<HoldingWithCostCurrency[]>({
     queryKey: ["/api/holdings", portfolioParam],
@@ -420,6 +424,16 @@ export default function DashboardMobile() {
     refetchInterval: () => getQuoteRefreshIntervalMs(),
     queryFn: () => fetchQuotes(tickers, shouldUseExtendedQuotes(getUsMarketSessionState())),
   });
+
+  const { notifications: importantNotifications, count: importantNotificationCount } =
+    useImportantNotifications({
+      holdings,
+      quotes,
+      portfolioParam,
+      portfolios,
+      selectedPortfolioId: selectedPortfolio?.id,
+      isAllPortfolios,
+    });
 
   const { data: realized } = useQuery<RealizedRes>({
     queryKey: ["/api/realized-gains", portfolioParam],
@@ -937,6 +951,21 @@ export default function DashboardMobile() {
                   onClick={() => toggleHideAmounts()}
                 >
                   {hideAmounts ? <EyeOff className="size-[18px]" /> : <Eye className="size-[18px]" />}
+                </button>
+                <button
+                  type="button"
+                  aria-label="Dôležité notifikácie"
+                  className="inline-flex items-center gap-1 text-[var(--rd-text-secondary)]"
+                  onClick={() => setNotificationsOpen(true)}
+                  data-testid="button-mobile-notifications"
+                >
+                  <Bell className="size-[18px]" />
+                  {importantNotificationCount > 0 ? (
+                    <Badge
+                      label={importantNotificationCount > 99 ? "99+" : String(importantNotificationCount)}
+                      tone="Loss"
+                    />
+                  ) : null}
                 </button>
               </div>
             </div>
@@ -1969,6 +1998,12 @@ export default function DashboardMobile() {
           ))}
         </div>
       </Dialog>
+
+      <ImportantNotificationsDialog
+        open={notificationsOpen}
+        onClose={() => setNotificationsOpen(false)}
+        notifications={importantNotifications}
+      />
     </div>
   );
 }
