@@ -17,7 +17,7 @@ export function Input({
         id={inputId}
         className={cn(
           "min-h-[40px] w-full rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-strong)] bg-[var(--rd-bg-surface-raised)] px-3 py-2 text-[13px] leading-[18px] text-[var(--rd-text-primary)] outline-none placeholder:text-[var(--rd-text-tertiary)] focus:border-[var(--rd-profit)]",
-          mono && "font-mono font-medium",
+          mono && "rd-type-data font-medium",
           className,
         )}
         {...props}

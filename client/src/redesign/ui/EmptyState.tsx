@@ -18,7 +18,7 @@ export function EmptyState({
   icon?: ReactNode;
 }) {
   return (
-    <div className="flex w-full flex-col items-center gap-2 rounded-[var(--rd-radius-md)] border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface)] p-5 text-center">
+    <div className="flex w-full flex-col items-center gap-2 rounded-[var(--rd-radius-md)] border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface)] p-5 text-center [background-image:var(--rd-bg-surface-gradient)]">
       <div className="flex size-10 items-center justify-center rounded-full bg-[var(--rd-bg-surface-raised)] text-[var(--rd-text-secondary)]">
         {icon ?? <LineChart className="size-4" aria-hidden />}
       </div>

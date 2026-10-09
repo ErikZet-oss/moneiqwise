@@ -39,7 +39,6 @@ import {
 import { formatShareQuantity } from "@/lib/utils";
 import {
   Avatar,
-  Badge,
   Button,
   Card,
   Chip,
@@ -90,7 +89,7 @@ const CHART_RANGES = [
   { v: "3m", label: "3M" },
   { v: "6m", label: "6M" },
   { v: "ytd", label: "YTD" },
-  { v: "all", label: "VĹˇe" },
+  { v: "all", label: "Všetko" },
 ] as const;
 
 async function fetchQuotes(tickers: string[], refresh: boolean) {
@@ -143,8 +142,8 @@ export default function DashboardMobile() {
   } = useDashboardLayout();
 
   const portfolioParam = getQueryParam();
-  const mask = (s: string) => (hideAmounts ? "â€˘â€˘â€˘â€˘â€˘â€˘" : s);
-  const overline = isAllPortfolios ? "VĹˇetky portfĂłliĂˇ" : selectedPortfolio?.name || "PortfĂłlio";
+  const mask = (s: string) => (hideAmounts ? "••••••" : s);
+  const overline = isAllPortfolios ? "Všetky portfóliá" : selectedPortfolio?.name || "Portfólio";
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [chartRange, setChartRange] = useState<(typeof CHART_RANGES)[number]["v"]>("all");
@@ -449,7 +448,7 @@ export default function DashboardMobile() {
           <div className="mb-2 flex items-center gap-2">
             <button
               type="button"
-              aria-label={visible[id] ? "SkryĹĄ" : "ZobraziĹĄ"}
+              aria-label={visible[id] ? "Skryť" : "Zobraziť"}
               className="inline-flex size-[30px] items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)]"
               onClick={() => toggleVisible(id)}
             >
@@ -471,23 +470,23 @@ export default function DashboardMobile() {
             <div className="flex items-start justify-between gap-2">
               <div>
                 <p className="rd-type-overline text-[var(--rd-text-tertiary)]">
-                  CelkovĂˇ hodnota
+                  Celková hodnota
                 </p>
                 <p className="mt-1 rd-type-display-hero">
                   {mask(formatCurrency(metrics.totalValue))}
                 </p>
               </div>
-              <IconButton label="ObnoviĹĄ kotĂˇcie" onClick={() => void refreshQuotes()} spinning={quotesFetching}>
+              <IconButton label="Obnoviť kotácie" onClick={() => void refreshQuotes()} spinning={quotesFetching}>
                 <RefreshCw className={`size-[18px] ${quotesFetching ? "animate-spin" : ""}`} />
               </IconButton>
             </div>
             <div className="mt-3 space-y-2">
-              <KvRow label="CelkovĂ˝ profit" value={mask(signedMoney(formatCurrency, metrics.totalProfit))} tone={toneOf(metrics.totalProfit)} />
+              <KvRow label="Celkový profit" value={mask(signedMoney(formatCurrency, metrics.totalProfit))} tone={toneOf(metrics.totalProfit)} />
               <KvRow label="" value={signedPct(metrics.totalProfitPercent)} tone={toneOf(metrics.totalProfitPercent)} />
-              <KvRow label="DennĂˇ zmena" value={mask(signedMoney(formatCurrency, metrics.dailyChange))} tone={toneOf(metrics.dailyChange)} />
+              <KvRow label="Denná zmena" value={mask(signedMoney(formatCurrency, metrics.dailyChange))} tone={toneOf(metrics.dailyChange)} />
               <KvRow label="" value={signedPct(metrics.dailyChangePercent)} tone={toneOf(metrics.dailyChangePercent)} />
-              <KvRow label="NerealizovanĂ˝ zisk" value={mask(signedMoney(formatCurrency, metrics.unrealized))} tone={toneOf(metrics.unrealized)} />
-              <KvRow label="HotovosĹĄ" value={mask(formatCurrency(metrics.cashValue))} />
+              <KvRow label="Nerealizovaný zisk" value={mask(signedMoney(formatCurrency, metrics.unrealized))} tone={toneOf(metrics.unrealized)} />
+              <KvRow label="Hotovosť" value={mask(formatCurrency(metrics.cashValue))} />
             </div>
             {isVisible("chart") || editing ? (
               <div className="mt-4">
@@ -504,7 +503,7 @@ export default function DashboardMobile() {
                       <ComposedChart data={chartPoints}>
                         <defs>
                           <linearGradient id="rd-dash-fill" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor={chartProfit ? "var(--rd-profit)" : "var(--rd-loss)"} stopOpacity={0.35} />
+                            <stop offset="0%" stopColor={chartProfit ? "var(--rd-profit)" : "var(--rd-loss)"} stopOpacity={0.26} />
                             <stop offset="100%" stopColor={chartProfit ? "var(--rd-profit)" : "var(--rd-loss)"} stopOpacity={0} />
                           </linearGradient>
                         </defs>
@@ -538,12 +537,12 @@ export default function DashboardMobile() {
                     </ResponsiveContainer>
                   ) : (
                     <div className="flex h-full items-center justify-center text-xs text-[var(--rd-text-tertiary)]">
-                      Graf sa naÄŤĂ­tavaâ€¦
+                      Graf sa načítava…
                     </div>
                   )}
                 </div>
-                <p className="mt-2 font-mono text-sm text-[var(--rd-text-secondary)]">
-                  Za obdobie Â· {mask(signedMoney(formatCurrency, metrics.totalProfit))} Â· {signedPct(metrics.totalProfitPercent)}
+                <p className="mt-2 rd-type-data text-[var(--rd-text-secondary)]">
+                  Za obdobie · {mask(signedMoney(formatCurrency, metrics.totalProfit))} · {signedPct(metrics.totalProfitPercent)}
                 </p>
               </div>
             ) : null}
@@ -558,7 +557,7 @@ export default function DashboardMobile() {
           <div className="grid grid-cols-2 gap-3">
             <button type="button" className="text-left" onClick={() => setLocation("/profit")}>
               <StatTile
-                label="RealizovanĂ˝ zisk"
+                label="Realizovaný zisk"
                 value={mask(formatCurrency(metrics.stockRealized))}
                 tone={metrics.stockRealized >= 0 ? "Up" : "Down"}
               />
@@ -568,7 +567,7 @@ export default function DashboardMobile() {
                 label="Dividendy (spolu)"
                 value={mask(signedMoney(formatCurrency, metrics.dividendGain))}
                 tone="Up"
-                sub="Detail â€ş"
+                sub="Detail ›"
               />
             </button>
           </div>,
@@ -580,12 +579,12 @@ export default function DashboardMobile() {
             <SectionHeader title="YTD vs S&P 500" />
             {ytd ? (
               <>
-                <p className="font-mono text-sm text-[var(--rd-profit)]">Alpha {signedPct(ytd.alpha)}</p>
+                <p className="rd-type-data text-[var(--rd-profit)]">Alpha {signedPct(ytd.alpha)}</p>
                 <div className="mt-3 space-y-3">
                   <div>
                     <div className="mb-1 flex justify-between text-xs">
                       <span className="text-[var(--rd-text-secondary)]">Moje YTD</span>
-                      <span className="font-mono">{signedPct(ytd.portfolio)}</span>
+                      <span className="rd-type-data">{signedPct(ytd.portfolio)}</span>
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-[var(--rd-bg-surface-hover)]">
                       <div
@@ -597,7 +596,7 @@ export default function DashboardMobile() {
                   <div>
                     <div className="mb-1 flex justify-between text-xs">
                       <span className="text-[var(--rd-text-secondary)]">S&P 500 YTD</span>
-                      <span className="font-mono">{signedPct(ytd.sp500)}</span>
+                      <span className="rd-type-data">{signedPct(ytd.sp500)}</span>
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-[var(--rd-bg-surface-hover)]">
                       <div
@@ -609,7 +608,7 @@ export default function DashboardMobile() {
                 </div>
               </>
             ) : (
-              <p className="text-xs text-[var(--rd-text-tertiary)]">YTD porovnanie sa naÄŤĂ­tavaâ€¦</p>
+              <p className="text-xs text-[var(--rd-text-tertiary)]">YTD porovnanie sa načítava…</p>
             )}
           </Card>,
         );
@@ -618,93 +617,99 @@ export default function DashboardMobile() {
       case "topPosition":
       case "macroEvent":
         return frame(
-          <Card>
-            <SectionHeader title="Na radare" />
-            <div className="space-y-3">
-              {(editing || isVisible("earnings")) ? (
-                <div className={`flex items-center gap-3 ${editing && !isVisible("earnings") ? "opacity-40" : ""}`}>
-                  {editing ? (
-                    <button
-                      type="button"
-                      aria-label="Earnings"
-                      className="inline-flex size-8 items-center justify-center"
-                      onClick={() => toggleVisible("earnings")}
-                    >
-                      {isVisible("earnings") ? <Eye className="size-4" /> : <EyeOff className="size-4 text-[var(--rd-text-tertiary)]" />}
-                    </button>
-                  ) : (
-                    <Badge label="Earnings" tone="Info" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    {editing ? <p className="text-xs text-[var(--rd-text-tertiary)]">Earnings</p> : null}
-                    <p className="font-mono text-sm">{earnings[0]?.ticker || "â€”"}</p>
-                    <p className="text-xs text-[var(--rd-text-tertiary)]">
-                      {earnings[0]?.date
-                        ? format(new Date(earnings[0].date), "d. MMM yyyy", { locale: sk })
-                        : "Ĺ˝iadne nadchĂˇdzajĂşce"}
-                    </p>
-                  </div>
-                </div>
-              ) : null}
-              {(editing || (isVisible("topPosition") && topPosition)) ? (
-                <div className={`flex items-center gap-3 ${editing && !isVisible("topPosition") ? "opacity-40" : ""}`}>
-                  {editing ? (
-                    <button
-                      type="button"
-                      aria-label="Top pozĂ­cia"
-                      className="inline-flex size-8 items-center justify-center"
-                      onClick={() => toggleVisible("topPosition")}
-                    >
-                      {isVisible("topPosition") ? <Eye className="size-4" /> : <EyeOff className="size-4 text-[var(--rd-text-tertiary)]" />}
-                    </button>
-                  ) : (
-                    <Badge label="Top pozĂ­cia" tone="Profit" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    {editing ? <p className="text-xs text-[var(--rd-text-tertiary)]">Top pozĂ­cia</p> : null}
-                    <p className="font-mono text-sm">{topPosition?.ticker || "â€”"}</p>
-                    <p className="font-mono text-xs text-[var(--rd-text-secondary)]">
-                      {topPosition ? `${topPosition.pct.toFixed(2)}%` : "â€”"}
-                    </p>
-                  </div>
-                </div>
-              ) : null}
-              {(editing || isVisible("macroEvent")) ? (
-                <div className={`flex items-center gap-3 ${editing && !isVisible("macroEvent") ? "opacity-40" : ""}`}>
-                  {editing ? (
-                    <button
-                      type="button"
-                      aria-label="Makro"
-                      className="inline-flex size-8 items-center justify-center"
-                      onClick={() => toggleVisible("macroEvent")}
-                    >
-                      {isVisible("macroEvent") ? <Eye className="size-4" /> : <EyeOff className="size-4 text-[var(--rd-text-tertiary)]" />}
-                    </button>
-                  ) : (
-                    <Badge label="Makro" tone="Warning" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    {editing ? <p className="text-xs text-[var(--rd-text-tertiary)]">Makro udalosĹĄ</p> : null}
-                    <p className="truncate text-sm">{macro[0]?.title || "â€”"}</p>
-                    <p className="text-xs text-[var(--rd-text-tertiary)]">
-                      {macro[0]?.date
-                        ? format(new Date(macro[0].date), "d. MMM yyyy", { locale: sk })
-                        : "Bez najbliĹľĹˇej udalosti"}
-                    </p>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </Card>,
+          <div className="flex flex-col gap-2">
+            {(editing || isVisible("earnings")) ? (
+              <div
+                className={`flex min-h-9 items-center gap-3 rounded-[var(--rd-radius-md)] border border-[color:color-mix(in_srgb,var(--rd-warning)_35%,transparent)] bg-[var(--rd-warning-dim)] px-3 ${
+                  editing && !isVisible("earnings") ? "opacity-40" : ""
+                }`}
+              >
+                {editing ? (
+                  <button
+                    type="button"
+                    aria-label="Earnings"
+                    className="inline-flex size-8 items-center justify-center"
+                    onClick={() => toggleVisible("earnings")}
+                  >
+                    {isVisible("earnings") ? <Eye className="size-4" /> : <EyeOff className="size-4 text-[var(--rd-text-tertiary)]" />}
+                  </button>
+                ) : (
+                  <span className="rd-type-overline shrink-0 text-[var(--rd-warning)]">Earnings</span>
+                )}
+                <p className="rd-type-data min-w-0 flex-1 truncate text-[var(--rd-text-primary)]">
+                  {earnings[0]?.ticker || "—"}
+                </p>
+                <p className="rd-type-data-sm shrink-0 text-[var(--rd-text-primary)]">
+                  {earnings[0]?.date
+                    ? format(new Date(earnings[0].date), "d. MMM yyyy", { locale: sk })
+                    : "Žiadne nadchádzajúce"}
+                </p>
+              </div>
+            ) : null}
+            {(editing || (isVisible("topPosition") && topPosition)) ? (
+              <div
+                className={`flex min-h-9 items-center gap-3 rounded-[var(--rd-radius-md)] border border-[color:color-mix(in_srgb,var(--rd-profit)_35%,transparent)] bg-[var(--rd-profit-dim)] px-3 ${
+                  editing && !isVisible("topPosition") ? "opacity-40" : ""
+                }`}
+              >
+                {editing ? (
+                  <button
+                    type="button"
+                    aria-label="Pozícia"
+                    className="inline-flex size-8 items-center justify-center"
+                    onClick={() => toggleVisible("topPosition")}
+                  >
+                    {isVisible("topPosition") ? <Eye className="size-4" /> : <EyeOff className="size-4 text-[var(--rd-text-tertiary)]" />}
+                  </button>
+                ) : (
+                  <span className="rd-type-overline shrink-0 text-[var(--rd-profit)]">Pozícia</span>
+                )}
+                <p className="rd-type-data min-w-0 flex-1 truncate text-[var(--rd-text-primary)]">
+                  {topPosition?.ticker || "—"}
+                </p>
+                <p className="rd-type-data-sm shrink-0 text-[var(--rd-text-primary)]">
+                  {topPosition ? `${topPosition.pct.toFixed(2)}%` : "—"}
+                </p>
+              </div>
+            ) : null}
+            {(editing || isVisible("macroEvent")) ? (
+              <div
+                className={`flex min-h-9 items-center gap-3 rounded-[var(--rd-radius-md)] border border-[color:color-mix(in_srgb,var(--rd-info)_35%,transparent)] bg-[var(--rd-info-dim)] px-3 ${
+                  editing && !isVisible("macroEvent") ? "opacity-40" : ""
+                }`}
+              >
+                {editing ? (
+                  <button
+                    type="button"
+                    aria-label="Udalosť"
+                    className="inline-flex size-8 items-center justify-center"
+                    onClick={() => toggleVisible("macroEvent")}
+                  >
+                    {isVisible("macroEvent") ? <Eye className="size-4" /> : <EyeOff className="size-4 text-[var(--rd-text-tertiary)]" />}
+                  </button>
+                ) : (
+                  <span className="rd-type-overline shrink-0 text-[var(--rd-info)]">Udalosť</span>
+                )}
+                <p className="rd-type-body-strong min-w-0 flex-1 truncate text-[var(--rd-text-primary)]">
+                  {macro[0]?.title || "—"}
+                </p>
+                <p className="rd-type-data-sm shrink-0 text-[var(--rd-text-primary)]">
+                  {macro[0]?.date
+                    ? format(new Date(macro[0].date), "d. MMM yyyy", { locale: sk })
+                    : "Bez najbližšej udalosti"}
+                </p>
+              </div>
+            ) : null}
+          </div>,
           { skipChrome: true },
         );
 
       case "dailyGainers":
         return frame(
           <Card>
-            <SectionHeader title="DennĂ© pohyby" />
+            <SectionHeader title="Denné pohyby" />
             <p className="text-xs text-[var(--rd-text-tertiary)]">
-              Zmena podÄľa reĹľimu trhu (RTH vs pre/post market).
+              Zmena podľa režimu trhu (RTH vs pre/post market).
             </p>
             <div className="mt-2 grid grid-cols-2 gap-3">
               <div className={editing && !isVisible("dailyGainers") ? "opacity-40" : undefined}>
@@ -712,7 +717,7 @@ export default function DashboardMobile() {
                   {editing ? (
                     <button
                       type="button"
-                      aria-label="NajlepĹˇie"
+                      aria-label="Najlepšie"
                       className="inline-flex size-7 items-center justify-center"
                       onClick={() => toggleVisible("dailyGainers")}
                     >
@@ -720,11 +725,11 @@ export default function DashboardMobile() {
                     </button>
                   ) : null}
                   <p className="rd-type-overline text-[var(--rd-text-tertiary)]">
-                    NajlepĹˇie
+                    Najlepšie
                   </p>
                 </div>
                 {(editing || isVisible("dailyGainers")) && movers.gainers.length === 0 ? (
-                  <p className="text-xs text-[var(--rd-text-tertiary)]">â€”</p>
+                  <p className="text-xs text-[var(--rd-text-tertiary)]">—</p>
                 ) : null}
                 {(editing || isVisible("dailyGainers") ? movers.gainers : []).map((m, i) => (
                   <button
@@ -733,8 +738,8 @@ export default function DashboardMobile() {
                     className="flex w-full items-center gap-2 py-2 text-left"
                     onClick={() => setLocation(`/asset/${encodeURIComponent(m.ticker)}`)}
                   >
-                    <span className="w-4 font-mono text-xs text-[var(--rd-text-tertiary)]">{i + 1}.</span>
-                    <span className="min-w-0 flex-1 truncate font-mono text-sm">{m.ticker}</span>
+                    <span className="w-4 rd-type-data-sm text-[var(--rd-text-tertiary)]">{i + 1}.</span>
+                    <span className="min-w-0 flex-1 truncate rd-type-data">{m.ticker}</span>
                     <Delta trend="Up" value={signedPct(m.pct)} />
                   </button>
                 ))}
@@ -744,7 +749,7 @@ export default function DashboardMobile() {
                   {editing ? (
                     <button
                       type="button"
-                      aria-label="NajhorĹˇie"
+                      aria-label="Najhoršie"
                       className="inline-flex size-7 items-center justify-center"
                       onClick={() => toggleVisible("dailyLosers")}
                     >
@@ -752,7 +757,7 @@ export default function DashboardMobile() {
                     </button>
                   ) : null}
                   <p className="rd-type-overline text-[var(--rd-text-tertiary)]">
-                    NajhorĹˇie
+                    Najhoršie
                   </p>
                 </div>
                 {(editing || isVisible("dailyLosers") ? movers.losers : []).map((m, i) => (
@@ -762,8 +767,8 @@ export default function DashboardMobile() {
                     className="flex w-full items-center gap-2 py-2 text-left"
                     onClick={() => setLocation(`/asset/${encodeURIComponent(m.ticker)}`)}
                   >
-                    <span className="w-4 font-mono text-xs text-[var(--rd-text-tertiary)]">{i + 1}.</span>
-                    <span className="min-w-0 flex-1 truncate font-mono text-sm">{m.ticker}</span>
+                    <span className="w-4 rd-type-data-sm text-[var(--rd-text-tertiary)]">{i + 1}.</span>
+                    <span className="min-w-0 flex-1 truncate rd-type-data">{m.ticker}</span>
                     <Delta trend="Down" value={signedPct(m.pct)} />
                   </button>
                 ))}
@@ -781,35 +786,35 @@ export default function DashboardMobile() {
           <Card className="gap-0 p-0">
             <div className="flex items-start gap-2 p-4 pb-2">
               <div className="min-w-0 flex-1">
-                <SectionHeader title="PrehÄľad aktĂ­v" />
-                <p className="text-xs text-[var(--rd-text-tertiary)]">VaĹˇe aktuĂˇlne drĹľanĂ© akcie</p>
+                <SectionHeader title="Prehľad aktív" />
+                <p className="text-xs text-[var(--rd-text-tertiary)]">Vaše aktuálne držané akcie (EUR)</p>
               </div>
               <button
                 type="button"
-                aria-label="Zobrazenie"
-                className="inline-flex size-[30px] items-center justify-center rounded-full border border-[var(--rd-border-subtle)]"
+                className="inline-flex h-[30px] items-center gap-1.5 rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-subtle)] [background-image:var(--rd-bg-surface-gradient)] px-2.5 text-[12px] font-medium text-[var(--rd-text-primary)]"
                 onClick={() => setViewOpen(true)}
               >
-                <LayoutList className="size-4" />
+                <LayoutList className="size-3.5" />
+                Zobrazenie
               </button>
               <button
                 type="button"
-                aria-label="ZoradiĹĄ"
-                className="inline-flex size-[30px] items-center justify-center rounded-full border border-[var(--rd-border-subtle)]"
+                className="inline-flex h-[30px] items-center gap-1.5 rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-subtle)] [background-image:var(--rd-bg-surface-gradient)] px-2.5 text-[12px] font-medium text-[var(--rd-text-primary)]"
                 onClick={() => {
                   setDraftSortBy(mobileAssetsSortBy);
                   setDraftSortOrder(mobileAssetsSortOrder);
                   setSortOpen(true);
                 }}
               >
-                <ArrowDownUp className="size-4" />
+                <ArrowDownUp className="size-3.5" />
+                Zoradiť
               </button>
             </div>
             {holdingsLoading ? (
-              <p className="px-4 pb-4 text-sm text-[var(--rd-text-tertiary)]">NaÄŤĂ­tavamâ€¦</p>
+              <p className="px-4 pb-4 text-sm text-[var(--rd-text-tertiary)]">Načítavam…</p>
             ) : enrichedHoldings.length === 0 ? (
               <div className="p-4">
-                <EmptyState title="Ĺ˝iadne pozĂ­cie" body="Importuj transakcie alebo pridaj nĂˇkup v HistĂłrii." />
+                <EmptyState title="Žiadne pozície" body="Importuj transakcie alebo pridaj nákup v Histórii." />
               </div>
             ) : (
               <div className="divide-y divide-[var(--rd-border-subtle)] px-4">
@@ -843,7 +848,7 @@ export default function DashboardMobile() {
                       name={holdingName(h)}
                       qty={`${formatShareQuantity(row.shares)} ks`}
                       value={mask(formatCurrency(row.value))}
-                      delta={`${signedPct(row.gainPct)} Â· ${mask(signedMoney(formatCurrency, row.gain))}`}
+                      delta={`${signedPct(row.gainPct)} · ${mask(signedMoney(formatCurrency, row.gain))}`}
                       trend={trendFromNumber(row.gain)}
                       onTickerClick={() => setLocation(`/asset/${encodeURIComponent(h.ticker)}`)}
                     />
@@ -857,7 +862,7 @@ export default function DashboardMobile() {
                 className="w-full border-t border-[var(--rd-border-subtle)] py-3 text-center text-sm font-medium text-[var(--rd-profit)]"
                 onClick={() => setHoldingsLimit((n) => n + 12)}
               >
-                Viac Â· ÄŹalĹˇĂ­ch {enrichedHoldings.length - holdingsLimit}
+                Viac · ďalších {enrichedHoldings.length - holdingsLimit}
               </button>
             ) : null}
           </Card>,
@@ -867,7 +872,7 @@ export default function DashboardMobile() {
         return frame(
           <Card>
             <div className="flex items-center justify-between gap-2">
-              <SectionHeader title="AlokĂˇcia" />
+              <SectionHeader title="Alokácia" />
               <button
                 type="button"
                 className="text-sm font-medium text-[var(--rd-profit)]"
@@ -880,12 +885,12 @@ export default function DashboardMobile() {
               {allocation.map((a) => (
                 <div key={a.ticker} className="flex items-center gap-2">
                   <Avatar ticker={a.ticker} />
-                  <p className="min-w-0 flex-1 font-mono text-sm">{a.ticker}</p>
-                  <p className="font-mono text-sm text-[var(--rd-text-secondary)]">{a.pct.toFixed(1)}%</p>
+                  <p className="min-w-0 flex-1 rd-type-data">{a.ticker}</p>
+                  <p className="rd-type-data text-[var(--rd-text-secondary)]">{a.pct.toFixed(1)}%</p>
                 </div>
               ))}
               {allocation.length === 0 ? (
-                <p className="text-xs text-[var(--rd-text-tertiary)]">Bez alokĂˇcie</p>
+                <p className="text-xs text-[var(--rd-text-tertiary)]">Bez alokácie</p>
               ) : null}
             </div>
           </Card>,
@@ -895,7 +900,7 @@ export default function DashboardMobile() {
         return frame(
           <Card className="gap-0">
             <div className="pb-2">
-              <SectionHeader title="Novinky k vaĹˇim aktĂ­vam" />
+              <SectionHeader title="Novinky k vašim aktívam" />
             </div>
             {(Array.isArray(news) ? news : []).slice(0, 5).map((item, idx) => (
               <button
@@ -907,12 +912,12 @@ export default function DashboardMobile() {
                 <NewsRow
                   ticker={item.ticker}
                   headline={item.title}
-                  meta={[item.publishedAt, item.publisher].filter(Boolean).join(" Â· ")}
+                  meta={[item.publishedAt, item.publisher].filter(Boolean).join(" · ")}
                 />
               </button>
             ))}
             {(!news || news.length === 0) ? (
-              <p className="py-3 text-xs text-[var(--rd-text-tertiary)]">Ĺ˝iadne novinky</p>
+              <p className="py-3 text-xs text-[var(--rd-text-tertiary)]">Žiadne novinky</p>
             ) : null}
           </Card>,
         );
@@ -927,10 +932,10 @@ export default function DashboardMobile() {
               </button>
             </div>
             <p className="text-xs text-[var(--rd-text-secondary)]">
-              Health score a makro rizikĂˇ Â· {overline}
+              Health score a makro riziká · {overline}
             </p>
             <Button variant="Secondary" className="mt-3 w-full" onClick={() => setLocation("/ai-macro-audit")}>
-              OtvoriĹĄ AI Macro Audit
+              Otvoriť AI Macro Audit
             </Button>
           </Card>,
         );
@@ -941,11 +946,11 @@ export default function DashboardMobile() {
             <SectionHeader title="Opcie" />
             <p className="text-sm text-[var(--rd-text-secondary)]">
               {metrics.optionsRealized
-                ? `RealizovanĂ˝ zisk z opciĂ­: ${mask(signedMoney(formatCurrency, metrics.optionsRealized))}`
-                : "Opcie nie sĂş v portfĂłliu"}
+                ? `Realizovaný zisk z opcií: ${mask(signedMoney(formatCurrency, metrics.optionsRealized))}`
+                : "Opcie nie sú v portfóliu"}
             </p>
             <Button variant="Ghost" className="mt-2 w-full" onClick={() => setLocation("/options")}>
-              PrejsĹĄ na Opcie
+              Prejsť na Opcie
             </Button>
           </Card>,
         );
@@ -983,12 +988,12 @@ export default function DashboardMobile() {
         <header className="flex items-center gap-3 bg-[var(--rd-bg-base)] px-4 py-3">
           <div className="min-w-0 flex-1">
             <p className="rd-type-overline text-[var(--rd-text-tertiary)]">
-              ReĹľim Ăşprav
+              Režim úprav
             </p>
-            <h1 className="rd-type-h1">Ăšprava prehÄľadu</h1>
+            <h1 className="rd-type-h1">Úprava prehľadu</h1>
           </div>
           <Button variant="Ghost" onClick={() => resetLayout()}>
-            PredvolenĂ©
+            Predvolené
           </Button>
           <Button onClick={() => setEditing(false)}>
             <Check className="size-4" />
@@ -998,17 +1003,17 @@ export default function DashboardMobile() {
       ) : (
         <TopBar
           overline={overline}
-          title="PrehÄľad"
+          title="Prehľad"
           onOverlineClick={() => setPickerOpen(true)}
           trailing={
             <div className="flex items-center gap-1">
               <HelpButton
-                title="PrehÄľad"
-                body="SĂşhrn portfĂłlia, graf, drĹľanĂ© aktĂ­va a widgety. Poradie a viditeÄľnosĹĄ upravĂ­Ĺˇ perom."
+                title="Prehľad"
+                body="Súhrn portfólia, graf, držané aktíva a widgety. Poradie a viditeľnosť upravíš perom."
               />
               <button
                 type="button"
-                aria-label={hideAmounts ? "ZobraziĹĄ sumy" : "SkryĹĄ sumy"}
+                aria-label={hideAmounts ? "Zobraziť sumy" : "Skryť sumy"}
                 className="inline-flex size-[30px] items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)]"
                 onClick={() => toggleHideAmounts()}
               >
@@ -1016,7 +1021,7 @@ export default function DashboardMobile() {
               </button>
               <button
                 type="button"
-                aria-label="UpraviĹĄ prehÄľad"
+                aria-label="Upraviť prehľad"
                 className="inline-flex size-[30px] items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)]"
                 onClick={() => setEditing(true)}
               >
@@ -1032,17 +1037,17 @@ export default function DashboardMobile() {
       <PageBody>
         {editing ? (
           <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">
-            Oko skryje/zobrazĂ­ widget. Poradie zatiaÄľ uprav v klasickom reĹľime alebo v Nastaveniach.
+            Oko skryje/zobrazí widget. Poradie zatiaľ uprav v klasickom režime alebo v Nastaveniach.
           </p>
         ) : null}
         {widgets}
       </PageBody>
 
-      <Dialog open={sortOpen} title="ZoradiĹĄ aktĂ­va" onClose={() => setSortOpen(false)}>
+      <Dialog open={sortOpen} title="Zoradiť aktíva" onClose={() => setSortOpen(false)}>
         <div className="mt-3 space-y-2">
           {(
             [
-              ["name", "NĂˇzov"],
+              ["name", "Názov"],
               ["value", "Hodnota"],
               ["netProfit", "Zisk/strata"],
               ["gainPercent", "Zisk %"],
@@ -1074,12 +1079,12 @@ export default function DashboardMobile() {
               setSortOpen(false);
             }}
           >
-            PouĹľiĹĄ
+            Použiť
           </Button>
         </div>
       </Dialog>
 
-      <Dialog open={viewOpen} title="Zobrazenie aktĂ­v" onClose={() => setViewOpen(false)}>
+      <Dialog open={viewOpen} title="Zobrazenie aktív" onClose={() => setViewOpen(false)}>
         <div className="mt-3 space-y-2">
           <button
             type="button"
@@ -1089,7 +1094,7 @@ export default function DashboardMobile() {
               setViewOpen(false);
             }}
           >
-            <span>PodrobnĂ©</span>
+            <span>Podrobné</span>
             {mobileAssetsView === "detailed" ? <Check className="size-4 text-[var(--rd-profit)]" /> : null}
           </button>
           <button
@@ -1100,7 +1105,7 @@ export default function DashboardMobile() {
               setViewOpen(false);
             }}
           >
-            <span>JednoduchĂ©</span>
+            <span>Jednoduché</span>
             {mobileAssetsView === "simple" ? <Check className="size-4 text-[var(--rd-profit)]" /> : null}
           </button>
         </div>

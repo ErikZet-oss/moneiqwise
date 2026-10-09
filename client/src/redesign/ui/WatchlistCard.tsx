@@ -47,7 +47,7 @@ export function WatchlistCard({
   return (
     <article
       className={cn(
-        "flex w-full flex-col gap-2 overflow-hidden rounded-[var(--rd-radius-md)] border bg-[var(--rd-bg-surface)] p-3",
+        "flex w-full flex-col gap-2 overflow-hidden rounded-[var(--rd-radius-md)] border bg-[var(--rd-bg-surface)] p-3 [background-image:var(--rd-bg-surface-gradient)]",
         border,
         view === "Compact" && "gap-0 py-2.5",
         className,

@@ -24,7 +24,7 @@ export function StatTile({
   return (
     <div
       className={cn(
-        "flex min-w-0 flex-col gap-1 rounded-[var(--rd-radius-md)] border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface)] p-3",
+        "flex min-w-0 flex-col gap-1 rounded-[var(--rd-radius-md)] border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface)] p-3 [background-image:var(--rd-bg-surface-gradient)]",
         className,
       )}
     >

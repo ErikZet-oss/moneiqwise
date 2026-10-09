@@ -1,13 +1,15 @@
-/* Mobile redesign tokens. Bound to Figma Foundations (compact type/spacing scale). */
+/* Mobile redesign tokens. Bound to Figma Foundations (Inter + compact scale). */
 
 [data-mobile-ui="redesign"] {
   --rd-bg-base: #050607;
-  --rd-bg-surface: #0e1012;
-  --rd-bg-surface-raised: #15181b;
-  --rd-bg-surface-hover: #1d2125;
+  --rd-bg-surface: #15181c;
+  --rd-bg-surface-raised: #1d2126;
+  --rd-bg-surface-hover: #272c32;
+  /* Card / widget fill — Figma linear #21262c → #15181c */
+  --rd-bg-surface-gradient: linear-gradient(145deg, #21262c 0%, #15181c 100%);
 
-  --rd-border-subtle: #1f2327;
-  --rd-border-strong: #2c3137;
+  --rd-border-subtle: #272c32;
+  --rd-border-strong: #383e46;
 
   --rd-text-primary: #f3f5f6;
   --rd-text-secondary: #a3aab3;
@@ -62,8 +64,12 @@
   --rd-radius-lg: 16px;
   --rd-radius-full: 999px;
 
-  --rd-font-sans: "Inter", sans-serif;
-  --rd-font-mono: "JetBrains Mono", monospace;
+  /* One typeface everywhere (Figma): Inter. Data styles use tabular figures.
+     Also remaps Tailwind --font-mono so leftover font-mono classes stay on Inter. */
+  --rd-font-sans: "Inter", system-ui, sans-serif;
+  --rd-font-mono: "Inter", system-ui, sans-serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "Inter", system-ui, sans-serif;
 
   /* Type scale (size / line-height) */
   --rd-text-display-hero: 28px;
@@ -128,19 +134,21 @@
 }
 
 [data-mobile-ui="redesign"] .rd-type-display-hero {
-  font-family: var(--rd-font-mono);
+  font-family: var(--rd-font-sans);
   font-size: var(--rd-text-display-hero);
   font-weight: 700;
   line-height: var(--rd-leading-display-hero);
   letter-spacing: var(--rd-tracking-display-hero);
+  font-variant-numeric: tabular-nums;
 }
 
 [data-mobile-ui="redesign"] .rd-type-display-lg {
-  font-family: var(--rd-font-mono);
+  font-family: var(--rd-font-sans);
   font-size: var(--rd-text-display-lg);
   font-weight: 700;
   line-height: var(--rd-leading-display-lg);
   letter-spacing: var(--rd-tracking-display-lg);
+  font-variant-numeric: tabular-nums;
 }
 
 [data-mobile-ui="redesign"] .rd-type-h1 {
@@ -204,30 +212,34 @@
 }
 
 [data-mobile-ui="redesign"] .rd-type-data-lg {
-  font-family: var(--rd-font-mono);
+  font-family: var(--rd-font-sans);
   font-size: var(--rd-text-data-lg);
-  font-weight: 500;
+  font-weight: 600;
   line-height: var(--rd-leading-data-lg);
   letter-spacing: var(--rd-tracking-data-lg);
+  font-variant-numeric: tabular-nums;
 }
 
 [data-mobile-ui="redesign"] .rd-type-data {
-  font-family: var(--rd-font-mono);
+  font-family: var(--rd-font-sans);
   font-size: var(--rd-text-data);
-  font-weight: 500;
+  font-weight: 600;
   line-height: var(--rd-leading-data);
+  font-variant-numeric: tabular-nums;
 }
 
 [data-mobile-ui="redesign"] .rd-type-data-sm {
-  font-family: var(--rd-font-mono);
+  font-family: var(--rd-font-sans);
   font-size: var(--rd-text-data-sm);
   font-weight: 500;
   line-height: var(--rd-leading-data-sm);
+  font-variant-numeric: tabular-nums;
 }
 
 [data-mobile-ui="redesign"] .rd-type-data-micro {
-  font-family: var(--rd-font-mono);
+  font-family: var(--rd-font-sans);
   font-size: var(--rd-text-data-micro);
-  font-weight: 400;
+  font-weight: 500;
   line-height: var(--rd-leading-data-micro);
+  font-variant-numeric: tabular-nums;
 }
