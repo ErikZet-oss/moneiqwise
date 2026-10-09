@@ -39,6 +39,7 @@ import {
   type DashboardWidgetId,
 } from "@/lib/dashboardLayout";
 import {
+  getExtendedSessionLabel,
   getQuoteRefreshIntervalMs,
   getQuoteStaleTimeMs,
   getUsMarketSessionState,
@@ -511,6 +512,53 @@ export default function DashboardMobile() {
 
   const usSessionState = getUsMarketSessionState();
 
+  const preOpenPreview = useMemo(() => {
+    if (holdings.length === 0) {
+      return { available: false, amount: 0, percent: 0 };
+    }
+
+    let totalCurrent = 0;
+    let totalPreOpen = 0;
+    let hasPreOpenData = false;
+
+    for (const holding of holdings) {
+      const quote = quotes[holding.ticker];
+      if (!quote || !(quote.price > 0)) continue;
+
+      const shares = parseFloat(holding.shares);
+      if (!Number.isFinite(shares) || shares <= 0) continue;
+
+      const tickerCurrency = getTickerCurrency(holding.ticker);
+      const regularPrice = convertPrice(quote.price, tickerCurrency);
+      const showExtended = shouldShowExtendedQuote(
+        usSessionState,
+        quote.marketState,
+        quote.preMarketChangePercent,
+      );
+      const preOpenRaw = showExtended ? quote.preMarketPrice : null;
+      const preOpenPrice =
+        typeof preOpenRaw === "number" && Number.isFinite(preOpenRaw) && preOpenRaw > 0
+          ? convertPrice(preOpenRaw, tickerCurrency)
+          : null;
+
+      totalCurrent += shares * regularPrice;
+      if (preOpenPrice != null) {
+        totalPreOpen += shares * preOpenPrice;
+        hasPreOpenData = true;
+      } else {
+        totalPreOpen += shares * regularPrice;
+      }
+    }
+
+    if (!hasPreOpenData) {
+      return { available: false, amount: 0, percent: 0 };
+    }
+
+    const amount = totalPreOpen - totalCurrent;
+    const percent = totalCurrent > 0 ? (amount / totalCurrent) * 100 : 0;
+    return { available: true, amount, percent };
+  }, [holdings, quotes, convertPrice, getTickerCurrency, usSessionState]);
+
   const enrichedHoldings = useMemo(() => {
     const rows = holdings.map((h) => {
       const quote = quotes[h.ticker];
@@ -706,8 +754,46 @@ export default function DashboardMobile() {
             <div className="mt-3 space-y-2">
               <KvRow label="Celkový profit" value={mask(signedMoney(formatCurrency, metrics.totalProfit))} tone={toneOf(metrics.totalProfit)} />
               <KvRow label="" value={signedPct(metrics.totalProfitPercent)} tone={toneOf(metrics.totalProfitPercent)} />
-              <KvRow label="Denná zmena" value={mask(signedMoney(formatCurrency, metrics.dailyChange))} tone={toneOf(metrics.dailyChange)} />
-              <KvRow label="" value={signedPct(metrics.dailyChangePercent)} tone={toneOf(metrics.dailyChangePercent)} />
+              {usSessionState === "LIVE" ? (
+                <>
+                  <KvRow
+                    label="Denná zmena"
+                    value={mask(signedMoney(formatCurrency, metrics.dailyChange))}
+                    tone={toneOf(metrics.dailyChange)}
+                  />
+                  <KvRow
+                    label=""
+                    value={signedPct(metrics.dailyChangePercent)}
+                    tone={toneOf(metrics.dailyChangePercent)}
+                  />
+                </>
+              ) : shouldUseExtendedQuotes(usSessionState) ? (
+                <>
+                  <KvRow
+                    label={
+                      <span className="inline-flex items-center gap-1">
+                        <Moon className="size-3 text-[var(--rd-warning)]" aria-hidden />
+                        {getExtendedSessionLabel(usSessionState)}
+                      </span>
+                    }
+                    value={
+                      preOpenPreview.available
+                        ? mask(signedMoney(formatCurrency, preOpenPreview.amount))
+                        : "bez dát"
+                    }
+                    tone={preOpenPreview.available ? toneOf(preOpenPreview.amount) : "neutral"}
+                  />
+                  {preOpenPreview.available ? (
+                    <KvRow
+                      label=""
+                      value={signedPct(preOpenPreview.percent)}
+                      tone={toneOf(preOpenPreview.percent)}
+                    />
+                  ) : null}
+                </>
+              ) : usSessionState === "CLOSED" ? (
+                <KvRow label="Denná zmena" value="Trh uzatvorený" tone="neutral" />
+              ) : null}
               <KvRow label="Nerealizovaný zisk" value={mask(signedMoney(formatCurrency, metrics.unrealized))} tone={toneOf(metrics.unrealized)} />
               <KvRow label="Hotovosť" value={mask(formatCurrency(metrics.cashValue))} />
             </div>

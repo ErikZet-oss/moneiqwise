@@ -18,7 +18,7 @@ export function KvRow({
   value,
   tone = "neutral",
 }: {
-  label: string;
+  label: ReactNode;
   value: string;
   tone?: "neutral" | "up" | "down";
 }) {
@@ -30,7 +30,7 @@ export function KvRow({
         : "text-[var(--rd-text-primary)]";
   return (
     <div className="flex items-center gap-2">
-      <p className="rd-type-body-sm min-w-0 flex-1 text-[var(--rd-text-secondary)]">{label}</p>
+      <div className="rd-type-body-sm min-w-0 flex-1 text-[var(--rd-text-secondary)]">{label}</div>
       <p className={cn("rd-type-data-sm shrink-0", valueClass)}>{value}</p>
     </div>
   );
