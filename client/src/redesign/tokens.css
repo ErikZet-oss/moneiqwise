@@ -253,34 +253,39 @@ html[data-mobile-ui="redesign"] {
   font-variant-numeric: tabular-nums;
 }
 
+/* Hardcoded hex in keyframes — CSS vars inside @keyframes are flaky on mobile Safari. */
 @keyframes rd-login-cta-pulse {
   0%,
   100% {
-    color: var(--rd-text-tertiary);
+    color: #6b727c;
+    text-shadow: none;
   }
   50% {
-    color: var(--rd-profit);
+    color: #2fdab8;
+    text-shadow: 0 0 12px rgba(47, 218, 184, 0.45);
   }
 }
 
 @keyframes rd-login-cta-chevron {
   0%,
   100% {
-    color: var(--rd-text-tertiary);
+    color: #6b727c;
     transform: translateY(0);
+    opacity: 0.7;
   }
   50% {
-    color: var(--rd-profit);
-    transform: translateY(3px);
+    color: #2fdab8;
+    transform: translateY(4px);
+    opacity: 1;
   }
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  [data-mobile-ui="redesign"] .rd-login-features-cta {
-    animation: rd-login-cta-pulse 2.4s ease-in-out infinite;
+  .rd-landing .rd-login-features-cta {
+    animation: rd-login-cta-pulse 2s ease-in-out infinite;
   }
 
-  [data-mobile-ui="redesign"] .rd-login-features-cta svg {
-    animation: rd-login-cta-chevron 2.4s ease-in-out infinite;
+  .rd-landing .rd-login-features-cta svg {
+    animation: rd-login-cta-chevron 2s ease-in-out infinite;
   }
 }
