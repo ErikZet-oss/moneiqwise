@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   addMonths,
+  differenceInCalendarDays,
   eachDayOfInterval,
   endOfMonth,
   endOfWeek,
@@ -21,14 +22,18 @@ import { cn } from "@/lib/utils";
 import { HelpButton, PageBody } from "./mobileChrome";
 
 type EventType = "earnings" | "dividend" | "macro";
+type EarningsSession = "BMO" | "AMC" | null;
 
 type CalEvent = {
   type: EventType;
   date: string;
   title: string;
   subtitle: string;
+  listTitle: string;
+  listSubtitle: string;
   ticker?: string;
   shortLabel?: string;
+  session?: EarningsSession;
 };
 
 const WEEKDAYS = ["Po", "Ut", "St", "Št", "Pi", "So", "Ne"];
@@ -119,6 +124,40 @@ function typeBadge(type: EventType) {
   return <Badge label="Makro" tone="Warning" />;
 }
 
+function typeLetterMeta(type: EventType): { letter: string; className: string } {
+  if (type === "earnings") {
+    return { letter: "E", className: "bg-[var(--rd-info-dim)] text-[var(--rd-info)]" };
+  }
+  if (type === "dividend") {
+    return { letter: "D", className: "bg-[var(--rd-profit-dim)] text-[var(--rd-profit)]" };
+  }
+  return { letter: "M", className: "bg-[var(--rd-warning-dim)] text-[var(--rd-warning)]" };
+}
+
+function sessionLabel(session?: EarningsSession): string | null {
+  if (session === "BMO") return "pred otvorením";
+  if (session === "AMC") return "po zatvorení";
+  return null;
+}
+
+function daysUntilLabel(dateIso: string, today: Date): string {
+  const days = differenceInCalendarDays(new Date(`${dateIso}T12:00:00`), startOfDay(today));
+  if (days <= 0) return "dnes";
+  if (days === 1) return "o 1 deň";
+  if (days >= 2 && days <= 4) return `o ${days} dni`;
+  return `o ${days} dní`;
+}
+
+function eventsCountLabel(count: number): string {
+  if (count === 1) return "1 udalosť";
+  if (count >= 2 && count <= 4) return `${count} udalosti`;
+  return `${count} udalostí`;
+}
+
+function weekdayShortSk(dateIso: string): string {
+  return format(new Date(`${dateIso}T12:00:00`), "EEEEEE", { locale: sk }).toUpperCase();
+}
+
 export default function EventsCalendarMobile() {
   const { getQueryParam } = usePortfolio();
   const portfolioParam = getQueryParam();
@@ -129,7 +168,7 @@ export default function EventsCalendarMobile() {
   const [dayKey, setDayKey] = useState<string | null>(null);
 
   const { data: earnings } = useQuery<{
-    all?: Array<{ ticker: string; date: string; companyName?: string }>;
+    all?: Array<{ ticker: string; date: string; companyName?: string; session?: EarningsSession }>;
   }>({
     queryKey: ["/api/holdings/next-earnings", portfolioParam],
     queryFn: async () => {
@@ -143,7 +182,13 @@ export default function EventsCalendarMobile() {
   });
 
   const { data: dividends } = useQuery<{
-    all?: Array<{ ticker: string; date: string; companyName?: string; kind?: string }>;
+    all?: Array<{
+      ticker: string;
+      date: string;
+      companyName?: string;
+      kind?: "ex_dividend" | "payout";
+      estimatedGrossInUserCcy?: number | null;
+    }>;
   }>({
     queryKey: ["/api/dividends/upcoming", portfolioParam],
     queryFn: async () => {
@@ -173,39 +218,56 @@ export default function EventsCalendarMobile() {
     if (showEarnings) {
       for (const e of earnings?.all ?? []) {
         const t = e.ticker.toUpperCase();
+        const company = e.companyName || t;
+        const sess = sessionLabel(e.session ?? null);
         list.push({
           type: "earnings",
           date: e.date.slice(0, 10),
           title: `${t} earnings`,
-          subtitle: e.companyName || t,
+          subtitle: company,
+          listTitle: t,
+          listSubtitle: ["Earnings", company, sess].filter(Boolean).join(" · "),
           ticker: t,
+          session: e.session ?? null,
         });
       }
     }
     if (showDividends) {
       for (const d of dividends?.all ?? []) {
         const t = d.ticker.toUpperCase();
+        const isEx = d.kind === "ex_dividend";
+        const amount =
+          d.estimatedGrossInUserCcy != null && Number.isFinite(d.estimatedGrossInUserCcy) && d.estimatedGrossInUserCcy > 0
+            ? `${d.estimatedGrossInUserCcy.toFixed(2).replace(".", ",")} €`
+            : null;
         list.push({
           type: "dividend",
           date: d.date.slice(0, 10),
-          title: d.kind === "ex_dividend" ? `${t} ex-dividend` : `${t} payout`,
+          title: isEx ? `${t} ex-dividend` : `${t} payout`,
           subtitle: d.companyName || t,
+          listTitle: t,
+          listSubtitle: ["Dividenda", isEx ? "Ex-dividend" : "Výplata dividendy", amount]
+            .filter(Boolean)
+            .join(" · "),
           ticker: t,
         });
       }
     }
     if (showMacro) {
       for (const m of macro?.all ?? []) {
+        const label = m.shortLabel || m.code || m.title;
         list.push({
           type: "macro",
           date: m.date.slice(0, 10),
-          title: m.shortLabel || m.title,
+          title: label,
           subtitle: m.title,
+          listTitle: label,
+          listSubtitle: `Makro · ${m.title}`,
           shortLabel: m.shortLabel || m.code,
         });
       }
     }
-    return list;
+    return list.sort((a, b) => a.date.localeCompare(b.date) || a.listTitle.localeCompare(b.listTitle));
   }, [earnings?.all, dividends?.all, macro?.all, showEarnings, showDividends, showMacro]);
 
   const byDay = useMemo(() => {
@@ -226,7 +288,17 @@ export default function EventsCalendarMobile() {
     });
   }, [month]);
 
+  const upcomingInMonth = useMemo(() => {
+    const today = startOfDay(new Date());
+    const todayIso = format(today, "yyyy-MM-dd");
+    const monthStartIso = format(startOfMonth(month), "yyyy-MM-dd");
+    const monthEndIso = format(endOfMonth(month), "yyyy-MM-dd");
+    const fromIso = isSameMonth(month, today) ? todayIso : monthStartIso;
+    return events.filter((e) => e.date >= fromIso && e.date <= monthEndIso);
+  }, [events, month]);
+
   const dayEvents = dayKey ? byDay.get(dayKey) ?? [] : [];
+  const today = startOfDay(new Date());
 
   return (
     <div className="bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
@@ -343,6 +415,79 @@ export default function EventsCalendarMobile() {
             })}
           </div>
         </Card>
+
+        <Card className="gap-2">
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="rd-type-h2">Najbližšie udalosti</p>
+              <p className="text-[11px] leading-[14px] text-[var(--rd-text-tertiary)]">
+                {format(month, "LLLL yyyy", { locale: sk })} · od najbližšej
+              </p>
+            </div>
+            <span className="shrink-0 rounded-full bg-[var(--rd-bg-surface-hover)] px-2 py-[3px] text-[10px] font-medium leading-3 text-[var(--rd-text-secondary)]">
+              {eventsCountLabel(upcomingInMonth.length)}
+            </span>
+          </div>
+
+          {upcomingInMonth.length === 0 ? (
+            <p className="py-2 text-[11px] text-[var(--rd-text-tertiary)]">
+              V tomto mesiaci nie sú udalosti pre aktívne filtre.
+            </p>
+          ) : (
+            <div className="flex flex-col">
+              {upcomingInMonth.map((e, i) => {
+                const prev = i > 0 ? upcomingInMonth[i - 1] : null;
+                const showDate = !prev || prev.date !== e.date;
+                const letter = typeLetterMeta(e.type);
+                return (
+                  <button
+                    key={`${e.type}-${e.date}-${e.listTitle}-${i}`}
+                    type="button"
+                    onClick={() => setDayKey(e.date)}
+                    className={cn(
+                      "flex w-full items-center gap-3 py-2 text-left",
+                      i > 0 && "border-t border-[var(--rd-border-subtle)]",
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "flex size-9 shrink-0 flex-col items-center justify-center rounded-[var(--rd-radius-sm)] bg-[var(--rd-bg-surface-raised)]",
+                        !showDate && "opacity-0",
+                      )}
+                      aria-hidden={!showDate}
+                    >
+                      <p className="text-[13px] font-semibold leading-[18px] text-[var(--rd-text-primary)]">
+                        {format(new Date(`${e.date}T12:00:00`), "d")}
+                      </p>
+                      <p className="text-[10px] font-medium leading-3 text-[var(--rd-text-tertiary)]">
+                        {weekdayShortSk(e.date)}
+                      </p>
+                    </div>
+                    <span
+                      className={cn(
+                        "inline-flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-medium",
+                        letter.className,
+                      )}
+                    >
+                      {letter.letter}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[13px] font-semibold leading-[18px] text-[var(--rd-text-primary)]">
+                        {e.listTitle}
+                      </p>
+                      <p className="truncate text-[11px] leading-[14px] text-[var(--rd-text-secondary)]">
+                        {e.listSubtitle}
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-[11px] font-medium leading-[14px] text-[var(--rd-text-tertiary)]">
+                      {daysUntilLabel(e.date, today)}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </Card>
       </PageBody>
 
       <Dialog
@@ -364,8 +509,8 @@ export default function EventsCalendarMobile() {
               {e.ticker ? <Avatar ticker={e.ticker} companyName={e.subtitle} /> : null}
               <div className="min-w-0 flex-1">
                 <div className="mb-1">{typeBadge(e.type)}</div>
-                <p className="text-[13px] font-semibold leading-[18px]">{e.title}</p>
-                <p className="truncate text-[11px] text-[var(--rd-text-tertiary)]">{e.subtitle}</p>
+                <p className="text-[13px] font-semibold leading-[18px]">{e.listTitle}</p>
+                <p className="truncate text-[11px] text-[var(--rd-text-tertiary)]">{e.listSubtitle}</p>
               </div>
             </li>
           ))}
