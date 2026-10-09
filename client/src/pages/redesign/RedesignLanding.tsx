@@ -13,26 +13,20 @@ const STRENGTH_LABEL: Record<string, string> = {
 export function RedesignLanding({ auth }: { auth: LandingAuth }) {
   const goToAuth = (tab: "login" | "register") => {
     auth.setAuthTab(tab);
-    const scroller = document.querySelector<HTMLElement>("[data-redesign-login-scroll]");
-    if (!scroller) return;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    scroller.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+    window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
   };
 
   const scrollToFeatures = () => {
-    const scroller = document.querySelector<HTMLElement>("[data-redesign-login-scroll]");
     const target = document.getElementById("rd-login-features");
-    if (!scroller || !target) return;
+    if (!target) return;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const top = target.offsetTop - 12;
-    scroller.scrollTo({ top, behavior: reduce ? "auto" : "smooth" });
+    const top = target.getBoundingClientRect().top + window.scrollY - 12;
+    window.scrollTo({ top, behavior: reduce ? "auto" : "smooth" });
   };
 
   return (
-    <div
-      data-redesign-login-scroll
-      className="rd-landing h-dvh overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)] [-webkit-overflow-scrolling:touch]"
-    >
+    <div className="rd-landing min-h-dvh overflow-x-hidden bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
       <Hero auth={auth} onScrollToFeatures={scrollToFeatures} />
       <section className="px-6 pb-2 pt-8">
         <h2 className="text-[22px] font-bold leading-[26px] tracking-[-0.33px]">

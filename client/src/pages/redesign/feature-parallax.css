@@ -1,0 +1,100 @@
+/* Scroll-driven feature parallax (Figma login motion spec).
+   Primary: animation-timeline: view() — compositor-synced, works with document scroll
+   and nested scrollports on Chrome/Android. JS fallback lives in FeatureParallax.tsx. */
+
+@keyframes rd-phone-in-right {
+  from {
+    transform: translate3d(160px, 40px, 0);
+    opacity: 0.4;
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+
+@keyframes rd-phone-in-left {
+  from {
+    transform: translate3d(-160px, 40px, 0);
+    opacity: 0.4;
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+
+@keyframes rd-text-in {
+  from {
+    transform: translate3d(0, 24px, 0);
+    opacity: 0;
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+    opacity: 1;
+  }
+}
+
+@keyframes rd-glow-drift {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 120px, 0);
+  }
+}
+
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .rd-feature-parallax .rd-parallax-phone.rd-parallax-from-right {
+      animation: rd-phone-in-right linear both;
+      animation-timeline: view();
+      animation-range: entry 0% contain 40%;
+    }
+
+    .rd-feature-parallax .rd-parallax-phone.rd-parallax-from-left {
+      animation: rd-phone-in-left linear both;
+      animation-timeline: view();
+      animation-range: entry 0% contain 40%;
+    }
+
+    .rd-feature-parallax .rd-parallax-text {
+      animation: rd-text-in linear both;
+      animation-timeline: view();
+      /* Text settles in the first half of the phone motion */
+      animation-range: entry 0% entry 50%;
+    }
+
+    .rd-feature-parallax [data-parallax-glow] {
+      animation: rd-glow-drift linear both;
+      animation-timeline: view();
+      animation-range: cover 0% cover 100%;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rd-feature-parallax .rd-parallax-phone,
+    .rd-feature-parallax .rd-parallax-text {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+/* Browsers without scroll-driven animations: start off-screen; JS drives motion */
+@supports not (animation-timeline: view()) {
+  .rd-feature-parallax .rd-parallax-phone.rd-parallax-from-right {
+    opacity: 0.4;
+    transform: translate3d(160px, 40px, 0);
+  }
+
+  .rd-feature-parallax .rd-parallax-phone.rd-parallax-from-left {
+    opacity: 0.4;
+    transform: translate3d(-160px, 40px, 0);
+  }
+
+  .rd-feature-parallax .rd-parallax-text {
+    opacity: 0;
+    transform: translate3d(0, 24px, 0);
+  }
+}
