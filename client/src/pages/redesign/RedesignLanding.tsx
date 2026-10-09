@@ -1,8 +1,12 @@
 import { ChevronDown, KeyRound } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Button, Checkbox, Chip, Input } from "@/redesign/ui";
 import type { LandingAuth } from "@/pages/useLandingAuth";
 import { FeatureParallax } from "@/pages/redesign/FeatureParallax";
+
+const CTA_GRAY = "#6b727c";
+const CTA_PROFIT = "#2fdab8";
 
 const STRENGTH_LABEL: Record<string, string> = {
   Slabe: "Slabé",
@@ -59,6 +63,8 @@ function Hero({
   auth: LandingAuth;
   onScrollToFeatures: () => void;
 }) {
+  const reduceMotion = useReducedMotion();
+
   return (
     <section className="relative flex flex-col gap-6 px-4 pb-8 pt-16">
       <div
@@ -91,14 +97,42 @@ function Hero({
         {auth.authTab === "register" ? <RegisterForm auth={auth} /> : null}
         {auth.authTab === "reset" ? <ResetForm auth={auth} /> : null}
       </div>
-      <button
+      <motion.button
         type="button"
-        className="rd-login-features-cta flex flex-col items-center gap-2 py-2 text-[10px] font-semibold uppercase leading-3 tracking-[0.8px]"
+        className="flex flex-col items-center gap-2 py-2 text-[10px] font-semibold uppercase leading-3 tracking-[0.8px]"
         onClick={onScrollToFeatures}
+        initial={false}
+        animate={
+          reduceMotion
+            ? { color: CTA_PROFIT }
+            : { color: [CTA_GRAY, CTA_PROFIT, CTA_GRAY] }
+        }
+        transition={
+          reduceMotion
+            ? undefined
+            : { duration: 2.2, repeat: Infinity, ease: "easeInOut" }
+        }
+        style={{ color: CTA_GRAY }}
       >
         Čo v aplikácii nájdeš
-        <ChevronDown className="size-5" aria-hidden />
-      </button>
+        <motion.span
+          aria-hidden
+          className="inline-flex"
+          initial={false}
+          animate={
+            reduceMotion
+              ? { y: 0, color: CTA_PROFIT }
+              : { y: [0, 5, 0], color: [CTA_GRAY, CTA_PROFIT, CTA_GRAY] }
+          }
+          transition={
+            reduceMotion
+              ? undefined
+              : { duration: 2.2, repeat: Infinity, ease: "easeInOut" }
+          }
+        >
+          <ChevronDown className="size-5" />
+        </motion.span>
+      </motion.button>
     </section>
   );
 }
