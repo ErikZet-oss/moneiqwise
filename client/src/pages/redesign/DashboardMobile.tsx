@@ -503,7 +503,6 @@ export default function DashboardMobile() {
   const { data: benchmarkHistory } = useQuery<BenchmarkHistoryRes>({
     queryKey: ["/api/benchmark/history", chartBenchmarkId, benchFrom, benchTo],
     enabled:
-      showChartBenchmark &&
       !!benchFrom &&
       !!benchTo &&
       historyPoints.length > 1 &&
@@ -847,8 +846,8 @@ export default function DashboardMobile() {
   }, [queryClient, tickers]);
 
   const chartPoints = historyPoints;
-  const showBenchLine =
-    showChartBenchmark && !!benchmarkHistory?.points?.length && chartPoints.length > 1;
+  const hasBenchData = !!benchmarkHistory?.points?.length && chartPoints.length > 1;
+  const showBenchLine = showChartBenchmark && hasBenchData;
 
   const chartSeries = useMemo(() => {
     if (chartPoints.length === 0) return [];
@@ -856,7 +855,7 @@ export default function DashboardMobile() {
     const values = chartPoints.map((p) => p.totalValue);
     const invested = chartPoints.map((p) => p.netInvested);
 
-    if (showBenchLine && benchmarkHistory?.points?.length) {
+    if (hasBenchData && benchmarkHistory?.points?.length) {
       const closes = new Map<string, number>();
       for (const pt of benchmarkHistory.points) {
         if (Number.isFinite(pt.close) && pt.close > 0) closes.set(pt.date, pt.close);
@@ -882,7 +881,7 @@ export default function DashboardMobile() {
       portfolioPct: 0,
       benchmarkPct: null as number | null,
     }));
-  }, [chartPoints, showBenchLine, benchmarkHistory?.points]);
+  }, [chartPoints, hasBenchData, benchmarkHistory?.points]);
 
   const chartProfit =
     chartSeries.length > 0
@@ -894,13 +893,13 @@ export default function DashboardMobile() {
   const benchLabel = chartBenchmarkLabel(chartBenchmarkId);
   const benchColor = chartBenchmarkStroke("dark");
   const benchPeriodReturn = useMemo(() => {
-    if (!showBenchLine || chartSeries.length === 0) return null;
+    if (chartSeries.length === 0) return null;
     for (let i = chartSeries.length - 1; i >= 0; i -= 1) {
       const pct = chartSeries[i]!.benchmarkPct;
       if (pct != null && Number.isFinite(pct)) return pct;
     }
     return null;
-  }, [chartSeries, showBenchLine]);
+  }, [chartSeries]);
 
   const renderWidget = (id: DashboardWidgetId) => {
     if (!editing && !isVisible(id)) return null;
@@ -959,13 +958,9 @@ export default function DashboardMobile() {
 
     switch (id) {
       case "summary": {
-        const periodLabel =
-          chartRange === "all"
-            ? "Za celé obdobie"
-            : `Za ${CHART_RANGES.find((r) => r.v === chartRange)?.label ?? chartRange}`;
         const showExtendedRow = shouldUseExtendedQuotes(usSessionState);
         return frame(
-          <Card className="gap-2">
+          <Card className="gap-2 overflow-hidden">
             <button
               type="button"
               className="flex w-full items-center gap-1.5 text-left"
@@ -991,21 +986,6 @@ export default function DashboardMobile() {
                   onClick={() => toggleHideAmounts()}
                 >
                   {hideAmounts ? <EyeOff className="size-[18px]" /> : <Eye className="size-[18px]" />}
-                </button>
-                <button
-                  type="button"
-                  aria-label="Dôležité notifikácie"
-                  className="inline-flex items-center gap-1 text-[var(--rd-text-secondary)]"
-                  onClick={() => setNotificationsOpen(true)}
-                  data-testid="button-mobile-notifications"
-                >
-                  <Bell className="size-[18px]" />
-                  {importantNotificationCount > 0 ? (
-                    <Badge
-                      label={importantNotificationCount > 99 ? "99+" : String(importantNotificationCount)}
-                      tone="Loss"
-                    />
-                  ) : null}
                 </button>
               </div>
             </div>
@@ -1105,20 +1085,10 @@ export default function DashboardMobile() {
                     </button>
                   </div>
                 ) : null}
-                {showBenchLine && benchPeriodReturn != null ? (
-                  <p className="rd-type-body-sm text-[var(--rd-text-tertiary)]">
-                    <span style={{ color: benchColor }}>{benchLabel}</span>
-                    {" "}
-                    <span className="rd-type-data-sm" style={{ color: benchColor }}>
-                      {benchPeriodReturn >= 0 ? "+" : ""}
-                      {benchPeriodReturn.toFixed(1)}%
-                    </span>
-                  </p>
-                ) : null}
-                <div className="h-[120px] w-full">
+                <div className="-mx-3 h-[120px] w-[calc(100%+1.5rem)]">
                   {chartSeries.length > 1 ? (
                     <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={chartSeries}>
+                      <ComposedChart data={chartSeries} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
                         <defs>
                           <linearGradient id="rd-dash-fill" x1="0" y1="0" x2="0" y2="1">
                             <stop
@@ -1173,7 +1143,7 @@ export default function DashboardMobile() {
                               type="monotone"
                               dataKey="benchmarkPct"
                               stroke={benchColor}
-                              strokeWidth={2}
+                              strokeWidth={1.5}
                               dot={false}
                               connectNulls
                             />
@@ -1196,18 +1166,45 @@ export default function DashboardMobile() {
                     </div>
                   )}
                 </div>
-                <MetricRow
-                  label={
-                    <span className="inline-flex items-center gap-1.5">
-                      <Calendar className="size-[18px] text-[var(--rd-text-tertiary)]" aria-hidden />
-                      {periodLabel}
-                    </span>
-                  }
-                  amount={mask(signedMoney(formatCurrency, metrics.totalProfit))}
-                  amountTone={toneOf(metrics.totalProfit)}
-                  pct={signedPct(metrics.totalProfitPercent)}
-                  pctTrend={trendFromNumber(metrics.totalProfitPercent)}
-                />
+                <div className="flex items-center gap-1.5">
+                  {benchPeriodReturn != null ? (
+                    <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                      <span
+                        className="size-1.5 shrink-0 rounded-full"
+                        style={{ background: "var(--rd-chart-benchmark)" }}
+                        aria-hidden
+                      />
+                      <span className="truncate rd-type-body-sm text-[var(--rd-text-secondary)]">
+                        {benchLabel}
+                      </span>
+                      <span
+                        className="shrink-0 rd-type-data-sm"
+                        style={{ color: "var(--rd-chart-benchmark)" }}
+                      >
+                        {benchPeriodReturn >= 0 ? "+" : ""}
+                        {benchPeriodReturn.toFixed(2)}%
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="min-w-0 flex-1" />
+                  )}
+                  <span
+                    className={cn(
+                      "shrink-0 rd-type-data-sm",
+                      toneOf(metrics.totalProfit) === "up"
+                        ? "text-[var(--rd-profit)]"
+                        : toneOf(metrics.totalProfit) === "down"
+                          ? "text-[var(--rd-loss)]"
+                          : "text-[var(--rd-text-primary)]",
+                    )}
+                  >
+                    {mask(signedMoney(formatCurrency, metrics.totalProfit))}
+                  </span>
+                  <Delta
+                    value={signedPct(metrics.totalProfitPercent)}
+                    trend={trendFromNumber(metrics.totalProfitPercent)}
+                  />
+                </div>
                 <div className="flex items-center justify-between gap-0.5">
                   {CHART_RANGES.map((r) => (
                     <Chip key={r.v} active={chartRange === r.v} onClick={() => setChartRange(r.v)}>
@@ -1933,14 +1930,30 @@ export default function DashboardMobile() {
           title="Prehľad"
           onOverlineClick={() => setPickerOpen(true)}
           trailing={
-            <button
-              type="button"
-              aria-label="Upraviť prehľad"
-              className="inline-flex size-[30px] items-center justify-center text-[var(--rd-text-secondary)]"
-              onClick={() => setEditing(true)}
-            >
-              <Pencil className="size-[18px]" />
-            </button>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                aria-label="Dôležité notifikácie"
+                className="relative inline-flex size-[30px] items-center justify-center text-[var(--rd-text-secondary)]"
+                onClick={() => setNotificationsOpen(true)}
+                data-testid="button-mobile-notifications"
+              >
+                <Bell className="size-[18px]" />
+                {importantNotificationCount > 0 ? (
+                  <span className="absolute -right-0.5 -top-0.5 min-w-[16px] rounded-full bg-[var(--rd-loss-dim)] px-1 text-center text-[9px] font-semibold leading-[14px] text-[var(--rd-loss)]">
+                    {importantNotificationCount > 99 ? "99+" : importantNotificationCount}
+                  </span>
+                ) : null}
+              </button>
+              <button
+                type="button"
+                aria-label="Upraviť prehľad"
+                className="inline-flex size-[30px] items-center justify-center text-[var(--rd-text-secondary)]"
+                onClick={() => setEditing(true)}
+              >
+                <Pencil className="size-[18px]" />
+              </button>
+            </div>
           }
         />
       )}
