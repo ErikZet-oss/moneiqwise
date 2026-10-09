@@ -1,58 +1,55 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { format } from "date-fns";
 import { sk } from "date-fns/locale";
-import { Download, Eye, EyeOff, PlusCircle, Search, Upload } from "lucide-react";
+import { ArrowDownUp, Check, Pencil, PlusCircle, Trash2 } from "lucide-react";
 import type { Transaction } from "@shared/schema";
 import { CASH_FLOW_TICKER } from "@shared/schema";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { AddTransactionForm } from "@/components/AddTransactionForm";
 import {
+  Avatar,
+  Badge,
   Button,
   Card,
-  Chip,
   Dialog,
   EmptyState,
-  Input,
+  Select,
   TopBar,
-  TransactionRow,
   type BadgeTone,
 } from "@/redesign/ui";
-import {
-  HelpButton,
-  PageBody,
-  PortfolioSwitcher,
-  signedMoney,
-} from "./mobileChrome";
+import { HelpButton, PageBody, PortfolioSwitcher, signedMoney } from "./mobileChrome";
 
 const TYPE_LABEL: Record<string, string> = {
-  BUY: "NĂˇkup",
+  BUY: "Nákup",
   SELL: "Predaj",
   DIVIDEND: "Div",
-  TAX: "DaĹ",
+  TAX: "Daň",
   DEPOSIT: "Vklad",
-  WITHDRAWAL: "VĂ˝ber",
+  WITHDRAWAL: "Výber",
 };
 
 const TYPE_TONE: Record<string, BadgeTone> = {
   BUY: "Profit",
-  SELL: "Info",
-  DIVIDEND: "Profit",
-  TAX: "Loss",
+  SELL: "Loss",
+  DIVIDEND: "Info",
+  TAX: "Warning",
   DEPOSIT: "Neutral",
   WITHDRAWAL: "Warning",
 };
 
 const TYPE_FILTERS = [
-  { value: "all", label: "VĹˇetky" },
-  { value: "BUY", label: "NĂˇkupy" },
+  { value: "all", label: "Všetky" },
+  { value: "BUY", label: "Nákupy" },
   { value: "SELL", label: "Predaje" },
   { value: "DIVIDEND", label: "Div" },
   { value: "DEPOSIT", label: "Vklady" },
-  { value: "WITHDRAWAL", label: "VĂ˝bery" },
+  { value: "WITHDRAWAL", label: "Výbery" },
   { value: "TAX", label: "Dane" },
 ] as const;
 
@@ -68,21 +65,30 @@ function txCurrency(tx: Transaction): "EUR" | "USD" | "GBP" | "CZK" | "PLN" {
   return "EUR";
 }
 
+function txCountLabel(n: number): string {
+  if (n === 1) return "1 transakcia";
+  if (n >= 2 && n <= 4) return `${n} transakcie`;
+  return `${n} transakcií`;
+}
+
 export default function HistoryMobile() {
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
   const { formatCurrency, convertPrice } = useCurrency();
   const { getQueryParam, isAllPortfolios, selectedPortfolio } = usePortfolio();
-  const { hideAmounts, toggleHideAmounts } = useChartSettings();
+  const { hideAmounts } = useChartSettings();
   const portfolioParam = getQueryParam();
-  const overline = isAllPortfolios ? "VĹˇetky portfĂłliĂˇ" : selectedPortfolio?.name || "PortfĂłlio";
-  const mask = (s: string) => (hideAmounts ? "â€˘â€˘â€˘â€˘â€˘â€˘" : s);
+  const rangeLabel = isAllPortfolios
+    ? "Rozsah: všetky viditeľné portfóliá."
+    : `Rozsah: ${selectedPortfolio?.name || "portfólio"}.`;
+  const mask = (s: string) => (hideAmounts ? "••••••" : s);
 
   const [typeFilter, setTypeFilter] = useState("all");
   const [sortDir, setSortDir] = useState<"desc" | "asc">("desc");
-  const [query, setQuery] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selected, setSelected] = useState<Transaction | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const { data: transactions = [], isPending } = useQuery<Transaction[]>({
     queryKey: ["/api/transactions", portfolioParam],
@@ -92,6 +98,28 @@ export default function HistoryMobile() {
       });
       if (!res.ok) throw new Error("transactions");
       return res.json();
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => apiRequest("DELETE", `/api/transactions/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      toast({ title: "Vymazané", description: "Transakcia bola odstránená." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Chyba", description: err.message || "Nepodarilo sa vymazať.", variant: "destructive" });
+    },
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await Promise.all(ids.map((id) => apiRequest("DELETE", `/api/transactions/${id}`)));
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      setSelectedIds(new Set());
+      toast({ title: "Vymazané", description: "Označené transakcie boli odstránené." });
     },
   });
 
@@ -112,29 +140,21 @@ export default function HistoryMobile() {
       return mask(signedMoney(formatCurrency, Math.abs(value)));
     }
     if (tx.type === "BUY" || tx.type === "TAX" || tx.type === "WITHDRAWAL") {
-      return mask(`â’${formatCurrency(Math.abs(value))}`);
+      return mask(`−${formatCurrency(Math.abs(value))}`);
     }
     return mask(formatCurrency(Math.abs(value)));
   };
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
     let list = [...transactions];
     if (typeFilter !== "all") list = list.filter((tx) => tx.type === typeFilter);
-    if (q) {
-      list = list.filter((tx) => {
-        const ticker = (tx.ticker || "").toLowerCase();
-        const name = (tx.companyName || "").toLowerCase();
-        return ticker.includes(q) || name.includes(q);
-      });
-    }
     list.sort((a, b) => {
       const da = new Date(a.transactionDate).getTime();
       const db = new Date(b.transactionDate).getTime();
       return sortDir === "desc" ? db - da : da - db;
     });
     return list;
-  }, [transactions, typeFilter, sortDir, query]);
+  }, [transactions, typeFilter, sortDir]);
 
   const groups = useMemo(() => {
     const map = new Map<string, Transaction[]>();
@@ -147,143 +167,170 @@ export default function HistoryMobile() {
     return Array.from(map.entries());
   }, [filtered]);
 
-  const periodTotal = useMemo(() => {
-    return filtered.reduce((sum, tx) => {
-      const price = parseFloat(tx.pricePerShare || "0");
-      const shares = parseFloat(tx.shares || "0");
-      const commission = parseFloat(tx.commission || "0");
-      const raw =
-        tx.type === "DIVIDEND" || tx.type === "DEPOSIT" || tx.type === "WITHDRAWAL"
-          ? price
-          : price * shares + (tx.type === "BUY" ? commission : -commission);
-      const v = convertPrice(raw, txCurrency(tx));
-      if (tx.type === "SELL" || tx.type === "DIVIDEND" || tx.type === "DEPOSIT") return sum + Math.abs(v);
-      if (tx.type === "BUY" || tx.type === "TAX" || tx.type === "WITHDRAWAL") return sum - Math.abs(v);
-      return sum;
-    }, 0);
-  }, [filtered, convertPrice]);
+  const toggleId = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
 
   return (
     <div className="bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
       <TopBar
-        overline={overline}
-        title="HistĂłria"
+        overline="História transakcií"
+        title="História"
         onOverlineClick={() => setPickerOpen(true)}
         trailing={
-          <div className="flex items-center gap-1">
-            <HelpButton
-              title="HistĂłria"
-              body="Zoznam nĂˇkupov, predajov, dividend a peĹaĹľnĂ˝ch pohybov. Filter podÄľa typu alebo tickera; sumy mĂ´ĹľeĹˇ skryĹĄ okom."
-            />
-            <button
-              type="button"
-              aria-label={hideAmounts ? "ZobraziĹĄ sumy" : "SkryĹĄ sumy"}
-              className="inline-flex size-[30px] items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)]"
-              onClick={() => toggleHideAmounts()}
-            >
-              {hideAmounts ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-            </button>
-          </div>
+          <HelpButton
+            title="História"
+            body="Zoznam nákupov, predajov, dividend a peňažných pohybov. Filter podľa typu; rozsah podľa vybraného portfólia."
+          />
         }
       />
 
       <PortfolioSwitcher open={pickerOpen} onClose={() => setPickerOpen(false)} />
 
       <PageBody>
-        <div className="flex gap-2">
-          <Button className="flex-1" onClick={() => setAddOpen(true)}>
-            <PlusCircle className="size-4" />
-            PridaĹĄ
-          </Button>
+        <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">{rangeLabel}</p>
+
+        <Button className="w-full" onClick={() => setAddOpen(true)}>
+          <PlusCircle className="size-4" />
+          Pridať transakciu
+        </Button>
+        <div className="flex gap-1.5">
           <Button
             variant="Secondary"
-            aria-label="Export"
+            className="flex-1"
             onClick={() => {
               window.location.href = `/api/transactions/export?portfolio=${portfolioParam}`;
             }}
           >
-            <Download className="size-4" />
+            Export CSV
           </Button>
-          <Button variant="Ghost" onClick={() => setLocation("/import")}>
-            <Upload className="size-4" />
-            Import
+          <Button variant="Secondary" className="flex-1" onClick={() => setLocation("/import")}>
+            Import CSV
           </Button>
         </div>
 
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-[14px] z-10 size-4 text-[var(--rd-text-tertiary)]" />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="HÄľadaĹĄ ticker alebo nĂˇzovâ€¦"
-            className="pl-9"
-            aria-label="HÄľadaĹĄ transakcie"
-            mono={false}
-          />
-        </div>
-
-        <div className="-mx-4 flex gap-1 overflow-x-auto px-4 pb-1">
-          {TYPE_FILTERS.map((f) => (
-            <Chip key={f.value} active={typeFilter === f.value} onClick={() => setTypeFilter(f.value)}>
-              {f.label}
-            </Chip>
-          ))}
-        </div>
-
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-xs text-[var(--rd-text-tertiary)]">
-            {filtered.length} z {transactions.length} Â· netto {mask(signedMoney(formatCurrency, periodTotal))}
-          </p>
-          <div className="flex gap-1">
-            <Chip active={sortDir === "desc"} onClick={() => setSortDir("desc")}>
-              NajnovĹˇie
-            </Chip>
-            <Chip active={sortDir === "asc"} onClick={() => setSortDir("asc")}>
-              NajstarĹˇie
-            </Chip>
+        <Card className="gap-2">
+          <div className="grid grid-cols-2 gap-2">
+            <Select
+              label="Typ"
+              value={typeFilter}
+              onChange={setTypeFilter}
+              options={TYPE_FILTERS.map((f) => ({ value: f.value, label: f.label }))}
+            />
+            <Select
+              label="Zoradiť"
+              value="date"
+              onChange={() => undefined}
+              options={[{ value: "date", label: "Dátum" }]}
+            />
           </div>
-        </div>
+          <button
+            type="button"
+            onClick={() => setSortDir((prev) => (prev === "desc" ? "asc" : "desc"))}
+            className="inline-flex min-h-[32px] w-full items-center justify-center gap-1.5 rounded-full border border-[var(--rd-border-strong)] bg-[var(--rd-bg-surface-raised)] px-2 text-xs font-medium text-[var(--rd-text-primary)]"
+          >
+            <ArrowDownUp className="size-3.5" />
+            {sortDir === "desc" ? "Zostupne" : "Vzostupne"}
+          </button>
+        </Card>
+
+        {selectedIds.size > 0 ? (
+          <div className="flex items-center gap-2">
+            <p className="min-w-0 flex-1 text-xs text-[var(--rd-text-secondary)]">
+              Označených: {selectedIds.size}
+            </p>
+            <Button
+              variant="Secondary"
+              onClick={() => bulkDeleteMutation.mutate(Array.from(selectedIds))}
+              disabled={bulkDeleteMutation.isPending}
+            >
+              <Trash2 className="size-4 text-[var(--rd-loss)]" />
+              Vymazať
+            </Button>
+          </div>
+        ) : null}
 
         {isPending ? (
-          <p className="text-sm text-[var(--rd-text-tertiary)]">NaÄŤĂ­tavamâ€¦</p>
+          <p className="text-sm text-[var(--rd-text-tertiary)]">Načítavam…</p>
         ) : groups.length === 0 ? (
           <EmptyState
-            title="Ĺ˝iadne transakcie"
-            body="Pridaj nĂˇkup, alebo importuj CSV/Excel z brokera."
-            actionLabel="ImportovaĹĄ"
+            title="Žiadne transakcie"
+            body="Pridaj nákup, alebo importuj CSV/Excel z brokera."
+            actionLabel="Importovať"
             onAction={() => setLocation("/import")}
           />
         ) : (
           groups.map(([month, rows]) => (
-            <Card key={month} className="gap-0 p-0">
-              <div className="flex items-baseline justify-between gap-2 px-4 pb-1 pt-4">
-                <h3 className="rd-type-h2">{month}</h3>
-                <p className="font-mono text-xs text-[var(--rd-text-tertiary)]">{rows.length}</p>
+            <Card key={month} className="gap-1">
+              <div className="flex items-center gap-1.5">
+                <p className="min-w-0 flex-1 rd-type-overline text-[var(--rd-text-tertiary)]">{month}</p>
+                <p className="text-[10px] font-medium text-[var(--rd-text-tertiary)]">{txCountLabel(rows.length)}</p>
               </div>
-              <div className="divide-y divide-[var(--rd-border-subtle)] px-4">
+              <div className="flex flex-col">
                 {rows.map((tx) => {
-                  const ticker = tx.ticker === CASH_FLOW_TICKER ? "CASH" : tx.ticker || "â€”";
-                  const meta = `${format(new Date(tx.transactionDate), "d. MMM yyyy", { locale: sk })} Â· ${formatShareQuantitySafe(tx.shares)} ks`;
+                  const ticker = tx.ticker === CASH_FLOW_TICKER ? "CASH" : tx.ticker || "—";
+                  const checked = selectedIds.has(tx.id);
+                  const meta = `${format(new Date(tx.transactionDate), "d. MMM yyyy HH:mm", { locale: sk })} · ${formatShareQuantitySafe(tx.shares)} ks`;
+                  const unit = tx.pricePerShare
+                    ? `${mask(formatCurrency(convertPrice(parseFloat(tx.pricePerShare), txCurrency(tx))))} / ks`
+                    : undefined;
                   return (
-                    <button
-                      key={tx.id}
-                      type="button"
-                      className="w-full text-left"
-                      onClick={() => setSelected(tx)}
-                    >
-                      <TransactionRow
-                        ticker={ticker}
-                        badge={TYPE_LABEL[tx.type] || tx.type}
-                        tone={TYPE_TONE[tx.type] || "Neutral"}
-                        meta={meta}
-                        amount={amountFor(tx)}
-                        unit={
-                          tx.pricePerShare
-                            ? `${mask(formatCurrency(convertPrice(parseFloat(tx.pricePerShare), txCurrency(tx))))} / ks`
-                            : undefined
-                        }
-                      />
-                    </button>
+                    <div key={tx.id} className="flex flex-col gap-1.5 border-t border-[var(--rd-border-subtle)] py-2 first:border-t-0">
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          aria-label={checked ? "Odznačiť" : "Označiť"}
+                          aria-pressed={checked}
+                          onClick={() => toggleId(tx.id, !checked)}
+                          className={`inline-flex size-5 shrink-0 items-center justify-center rounded-[var(--rd-radius-xs)] border ${
+                            checked
+                              ? "border-[var(--rd-profit)] bg-[var(--rd-profit)] text-[var(--rd-text-on-brand)]"
+                              : "border-[var(--rd-border-strong)] bg-transparent"
+                          }`}
+                        >
+                          {checked ? <Check className="size-3.5" strokeWidth={3} /> : null}
+                        </button>
+                        <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setSelected(tx)}>
+                          <div className="flex items-center gap-1.5">
+                            <Avatar ticker={ticker} companyName={tx.companyName || undefined} />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5">
+                                <p className="rd-type-data text-[var(--rd-text-primary)]">{ticker}</p>
+                                <Badge label={TYPE_LABEL[tx.type] || tx.type} tone={TYPE_TONE[tx.type] || "Neutral"} />
+                              </div>
+                            </div>
+                            <p className="rd-type-data shrink-0 text-[var(--rd-text-primary)]">{amountFor(tx)}</p>
+                          </div>
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-1.5 pl-7">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[11px] leading-[14px] text-[var(--rd-text-tertiary)]">{meta}</p>
+                          {unit ? <p className="text-[10px] font-medium leading-3 text-[var(--rd-text-tertiary)]">{unit}</p> : null}
+                        </div>
+                        <button
+                          type="button"
+                          aria-label="Upraviť"
+                          className="inline-flex size-8 items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)]"
+                          onClick={() => setSelected(tx)}
+                        >
+                          <Pencil className="size-4" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Vymazať"
+                          className="inline-flex size-8 items-center justify-center rounded-full border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)] text-[var(--rd-loss)]"
+                          onClick={() => deleteMutation.mutate(tx.id)}
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </div>
+                    </div>
                   );
                 })}
               </div>
@@ -292,7 +339,7 @@ export default function HistoryMobile() {
         )}
       </PageBody>
 
-      <Dialog open={addOpen} title="NovĂˇ transakcia" body="Pridajte nĂˇkup alebo inĂş transakciu do portfĂłlia." onClose={() => setAddOpen(false)}>
+      <Dialog open={addOpen} title="Nová transakcia" body="Pridajte nákup alebo inú transakciu do portfólia." onClose={() => setAddOpen(false)}>
         <div className="mt-3 max-h-[60vh] overflow-y-auto">
           <AddTransactionForm embed onSuccessSubmit={() => setAddOpen(false)} />
         </div>
@@ -300,7 +347,11 @@ export default function HistoryMobile() {
 
       <Dialog
         open={!!selected}
-        title={selected ? `${TYPE_LABEL[selected.type] || selected.type} Â· ${selected.ticker === CASH_FLOW_TICKER ? "CASH" : selected.ticker}` : "Detail"}
+        title={
+          selected
+            ? `${TYPE_LABEL[selected.type] || selected.type} · ${selected.ticker === CASH_FLOW_TICKER ? "CASH" : selected.ticker}`
+            : "Detail"
+        }
         onClose={() => setSelected(null)}
       >
         {selected ? (
@@ -308,23 +359,21 @@ export default function HistoryMobile() {
             <p className="text-[var(--rd-text-secondary)]">
               {format(new Date(selected.transactionDate), "d. MMMM yyyy HH:mm", { locale: sk })}
             </p>
-            {selected.companyName ? (
-              <p className="text-[var(--rd-text-primary)]">{selected.companyName}</p>
-            ) : null}
+            {selected.companyName ? <p className="text-[var(--rd-text-primary)]">{selected.companyName}</p> : null}
             <div className="space-y-1 font-mono text-xs">
-              <p>Suma Â· {amountFor(selected)}</p>
+              <p>Suma · {amountFor(selected)}</p>
               <p>
-                Cena Â·{" "}
+                Cena ·{" "}
                 {selected.pricePerShare
                   ? mask(formatCurrency(convertPrice(parseFloat(selected.pricePerShare), txCurrency(selected))))
-                  : "â€”"}
+                  : "—"}
               </p>
-              <p>MnoĹľstvo Â· {formatShareQuantitySafe(selected.shares)} ks</p>
+              <p>Množstvo · {formatShareQuantitySafe(selected.shares)} ks</p>
               <p>
-                Poplatok Â·{" "}
+                Poplatok ·{" "}
                 {mask(formatCurrency(convertPrice(parseFloat(selected.commission || "0"), txCurrency(selected))))}
               </p>
-              <p>Mena Â· {(selected.currency || "EUR").toUpperCase()}</p>
+              <p>Mena · {(selected.currency || "EUR").toUpperCase()}</p>
             </div>
             {selected.ticker && selected.ticker !== CASH_FLOW_TICKER ? (
               <Button
@@ -336,7 +385,7 @@ export default function HistoryMobile() {
                   setLocation(`/asset/${encodeURIComponent(t)}`);
                 }}
               >
-                OtvoriĹĄ aktĂ­vum
+                Otvoriť aktívum
               </Button>
             ) : null}
           </div>
