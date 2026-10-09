@@ -57,7 +57,7 @@ export function WatchlistCard({
         {view === "Detailed" ? (
           <GripVertical className="size-4 shrink-0 text-[var(--rd-text-tertiary)]" aria-hidden />
         ) : null}
-        <Avatar ticker={ticker} />
+        <Avatar ticker={ticker} companyName={name} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1">
             {onOpen ? (

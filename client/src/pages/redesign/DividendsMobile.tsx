@@ -133,7 +133,7 @@ export default function DividendsMobile() {
         <div className="mt-3 space-y-3">
           {(selected?.items ?? []).map((item, idx) => (
             <div key={`${item.ticker}-${idx}`} className="flex items-center gap-3">
-              <Avatar ticker={item.ticker} />
+              <Avatar ticker={item.ticker} companyName={item.companyName || undefined} />
               <div className="min-w-0 flex-1">
                 <p className="font-mono text-sm font-medium">{item.ticker}</p>
                 <p className="truncate text-xs text-[var(--rd-text-tertiary)]">{item.companyName || "â€”"}</p>

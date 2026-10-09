@@ -634,6 +634,8 @@ export default function DashboardMobile() {
       .slice(0, 4)
       .map((r) => ({
         ticker: r.holding.ticker,
+        name: holdingName(r.holding),
+        imageUrl: r.holding.tcgImageUrl,
         pct: (r.value / total) * 100,
       }));
   }, [enrichedHoldings, metrics.stockValue]);
@@ -960,6 +962,7 @@ export default function DashboardMobile() {
                     onClick={() => setLocation(`/asset/${encodeURIComponent(m.ticker)}`)}
                   >
                     <span className="w-4 rd-type-data-sm text-[var(--rd-text-tertiary)]">{i + 1}.</span>
+                    <Avatar ticker={m.ticker} />
                     <span className="min-w-0 flex-1 truncate rd-type-data">{m.ticker}</span>
                     <span className="inline-flex items-center gap-1">
                       {m.showMoon ? <Moon className="size-2.5 text-[var(--rd-warning)]" aria-hidden /> : null}
@@ -992,6 +995,7 @@ export default function DashboardMobile() {
                     onClick={() => setLocation(`/asset/${encodeURIComponent(m.ticker)}`)}
                   >
                     <span className="w-4 rd-type-data-sm text-[var(--rd-text-tertiary)]">{i + 1}.</span>
+                    <Avatar ticker={m.ticker} />
                     <span className="min-w-0 flex-1 truncate rd-type-data">{m.ticker}</span>
                     <span className="inline-flex items-center gap-1">
                       {m.showMoon ? <Moon className="size-2.5 text-[var(--rd-warning)]" aria-hidden /> : null}
@@ -1078,6 +1082,7 @@ export default function DashboardMobile() {
                         dayTrend={trendFromNumber(row.dayTrendSource)}
                         pl={`${mask(signedMoney(formatCurrency, row.gain))} (${signedPct(row.gainPct)})`}
                         plTrend={trendFromNumber(row.gain)}
+                        imageUrl={h.tcgImageUrl}
                         expandable={expandable}
                         expanded={expanded}
                         onToggle={
@@ -1117,6 +1122,7 @@ export default function DashboardMobile() {
                       value={mask(formatCurrency(row.value))}
                       delta={`${signedPct(row.gainPct)} · ${mask(signedMoney(formatCurrency, row.gain))}`}
                       trend={trendFromNumber(row.gain)}
+                      imageUrl={h.tcgImageUrl}
                       onTickerClick={() => setLocation(`/asset/${encodeURIComponent(h.ticker)}`)}
                       afterHoursPrice={afterHoursPrice}
                       afterHoursChange={afterHoursChange}
@@ -1154,7 +1160,7 @@ export default function DashboardMobile() {
             <div className="mt-2 space-y-2">
               {allocation.map((a) => (
                 <div key={a.ticker} className="flex items-center gap-2">
-                  <Avatar ticker={a.ticker} />
+                  <Avatar ticker={a.ticker} companyName={a.name} imageUrl={a.imageUrl} />
                   <p className="min-w-0 flex-1 rd-type-data">{a.ticker}</p>
                   <p className="rd-type-data text-[var(--rd-text-secondary)]">{a.pct.toFixed(1)}%</p>
                 </div>

@@ -198,7 +198,7 @@ export default function ProfitMobile() {
             <p className="px-4 py-3 text-[15px] font-semibold">PodÄľa tickerov</p>
             {(realized?.byTicker ?? []).slice(0, 12).map((row) => (
               <div key={row.ticker} className="flex items-center gap-3 border-t border-[var(--rd-border-subtle)] px-4 py-3">
-                <Avatar ticker={row.ticker} />
+                <Avatar ticker={row.ticker} companyName={row.companyName || undefined} />
                 <div className="min-w-0 flex-1">
                   <p className="font-mono text-sm font-medium">{row.ticker}</p>
                   <p className="truncate text-xs text-[var(--rd-text-tertiary)]">

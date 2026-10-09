@@ -181,7 +181,7 @@ export default function AssetDetailMobile() {
           SpĂ¤ĹĄ na prehÄľad
         </button>
         <div className="flex items-start gap-3">
-          <Avatar ticker={data.ticker} />
+          <Avatar ticker={data.ticker} companyName={data.companyName} />
           <div className="min-w-0 flex-1">
             <h1 className="truncate rd-type-h1" data-testid="asset-detail-title">{data.companyName}</h1>
             <div className="mt-1 flex flex-wrap items-center gap-2">

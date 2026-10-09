@@ -81,6 +81,7 @@ export function HoldingRow({
   delta,
   trend = "Flat",
   onTickerClick,
+  imageUrl,
   afterHoursPrice,
   afterHoursChange,
   afterHoursTrend = "Flat",
@@ -92,6 +93,7 @@ export function HoldingRow({
   delta: string;
   trend?: DeltaTrend;
   onTickerClick?: () => void;
+  imageUrl?: string | null;
   afterHoursPrice?: string;
   afterHoursChange?: string;
   afterHoursTrend?: DeltaTrend;
@@ -99,7 +101,7 @@ export function HoldingRow({
   return (
     <div className="flex w-full flex-col gap-1 py-2.5">
       <div className="flex min-h-[40px] w-full items-center gap-2">
-        <Avatar ticker={ticker} />
+        <Avatar ticker={ticker} companyName={name} imageUrl={imageUrl} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             {onTickerClick ? (
@@ -144,6 +146,7 @@ export function HoldingRowExpandable({
   expanded = false,
   onToggle,
   onTickerClick,
+  imageUrl,
   lots = [],
   afterHoursPrice,
   afterHoursChange,
@@ -164,6 +167,7 @@ export function HoldingRowExpandable({
   expanded?: boolean;
   onToggle?: () => void;
   onTickerClick?: () => void;
+  imageUrl?: string | null;
   lots?: HoldingLot[];
   afterHoursPrice?: string;
   afterHoursChange?: string;
@@ -181,7 +185,7 @@ export function HoldingRowExpandable({
         >
           {expanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
         </button>
-        <Avatar ticker={ticker} />
+        <Avatar ticker={ticker} companyName={name} imageUrl={imageUrl} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             {onTickerClick ? (
@@ -260,6 +264,7 @@ export function HoldingRowSimple({
   expanded = false,
   onToggle,
   onNameClick,
+  imageUrl,
   lots = [],
   lotsSlot,
   afterHoursPrice,
@@ -280,6 +285,7 @@ export function HoldingRowSimple({
   expanded?: boolean;
   onToggle?: () => void;
   onNameClick?: () => void;
+  imageUrl?: string | null;
   lots?: HoldingLot[];
   /** Lazy-loaded lots panel (preferred over static `lots`). */
   lotsSlot?: ReactNode;
@@ -316,7 +322,7 @@ export function HoldingRowSimple({
         ) : (
           <span className="inline-block size-4 shrink-0" aria-hidden />
         )}
-        <Avatar ticker={ticker} />
+        <Avatar ticker={ticker} companyName={name} imageUrl={imageUrl} />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex items-center gap-1.5">
             {onNameClick ? (
