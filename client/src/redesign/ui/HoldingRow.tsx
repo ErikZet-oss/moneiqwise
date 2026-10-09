@@ -5,6 +5,17 @@ import { Avatar } from "./Avatar";
 import { Badge, type BadgeTone } from "./Badge";
 import { Delta, type DeltaTrend } from "./Delta";
 
+/** Figma Body/Strong — name / ticker (13/18, 600). Explicit px so phone font scaling cannot rem-inflate. */
+const typeName = "text-[13px] font-semibold leading-[18px]";
+/** Figma Data/Default — position value (13/18, 600). */
+const typeValue = "text-[13px] font-semibold leading-[18px] tabular-nums";
+/** Figma Body/Small — secondary labels (11/14, 400). */
+const typeMeta = "text-[11px] font-normal leading-[14px]";
+/** Figma Data/Small — P/L, delta (11/14, 500). */
+const typeDataSm = "text-[11px] font-medium leading-[14px] tabular-nums";
+/** Figma Data/Micro — lot line, prices (10/12, 500). */
+const typeMicro = "text-[10px] font-medium leading-[12px] tabular-nums";
+
 export function LotRow({
   label = "Nákup",
   tone = "Profit",
@@ -29,9 +40,9 @@ export function LotRow({
   return (
     <div className="flex min-h-[32px] w-full items-center gap-1.5 py-1.5">
       <Badge label={label} tone={tone} />
-      <p className="rd-type-data-sm min-w-0 flex-1 text-[var(--rd-text-secondary)]">{date}</p>
-      <p className="rd-type-data-sm shrink-0 text-[var(--rd-text-primary)]">{lot}</p>
-      <p className={cn("rd-type-data-sm shrink-0 text-right", returnClass)}>{returnLabel}</p>
+      <p className={cn(typeDataSm, "min-w-0 flex-1 text-[var(--rd-text-secondary)]")}>{date}</p>
+      <p className={cn(typeDataSm, "shrink-0 text-[var(--rd-text-primary)]")}>{lot}</p>
+      <p className={cn(typeDataSm, "shrink-0 text-right", returnClass)}>{returnLabel}</p>
     </div>
   );
 }
@@ -68,9 +79,9 @@ function AfterHoursLine({
   return (
     <div className={cn("flex items-center gap-1", className)}>
       <Moon className="size-3 shrink-0 text-[var(--rd-warning)]" aria-hidden />
-      {showLabel ? <span className="rd-type-body-sm text-[var(--rd-text-tertiary)]">Mimo trhu</span> : null}
-      {price ? <span className="rd-type-data-micro text-[var(--rd-text-primary)]">{price}</span> : null}
-      {change ? <span className={cn("rd-type-data-micro", changeClass)}>{change}</span> : null}
+      {showLabel ? <span className={cn(typeMeta, "text-[var(--rd-text-tertiary)]")}>Mimo trhu</span> : null}
+      {price ? <span className={cn(typeMicro, "text-[var(--rd-text-primary)]")}>{price}</span> : null}
+      {change ? <span className={cn(typeMicro, changeClass)}>{change}</span> : null}
     </div>
   );
 }
@@ -78,15 +89,13 @@ function AfterHoursLine({
 function ExpandChevron({
   expanded,
   onToggle,
-  size = "md",
 }: {
   expanded: boolean;
   onToggle?: () => void;
-  size?: "sm" | "md";
 }) {
   const icon = expanded ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />;
   if (!onToggle) {
-    return <span className={cn("inline-flex shrink-0 items-center justify-center", size === "sm" ? "size-4" : "size-4")} aria-hidden />;
+    return <span className="inline-flex size-4 shrink-0 items-center justify-center" aria-hidden />;
   }
   return (
     <button
@@ -127,24 +136,24 @@ export function HoldingRow({
   afterHoursTrend?: DeltaTrend;
 }) {
   return (
-    <div className="flex w-full flex-col gap-1 py-2">
+    <div className="flex w-full flex-col gap-1.5 py-2">
       <div className="flex min-h-[40px] w-full items-center gap-1.5">
         <Avatar ticker={ticker} companyName={name} imageUrl={imageUrl} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             {onTickerClick ? (
-              <button type="button" onClick={onTickerClick} className="rd-type-data text-[var(--rd-text-primary)]">
+              <button type="button" onClick={onTickerClick} className={cn(typeName, "text-[var(--rd-text-primary)]")}>
                 {ticker}
               </button>
             ) : (
-              <p className="rd-type-data text-[var(--rd-text-primary)]">{ticker}</p>
+              <p className={cn(typeName, "text-[var(--rd-text-primary)]")}>{ticker}</p>
             )}
-            <p className="rd-type-body-sm text-[var(--rd-text-tertiary)]">{qty}</p>
+            <p className={cn(typeMeta, "text-[var(--rd-text-tertiary)]")}>{qty}</p>
           </div>
-          <p className="rd-type-body-sm truncate text-[var(--rd-text-secondary)]">{name}</p>
+          <p className={cn(typeMeta, "truncate text-[var(--rd-text-secondary)]")}>{name}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <p className="rd-type-data text-[var(--rd-text-primary)]">{value}</p>
+          <p className={cn(typeValue, "text-[var(--rd-text-primary)]")}>{value}</p>
           <Delta value={delta} trend={trend} />
         </div>
       </div>
@@ -210,38 +219,38 @@ export function HoldingRowExpandable({
         : "text-[var(--rd-text-secondary)]";
 
   return (
-    <div className="flex w-full flex-col gap-1.5 py-2">
+    <div className="flex w-full flex-col gap-1.5 py-2" data-testid={`row-holding-${ticker}`}>
       <div className="flex items-center gap-1.5">
         <ExpandChevron expanded={expanded} onToggle={onToggle} />
         <Avatar ticker={ticker} companyName={name} imageUrl={imageUrl} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             {onTickerClick ? (
-              <button type="button" onClick={onTickerClick} className="rd-type-data text-[var(--rd-text-primary)]">
+              <button type="button" onClick={onTickerClick} className={cn(typeName, "text-[var(--rd-text-primary)]")}>
                 {ticker}
               </button>
             ) : (
-              <p className="rd-type-data text-[var(--rd-text-primary)]">{ticker}</p>
+              <p className={cn(typeName, "text-[var(--rd-text-primary)]")}>{ticker}</p>
             )}
-            <p className="rd-type-body-sm text-[var(--rd-text-tertiary)]">{qty}</p>
+            <p className={cn(typeMeta, "text-[var(--rd-text-tertiary)]")}>{qty}</p>
           </div>
-          <p className="rd-type-body-sm truncate text-[var(--rd-text-secondary)]">{name}</p>
+          <p className={cn(typeMeta, "truncate text-[var(--rd-text-secondary)]")}>{name}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          <p className="rd-type-data text-[var(--rd-text-primary)]">{value}</p>
+          <p className={cn(typeValue, "text-[var(--rd-text-primary)]")}>{value}</p>
           <Delta value={delta} trend={trend} />
         </div>
       </div>
       <div className="flex items-center justify-between gap-1.5 pl-4">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {avg ? (
-            <span className="inline-flex items-center gap-1 rd-type-body-sm text-[var(--rd-text-tertiary)]">
-              Priem <span className="rd-type-data-micro text-[var(--rd-text-primary)]">{avg}</span>
+            <span className={cn("inline-flex items-center gap-1", typeMeta, "text-[var(--rd-text-tertiary)]")}>
+              Priem <span className={cn(typeMicro, "text-[var(--rd-text-primary)]")}>{avg}</span>
             </span>
           ) : null}
           {price ? (
-            <span className="inline-flex items-center gap-1 rd-type-body-sm text-[var(--rd-text-tertiary)]">
-              Cena <span className="rd-type-data-micro text-[var(--rd-text-primary)]">{price}</span>
+            <span className={cn("inline-flex items-center gap-1", typeMeta, "text-[var(--rd-text-tertiary)]")}>
+              Cena <span className={cn(typeMicro, "text-[var(--rd-text-primary)]")}>{price}</span>
               <AfterHoursLine
                 price={afterHoursPrice}
                 change={afterHoursChange}
@@ -251,7 +260,7 @@ export function HoldingRowExpandable({
             </span>
           ) : null}
         </div>
-        {pl ? <p className={cn("rd-type-data-sm shrink-0", plClass)}>{pl}</p> : null}
+        {pl ? <p className={cn(typeDataSm, "shrink-0", plClass)}>{pl}</p> : null}
       </div>
       {expanded ? (
         <div className="pl-1.5">
@@ -322,9 +331,9 @@ export function HoldingRowSimple({
         : "text-[var(--rd-text-secondary)]";
 
   return (
-    <div className="flex w-full flex-col gap-1.5 py-2">
+    <div className="flex w-full flex-col gap-1.5 py-2" data-testid={`row-holding-${ticker}`}>
       <div className="flex items-center gap-1.5">
-        <ExpandChevron expanded={expanded} onToggle={expandable ? onToggle : undefined} size="sm" />
+        <ExpandChevron expanded={expanded} onToggle={expandable ? onToggle : undefined} />
         <Avatar ticker={ticker} companyName={name} imageUrl={imageUrl} />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex items-center gap-1.5">
@@ -332,20 +341,20 @@ export function HoldingRowSimple({
               <button
                 type="button"
                 onClick={onNameClick}
-                className="rd-type-body-strong min-w-0 flex-1 truncate text-left text-[var(--rd-text-primary)]"
+                className={cn(typeName, "min-w-0 flex-1 truncate text-left text-[var(--rd-text-primary)]")}
               >
                 {name}
               </button>
             ) : (
-              <p className="rd-type-body-strong min-w-0 flex-1 truncate text-[var(--rd-text-primary)]">{name}</p>
+              <p className={cn(typeName, "min-w-0 flex-1 truncate text-[var(--rd-text-primary)]")}>{name}</p>
             )}
             <Badge label={assetType} className="shrink-0" />
-            <p className="rd-type-data shrink-0 text-[var(--rd-text-primary)]">{value}</p>
+            <p className={cn(typeValue, "shrink-0 text-[var(--rd-text-primary)]")}>{value}</p>
           </div>
           <div className="flex items-center gap-1">
-            <p className="rd-type-data-micro min-w-0 flex-1 truncate text-[var(--rd-text-secondary)]">{lot}</p>
-            {dayChange ? <p className={cn("rd-type-data-micro shrink-0", dayClass)}>{dayChange}</p> : null}
-            {pl ? <p className={cn("rd-type-data-micro shrink-0 text-right", plClass)}>{pl}</p> : null}
+            <p className={cn(typeMicro, "min-w-0 flex-1 truncate text-[var(--rd-text-secondary)]")}>{lot}</p>
+            {dayChange ? <p className={cn(typeMicro, "shrink-0", dayClass)}>{dayChange}</p> : null}
+            {pl ? <p className={cn(typeMicro, "shrink-0 text-right", plClass)}>{pl}</p> : null}
           </div>
         </div>
       </div>

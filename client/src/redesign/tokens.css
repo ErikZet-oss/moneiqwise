@@ -124,6 +124,12 @@
   --rd-page-gutter: 12px;
 }
 
+/* Prevent mobile browsers from inflating px type when system font size is larger. */
+html[data-mobile-ui="redesign"] {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 /* Scope color/font to redesign surfaces only — never paint classic UI via <html>. */
 [data-mobile-ui="redesign"] .rd-app-shell,
 [data-mobile-ui="redesign"] .rd-landing {
@@ -132,6 +138,8 @@
   font-size: var(--rd-text-body);
   line-height: var(--rd-leading-body);
   -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 [data-mobile-ui="redesign"] .rd-type-display-hero {

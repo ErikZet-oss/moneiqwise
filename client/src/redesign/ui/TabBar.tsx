@@ -48,8 +48,8 @@ export function TabBar() {
             />
             <span
               className={cn(
-                "rd-type-overline normal-case tracking-normal",
-                isActive ? "font-medium text-[var(--rd-text-primary)]" : "font-medium text-[var(--rd-text-tertiary)]",
+                "text-[11px] font-medium leading-[14px] tracking-normal",
+                isActive ? "text-[var(--rd-text-primary)]" : "text-[var(--rd-text-tertiary)]",
               )}
             >
               {tab.label}

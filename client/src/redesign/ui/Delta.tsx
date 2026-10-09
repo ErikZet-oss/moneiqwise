@@ -20,7 +20,7 @@ export function Delta({
   return (
     <span
       className={cn(
-        "rd-type-data-sm inline-flex items-center rounded-[var(--rd-radius-xs)] px-1.5 py-0.5",
+        "inline-flex items-center rounded-[var(--rd-radius-xs)] px-1.5 py-0.5 text-[11px] font-medium leading-[14px] tabular-nums",
         trendClass[trend],
         className,
       )}
