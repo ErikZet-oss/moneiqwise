@@ -1,12 +1,18 @@
 import { useCallback, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, Moon, RefreshCw } from "lucide-react";
 import type { OptionTrade } from "@shared/schema";
 import type { HoldingWithCostCurrency } from "@shared/holdingCostCurrency";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
+import {
+  getExtendedSessionLabel,
+  getUsMarketSessionState,
+  shouldShowExtendedQuote,
+  shouldUseExtendedQuotes,
+} from "@/lib/usMarketSession";
 import { Badge, Card, EmptyState, TopBar } from "@/redesign/ui";
 import { IconButton, KvRow, PageBody, signedMoney, signedPct, toneOf } from "./mobileChrome";
 
@@ -14,8 +20,16 @@ interface StockQuote {
   ticker: string;
   price: number;
   change: number;
+  changePercent?: number;
   annualDividendPerShare?: number;
+  preMarketPrice?: number | null;
+  preMarketChange?: number | null;
+  preMarketChangePercent?: number | null;
+  marketState?: string | null;
 }
+
+type PreOpenPreview = { available: boolean; amount: number; percent: number };
+const EMPTY_PRE_OPEN: PreOpenPreview = { available: false, amount: 0, percent: 0 };
 
 interface OverviewBundle {
   byPortfolioId: Record<
@@ -100,7 +114,8 @@ export default function OverviewMobile() {
   const { data: quotes } = useQuery({
     queryKey: quotesQueryKey,
     enabled: allTickers.length > 0,
-    queryFn: () => fetchQuotes(allTickers, false),
+    queryFn: () =>
+      fetchQuotes(allTickers, shouldUseExtendedQuotes(getUsMarketSessionState())),
     staleTime: 60 * 1000,
     gcTime: 30 * 60 * 1000,
     refetchOnMount: false,
@@ -317,6 +332,72 @@ export default function OverviewMobile() {
     return weight > 0 ? acc / weight : null;
   }, [portfolios, ytdByPortfolioId, metricsById]);
 
+  const usSessionState = getUsMarketSessionState();
+  const showExtendedSession = shouldUseExtendedQuotes(usSessionState);
+  const extendedLabel = getExtendedSessionLabel(usSessionState).replace(/:$/, "");
+
+  const computePreOpenPreview = useCallback(
+    (holdings: HoldingWithCostCurrency[]): PreOpenPreview => {
+      if (!quotes || holdings.length === 0) return EMPTY_PRE_OPEN;
+
+      let totalCurrent = 0;
+      let totalPreOpen = 0;
+      let hasPreOpenData = false;
+
+      for (const holding of holdings) {
+        const quote = quotes[holding.ticker];
+        if (!quote || !(quote.price > 0)) continue;
+
+        const shares = parseFloat(holding.shares);
+        if (!Number.isFinite(shares) || shares <= 0) continue;
+
+        const tickerCurrency = getTickerCurrency(holding.ticker);
+        const regularPrice = convertPrice(quote.price, tickerCurrency);
+        const showExtended = shouldShowExtendedQuote(
+          usSessionState,
+          quote.marketState,
+          quote.preMarketChangePercent,
+        );
+        const preOpenRaw = showExtended ? quote.preMarketPrice : null;
+        const preOpenPrice =
+          typeof preOpenRaw === "number" && Number.isFinite(preOpenRaw) && preOpenRaw > 0
+            ? convertPrice(preOpenRaw, tickerCurrency)
+            : null;
+
+        totalCurrent += shares * regularPrice;
+        if (preOpenPrice != null) {
+          totalPreOpen += shares * preOpenPrice;
+          hasPreOpenData = true;
+        } else {
+          totalPreOpen += shares * regularPrice;
+        }
+      }
+
+      if (!hasPreOpenData) return EMPTY_PRE_OPEN;
+
+      const amount = totalPreOpen - totalCurrent;
+      const percent = totalCurrent > 0 ? (amount / totalCurrent) * 100 : 0;
+      return { available: true, amount, percent };
+    },
+    [quotes, convertPrice, getTickerCurrency, usSessionState],
+  );
+
+  const preOpenByPortfolioId = useMemo(() => {
+    const map = new Map<string, PreOpenPreview>();
+    if (!overview?.byPortfolioId) return map;
+    for (const p of portfolios) {
+      const holdings = overview.byPortfolioId[p.id]?.holdings ?? [];
+      map.set(p.id, computePreOpenPreview(holdings));
+    }
+    return map;
+  }, [overview, portfolios, computePreOpenPreview]);
+
+  const aggregatedPreOpen = useMemo(() => {
+    if (!overview?.byPortfolioId) return EMPTY_PRE_OPEN;
+    const allHoldings = Object.values(overview.byPortfolioId).flatMap((row) => row.holdings ?? []);
+    return computePreOpenPreview(allHoldings);
+  }, [overview, computePreOpenPreview]);
+
   const refreshAll = useCallback(async () => {
     if (allTickers.length === 0) return;
     setRefreshingId("all");
@@ -351,7 +432,38 @@ export default function OverviewMobile() {
     setLocation("/");
   };
 
-  const renderMetricBody = (metrics: Metrics) => (
+  const renderDayOrExtendedRow = (metrics: Metrics, preOpen: PreOpenPreview) => {
+    if (usSessionState === "LIVE") {
+      return (
+        <KvRow
+          label="Denná zmena"
+          value={`${mask(signedMoney(formatCurrency, metrics.dailyChange))} · ${signedPct(metrics.dailyChangePercent)}`}
+          tone={toneOf(metrics.dailyChange)}
+        />
+      );
+    }
+    if (showExtendedSession) {
+      return (
+        <KvRow
+          label={
+            <span className="inline-flex items-center gap-1">
+              <Moon className="size-2.5 shrink-0 text-[var(--rd-warning)]" aria-hidden />
+              {extendedLabel}
+            </span>
+          }
+          value={
+            preOpen.available
+              ? `${mask(signedMoney(formatCurrency, preOpen.amount))} · ${signedPct(preOpen.percent)}`
+              : "bez dát"
+          }
+          tone={preOpen.available ? toneOf(preOpen.amount) : "neutral"}
+        />
+      );
+    }
+    return <KvRow label="Denná zmena" value="Trh uzatvorený" />;
+  };
+
+  const renderMetricBody = (metrics: Metrics, preOpen: PreOpenPreview) => (
     <>
       <p className="rd-type-display-lg text-[var(--rd-text-primary)]">
         {mask(formatCurrency(metrics.totalValue))}
@@ -373,11 +485,7 @@ export default function OverviewMobile() {
         value={mask(signedMoney(formatCurrency, metrics.realizedGain))}
         tone={toneOf(metrics.realizedGain)}
       />
-      <KvRow
-        label="Denná zmena"
-        value={`${mask(signedMoney(formatCurrency, metrics.dailyChange))} · ${signedPct(metrics.dailyChangePercent)}`}
-        tone={toneOf(metrics.dailyChange)}
-      />
+      {renderDayOrExtendedRow(metrics, preOpen)}
       <KvRow
         label="Pasívny príjem"
         value={`${signedPct(metrics.passiveIncomePercent)} (${mask(formatCurrency(metrics.passiveIncome))})`}
@@ -418,7 +526,7 @@ export default function OverviewMobile() {
           <>
             <Card className="gap-1.5">
               {renderCardHeader("Všetky portfóliá", weightedYtd)}
-              {renderMetricBody(aggregated)}
+              {renderMetricBody(aggregated, aggregatedPreOpen)}
             </Card>
 
             <p className="rd-type-overline text-[var(--rd-text-tertiary)]">Portfóliá</p>
@@ -426,6 +534,7 @@ export default function OverviewMobile() {
               const metrics = metricsById.get(portfolio.id);
               const ytd = ytdByPortfolioId[portfolio.id];
               if (!metrics) return null;
+              const preOpen = preOpenByPortfolioId.get(portfolio.id) ?? EMPTY_PRE_OPEN;
               return (
                 <Card
                   key={portfolio.id}
@@ -456,7 +565,7 @@ export default function OverviewMobile() {
                       )}
                     </button>,
                   )}
-                  {renderMetricBody(metrics)}
+                  {renderMetricBody(metrics, preOpen)}
                 </Card>
               );
             })}

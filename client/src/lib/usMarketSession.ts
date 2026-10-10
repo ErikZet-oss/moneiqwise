@@ -84,3 +84,57 @@ export function getExtendedSessionLabel(usSession: UsMarketSessionState): string
       return "Pred open:";
   }
 }
+
+/** Denná zmena / mimo trhu — rovnaká logika ako klasický Watchlist. */
+export function getDisplayDayChange(
+  usSession: UsMarketSessionState,
+  quote:
+    | {
+        change?: number | null;
+        changePercent?: number | null;
+        preMarketChange?: number | null;
+        preMarketChangePercent?: number | null;
+        marketState?: string | null;
+      }
+    | null
+    | undefined,
+): {
+  change: number;
+  changePercent: number | null;
+  showMoon: boolean;
+} {
+  if (!quote) return { change: 0, changePercent: null, showMoon: false };
+  const showMoon = shouldShowExtendedQuote(
+    usSession,
+    quote.marketState,
+    quote.preMarketChangePercent,
+  );
+  if (usSession === "LIVE") {
+    return {
+      change: Number(quote.change) || 0,
+      changePercent:
+        quote.changePercent != null && Number.isFinite(quote.changePercent)
+          ? quote.changePercent
+          : null,
+      showMoon: false,
+    };
+  }
+  if (showMoon) {
+    return {
+      change: Number(quote.preMarketChange) || 0,
+      changePercent:
+        quote.preMarketChangePercent != null && Number.isFinite(quote.preMarketChangePercent)
+          ? quote.preMarketChangePercent
+          : null,
+      showMoon: true,
+    };
+  }
+  return {
+    change: Number(quote.change) || 0,
+    changePercent:
+      quote.changePercent != null && Number.isFinite(quote.changePercent)
+        ? quote.changePercent
+        : null,
+    showMoon: false,
+  };
+}

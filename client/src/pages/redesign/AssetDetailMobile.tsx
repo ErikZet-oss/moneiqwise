@@ -3,7 +3,12 @@ import { useQueries, useQuery } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import { format, parseISO, startOfDay, subMonths, subYears } from "date-fns";
 import { sk } from "date-fns/locale";
-import { ArrowLeft, Calendar, ExternalLink } from "lucide-react";
+import { ArrowLeft, Calendar, ExternalLink, Moon } from "lucide-react";
+import {
+  getDisplayDayChange,
+  getUsMarketSessionState,
+  shouldUseExtendedQuotes,
+} from "@/lib/usMarketSession";
 import {
   Area,
   ComposedChart,
@@ -55,7 +60,15 @@ type AssetDetailResponse = {
   positions: PositionRow[];
   totals: { shares: number; totalInvested: number; averageCost: number };
   dividends: { totalNet: number; paymentCount: number };
-  quote: { price: number; change: number; changePercent: number } | null;
+  quote: {
+    price: number;
+    change: number;
+    changePercent: number;
+    preMarketPrice?: number | null;
+    preMarketChange?: number | null;
+    preMarketChangePercent?: number | null;
+    marketState?: string | null;
+  } | null;
   nextEarnings: { date: string } | null;
   prices: Record<string, number>;
   marketTransactions: Transaction[];
@@ -342,6 +355,8 @@ export default function AssetDetailMobile() {
   }
 
   const quote = data.quote;
+  const usSessionState = getUsMarketSessionState();
+  const dayChange = getDisplayDayChange(usSessionState, quote);
   const costCurrency = asQuoteCurrency(data.costCurrency);
   const invested = convertPrice(data.totals.totalInvested, costCurrency);
   const value =
@@ -440,16 +455,38 @@ export default function AssetDetailMobile() {
         </div>
 
         <Card className="gap-2">
-          <p className="rd-type-display-lg">{quote ? mask(priceLabel(quote.price)) : "—"}</p>
+          <p className="rd-type-display-lg">
+            {quote
+              ? mask(
+                  priceLabel(
+                    dayChange.showMoon &&
+                      quote.preMarketPrice != null &&
+                      Number.isFinite(quote.preMarketPrice) &&
+                      quote.preMarketPrice > 0
+                      ? quote.preMarketPrice
+                      : quote.price,
+                  ),
+                )
+              : "—"}
+          </p>
           {quote ? (
-            <p
-              className={cn(
-                "rd-type-data-sm",
-                quote.change >= 0 ? "text-[var(--rd-profit)]" : "text-[var(--rd-loss)]",
-              )}
-            >
-              {signedMoney((n) => priceLabel(n), quote.change)} {signedPct(quote.changePercent)} dnes
-            </p>
+            usSessionState === "LIVE" || dayChange.showMoon || !shouldUseExtendedQuotes(usSessionState) ? (
+              <p
+                className={cn(
+                  "inline-flex items-center gap-1 rd-type-data-sm",
+                  dayChange.change >= 0 ? "text-[var(--rd-profit)]" : "text-[var(--rd-loss)]",
+                )}
+              >
+                {dayChange.showMoon ? (
+                  <Moon className="size-3 shrink-0 text-[var(--rd-warning)]" aria-hidden />
+                ) : null}
+                {signedMoney((n) => priceLabel(n), dayChange.change)}{" "}
+                {dayChange.changePercent != null ? signedPct(dayChange.changePercent) : null}{" "}
+                {dayChange.showMoon ? "mimo trhu" : "dnes"}
+              </p>
+            ) : (
+              <p className="rd-type-data-sm text-[var(--rd-text-tertiary)]">Trh uzatvorený</p>
+            )
           ) : null}
           <div className="grid grid-cols-2 gap-2">
             <div className="rounded-[var(--rd-radius-md)] border border-[var(--rd-border-subtle)] p-2 [background-image:var(--rd-bg-surface-gradient)]">

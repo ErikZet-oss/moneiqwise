@@ -25,7 +25,11 @@ import { LayoutList, Loader2, Plus, Rows2, Search, Star, X } from "lucide-react"
 import { useCurrency } from "@/hooks/useCurrency";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { getUsMarketSessionState, shouldShowExtendedQuote } from "@/lib/usMarketSession";
+import {
+  getUsMarketSessionState,
+  shouldShowExtendedQuote,
+  shouldUseExtendedQuotes,
+} from "@/lib/usMarketSession";
 import { cn } from "@/lib/utils";
 import {
   Avatar,
@@ -306,7 +310,10 @@ export default function WatchlistMobile() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ tickers, refresh: false }),
+        body: JSON.stringify({
+          tickers,
+          refresh: shouldUseExtendedQuotes(getUsMarketSessionState()),
+        }),
       });
       if (!res.ok) throw new Error("Failed to fetch quotes");
       const data = await res.json();
@@ -655,6 +662,7 @@ export default function WatchlistMobile() {
                               : "—"
                           }
                           trend={quote ? trendFromNumber(changeValue) : "Flat"}
+                          showMoon={showOffHours}
                           low={quote ? formatWatchlistCurrency(quote.low52, item.ticker) : "—"}
                           high={quote ? formatWatchlistCurrency(quote.high52, item.ticker) : "—"}
                           position={quote ? rangePosition(quote.price, quote.low52, quote.high52) : 0}

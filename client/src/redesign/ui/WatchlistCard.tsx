@@ -10,6 +10,7 @@ export function WatchlistCard({
   price,
   delta,
   trend = "Flat",
+  showMoon = false,
   low,
   high,
   position = 0,
@@ -26,6 +27,8 @@ export function WatchlistCard({
   price: string;
   delta: string;
   trend?: DeltaTrend;
+  /** Mimo RTH — mesiačik pri dennej / off-hours zmene. */
+  showMoon?: boolean;
   low?: string;
   high?: string;
   /** 0–100 position inside the 52-week range. */
@@ -94,13 +97,13 @@ export function WatchlistCard({
         </div>
         {compact ? (
           <div className="flex shrink-0 items-center gap-1.5">
-            <Delta value={delta} trend={trend} />
+            <Delta value={delta} trend={trend} showMoon={showMoon} />
             <p className="rd-type-data text-[var(--rd-text-primary)]">{price}</p>
           </div>
         ) : (
           <div className="flex shrink-0 flex-col items-end gap-1">
             <p className="rd-type-data-lg text-[var(--rd-text-primary)]">{price}</p>
-            <Delta value={delta} trend={trend} />
+            <Delta value={delta} trend={trend} showMoon={showMoon} />
           </div>
         )}
       </div>

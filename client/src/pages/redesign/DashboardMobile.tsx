@@ -191,12 +191,14 @@ function MetricRow({
   amountTone = "neutral",
   pct,
   pctTrend,
+  showMoon = false,
 }: {
   label: ReactNode;
   amount?: string;
   amountTone?: "neutral" | "up" | "down";
   pct?: string;
   pctTrend?: DeltaTrend;
+  showMoon?: boolean;
 }) {
   const amountClass =
     amountTone === "up"
@@ -208,7 +210,7 @@ function MetricRow({
     <div className="flex items-center gap-1.5">
       <div className="rd-type-body-sm min-w-0 flex-1 truncate text-[var(--rd-text-secondary)]">{label}</div>
       {amount ? <p className={cn("rd-type-data-sm shrink-0", amountClass)}>{amount}</p> : null}
-      {pct ? <Delta value={pct} trend={pctTrend ?? "Flat"} /> : null}
+      {pct ? <Delta value={pct} trend={pctTrend ?? "Flat"} showMoon={showMoon} /> : null}
     </div>
   );
 }
@@ -1038,20 +1040,15 @@ export default function DashboardMobile() {
                 pct={signedPct(metrics.totalProfitPercent)}
                 pctTrend={trendFromNumber(metrics.totalProfitPercent)}
               />
-              <MetricRow
-                label="Denná zmena"
-                amount={mask(signedMoney(formatCurrency, metrics.dailyChange))}
-                amountTone={toneOf(metrics.dailyChange)}
-                pct={signedPct(metrics.dailyChangePercent)}
-                pctTrend={trendFromNumber(metrics.dailyChangePercent)}
-              />
-              <MetricRow
-                label="Nerealizovaný zisk"
-                amount={mask(signedMoney(formatCurrency, metrics.unrealized))}
-                amountTone={toneOf(metrics.unrealized)}
-              />
-              <MetricRow label="Hotovosť" amount={mask(formatCurrency(metrics.cashValue))} />
-              {showExtendedRow ? (
+              {usSessionState === "LIVE" ? (
+                <MetricRow
+                  label="Denná zmena"
+                  amount={mask(signedMoney(formatCurrency, metrics.dailyChange))}
+                  amountTone={toneOf(metrics.dailyChange)}
+                  pct={signedPct(metrics.dailyChangePercent)}
+                  pctTrend={trendFromNumber(metrics.dailyChangePercent)}
+                />
+              ) : showExtendedRow ? (
                 <MetricRow
                   label={
                     <span className="inline-flex items-center gap-1">
@@ -1070,7 +1067,15 @@ export default function DashboardMobile() {
                     preOpenPreview.available ? trendFromNumber(preOpenPreview.percent) : undefined
                   }
                 />
-              ) : null}
+              ) : (
+                <MetricRow label="Denná zmena" amount="Trh uzatvorený" amountTone="neutral" />
+              )}
+              <MetricRow
+                label="Nerealizovaný zisk"
+                amount={mask(signedMoney(formatCurrency, metrics.unrealized))}
+                amountTone={toneOf(metrics.unrealized)}
+              />
+              <MetricRow label="Hotovosť" amount={mask(formatCurrency(metrics.cashValue))} />
             </div>
 
             {isVisible("chart") || editing ? (
