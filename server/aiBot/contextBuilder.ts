@@ -152,14 +152,16 @@ export async function buildAiBotContext(
   slotLabel: string,
 ): Promise<AiBotRunContext> {
   const sourcesUsed = ["yahoo_finance", "moneiqwise_holdings"];
-  const pf =
-    portfolioId && portfolioId !== "all"
-      ? await storage.getPortfolioById(portfolioId, userId)
-      : null;
-  const portfolioLabel =
-    portfolioId === "all" || !portfolioId
-      ? "Všetky portfóliá"
-      : pf?.name || portfolioId;
+  let portfolioLabel = "Všetky portfóliá";
+  if (portfolioId && portfolioId !== "all") {
+    if (portfolioId.startsWith("cat:")) {
+      const cat = await storage.getPortfolioCategoryById(portfolioId.slice(4), userId);
+      portfolioLabel = cat?.name || "Kategória";
+    } else {
+      const pf = await storage.getPortfolioById(portfolioId, userId);
+      portfolioLabel = pf?.name || portfolioId;
+    }
+  }
 
   const holdingsRaw = await storage.getHoldingsByUser(
     userId,
