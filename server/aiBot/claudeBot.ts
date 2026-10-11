@@ -425,7 +425,19 @@ function sanitizeContext(ctx: AiBotRunContext) {
   };
 }
 
-function buildPrompt(userPayload: unknown, compact: boolean): string {
+function macroPromptBlock(payload: { macroAudit?: AiBotMacroContext | null }): string {
+  if (!payload.macroAudit) return "";
+  return `
+MACRO AUDIT (pass 1 — povinné rešpektovať pri action):
+- healthScore ${payload.macroAudit.healthScore}/100 (${payload.macroAudit.healthLabel})
+- ${payload.macroAudit.summaryOneLiner}
+- Nízke health / vysoká sektorová koncentrácia / negatívny Fed impact → skôr TRIM/HOLD než agresívny BUY do rovnakého rizika.
+- Odporúčania Macro ber ako rámec rizík; konkrétne action stále viaž na ticker (technika + novinky).
+`;
+}
+
+function buildPrompt(userPayload: { macroAudit?: AiBotMacroContext | null }, compact: boolean): string {
+  const macroHint = macroPromptBlock(userPayload);
   if (compact) {
     return `Return ONLY valid minified JSON. No markdown.
 Keys IN THIS ORDER (portfolioAudit EARLY — never omit):
@@ -440,6 +452,7 @@ MUST include EVERY holdings[] ticker in portfolioAudit.
 rationale = 3-5 clear Slovak sentences. thesis = 2-4 Slovak sentences. Never "Bez tézy".
 Cite recentNews. Use SMA50/SMA200 and 52w high/low from holdings when writing rationale.
 action=BUY|SELL|TRIM|HOLD.
+${macroHint}
 Context:
 ${JSON.stringify(userPayload)}`;
   }
@@ -449,7 +462,7 @@ Píš po SLOVENSKY, kultivovane a zrozumiteľne — ako v kvalitnom investičnom
 
 Musíš spraviť HĹBKOVÝ rozbor podľa aktuálnych noviniek v poli recentNews.
 Nestačí všeobecné frázovanie — viaž rozhodnutia na konkrétne titulky (Fed/inflácia, Trump/cla, geopolitika, sektory, firemné správy).
-
+${macroHint}
 KRITICKÉ: portfolioAudit je jadro briefu. Musí obsahovať KAŽDÚ pozíciu z holdings[].
 Ak by odpoveď bola dlhá, radšej skráť newsDigest/marketNotes — NIKDY nevynechaj portfolioAudit.
 
@@ -478,18 +491,48 @@ Kontext:
 ${JSON.stringify(userPayload)}`;
 }
 
-function buildAuditOnlyPrompt(userPayload: unknown): string {
+function buildAuditOnlyPrompt(userPayload: { macroAudit?: AiBotMacroContext | null }): string {
   return `Si senior investičný analytik (slovensky, kultivovane).
 Doplň LEN portfolioAudit pre KAŽDÚ pozíciu z holdings.
 Return ONLY JSON: {"portfolioAudit":[{ticker,companyName,action,weightPct,horizon,conviction,rationale,risks,invalidation,newsDrivers[]}]}
 action=BUY|SELL|TRIM|HOLD. rationale = 4–6 viet (váha, P/L, SMA50/SMA200, 52w high/low a % od nich, novinky, odporúčanie).
 Cite recentNews where relevant. Never omit a holding ticker.
+${macroPromptBlock(userPayload)}
 Context:
 ${JSON.stringify(userPayload)}`;
 }
 
-async function callClaude(prompt: string, maxTokens: number): Promise<string> {
-  if (!isClaudeFeatureEnabled("ai-bot")) {
+export type AiBotMacroContext = {
+  healthScore: number;
+  healthLabel: string;
+  summaryOneLiner: string;
+  scoreBreakdown?: {
+    sectorConcentration?: { score: number; detail: string };
+    fedSensitivity?: { score: number; detail: string };
+    newsSentiment?: { score: number; detail: string };
+    inflationResilience?: { score: number; detail: string };
+  };
+  recommendations?: Array<{ title: string; detail: string; priority: string }>;
+  macroStress?: {
+    fedRates?: { impact: string; detail: string };
+    inflation?: { impact: string; detail: string };
+    sectorConcentration?: { level: string; detail: string };
+  };
+};
+
+export type RunClaudeAiBotOptions = {
+  /** Výstup Macro Audit passu — Bot má rešpektovať zdravie / riziká. */
+  macroContext?: AiBotMacroContext | null;
+  /** Volanie z Macro Audit runnera — povolené aj pri CLAUDE_MACRO_AUDIT_ONLY. */
+  allowUnderMacroGate?: boolean;
+};
+
+async function callClaude(
+  prompt: string,
+  maxTokens: number,
+  opts?: { allowUnderMacroGate?: boolean },
+): Promise<string> {
+  if (!opts?.allowUnderMacroGate && !isClaudeFeatureEnabled("ai-bot")) {
     throw new Error(CLAUDE_DISABLED_MESSAGE);
   }
   const client = getAnthropicClient();
@@ -515,14 +558,19 @@ function auditCoverageOk(
 
 export async function runClaudeAiBotAnalysis(
   ctx: AiBotRunContext,
+  opts?: RunClaudeAiBotOptions,
 ): Promise<AiBotAnalysisPayload> {
-  const userPayload = sanitizeContext(ctx);
+  const userPayload = {
+    ...sanitizeContext(ctx),
+    macroAudit: opts?.macroContext ?? null,
+  };
   const holdingsCount = userPayload.holdings.length;
+  const gate = { allowUnderMacroGate: opts?.allowUnderMacroGate === true };
   let lastText = "";
 
   try {
     // Viac tokenov — plnší audit pozícií (hlavne „Všetky portfóliá“).
-    lastText = await callClaude(buildPrompt(userPayload, false), 12288);
+    lastText = await callClaude(buildPrompt(userPayload, false), 12288, gate);
     let analysis: AiBotAnalysisPayload | null = null;
     try {
       analysis = normalizeAnalysis(extractJsonObject(lastText), ctx.sourcesUsed);
@@ -531,7 +579,7 @@ export async function runClaudeAiBotAnalysis(
     }
 
     if (!analysis) {
-      lastText = await callClaude(buildPrompt(userPayload, true), 8192);
+      lastText = await callClaude(buildPrompt(userPayload, true), 8192, gate);
       try {
         analysis = normalizeAnalysis(extractJsonObject(lastText), ctx.sourcesUsed);
       } catch {
@@ -553,7 +601,7 @@ export async function runClaudeAiBotAnalysis(
         `[ai-bot] thin portfolioAudit (${analysis.portfolioAudit.length}/${holdingsCount}), running audit-only pass`,
       );
       try {
-        const auditText = await callClaude(buildAuditOnlyPrompt(userPayload), 8192);
+        const auditText = await callClaude(buildAuditOnlyPrompt(userPayload), 8192, gate);
         const auditRaw = extractJsonObject(auditText) as any;
         const patched = normalizeAnalysis(
           { ...analysis, portfolioAudit: auditRaw?.portfolioAudit ?? auditRaw },

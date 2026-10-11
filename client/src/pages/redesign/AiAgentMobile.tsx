@@ -1,10 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import AiAlerts from "@/pages/AiAlerts";
-import AiBot from "@/pages/AiBot";
 import AiPaperBot from "@/pages/AiPaperBot";
 import AiSkener from "@/pages/AiSkener";
-import { Chip, TopBar } from "@/redesign/ui";
+import { Button, Card, Chip, TopBar } from "@/redesign/ui";
 
 type TabId = "bot" | "paper" | "alerts" | "skener";
 
@@ -45,10 +44,10 @@ export default function AiAgentMobile() {
 
   return (
     <div className="bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
-      <TopBar overline="Bot · Paper · Alerty · Skener" title="AI Agent" />
+      <TopBar overline="Paper · Alerty · Skener" title="AI Agent" />
       <div className="flex flex-col gap-4 px-4 pb-8 pt-2">
         <p className="text-xs leading-4 text-[var(--rd-text-secondary)]">
-          Audit bot, Paper trading, Alerty a Skener tipov z trhu.
+          Paper trading, Alerty a Skener. Makro + akcie sú v AI Macro Audit.
         </p>
         <div className="flex gap-1 overflow-x-auto" role="tablist" aria-label="AI Agent sekcie">
           {TABS.map((item) => (
@@ -70,7 +69,20 @@ export default function AiAgentMobile() {
         </div>
         <div className="min-w-0">
           {tab === "bot" ? (
-            <AiBot embedded />
+            <Card className="gap-2 p-3" data-testid="card-ai-bot-moved">
+              <p className="rd-type-h3 text-[var(--rd-text-primary)]">AI Bot → Macro Audit</p>
+              <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">
+                Jedno Spustiť v AI Macro Audit dá health skóre, makro riziká aj akcie
+                BUY/SELL/TRIM/HOLD na pozície.
+              </p>
+              <Button
+                className="w-full"
+                onClick={() => setLocation("/ai-macro-audit")}
+                data-testid="button-goto-ai-macro-audit"
+              >
+                Otvoriť AI Macro Audit
+              </Button>
+            </Card>
           ) : tab === "paper" ? (
             <AiPaperBot embedded />
           ) : tab === "alerts" ? (

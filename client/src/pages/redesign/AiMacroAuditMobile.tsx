@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { sk } from "date-fns/locale";
 import { ChevronDown, ExternalLink, Lightbulb, Newspaper, ShieldAlert, Sparkles, Target } from "lucide-react";
+import { AiMacroActionBriefSection } from "@/components/AiMacroActionBrief";
 import { HealthScoreBar, scoreToBarColor } from "@/components/AiMacroScoreGauge";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useToast } from "@/hooks/use-toast";
@@ -90,10 +91,14 @@ export default function AiMacroAuditMobile() {
     onSuccess: (payload) => {
       queryClient.setQueryData(["/api/ai-auditor/latest", portfolioId], payload);
       void queryClient.invalidateQueries({ queryKey: ["/api/ai-auditor/latest", portfolioId] });
-      const analysis = ensureAnalysisShape(payload.run?.analysis ?? null);
+      const a = ensureAnalysisShape(payload.run?.analysis ?? null);
+      const actions = a?.actionBrief?.portfolioAudit?.length ?? 0;
       toast({
         title: "Audit hotový",
-        description: `Skóre ${analysis?.healthScore ?? "—"}/100`,
+        description:
+          actions > 0
+            ? `Skóre ${a?.healthScore ?? "—"}/100 · ${actions} akcií`
+            : `Skóre ${a?.healthScore ?? "—"}/100`,
       });
     },
     onError: (err: Error) => {
@@ -169,8 +174,8 @@ export default function AiMacroAuditMobile() {
             <Badge label="AI" tone="AI" />
           </div>
           <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">
-            Analýza voči Fedu, inflácii, sektorovej koncentrácii a aktuálnym správam. Manuálne
-            spustenie, max. 3× denne na portfólio.
+            Makro zdravie (Fed, inflácia, koncentrácia, správy) a akcie BUY/SELL/TRIM/HOLD na
+            pozície. Manuálne, max. 3× denne na portfólio.
           </p>
           <Button
             className="w-full"
@@ -178,7 +183,7 @@ export default function AiMacroAuditMobile() {
             onClick={() => runMutation.mutate()}
             data-testid="button-ai-macro-audit-run"
           >
-            {runMutation.isPending ? "Beží…" : "Spustiť analýzu"}
+            {runMutation.isPending ? "Makro + akcie…" : "Spustiť analýzu"}
           </Button>
           <p className="rd-type-overline text-[var(--rd-text-tertiary)]">
             Dnes {usage ? `${usage.used}/${usage.limit}` : "—"} · {pfName}
@@ -190,7 +195,7 @@ export default function AiMacroAuditMobile() {
         ) : !analysis ? (
           <EmptyState
             title="Zatiaľ žiadny audit"
-            body={`Spusti prvú analýzu pre ${pfName}. Claude vyhodnotí health score, makro riziká, sentiment správ a konkrétne tipy.`}
+            body={`Spusti prvú analýzu pre ${pfName}. Claude vyhodnotí health score, makro riziká, správy a akcie na pozície.`}
           />
         ) : (
           <>
@@ -413,6 +418,11 @@ export default function AiMacroAuditMobile() {
                 </div>
               )}
             </Card>
+
+            <AiMacroActionBriefSection
+              brief={analysis.actionBrief}
+              error={analysis.actionBriefError}
+            />
           </>
         )}
       </PageBody>

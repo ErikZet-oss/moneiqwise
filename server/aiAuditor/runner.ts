@@ -1,4 +1,5 @@
 import { buildAiBotContext } from "../aiBot/contextBuilder";
+import { runClaudeAiBotAnalysis } from "../aiBot/claudeBot";
 import { storage } from "../storage";
 import { runClaudeAiAuditorAnalysis, AI_AUDITOR_MODEL } from "./claudeAuditor";
 import {
@@ -6,7 +7,12 @@ import {
   insertAiAuditorRun,
   tryConsumeAiAuditorQuota,
 } from "./store";
-import type { AiAuditorRun, AiAuditorUsage } from "./types";
+import type {
+  AiAuditorActionBrief,
+  AiAuditorAnalysis,
+  AiAuditorRun,
+  AiAuditorUsage,
+} from "./types";
 
 export async function resolveAuditorPortfolioId(
   userId: string,
@@ -16,6 +22,68 @@ export async function resolveAuditorPortfolioId(
   if (portfolioId === "all") return "all";
   const pf = await storage.getPortfolioById(portfolioId, userId);
   return pf ? portfolioId : "all";
+}
+
+function emptyAnalysis(sourcesUsed: string[]): AiAuditorAnalysis {
+  return {
+    healthScore: 0,
+    healthLabel: "Bez pozícií",
+    summaryOneLiner:
+      "V zvolenom portfóliu nie sú žiadne pozície na audit. Pridaj holdingy alebo vyber iné portfólio.",
+    scoreBreakdown: {
+      sectorConcentration: { score: 50, detail: "Portfólio je prázdne." },
+      fedSensitivity: { score: 50, detail: "Bez holdingov." },
+      newsSentiment: { score: 50, detail: "Bez holdingov." },
+      inflationResilience: { score: 50, detail: "Bez holdingov." },
+    },
+    macroStress: {
+      fedRates: {
+        impact: "neutral",
+        detail: "Bez holdingov nie je možné vyhodnotiť vplyv sadzieb.",
+        deepDive: "Bez holdingov nie je možné vyhodnotiť vplyv sadzieb.",
+        mitigation: "Pridaj pozície a spusti audit znova.",
+      },
+      inflation: {
+        impact: "neutral",
+        detail: "Bez holdingov nie je možné vyhodnotiť inflačný vplyv.",
+        deepDive: "Bez holdingov nie je možné vyhodnotiť inflačný vplyv.",
+        mitigation: "Pridaj pozície a spusti audit znova.",
+      },
+      sectorConcentration: {
+        level: "low",
+        detail: "Portfólio je prázdne.",
+        deepDive: "Portfólio je prázdne.",
+        mitigation: "Pridaj transakcie alebo vyber iné portfólio.",
+        topSectors: [],
+      },
+    },
+    newsSentiment: [],
+    recommendations: [
+      {
+        title: "Doplň pozície",
+        detail: "Pridaj transakcie alebo vyber iné portfólio a spusti audit znova.",
+        priority: "high",
+      },
+    ],
+    actionBrief: null,
+    actionBriefError: null,
+    model: AI_AUDITOR_MODEL,
+    sourcesUsed,
+  };
+}
+
+function toActionBrief(payload: Awaited<ReturnType<typeof runClaudeAiBotAnalysis>>): AiAuditorActionBrief {
+  return {
+    summary: payload.summary,
+    marketOutlook: payload.marketOutlook,
+    sectorTrends: payload.sectorTrends,
+    newsDigest: payload.newsDigest,
+    portfolioAudit: payload.portfolioAudit,
+    newOpportunities: payload.newOpportunities,
+    marketNotes: payload.marketNotes,
+    model: payload.model,
+    sourcesUsed: payload.sourcesUsed,
+  };
 }
 
 export async function runAiAuditorForUser(input: {
@@ -41,41 +109,59 @@ export async function runAiAuditorForUser(input: {
     "Manuálny AI Macro Audit",
   );
 
-  let analysis;
+  let analysis: AiAuditorAnalysis;
   if (ctx.holdings.length === 0) {
-    analysis = {
-      healthScore: 0,
-      healthLabel: "Bez pozícií",
-      summaryOneLiner:
-        "V zvolenom portfóliu nie sú žiadne pozície na audit. Pridaj holdingy alebo vyber iné portfólio.",
-      macroStress: {
-        fedRates: {
-          impact: "neutral" as const,
-          detail: "Bez holdingov nie je možné vyhodnotiť vplyv sadzieb.",
-        },
-        inflation: {
-          impact: "neutral" as const,
-          detail: "Bez holdingov nie je možné vyhodnotiť inflačný vplyv.",
-        },
-        sectorConcentration: {
-          level: "low" as const,
-          detail: "Portfólio je prázdne.",
-          topSectors: [],
-        },
-      },
-      newsSentiment: [],
-      recommendations: [
-        {
-          title: "Doplň pozície",
-          detail: "Pridaj transakcie alebo vyber iné portfólio a spusti audit znova.",
-          priority: "high" as const,
-        },
-      ],
-      model: AI_AUDITOR_MODEL,
-      sourcesUsed: ctx.sourcesUsed,
-    };
+    analysis = emptyAnalysis(ctx.sourcesUsed);
   } else {
+    // Pass 1 — makro / health
     analysis = await runClaudeAiAuditorAnalysis(ctx);
+
+    // Pass 2 — akcie (AI Bot) so skóre Macro v kontexte
+    try {
+      const botPayload = await runClaudeAiBotAnalysis(ctx, {
+        allowUnderMacroGate: true,
+        macroContext: {
+          healthScore: analysis.healthScore,
+          healthLabel: analysis.healthLabel,
+          summaryOneLiner: analysis.summaryOneLiner,
+          scoreBreakdown: {
+            sectorConcentration: analysis.scoreBreakdown.sectorConcentration,
+            fedSensitivity: analysis.scoreBreakdown.fedSensitivity,
+            newsSentiment: analysis.scoreBreakdown.newsSentiment,
+            inflationResilience: analysis.scoreBreakdown.inflationResilience,
+          },
+          recommendations: analysis.recommendations.slice(0, 4),
+          macroStress: {
+            fedRates: {
+              impact: analysis.macroStress.fedRates.impact,
+              detail: analysis.macroStress.fedRates.detail,
+            },
+            inflation: {
+              impact: analysis.macroStress.inflation.impact,
+              detail: analysis.macroStress.inflation.detail,
+            },
+            sectorConcentration: {
+              level: analysis.macroStress.sectorConcentration.level,
+              detail: analysis.macroStress.sectorConcentration.detail,
+            },
+          },
+        },
+      });
+      analysis = {
+        ...analysis,
+        actionBrief: toActionBrief(botPayload),
+        actionBriefError: null,
+      };
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "Akcie na pozíciách sa nepodarilo doplniť.";
+      console.warn("[ai-auditor] action brief (pass 2) failed:", msg);
+      analysis = {
+        ...analysis,
+        actionBrief: null,
+        actionBriefError: msg,
+      };
+    }
   }
 
   const run = await insertAiAuditorRun({
@@ -86,7 +172,7 @@ export async function runAiAuditorForUser(input: {
     model: analysis.model,
   });
 
-  // Consume quota only after a successful saved run.
+  // Consume quota only after a successful saved run (1 Spustiť = 1 kvóta).
   const usageAfter =
     (await tryConsumeAiAuditorQuota(input.userId, portfolioId)) ??
     (await getAiAuditorUsage(input.userId, portfolioId));

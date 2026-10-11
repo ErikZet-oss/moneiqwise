@@ -50,6 +50,53 @@ export type AiAuditorScoreBreakdown = {
   inflationResilience: AiAuditorScoreFactor;
 };
 
+/** Skrátený tvar AI Bot briefu — uložený spolu s Macro Audítom. */
+export type AiAuditorActionBrief = {
+  summary: string;
+  marketOutlook: {
+    sentiment: "risk_on" | "risk_off" | "mixed" | "uncertain";
+    narrative: string;
+    drivers: string[];
+  } | null;
+  sectorTrends: Array<{
+    sector: string;
+    bias: "bullish" | "bearish" | "neutral";
+    why: string;
+  }>;
+  newsDigest: Array<{
+    title: string;
+    publisher: string | null;
+    link: string | null;
+    whyItMatters: string;
+    relatedTickers: string[] | null;
+  }>;
+  portfolioAudit: Array<{
+    ticker: string;
+    companyName: string | null;
+    action: "BUY" | "SELL" | "TRIM" | "HOLD";
+    weightPct: number | null;
+    horizon: "swing" | "long" | null;
+    conviction: number | null;
+    rationale: string;
+    risks: string | null;
+    invalidation: string | null;
+    newsDrivers: string[] | null;
+  }>;
+  newOpportunities: Array<{
+    ticker: string;
+    companyName: string | null;
+    thesis: string;
+    horizon: "swing" | "long" | null;
+    risks: string | null;
+    whyNow: string | null;
+    conviction: number | null;
+    newsDrivers: string[] | null;
+  }>;
+  marketNotes: Array<{ title: string; detail: string }>;
+  model: string;
+  sourcesUsed: string[];
+};
+
 export type AiAuditorAnalysis = {
   healthScore: number;
   healthLabel: string;
@@ -62,6 +109,10 @@ export type AiAuditorAnalysis = {
   };
   newsSentiment: AiAuditorNewsItem[];
   recommendations: AiAuditorRecommendation[];
+  /** Pass 2 — akcie BUY/SELL/TRIM/HOLD (AI Bot kvalita). */
+  actionBrief: AiAuditorActionBrief | null;
+  /** Ak pass 2 zlyhal, Macro ostane; UI ukáže hlášku. */
+  actionBriefError: string | null;
   model: string;
   sourcesUsed: string[];
 };

@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Bell, Brain, Bot, ScanSearch, Wallet } from "lucide-react";
+import { ArrowRight, Bell, Brain, Bot, ScanSearch, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useMobileRedesign } from "@/hooks/useMobileUi";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import AiSkener from "@/pages/AiSkener";
-import AiBot from "@/pages/AiBot";
 import AiAlerts from "@/pages/AiAlerts";
 import AiPaperBot from "@/pages/AiPaperBot";
 import AiAgentMobile from "@/pages/redesign/AiAgentMobile";
@@ -47,7 +48,7 @@ function AiAgentClassic() {
           <h1 className="text-lg font-semibold tracking-tight md:text-xl">AI Agent</h1>
         </div>
         <p className="text-xs text-muted-foreground md:text-sm">
-          Audit bot, Paper trading, Alerty a Skener tipov z trhu.
+          Paper trading, Alerty a Skener. Makro + akcie na pozície sú v AI Macro Audit.
         </p>
       </div>
 
@@ -136,7 +137,30 @@ function AiAgentClassic() {
 
       <div className="min-w-0">
         {tab === "bot" ? (
-          <AiBot embedded />
+          <Card data-testid="card-ai-bot-moved">
+            <CardHeader className="p-4 pb-2">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <Bot className="h-4 w-4 text-primary" />
+                AI Bot je súčasťou Macro Auditu
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4 space-y-3">
+              <p className="text-xs text-muted-foreground leading-relaxed md:text-sm">
+                Jedno Spustiť v <strong>AI Macro Audit</strong> teraz dá health skóre, makro riziká
+                aj konkrétne akcie BUY/SELL/TRIM/HOLD na každú pozíciu. Samostatný AI Bot brief už
+                nie je potrebný.
+              </p>
+              <Button
+                type="button"
+                className="h-10"
+                onClick={() => setLocation("/ai-macro-audit")}
+                data-testid="button-goto-ai-macro-audit"
+              >
+                Otvoriť AI Macro Audit
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </CardContent>
+          </Card>
         ) : tab === "paper" ? (
           <AiPaperBot embedded />
         ) : tab === "alerts" ? (

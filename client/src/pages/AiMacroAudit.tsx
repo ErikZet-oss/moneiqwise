@@ -14,6 +14,7 @@ import {
   Sparkles,
   Target,
 } from "lucide-react";
+import { AiMacroActionBriefSection } from "@/components/AiMacroActionBrief";
 import { AiMacroScoreGauge } from "@/components/AiMacroScoreGauge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -145,9 +146,14 @@ function AiMacroAuditClassic() {
     },
     onSuccess: (payload) => {
       queryClient.setQueryData(["/api/ai-auditor/latest", portfolioId], payload);
+      const a = payload.run?.analysis;
+      const actions = a?.actionBrief?.portfolioAudit?.length ?? 0;
       toast({
         title: "Audit hotový",
-        description: `Skóre ${payload.run?.analysis.healthScore ?? "—"}/100`,
+        description:
+          actions > 0
+            ? `Skóre ${a?.healthScore ?? "—"}/100 · ${actions} akcií na pozíciách`
+            : `Skóre ${a?.healthScore ?? "—"}/100`,
       });
     },
     onError: (err: Error) => {
@@ -188,8 +194,9 @@ function AiMacroAuditClassic() {
           </span>
         </div>
         <p className="text-xs text-muted-foreground md:text-sm max-w-xl">
-          Hĺbková analýza portfólia voči Fedu, inflácii, sektorovej koncentrácii a
-          aktuálnym správam. Manuálne spustenie, max. 3× denne na portfólio.
+          Makro zdravie portfólia (Fed, inflácia, koncentrácia, správy) a hneď potom
+          konkrétne akcie BUY/SELL/TRIM/HOLD na každú pozíciu. Manuálne, max. 3× denne
+          na portfólio.
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -202,7 +209,7 @@ function AiMacroAuditClassic() {
             {runMutation.isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Analyzujem…
+                Makro + akcie…
               </>
             ) : (
               <>
@@ -593,6 +600,11 @@ function AiMacroAuditClassic() {
               ))}
             </CardContent>
           </Card>
+
+          <AiMacroActionBriefSection
+            brief={analysis.actionBrief}
+            error={analysis.actionBriefError}
+          />
 
           <Dialog
             open={!!newsDetail}

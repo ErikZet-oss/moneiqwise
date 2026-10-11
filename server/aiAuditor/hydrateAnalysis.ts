@@ -165,6 +165,14 @@ export function hydrateAiAuditorAnalysis(raw: any): AiAuditorAnalysis {
     },
     newsSentiment,
     recommendations: Array.isArray(raw?.recommendations) ? raw.recommendations : [],
+    actionBrief:
+      raw?.actionBrief && typeof raw.actionBrief === "object"
+        ? (raw.actionBrief as AiAuditorAnalysis["actionBrief"])
+        : null,
+    actionBriefError:
+      typeof raw?.actionBriefError === "string" && raw.actionBriefError.trim()
+        ? raw.actionBriefError.trim()
+        : null,
     model: String(raw?.model || ""),
     sourcesUsed: Array.isArray(raw?.sourcesUsed) ? raw.sourcesUsed : [],
   };

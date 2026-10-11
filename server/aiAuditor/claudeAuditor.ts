@@ -364,6 +364,8 @@ function normalizeAnalysis(rawInput: any, ctx: AiBotRunContext): AiAuditorAnalys
     },
     newsSentiment,
     recommendations,
+    actionBrief: null,
+    actionBriefError: null,
     model: AI_AUDITOR_MODEL,
     sourcesUsed: ctx.sourcesUsed,
   };

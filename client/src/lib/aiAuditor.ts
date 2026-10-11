@@ -44,6 +44,54 @@ export type AiAuditorScoreBreakdown = {
   inflationResilience: AiAuditorScoreFactor;
 };
 
+export type AiAuditorAction = "BUY" | "SELL" | "TRIM" | "HOLD";
+
+export type AiAuditorActionBrief = {
+  summary: string;
+  marketOutlook: {
+    sentiment: "risk_on" | "risk_off" | "mixed" | "uncertain";
+    narrative: string;
+    drivers: string[];
+  } | null;
+  sectorTrends: Array<{
+    sector: string;
+    bias: "bullish" | "bearish" | "neutral";
+    why: string;
+  }>;
+  newsDigest: Array<{
+    title: string;
+    publisher: string | null;
+    link: string | null;
+    whyItMatters: string;
+    relatedTickers: string[] | null;
+  }>;
+  portfolioAudit: Array<{
+    ticker: string;
+    companyName: string | null;
+    action: AiAuditorAction;
+    weightPct: number | null;
+    horizon: "swing" | "long" | null;
+    conviction: number | null;
+    rationale: string;
+    risks: string | null;
+    invalidation: string | null;
+    newsDrivers: string[] | null;
+  }>;
+  newOpportunities: Array<{
+    ticker: string;
+    companyName: string | null;
+    thesis: string;
+    horizon: "swing" | "long" | null;
+    risks: string | null;
+    whyNow: string | null;
+    conviction: number | null;
+    newsDrivers: string[] | null;
+  }>;
+  marketNotes: Array<{ title: string; detail: string }>;
+  model: string;
+  sourcesUsed: string[];
+};
+
 export type AiAuditorAnalysis = {
   healthScore: number;
   healthLabel: string;
@@ -56,6 +104,8 @@ export type AiAuditorAnalysis = {
   };
   newsSentiment: AiAuditorNewsItem[];
   recommendations: AiAuditorRecommendation[];
+  actionBrief: AiAuditorActionBrief | null;
+  actionBriefError: string | null;
   model: string;
   sourcesUsed: string[];
 };
@@ -193,6 +243,12 @@ export function ensureAnalysisShape(raw: AiAuditorAnalysis | null | undefined): 
       sourceUrl: n.sourceUrl ?? null,
     })),
     recommendations: Array.isArray(raw.recommendations) ? raw.recommendations : [],
+    actionBrief:
+      raw.actionBrief && typeof raw.actionBrief === "object" ? raw.actionBrief : null,
+    actionBriefError:
+      typeof raw.actionBriefError === "string" && raw.actionBriefError.trim()
+        ? raw.actionBriefError.trim()
+        : null,
     summaryOneLiner:
       String(raw.summaryOneLiner || "").trim() ||
       "Analýza portfólia voči aktuálnemu makro prostrediu.",
