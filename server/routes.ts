@@ -3353,6 +3353,11 @@ export async function registerRoutes(
 
   app.get("/api/portfolio-categories", isAuthenticated, async (req: any, res) => {
     try {
+      try {
+        await ensurePortfolioCategoriesSchema();
+      } catch (ensureErr) {
+        console.warn("portfolio-categories GET ensure:", ensureErr);
+      }
       const userId = req.user.claims.sub;
       const categories = await storage.getPortfolioCategoriesByUser(userId);
       res.json(categories);
@@ -3391,14 +3396,18 @@ export async function registerRoutes(
     };
 
     try {
+      try {
+        await ensurePortfolioCategoriesSchema();
+      } catch (ensureErr) {
+        console.warn("portfolio-categories POST ensure:", ensureErr);
+      }
       const result = await createOnce();
       return res.status(result.status).json(result.body);
     } catch (error: any) {
       console.error("Error creating portfolio category:", error);
-      // Self-heal if boot ensure was skipped / old process without migration.
+      // Self-heal if table still missing after ensure attempt.
       if (error?.code === "42P01") {
         try {
-          const { ensurePortfolioCategoriesSchema } = await import("./schemaEnsure");
           await ensurePortfolioCategoriesSchema();
           const result = await createOnce();
           return res.status(result.status).json(result.body);
@@ -3406,7 +3415,12 @@ export async function registerRoutes(
           console.error("Error creating portfolio category after ensure:", retryErr);
         }
       }
-      res.status(500).json({ message: "Nepodarilo sa vytvoriť kategóriu." });
+      res.status(500).json({
+        message:
+          error?.message && typeof error.message === "string"
+            ? `Nepodarilo sa vytvoriť kategóriu: ${error.message}`
+            : "Nepodarilo sa vytvoriť kategóriu.",
+      });
     }
   });
 

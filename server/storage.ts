@@ -38,6 +38,7 @@ import { computeRealizedGainsFromTransactionsAsync } from "./realizedGainsComput
 import { sumCloseTradeCashFlowEurFromRows } from "@shared/cashFromTransactions";
 import { dividendNetEur } from "./pnlBreakdown";
 import { enrichHoldingsWithCostCurrency } from "@shared/holdingCostCurrency";
+import { randomUUID } from "crypto";
 import { eq, and, desc, asc, sql, isNull, or, inArray, notInArray, type SQL } from "drizzle-orm";
 
 export type RegistrationAdminListFilter = "pending" | "blocked" | "approved" | "all";
@@ -390,7 +391,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createPortfolioCategory(data: InsertPortfolioCategory): Promise<PortfolioCategory> {
-    const [result] = await db.insert(portfolioCategories).values(data).returning();
+    const [result] = await db
+      .insert(portfolioCategories)
+      .values({ ...data, id: randomUUID() })
+      .returning();
     return result!;
   }
 

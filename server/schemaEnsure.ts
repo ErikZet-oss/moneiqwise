@@ -13,24 +13,42 @@ export async function ensurePortfolioSortOrderColumn(): Promise<void> {
 
 /** Portfolio categories + portfolios.category_id (Figma Portfóliá a kategórie). */
 export async function ensurePortfolioCategoriesSchema(): Promise<void> {
-  // gen_random_uuid() needs pgcrypto on some Postgres installs.
+  // Prefer gen_random_uuid(); fall back to a plain PK (app always sends id).
   try {
     await pool.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`);
   } catch (err) {
     console.warn("schemaEnsure: pgcrypto (ok if uuid already available):", err);
   }
 
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS portfolio_categories (
-      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
-      user_id VARCHAR NOT NULL REFERENCES users(id),
-      name VARCHAR(100) NOT NULL,
-      color VARCHAR(16) NOT NULL DEFAULT '#6bb0f5',
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS portfolio_categories (
+        id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id VARCHAR NOT NULL REFERENCES users(id),
+        name VARCHAR(100) NOT NULL,
+        color VARCHAR(16) NOT NULL DEFAULT '#6bb0f5',
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+  } catch (err) {
+    console.warn(
+      "schemaEnsure: portfolio_categories with gen_random_uuid failed, retrying without default:",
+      err,
+    );
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS portfolio_categories (
+        id VARCHAR PRIMARY KEY,
+        user_id VARCHAR NOT NULL REFERENCES users(id),
+        name VARCHAR(100) NOT NULL,
+        color VARCHAR(16) NOT NULL DEFAULT '#6bb0f5',
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+  }
   await pool.query(`
     CREATE INDEX IF NOT EXISTS portfolio_categories_user_sort_idx
       ON portfolio_categories (user_id, sort_order)
