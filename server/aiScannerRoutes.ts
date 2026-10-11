@@ -42,6 +42,7 @@ import {
   savePromptsForUser,
 } from "./finviz/promptStore";
 import type { AiPromptKey } from "./finviz/defaultPrompts";
+import { CLAUDE_DISABLED_MESSAGE, isClaudeFeatureEnabled } from "./claudeFeatures";
 
 type AuthReq = {
   user?: { claims?: { sub?: string } };
@@ -233,6 +234,9 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
 
       await ensureAiScannerCacheTable();
 
+      if (!isClaudeFeatureEnabled("ai-scanner")) {
+        return res.status(503).json({ message: CLAUDE_DISABLED_MESSAGE });
+      }
       if (!process.env.ANTHROPIC_API_KEY?.trim()) {
         return res.status(503).json({
           message: "AI Skener nie je nakonfigurovaný. Nastav ANTHROPIC_API_KEY na serveri.",
@@ -381,6 +385,9 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
 
       await ensureAiScannerCacheTable();
 
+      if (!isClaudeFeatureEnabled("ai-scanner")) {
+        return res.status(503).json({ message: CLAUDE_DISABLED_MESSAGE });
+      }
       if (!process.env.ANTHROPIC_API_KEY?.trim()) {
         return res.status(503).json({
           message: "AI Skener nie je nakonfigurovaný. Nastav ANTHROPIC_API_KEY na serveri.",
@@ -653,6 +660,9 @@ export function registerAiScannerRoutes(app: Express, isAuthenticated: any) {
       if (!userId) return;
       await ensureAiScannerChatTables();
 
+      if (!isClaudeFeatureEnabled("ai-chat")) {
+        return res.status(503).json({ message: CLAUDE_DISABLED_MESSAGE });
+      }
       if (!process.env.ANTHROPIC_API_KEY?.trim()) {
         return res.status(503).json({
           message: "AI Skener nie je nakonfigurovaný. Nastav ANTHROPIC_API_KEY na serveri.",

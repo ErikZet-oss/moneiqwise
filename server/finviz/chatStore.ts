@@ -1,6 +1,10 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db";
 import Anthropic from "@anthropic-ai/sdk";
+import {
+  CLAUDE_DISABLED_MESSAGE,
+  isClaudeFeatureEnabled,
+} from "../claudeFeatures";
 import { formatAnthropicError } from "./claudeEvaluator";
 import { DEFAULT_AI_PROMPTS, applyPromptTemplate } from "./defaultPrompts";
 import { getPromptsForUser } from "./promptStore";
@@ -194,6 +198,10 @@ export async function appendUserMessageAndReply(input: {
     })),
     { role: "user" as const, content: text },
   ];
+
+  if (!isClaudeFeatureEnabled("ai-chat")) {
+    throw new Error(CLAUDE_DISABLED_MESSAGE);
+  }
 
   // Anthropic: only user/assistant in messages; system separate
   const client = getAnthropicClient();

@@ -1,4 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
+import {
+  CLAUDE_DISABLED_MESSAGE,
+  isClaudeFeatureEnabled,
+} from "../claudeFeatures";
 import type { FinvizScreenerRow, FinvizQuoteSnapshot } from "./scraper";
 import type { AiScannerStrategy } from "./strategies";
 import {
@@ -441,6 +445,9 @@ export async function evaluateStrategyPicks(
   rows: FinvizScreenerRow[],
   promptTemplate?: string,
 ): Promise<AiStrategyEvaluation> {
+  if (!isClaudeFeatureEnabled("ai-scanner")) {
+    throw new Error(CLAUDE_DISABLED_MESSAGE);
+  }
   const client = getAnthropicClient();
   const limited = rows.slice(0, 20);
   const list = limited.map((r) => ({
@@ -535,6 +542,9 @@ export async function evaluateTickerSnapshot(
   snapshot: FinvizQuoteSnapshot,
   promptTemplate?: string,
 ): Promise<AiTickerVerdict> {
+  if (!isClaudeFeatureEnabled("ai-scanner")) {
+    throw new Error(CLAUDE_DISABLED_MESSAGE);
+  }
   const client = getAnthropicClient();
   const interestingKeys = [
     "P/E",

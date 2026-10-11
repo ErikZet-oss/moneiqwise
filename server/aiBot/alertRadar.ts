@@ -116,7 +116,8 @@ async function filterMaterialNews(
   candidates: MaterialCandidate[],
 ): Promise<MaterialCandidate[]> {
   if (candidates.length === 0) return [];
-  if (!process.env.ANTHROPIC_API_KEY?.trim()) {
+  const { isClaudeFeatureEnabled } = await import("../claudeFeatures");
+  if (!isClaudeFeatureEnabled("ai-alerts") || !process.env.ANTHROPIC_API_KEY?.trim()) {
     // Bez Claude: konzervatívny keyword filter
     const keys = [
       /earnings/i,
@@ -298,6 +299,10 @@ export async function runAlertRadar(
   now = new Date(),
   opts?: { force?: boolean },
 ): Promise<{ ran: boolean; reason?: string; users?: number; created?: number }> {
+  const { isClaudeFeatureEnabled } = await import("../claudeFeatures");
+  if (!isClaudeFeatureEnabled("ai-alerts")) {
+    return { ran: false, reason: "claude_macro_audit_only" };
+  }
   if (!opts?.force && !isUsRth(now)) {
     return { ran: false, reason: "outside_rth" };
   }

@@ -107,9 +107,17 @@ app.use((req, res, next) => {
   // Avoid reusePort: true — not supported on Windows and can make listen() fail.
   httpServer.listen(port, "0.0.0.0", () => {
     log(`serving on port ${port}`);
-    void import("./aiBot/scheduler")
-      .then(({ startAiBotScheduler }) => startAiBotScheduler())
-      .catch((err) => console.error("[ai-bot] scheduler start failed:", err));
+    void import("./claudeFeatures").then(({ isClaudeFeatureEnabled }) => {
+      if (isClaudeFeatureEnabled("ai-bot")) {
+        void import("./aiBot/scheduler")
+          .then(({ startAiBotScheduler }) => startAiBotScheduler())
+          .catch((err) => console.error("[ai-bot] scheduler start failed:", err));
+      } else {
+        log(
+          "[claude] AI Bot scheduler + alert radar OFF (CLAUDE_MACRO_AUDIT_ONLY — len Macro Audit)",
+        );
+      }
+    });
     void import("./paperBot/scheduler")
       .then(({ startPaperBotScheduler }) => startPaperBotScheduler())
       .catch((err) =>

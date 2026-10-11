@@ -65,6 +65,10 @@ export async function runDueAiBotSchedule(
   reason?: string;
   users?: number;
 }> {
+  const { isClaudeFeatureEnabled } = await import("../claudeFeatures");
+  if (!isClaudeFeatureEnabled("ai-bot")) {
+    return { slot: null, ran: false, reason: "claude_macro_audit_only" };
+  }
   const et = getEtParts(now);
   const slot = detectSlot(et);
   if (!slot) {

@@ -1,4 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
+import {
+  CLAUDE_DISABLED_MESSAGE,
+  isClaudeFeatureEnabled,
+} from "../claudeFeatures";
 import { formatAnthropicError } from "../finviz/claudeEvaluator";
 import type { AiBotRunContext } from "./contextBuilder";
 import type {
@@ -485,6 +489,9 @@ ${JSON.stringify(userPayload)}`;
 }
 
 async function callClaude(prompt: string, maxTokens: number): Promise<string> {
+  if (!isClaudeFeatureEnabled("ai-bot")) {
+    throw new Error(CLAUDE_DISABLED_MESSAGE);
+  }
   const client = getAnthropicClient();
   const msg = await client.messages.create({
     model: MODEL,

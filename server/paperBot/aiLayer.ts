@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { collectAiBotNewsContext } from "../aiBot/newsContext";
+import { isClaudeFeatureEnabled } from "../claudeFeatures";
 import { formatAnthropicError } from "../finviz/claudeEvaluator";
 import type { SignalDecision } from "./indicators";
 
@@ -188,6 +189,10 @@ export async function fetchPaperBotAiVerdicts(input: {
     newsCount: 0,
   };
   if (symbols.length === 0) return empty;
+
+  if (!isClaudeFeatureEnabled("paper-bot-ai")) {
+    return { ...empty, error: "CLAUDE_MACRO_AUDIT_ONLY" };
+  }
 
   const key = cacheKey(symbols);
   const hit = verdictCache.get(key);

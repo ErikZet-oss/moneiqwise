@@ -245,6 +245,12 @@ export function registerAiBotRoutes(app: Express, isAuthenticated: any) {
     try {
       const userId = requireUserId(req, res);
       if (!userId) return;
+      const { CLAUDE_DISABLED_MESSAGE, isClaudeFeatureEnabled } = await import(
+        "./claudeFeatures"
+      );
+      if (!isClaudeFeatureEnabled("ai-bot")) {
+        return res.status(503).json({ message: CLAUDE_DISABLED_MESSAGE });
+      }
       if (!process.env.ANTHROPIC_API_KEY?.trim()) {
         return res.status(503).json({
           message: "AI Bot nie je nakonfigurovaný. Nastav ANTHROPIC_API_KEY na serveri.",
@@ -306,6 +312,15 @@ export function registerAiBotRoutes(app: Express, isAuthenticated: any) {
     },
     async (req: AuthReq, res) => {
       try {
+        const { isClaudeFeatureEnabled } = await import("./claudeFeatures");
+        if (!isClaudeFeatureEnabled("ai-bot")) {
+          return res.json({
+            slot: null,
+            ran: false,
+            reason: "claude_macro_audit_only",
+            radar: { ran: false, reason: "claude_macro_audit_only" },
+          });
+        }
         const force =
           req.query?.force === "1" ||
           req.body?.force === true ||
