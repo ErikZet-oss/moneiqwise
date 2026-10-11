@@ -27,6 +27,17 @@
   --rd-ai: #b48ce0;
   --rd-ai-dim: #261c33;
 
+  /* Dashboard radar rows — Figma accent/earnings|position|event */
+  --rd-accent-earnings: #e3c690;
+  --rd-accent-earnings-surface: #282826;
+  --rd-accent-earnings-border: #4f493c;
+  --rd-accent-position: #96d9c6;
+  --rd-accent-position-surface: #21292b;
+  --rd-accent-position-border: #394e4c;
+  --rd-accent-event: #a9c5ea;
+  --rd-accent-event-surface: #22282f;
+  --rd-accent-event-border: #3e4856;
+
   --rd-chart-1: #2fdab8;
   --rd-chart-2: #6bb0f5;
   --rd-chart-3: #b48ce0;

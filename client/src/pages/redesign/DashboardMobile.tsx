@@ -1395,7 +1395,7 @@ export default function DashboardMobile() {
             {(editing || isVisible("earnings")) ? (
               <div
                 className={cn(
-                  "flex min-h-9 items-center gap-1.5 rounded-[var(--rd-radius-md)] border border-[var(--rd-warning)] bg-[var(--rd-warning-dim)] p-2",
+                  "flex min-h-9 items-center gap-1.5 rounded-[var(--rd-radius-md)] border border-[var(--rd-accent-earnings-border)] bg-[var(--rd-accent-earnings-surface)] p-2",
                   editing && !isVisible("earnings") ? "opacity-40" : undefined,
                 )}
               >
@@ -1407,13 +1407,13 @@ export default function DashboardMobile() {
                     onClick={() => toggleVisible("earnings")}
                   >
                     {isVisible("earnings") ? (
-                      <Eye className="size-4 text-[var(--rd-warning)]" />
+                      <Eye className="size-4 text-[var(--rd-accent-earnings)]" />
                     ) : (
                       <EyeOff className="size-4 text-[var(--rd-text-tertiary)]" />
                     )}
                   </button>
                 ) : (
-                  <Calendar className="size-[18px] shrink-0 text-[var(--rd-warning)]" aria-hidden />
+                  <Calendar className="size-[18px] shrink-0 text-[var(--rd-accent-earnings)]" aria-hidden />
                 )}
                 <button
                   type="button"
@@ -1424,7 +1424,9 @@ export default function DashboardMobile() {
                     setLocation(`/asset/${encodeURIComponent(currentEarnings.ticker)}`);
                   }}
                 >
-                  <span className="rd-type-overline shrink-0 text-[var(--rd-warning)]">Earnings</span>
+                  <span className="rd-type-overline shrink-0 text-[var(--rd-accent-earnings)]">
+                    Earnings
+                  </span>
                   <span className="min-w-0 flex-1 truncate rd-type-body-strong text-[var(--rd-text-primary)]">
                     {currentEarnings?.ticker || "—"}
                   </span>
@@ -1436,7 +1438,7 @@ export default function DashboardMobile() {
                   <button
                     type="button"
                     aria-label="Ďalší earnings"
-                    className="inline-flex size-4 shrink-0 items-center justify-center text-[var(--rd-warning)]"
+                    className="inline-flex size-4 shrink-0 items-center justify-center text-[var(--rd-text-secondary)]"
                     onClick={() =>
                       setEarningsIndex((prev) => (prev + 1) % Math.max(1, earningsItems.length))
                     }
@@ -1450,7 +1452,7 @@ export default function DashboardMobile() {
             {(editing || isVisible("topPosition")) ? (
               <div
                 className={cn(
-                  "flex min-h-9 items-center gap-1.5 rounded-[var(--rd-radius-md)] border border-[var(--rd-profit)] bg-[var(--rd-profit-dim)] p-2",
+                  "flex min-h-9 items-center gap-1.5 rounded-[var(--rd-radius-md)] border border-[var(--rd-accent-position-border)] bg-[var(--rd-accent-position-surface)] p-2",
                   editing && !isVisible("topPosition") ? "opacity-40" : undefined,
                 )}
               >
@@ -1462,13 +1464,13 @@ export default function DashboardMobile() {
                     onClick={() => toggleVisible("topPosition")}
                   >
                     {isVisible("topPosition") ? (
-                      <Eye className="size-4 text-[var(--rd-profit)]" />
+                      <Eye className="size-4 text-[var(--rd-accent-position)]" />
                     ) : (
                       <EyeOff className="size-4 text-[var(--rd-text-tertiary)]" />
                     )}
                   </button>
                 ) : (
-                  <TrendingUp className="size-[18px] shrink-0 text-[var(--rd-profit)]" aria-hidden />
+                  <TrendingUp className="size-[18px] shrink-0 text-[var(--rd-accent-position)]" aria-hidden />
                 )}
                 <button
                   type="button"
@@ -1479,7 +1481,9 @@ export default function DashboardMobile() {
                     setLocation(`/asset/${encodeURIComponent(currentTopPosition.ticker)}`);
                   }}
                 >
-                  <span className="rd-type-overline shrink-0 text-[var(--rd-profit)]">Pozícia</span>
+                  <span className="rd-type-overline shrink-0 text-[var(--rd-accent-position)]">
+                    Pozícia
+                  </span>
                   <span className="min-w-0 flex-1 truncate rd-type-body-strong text-[var(--rd-text-primary)]">
                     {currentTopPosition?.ticker || "—"}
                   </span>
@@ -1491,7 +1495,7 @@ export default function DashboardMobile() {
                   <button
                     type="button"
                     aria-label="Ďalšia pozícia"
-                    className="inline-flex size-4 shrink-0 items-center justify-center text-[var(--rd-profit)]"
+                    className="inline-flex size-4 shrink-0 items-center justify-center text-[var(--rd-text-secondary)]"
                     onClick={() =>
                       setTopPositionIndex((prev) => (prev + 1) % Math.max(1, topPositions.length))
                     }
@@ -1505,7 +1509,7 @@ export default function DashboardMobile() {
             {(editing || isVisible("macroEvent")) ? (
               <div
                 className={cn(
-                  "flex min-h-9 items-center gap-1.5 rounded-[var(--rd-radius-md)] border border-[var(--rd-info)] bg-[var(--rd-info-dim)] p-2",
+                  "flex min-h-9 items-center gap-1.5 rounded-[var(--rd-radius-md)] border border-[var(--rd-accent-event-border)] bg-[var(--rd-accent-event-surface)] p-2",
                   editing && !isVisible("macroEvent") ? "opacity-40" : undefined,
                 )}
               >
@@ -1517,20 +1521,22 @@ export default function DashboardMobile() {
                     onClick={() => toggleVisible("macroEvent")}
                   >
                     {isVisible("macroEvent") ? (
-                      <Eye className="size-4 text-[var(--rd-info)]" />
+                      <Eye className="size-4 text-[var(--rd-accent-event)]" />
                     ) : (
                       <EyeOff className="size-4 text-[var(--rd-text-tertiary)]" />
                     )}
                   </button>
                 ) : (
-                  <Calendar className="size-[18px] shrink-0 text-[var(--rd-info)]" aria-hidden />
+                  <Calendar className="size-[18px] shrink-0 text-[var(--rd-accent-event)]" aria-hidden />
                 )}
                 <button
                   type="button"
                   className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
                   onClick={() => setLocation("/events")}
                 >
-                  <span className="rd-type-overline shrink-0 text-[var(--rd-info)]">Udalosť</span>
+                  <span className="rd-type-overline shrink-0 text-[var(--rd-accent-event)]">
+                    Udalosť
+                  </span>
                   <span className="min-w-0 flex-1 truncate rd-type-body-strong text-[var(--rd-text-primary)]">
                     {currentMacro?.shortLabel || currentMacro?.title || "—"}
                   </span>
@@ -1542,7 +1548,7 @@ export default function DashboardMobile() {
                   <button
                     type="button"
                     aria-label="Ďalšia makro udalosť"
-                    className="inline-flex size-4 shrink-0 items-center justify-center text-[var(--rd-info)]"
+                    className="inline-flex size-4 shrink-0 items-center justify-center text-[var(--rd-text-secondary)]"
                     onClick={() =>
                       setMacroIndex((prev) => (prev + 1) % Math.max(1, macroItems.length))
                     }
@@ -1829,6 +1835,13 @@ export default function DashboardMobile() {
         );
 
       case "allocation": {
+        // Figma donut: chart-1…4 + chart-6 (Ostatné) — never chart-5/loss red.
+        const ALLOC_SLICE_COLORS = [
+          "var(--rd-chart-1)",
+          "var(--rd-chart-2)",
+          "var(--rd-chart-3)",
+          "var(--rd-chart-4)",
+        ] as const;
         const topPct = allocation.reduce((s, a) => s + a.pct, 0);
         const otherPct = Math.max(0, 100 - topPct);
         const slices =
@@ -1839,7 +1852,7 @@ export default function DashboardMobile() {
                   key: a.ticker,
                   label: a.ticker,
                   pct: a.pct,
-                  color: CHART_COLORS[i % CHART_COLORS.length]!,
+                  color: ALLOC_SLICE_COLORS[i % ALLOC_SLICE_COLORS.length]!,
                 })),
                 ...(otherPct > 0.05
                   ? [
@@ -1847,7 +1860,7 @@ export default function DashboardMobile() {
                         key: "other",
                         label: "Ostatné",
                         pct: otherPct,
-                        color: CHART_COLORS[5] ?? "var(--rd-chart-6)",
+                        color: "var(--rd-chart-6)",
                       },
                     ]
                   : []),
