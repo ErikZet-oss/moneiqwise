@@ -41,12 +41,13 @@ function ActionBadge({ action }: { action: AiAuditorAction }) {
 export function AiMacroActionBriefSection({
   brief,
   error,
+  showEmptyHint = false,
 }: {
   brief: AiAuditorActionBrief | null;
   error?: string | null;
+  /** Starý audit bez pass 2 — ukáž kartu s výzvou Spustiť znova. */
+  showEmptyHint?: boolean;
 }) {
-  if (!brief && !error) return null;
-
   if (!brief && error) {
     return (
       <Card data-testid="card-ai-macro-actions-error">
@@ -65,7 +66,26 @@ export function AiMacroActionBriefSection({
     );
   }
 
-  if (!brief) return null;
+  if (!brief) {
+    if (!showEmptyHint) return null;
+    return (
+      <Card data-testid="card-ai-macro-actions-empty">
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <Crosshair className="h-4 w-4 text-primary" />
+            Akcie na pozíciách
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Táto analýza ešte nemá BUY/SELL/TRIM/HOLD. Stlač{" "}
+            <span className="font-medium text-foreground">Spustiť analýzu</span> — najprv
+            prebehne makro health, potom akcie na každú pozíciu.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   const outlook = brief.marketOutlook;
 

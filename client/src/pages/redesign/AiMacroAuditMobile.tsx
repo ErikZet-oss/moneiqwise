@@ -422,6 +422,7 @@ export default function AiMacroAuditMobile() {
             <AiMacroActionBriefSection
               brief={analysis.actionBrief}
               error={analysis.actionBriefError}
+              showEmptyHint
             />
           </>
         )}

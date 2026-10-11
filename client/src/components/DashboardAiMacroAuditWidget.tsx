@@ -28,6 +28,7 @@ export function DashboardAiMacroAuditWidget() {
   const score = data?.run?.analysis?.healthScore ?? null;
   const label = data?.run?.analysis?.healthLabel;
   const oneLiner = data?.run?.analysis?.summaryOneLiner;
+  const actionCount = data?.run?.analysis?.actionBrief?.portfolioAudit?.length ?? 0;
   const usage = data?.usage;
   const pfName = isAllPortfolios
     ? "Všetky portfóliá"
@@ -76,6 +77,11 @@ export function DashboardAiMacroAuditWidget() {
             {oneLiner ? (
               <p className="text-[11px] leading-snug text-muted-foreground line-clamp-2 text-center px-1">
                 {oneLiner}
+              </p>
+            ) : null}
+            {actionCount > 0 ? (
+              <p className="text-center text-[10px] text-muted-foreground tabular-nums">
+                {actionCount} akcií na pozíciách
               </p>
             ) : null}
             {usage ? (

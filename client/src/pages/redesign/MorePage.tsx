@@ -61,7 +61,7 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     title: "AI",
     items: [
       { href: "/ai-agent/bot", title: "AI Agent", subtitle: "Bot, paper, alerty, skener", icon: Brain },
-      { href: "/ai-macro-audit", title: "AI Macro Audit", subtitle: "Health score a makro riziká", icon: Sparkles },
+      { href: "/ai-macro-audit", title: "AI Macro Audit", subtitle: "Health, makro riziká a akcie na pozície", icon: Sparkles },
     ],
   },
   {

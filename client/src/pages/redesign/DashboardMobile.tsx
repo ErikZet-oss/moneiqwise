@@ -1899,7 +1899,7 @@ export default function DashboardMobile() {
               </button>
             </div>
             <p className="text-xs text-[var(--rd-text-secondary)]">
-              Health score a makro riziká · {overline}
+              Health, makro riziká a akcie BUY/SELL/TRIM/HOLD · {overline}
             </p>
             <Button variant="Secondary" className="mt-3 w-full" onClick={() => setLocation("/ai-macro-audit")}>
               Otvoriť AI Macro Audit
