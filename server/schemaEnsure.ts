@@ -13,6 +13,13 @@ export async function ensurePortfolioSortOrderColumn(): Promise<void> {
 
 /** Portfolio categories + portfolios.category_id (Figma Portfóliá a kategórie). */
 export async function ensurePortfolioCategoriesSchema(): Promise<void> {
+  // gen_random_uuid() needs pgcrypto on some Postgres installs.
+  try {
+    await pool.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`);
+  } catch (err) {
+    console.warn("schemaEnsure: pgcrypto (ok if uuid already available):", err);
+  }
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS portfolio_categories (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,

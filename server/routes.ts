@@ -3177,7 +3177,11 @@ export async function registerRoutes(
     ensurePokemonTcgColumns,
   } = await import("./schemaEnsure");
   await ensurePortfolioSortOrderColumn();
-  await ensurePortfolioCategoriesSchema();
+  try {
+    await ensurePortfolioCategoriesSchema();
+  } catch (err) {
+    console.error("schemaEnsure: portfolio categories failed (will retry on first create):", err);
+  }
   await ensureTransactionImportColumns();
   await ensureExchangeRatesTable();
   await ensureUserRegistrationStatusColumn();
@@ -3359,19 +3363,22 @@ export async function registerRoutes(
   });
 
   app.post("/api/portfolio-categories", isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
+    const createOnce = async () => {
+      const userId = req.user.claims.sub as string;
       const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
       const colorRaw = req.body?.color;
       if (!name) {
-        return res.status(400).json({ message: "Zadajte názov kategórie." });
+        return { status: 400 as const, body: { message: "Zadajte názov kategórie." } };
       }
       const color: PortfolioCategoryColor = isAllowedCategoryColor(colorRaw)
         ? colorRaw
         : PORTFOLIO_CATEGORY_COLORS[0];
       const existing = await storage.getPortfolioCategoriesByUser(userId);
       if (existing.some((c) => c.name.toLowerCase() === name.toLowerCase())) {
-        return res.status(400).json({ message: "Kategória s týmto názvom už existuje." });
+        return {
+          status: 400 as const,
+          body: { message: "Kategória s týmto názvom už existuje." },
+        };
       }
       const sortOrder = await storage.getNextPortfolioCategorySortOrder(userId);
       const created = await storage.createPortfolioCategory({
@@ -3380,9 +3387,25 @@ export async function registerRoutes(
         color,
         sortOrder,
       });
-      res.json(created);
-    } catch (error) {
+      return { status: 200 as const, body: created };
+    };
+
+    try {
+      const result = await createOnce();
+      return res.status(result.status).json(result.body);
+    } catch (error: any) {
       console.error("Error creating portfolio category:", error);
+      // Self-heal if boot ensure was skipped / old process without migration.
+      if (error?.code === "42P01") {
+        try {
+          const { ensurePortfolioCategoriesSchema } = await import("./schemaEnsure");
+          await ensurePortfolioCategoriesSchema();
+          const result = await createOnce();
+          return res.status(result.status).json(result.body);
+        } catch (retryErr) {
+          console.error("Error creating portfolio category after ensure:", retryErr);
+        }
+      }
       res.status(500).json({ message: "Nepodarilo sa vytvoriť kategóriu." });
     }
   });
