@@ -27,7 +27,6 @@ import { usePortfolio } from "@/hooks/usePortfolio";
 import { useTheme } from "@/hooks/useTheme";
 import { apiRequest, PORTFOLIO_QUERY_CACHE_KEY, queryClient } from "@/lib/queryClient";
 import { Button, Card, Select, Toggle, TopBar } from "@/redesign/ui";
-import { MobileUiToggle } from "@/redesign/MobileUiToggle";
 
 type NavItem = {
   href: string;
@@ -166,13 +165,6 @@ export default function MorePage() {
                 <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">Prepnúť tému aplikácie</p>
               </div>
               <Toggle checked={theme === "light"} onCheckedChange={() => toggleTheme()} label="Prepnúť na svetlý režim" />
-            </div>
-            <div className="flex min-h-[62px] items-center gap-3 border-b border-[var(--rd-border-subtle)] py-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm leading-5">Vzhľad</p>
-                <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">Klasický alebo nový mobil</p>
-              </div>
-              <MobileUiToggle />
             </div>
             <button
               type="button"

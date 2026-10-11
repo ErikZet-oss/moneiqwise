@@ -1,84 +1,48 @@
-import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { useCallback, useLayoutEffect } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export type MobileUiMode = "classic" | "redesign";
 
-const STORAGE_KEY = "moneiqwise-mobile-ui";
-const CHANGE_EVENT = "mobileUiChanged";
+/**
+ * Classic mobile UI remains in the codebase as backup, but is no longer
+ * selectable. Mobile always uses the Figma redesign; desktop stays classic.
+ */
+const REDESIGN_LOCKED = true;
 
-function loadMode(): MobileUiMode {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "redesign" || stored === "classic") return stored;
-  } catch {
-    // ignore
-  }
-  return "classic";
-}
-
-function applyDocumentMode(mode: MobileUiMode) {
+function applyDocumentMode(active: boolean) {
   if (typeof document === "undefined") return;
-  if (mode === "redesign") {
+  if (active) {
     document.documentElement.setAttribute("data-mobile-ui", "redesign");
   } else {
-    // Classic must never keep redesign color/font overrides on <html>.
     document.documentElement.removeAttribute("data-mobile-ui");
-  }
-}
-
-function saveMode(mode: MobileUiMode) {
-  try {
-    localStorage.setItem(STORAGE_KEY, mode);
-    applyDocumentMode(mode);
-    window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: mode }));
-  } catch {
-    // ignore
   }
 }
 
 /** Keep <html data-mobile-ui> in sync for the whole app (one mount is enough). */
 export function MobileUiDocumentSync() {
-  const { mode } = useMobileUi();
+  const redesign = useMobileRedesign();
   useLayoutEffect(() => {
-    applyDocumentMode(mode);
-  }, [mode]);
+    applyDocumentMode(redesign);
+  }, [redesign]);
   return null;
 }
 
+/**
+ * Storage / toggle API kept for backup (MobileUiToggle). Mode is locked to redesign.
+ */
 export function useMobileUi() {
-  const [mode, setModeState] = useState<MobileUiMode>(loadMode);
-
-  useEffect(() => {
-    const handleChange = (event: Event) => {
-      const detail = (event as CustomEvent<MobileUiMode>).detail;
-      if (detail === "classic" || detail === "redesign") setModeState(detail);
-    };
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key !== STORAGE_KEY) return;
-      if (event.newValue === "redesign" || event.newValue === "classic") {
-        setModeState(event.newValue);
-      }
-    };
-    window.addEventListener(CHANGE_EVENT, handleChange);
-    window.addEventListener("storage", handleStorage);
-    return () => {
-      window.removeEventListener(CHANGE_EVENT, handleChange);
-      window.removeEventListener("storage", handleStorage);
-    };
+  const setMode = useCallback((_next: MobileUiMode) => {
+    // Intentionally no-op — classic mobile is retired from the UI.
   }, []);
 
-  const setMode = useCallback((next: MobileUiMode) => {
-    setModeState(next);
-    saveMode(next);
-  }, []);
-
-  return { mode, setMode };
+  return { mode: "redesign" as MobileUiMode, setMode };
 }
 
 /**
- * True when the user selected Nový on the login / settings toggle.
- * Classic mode must render the pre-redesign shell and pages unchanged.
+ * True on mobile viewports when the redesign is the active mobile UI.
+ * Desktop always stays on the classic shell / pages.
  */
 export function useMobileRedesign() {
-  const { mode } = useMobileUi();
-  return mode === "redesign";
+  const isMobile = useIsMobile();
+  return REDESIGN_LOCKED && isMobile;
 }

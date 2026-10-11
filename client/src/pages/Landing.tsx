@@ -6,7 +6,6 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMemo, useId } from "react";
 import { useMobileRedesign } from "@/hooks/useMobileUi";
-import { MobileUiToggle } from "@/redesign/MobileUiToggle";
 import { RedesignLanding } from "@/pages/redesign/RedesignLanding";
 import { useLandingAuth } from "@/pages/useLandingAuth";
 import {
@@ -166,12 +165,7 @@ export default function Landing() {
   } = auth;
 
   if (redesign) {
-    return (
-      <>
-        <MobileUiToggle pinned variant="redesign" />
-        <RedesignLanding auth={auth} />
-      </>
-    );
+    return <RedesignLanding auth={auth} />;
   }
 
   return (
@@ -184,10 +178,6 @@ export default function Landing() {
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_15%_20%,hsl(160_40%_22%_/_0.2),transparent_55%),radial-gradient(ellipse_55%_45%_at_88%_70%,hsl(200_45%_28%_/_0.14),transparent_50%)]"
         aria-hidden
       />
-
-      <div className="absolute inset-x-0 top-0 z-20 flex justify-center px-4 pt-[max(10px,env(safe-area-inset-top))]">
-        <MobileUiToggle variant="classic" />
-      </div>
 
       <div className="relative z-10 flex min-h-screen">
         <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 xl:p-14">

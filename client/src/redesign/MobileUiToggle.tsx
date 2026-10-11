@@ -1,3 +1,7 @@
+/**
+ * Backup: classic ↔ redesign toggle. No longer mounted anywhere —
+ * mobile redesign is locked on; classic mobile pages stay in the repo unused.
+ */
 import { cn } from "@/lib/utils";
 import { useMobileUi, type MobileUiMode } from "@/hooks/useMobileUi";
 
