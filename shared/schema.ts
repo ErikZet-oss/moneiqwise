@@ -63,6 +63,47 @@ export const BROKER_CODES = [
 
 export type BrokerCode = typeof BROKER_CODES[number];
 
+/** Figma color swatches for portfolio categories. */
+export const PORTFOLIO_CATEGORY_COLORS = [
+  "#6bb0f5",
+  "#e3c690",
+  "#96d9c6",
+  "#b48ce0",
+  "#5c6570",
+  "#a3aab3",
+] as const;
+export type PortfolioCategoryColor = (typeof PORTFOLIO_CATEGORY_COLORS)[number];
+
+/** Prefix for portfolio query scope: aggregate all portfolios in a category. */
+export const PORTFOLIO_CATEGORY_SCOPE_PREFIX = "cat:" as const;
+
+// Named groups of portfolios (Akcie, Krypto, …). Delete → portfolios become uncategorized.
+export const portfolioCategories = pgTable(
+  "portfolio_categories",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    userId: varchar("user_id").notNull().references(() => users.id),
+    name: varchar("name", { length: 100 }).notNull(),
+    color: varchar("color", { length: 16 }).notNull().default("#6bb0f5"),
+    /** Lower values appear first in lists / switcher. */
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    index("portfolio_categories_user_sort_idx").on(table.userId, table.sortOrder),
+  ],
+);
+
+export const insertPortfolioCategorySchema = createInsertSchema(portfolioCategories).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertPortfolioCategory = z.infer<typeof insertPortfolioCategorySchema>;
+export type PortfolioCategory = typeof portfolioCategories.$inferSelect;
+
 // Portfolios table - allows users to have multiple portfolios
 export const portfolios = pgTable("portfolios", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -70,6 +111,10 @@ export const portfolios = pgTable("portfolios", {
   name: varchar("name", { length: 100 }).notNull(),
   description: text("description"),
   brokerCode: varchar("broker_code", { length: 20 }),
+  /** Optional category; null = Bez kategórie. */
+  categoryId: varchar("category_id").references(() => portfolioCategories.id, {
+    onDelete: "set null",
+  }),
   isDefault: boolean("is_default").default(false),
   isHidden: boolean("is_hidden").default(false),
   /** Lower values appear first in lists (sidebar, settings). */

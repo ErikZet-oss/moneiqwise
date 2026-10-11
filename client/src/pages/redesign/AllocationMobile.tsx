@@ -154,14 +154,14 @@ function DonutCard({
 export default function AllocationMobile() {
   const { currency, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
   const { toast } = useToast();
-  const { portfolios, selectedPortfolio, isAllPortfolios, getQueryParam, isLoading } = usePortfolio();
+  const { portfolios, selectedPortfolio, isAllPortfolios, getQueryParam, isLoading, scopeLabel } = usePortfolio();
   const { hideAmounts } = useChartSettings();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [mode, setMode] = useState<"percent" | "value">("percent");
   const [editorRows, setEditorRows] = useState<Record<string, EditorRow>>({});
   const portfolioParam = getQueryParam();
   const mask = (value: string) => (hideAmounts ? "••••••" : value);
-  const overline = isAllPortfolios ? "Všetky portfóliá" : selectedPortfolio?.name ?? "Portfólio";
+  const overline = scopeLabel;
 
   const { data: holdings, isLoading: holdingsLoading } = useQuery<Holding[]>({
     queryKey: ["/api/holdings", portfolioParam],

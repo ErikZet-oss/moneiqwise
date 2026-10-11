@@ -11,6 +11,47 @@ export async function ensurePortfolioSortOrderColumn(): Promise<void> {
   `);
 }
 
+/** Portfolio categories + portfolios.category_id (Figma Portfóliá a kategórie). */
+export async function ensurePortfolioCategoriesSchema(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS portfolio_categories (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      user_id VARCHAR NOT NULL REFERENCES users(id),
+      name VARCHAR(100) NOT NULL,
+      color VARCHAR(16) NOT NULL DEFAULT '#6bb0f5',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS portfolio_categories_user_sort_idx
+      ON portfolio_categories (user_id, sort_order)
+  `);
+  await pool.query(`
+    ALTER TABLE portfolios
+    ADD COLUMN IF NOT EXISTS category_id VARCHAR
+  `);
+  // FK may already exist after drizzle push — ignore duplicate.
+  try {
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint WHERE conname = 'portfolios_category_id_portfolio_categories_id_fk'
+        ) THEN
+          ALTER TABLE portfolios
+            ADD CONSTRAINT portfolios_category_id_portfolio_categories_id_fk
+            FOREIGN KEY (category_id) REFERENCES portfolio_categories(id)
+            ON DELETE SET NULL;
+        END IF;
+      END $$;
+    `);
+  } catch (err) {
+    console.warn("schemaEnsure: portfolio category FK (ok if already present):", err);
+  }
+}
+
 /**
  * Doplní stĺpce pre import (XTB) a kľúče, ak beží staršia DB bez `db:push` na
  * Replite / inom hoste (identické s `scripts/add-transaction-columns.sql`).

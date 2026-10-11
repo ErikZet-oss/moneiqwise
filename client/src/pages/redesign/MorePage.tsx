@@ -77,11 +77,18 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
 export default function MorePage() {
   const [, setLocation] = useLocation();
   const { user, isDemo } = useAuth();
-  const { portfolios, selectedPortfolioId, setSelectedPortfolioId, isAllPortfolios, selectedPortfolio } = usePortfolio();
+  const {
+    portfolios,
+    categories,
+    selectedPortfolioId,
+    setSelectedPortfolioId,
+    scopeLabel,
+    encodeCategoryScope,
+  } = usePortfolio();
   const { theme, toggleTheme } = useTheme();
   const [exiting, setExiting] = useState(false);
 
-  const portfolioName = isAllPortfolios ? "Všetky portfóliá" : selectedPortfolio?.name || "Vybrať portfólio";
+  const portfolioName = scopeLabel || "Vybrať portfólio";
   const accountLine = [user?.firstName, user?.email].filter(Boolean).join(" · ") || "Účet";
 
   const exitDemo = async () => {
@@ -146,6 +153,10 @@ export default function MorePage() {
           onChange={(id) => setSelectedPortfolioId(id)}
           options={[
             { value: "all", label: "Všetky portfóliá" },
+            ...categories.map((category) => ({
+              value: encodeCategoryScope(category.id),
+              label: `Kategória: ${category.name}`,
+            })),
             ...portfolios.map((portfolio) => ({ value: portfolio.id, label: portfolio.name })),
           ]}
         />

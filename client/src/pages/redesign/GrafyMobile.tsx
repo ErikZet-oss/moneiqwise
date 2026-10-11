@@ -44,14 +44,22 @@ interface PortfolioHistoryRes {
 
 export default function GrafyMobile() {
   const { formatCurrency, currency } = useCurrency();
-  const { portfolios, selectedPortfolioId, setSelectedPortfolioId, getQueryParam, isAllPortfolios, selectedPortfolio, isLoading } =
-    usePortfolio();
+  const {
+    portfolios,
+    categories,
+    selectedPortfolioId,
+    setSelectedPortfolioId,
+    getQueryParam,
+    scopeLabel,
+    isLoading,
+    encodeCategoryScope,
+  } = usePortfolio();
   const { hideAmounts } = useChartSettings();
   const [range, setRange] = useState<RangeVal>("all");
   const [pickerOpen, setPickerOpen] = useState(false);
   const portfolioParam = getQueryParam();
   const mask = (value: string) => (hideAmounts ? "••••••" : value);
-  const overline = isAllPortfolios ? "Všetky portfóliá" : selectedPortfolio?.name ?? "Portfólio";
+  const overline = scopeLabel;
 
   const { data: history, isLoading: histLoading, error } = useQuery<PortfolioHistoryRes>({
     queryKey: ["/api/portfolio-history", portfolioParam, range, currency],
@@ -124,6 +132,10 @@ export default function GrafyMobile() {
               onChange={(id) => setSelectedPortfolioId(id)}
               options={[
                 { value: "all", label: "Všetky portfóliá" },
+                ...categories.map((category) => ({
+                  value: encodeCategoryScope(category.id),
+                  label: `Kategória: ${category.name}`,
+                })),
                 ...portfolios.map((portfolio) => ({ value: portfolio.id, label: portfolio.name })),
               ]}
             />

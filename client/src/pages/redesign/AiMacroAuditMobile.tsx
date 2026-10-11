@@ -63,9 +63,9 @@ function priorityTone(p: "high" | "medium" | "low"): BadgeTone {
 export default function AiMacroAuditMobile() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { getQueryParam, selectedPortfolio, isAllPortfolios } = usePortfolio();
+  const { getQueryParam, selectedPortfolio, isAllPortfolios, scopeLabel } = usePortfolio();
   const portfolioId = getQueryParam();
-  const pfName = isAllPortfolios ? "Všetky portfóliá" : selectedPortfolio?.name || "Portfólio";
+  const pfName = scopeLabel;
   const [scoreOpen, setScoreOpen] = useState(false);
   const [openRisk, setOpenRisk] = useState<string | null>(null);
   const [newsDetail, setNewsDetail] = useState<AiAuditorNewsItem | null>(null);

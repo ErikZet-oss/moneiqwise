@@ -32,7 +32,7 @@ function parseNumberInput(raw: string, fallback: number): number {
 }
 
 export default function GoalTrackerMobile() {
-  const { getQueryParam, selectedPortfolio, isAllPortfolios } = usePortfolio();
+  const { getQueryParam, selectedPortfolio, isAllPortfolios, scopeLabel } = usePortfolio();
   const { formatCurrency } = useCurrency();
   const portfolioParam = getQueryParam();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -154,7 +154,7 @@ export default function GoalTrackerMobile() {
   const yearRows = projection.filter((point) => point.year === effectiveSelectedYear);
   const selectedDetail =
     (selectedMonthKey ? projection.find((point) => point.monthKey === selectedMonthKey) : null) ?? yearRows[0] ?? null;
-  const overline = isAllPortfolios ? "Všetky portfóliá" : selectedPortfolio?.name ?? "Portfólio";
+  const overline = scopeLabel;
   const hitLabel = summary.goalHitDate ? new Date(summary.goalHitDate).toLocaleDateString("sk-SK") : "—";
   const currentMonthKey = monthKeyFromDate(new Date());
 

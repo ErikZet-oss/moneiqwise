@@ -59,7 +59,16 @@ interface PasskeyItem {
 
 function SettingsClassic() {
   const { toast } = useToast();
-  const { allPortfolios, createPortfolio, updatePortfolio, deletePortfolio, setPortfolioHidden, reorderPortfolios } = usePortfolio();
+  const {
+    allPortfolios,
+    categories,
+    createPortfolio,
+    updatePortfolio,
+    deletePortfolio,
+    setPortfolioHidden,
+    reorderPortfolios,
+    createCategory,
+  } = usePortfolio();
   const {
     showChart,
     showTooltip,
@@ -95,7 +104,15 @@ function SettingsClassic() {
   } = useQuickNavFab();
   const [newPortfolioName, setNewPortfolioName] = useState("");
   const [newPortfolioBroker, setNewPortfolioBroker] = useState<BrokerCode | undefined>(undefined);
-  const [editingPortfolio, setEditingPortfolio] = useState<{ id: string; name: string; brokerCode: BrokerCode | null } | null>(null);
+  const [newPortfolioCategoryId, setNewPortfolioCategoryId] = useState<string>("none");
+  const [editingPortfolio, setEditingPortfolio] = useState<{
+    id: string;
+    name: string;
+    brokerCode: BrokerCode | null;
+    categoryId: string | null;
+  } | null>(null);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [deletePortfolioId, setDeletePortfolioId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -437,13 +454,15 @@ function SettingsClassic() {
     if (!newPortfolioName.trim()) return;
     setIsCreating(true);
     try {
-      await createPortfolio(newPortfolioName.trim(), newPortfolioBroker);
+      const catId = newPortfolioCategoryId === "none" ? null : newPortfolioCategoryId;
+      await createPortfolio(newPortfolioName.trim(), newPortfolioBroker, catId);
       toast({
         title: "Vytvorené",
         description: "Nové portfólio bolo úspešne vytvorené.",
       });
       setNewPortfolioName("");
       setNewPortfolioBroker(undefined);
+      setNewPortfolioCategoryId("none");
     } catch (error) {
       const msg =
         error instanceof Error && error.message.trim()
@@ -459,11 +478,34 @@ function SettingsClassic() {
     }
   };
 
+  const handleCreateCategory = async () => {
+    if (!newCategoryName.trim()) return;
+    setIsCreatingCategory(true);
+    try {
+      await createCategory(newCategoryName.trim(), "#6bb0f5");
+      toast({ title: "Vytvorené", description: "Nová kategória bola vytvorená." });
+      setNewCategoryName("");
+    } catch (error) {
+      const msg =
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : "Nepodarilo sa vytvoriť kategóriu.";
+      toast({ title: "Chyba", description: msg, variant: "destructive" });
+    } finally {
+      setIsCreatingCategory(false);
+    }
+  };
+
   const handleUpdatePortfolio = async () => {
     if (!editingPortfolio || !editingPortfolio.name.trim()) return;
     setIsUpdating(true);
     try {
-      await updatePortfolio(editingPortfolio.id, editingPortfolio.name.trim(), editingPortfolio.brokerCode);
+      await updatePortfolio(
+        editingPortfolio.id,
+        editingPortfolio.name.trim(),
+        editingPortfolio.brokerCode,
+        editingPortfolio.categoryId,
+      );
       toast({
         title: "Uložené",
         description: "Portfólio bolo úspešne aktualizované.",
@@ -715,6 +757,19 @@ function SettingsClassic() {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={newPortfolioCategoryId} onValueChange={setNewPortfolioCategoryId}>
+              <SelectTrigger className="h-8 w-full sm:w-[150px] text-xs" data-testid="select-new-portfolio-category">
+                <SelectValue placeholder="Kategória" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Bez kategórie</SelectItem>
+                {categories.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button 
               onClick={handleCreatePortfolio}
               disabled={!newPortfolioName.trim() || isCreating}
@@ -722,6 +777,26 @@ function SettingsClassic() {
               data-testid="button-create-portfolio"
             >
               {isCreating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+            </Button>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Input
+              placeholder="Nová kategória..."
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && void handleCreateCategory()}
+              className="h-8 flex-1 min-w-[140px] text-sm"
+              data-testid="input-new-category-name"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="h-8 text-xs"
+              disabled={!newCategoryName.trim() || isCreatingCategory}
+              onClick={() => void handleCreateCategory()}
+              data-testid="button-create-category"
+            >
+              {isCreatingCategory ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "+ Kategória"}
             </Button>
           </div>
           
@@ -803,7 +878,14 @@ function SettingsClassic() {
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7"
-                    onClick={() => setEditingPortfolio({ id: portfolio.id, name: portfolio.name, brokerCode: portfolio.brokerCode })}
+                    onClick={() =>
+                      setEditingPortfolio({
+                        id: portfolio.id,
+                        name: portfolio.name,
+                        brokerCode: portfolio.brokerCode,
+                        categoryId: portfolio.categoryId ?? null,
+                      })
+                    }
                     data-testid={`button-edit-portfolio-${portfolio.id}`}
                   >
                     <Pencil className="h-3.5 w-3.5" />
@@ -838,7 +920,7 @@ function SettingsClassic() {
           <DialogHeader>
             <DialogTitle>Upraviť portfólio</DialogTitle>
             <DialogDescription>
-              Upravte názov a brokera pre toto portfólio.
+              Upravte názov, brokera a kategóriu pre toto portfólio.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -872,6 +954,29 @@ function SettingsClassic() {
                   {BROKER_CODES.map((code) => (
                     <SelectItem key={code} value={code}>
                       <BrokerSelectItem brokerCode={code} />
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Kategória</label>
+              <Select
+                value={editingPortfolio?.categoryId || "none"}
+                onValueChange={(value) =>
+                  setEditingPortfolio((prev) =>
+                    prev ? { ...prev, categoryId: value === "none" ? null : value } : null,
+                  )
+                }
+              >
+                <SelectTrigger data-testid="select-edit-portfolio-category">
+                  <SelectValue placeholder="Kategória" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Bez kategórie</SelectItem>
+                  {categories.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

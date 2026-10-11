@@ -13,8 +13,10 @@ import {
   insertOptionTradeSchema,
   ASSET_CLASS_VALUES,
   CASH_FLOW_TICKER,
+  PORTFOLIO_CATEGORY_COLORS,
   type AssetClassValue,
   type InsertTransaction,
+  type PortfolioCategoryColor,
   transactions,
   users,
   type Transaction,
@@ -3166,6 +3168,7 @@ export async function registerRoutes(
 ): Promise<Server> {
   const {
     ensurePortfolioSortOrderColumn,
+    ensurePortfolioCategoriesSchema,
     ensureTransactionImportColumns,
     ensureExchangeRatesTable,
     ensureUserRegistrationStatusColumn,
@@ -3174,6 +3177,7 @@ export async function registerRoutes(
     ensurePokemonTcgColumns,
   } = await import("./schemaEnsure");
   await ensurePortfolioSortOrderColumn();
+  await ensurePortfolioCategoriesSchema();
   await ensureTransactionImportColumns();
   await ensureExchangeRatesTable();
   await ensureUserRegistrationStatusColumn();
@@ -3339,6 +3343,122 @@ export async function registerRoutes(
     }
   });
 
+  const isAllowedCategoryColor = (color: unknown): color is PortfolioCategoryColor =>
+    typeof color === "string" &&
+    (PORTFOLIO_CATEGORY_COLORS as readonly string[]).includes(color);
+
+  app.get("/api/portfolio-categories", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const categories = await storage.getPortfolioCategoriesByUser(userId);
+      res.json(categories);
+    } catch (error) {
+      console.error("Error fetching portfolio categories:", error);
+      res.status(500).json({ message: "Nepodarilo sa načítať kategórie." });
+    }
+  });
+
+  app.post("/api/portfolio-categories", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
+      const colorRaw = req.body?.color;
+      if (!name) {
+        return res.status(400).json({ message: "Zadajte názov kategórie." });
+      }
+      const color: PortfolioCategoryColor = isAllowedCategoryColor(colorRaw)
+        ? colorRaw
+        : PORTFOLIO_CATEGORY_COLORS[0];
+      const existing = await storage.getPortfolioCategoriesByUser(userId);
+      if (existing.some((c) => c.name.toLowerCase() === name.toLowerCase())) {
+        return res.status(400).json({ message: "Kategória s týmto názvom už existuje." });
+      }
+      const sortOrder = await storage.getNextPortfolioCategorySortOrder(userId);
+      const created = await storage.createPortfolioCategory({
+        userId,
+        name,
+        color,
+        sortOrder,
+      });
+      res.json(created);
+    } catch (error) {
+      console.error("Error creating portfolio category:", error);
+      res.status(500).json({ message: "Nepodarilo sa vytvoriť kategóriu." });
+    }
+  });
+
+  const handleCategoryReorder = async (req: any, res: any) => {
+    try {
+      const userId = req.user.claims.sub;
+      const orderedIds = req.body?.orderedIds;
+      if (!Array.isArray(orderedIds) || orderedIds.some((id: unknown) => typeof id !== "string")) {
+        return res.status(400).json({
+          message: "Očakávané pole orderedIds (pole ID kategórií v novom poradí).",
+        });
+      }
+      await storage.reorderPortfolioCategories(userId, orderedIds as string[]);
+      const categories = await storage.getPortfolioCategoriesByUser(userId);
+      res.json(categories);
+    } catch (error) {
+      console.error("Error reordering portfolio categories:", error);
+      res.status(500).json({ message: "Nepodarilo sa uložiť poradie kategórií." });
+    }
+  };
+
+  app.put("/api/portfolio-categories/reorder", isAuthenticated, handleCategoryReorder);
+  app.post("/api/portfolio-categories/reorder", isAuthenticated, handleCategoryReorder);
+
+  app.put("/api/portfolio-categories/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const categoryId = req.params.id as string;
+      const existing = await storage.getPortfolioCategoryById(categoryId, userId);
+      if (!existing) {
+        return res.status(404).json({ message: "Kategória nenájdená." });
+      }
+      const name =
+        typeof req.body?.name === "string" ? req.body.name.trim() : existing.name;
+      if (!name) {
+        return res.status(400).json({ message: "Zadajte názov kategórie." });
+      }
+      const siblings = await storage.getPortfolioCategoriesByUser(userId);
+      if (
+        siblings.some(
+          (c) => c.id !== categoryId && c.name.toLowerCase() === name.toLowerCase(),
+        )
+      ) {
+        return res.status(400).json({ message: "Kategória s týmto názvom už existuje." });
+      }
+      const color = isAllowedCategoryColor(req.body?.color)
+        ? req.body.color
+        : existing.color;
+      const updated = await storage.updatePortfolioCategory(categoryId, userId, {
+        name,
+        color,
+      });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating portfolio category:", error);
+      res.status(500).json({ message: "Nepodarilo sa aktualizovať kategóriu." });
+    }
+  });
+
+  app.delete("/api/portfolio-categories/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const categoryId = req.params.id as string;
+      const existing = await storage.getPortfolioCategoryById(categoryId, userId);
+      if (!existing) {
+        return res.status(404).json({ message: "Kategória nenájdená." });
+      }
+      await storage.deletePortfolioCategory(categoryId, userId);
+      res.json({ message: "Kategória bola vymazaná." });
+    } catch (error) {
+      console.error("Error deleting portfolio category:", error);
+      res.status(500).json({ message: "Nepodarilo sa vymazať kategóriu." });
+    }
+  });
+
   // Overview page: holdings + realizovaný zisk + dividendy naraz na portfólio,
   // namiesto 3×N samostatných HTTP dotazov z klienta (veľké zrýchlenie Pri prehľade).
   app.get("/api/overview", isAuthenticated, async (req: any, res) => {
@@ -3490,10 +3610,19 @@ export async function registerRoutes(
   app.post("/api/portfolios", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { name, description, brokerCode } = req.body;
+      const { name, description, brokerCode, categoryId } = req.body;
 
       if (!name || name.trim().length === 0) {
         return res.status(400).json({ message: "Názov portfólia je povinný." });
+      }
+
+      let resolvedCategoryId: string | null = null;
+      if (categoryId != null && categoryId !== "" && categoryId !== "none") {
+        const cat = await storage.getPortfolioCategoryById(String(categoryId), userId);
+        if (!cat) {
+          return res.status(400).json({ message: "Vybraná kategória neexistuje." });
+        }
+        resolvedCategoryId = cat.id;
       }
 
       const sortOrder = await storage.getNextPortfolioSortOrder(userId);
@@ -3503,6 +3632,7 @@ export async function registerRoutes(
         name: name.trim(),
         description: description?.trim() || null,
         brokerCode: brokerCode || null,
+        categoryId: resolvedCategoryId,
         isDefault: false,
         sortOrder,
       });
@@ -3563,7 +3693,7 @@ export async function registerRoutes(
     try {
       const userId = req.user.claims.sub;
       const portfolioId = req.params.id;
-      const { name, description, isDefault, brokerCode, isHidden } = req.body;
+      const { name, description, isDefault, brokerCode, isHidden, categoryId } = req.body;
 
       const existing = await storage.getPortfolioById(portfolioId, userId);
       if (!existing) {
@@ -3580,10 +3710,24 @@ export async function registerRoutes(
         }
       }
 
+      let resolvedCategoryId = existing.categoryId ?? null;
+      if (categoryId !== undefined) {
+        if (categoryId === null || categoryId === "" || categoryId === "none") {
+          resolvedCategoryId = null;
+        } else {
+          const cat = await storage.getPortfolioCategoryById(String(categoryId), userId);
+          if (!cat) {
+            return res.status(400).json({ message: "Vybraná kategória neexistuje." });
+          }
+          resolvedCategoryId = cat.id;
+        }
+      }
+
       const updated = await storage.updatePortfolio(portfolioId, userId, {
         name: name?.trim() || existing.name,
-        description: description?.trim() || null,
+        description: description !== undefined ? (description?.trim() || null) : existing.description,
         brokerCode: brokerCode !== undefined ? brokerCode : existing.brokerCode,
+        categoryId: resolvedCategoryId,
         isDefault: isDefault !== undefined ? isDefault : existing.isDefault,
         isHidden: isHidden !== undefined ? !!isHidden : existing.isHidden,
       });

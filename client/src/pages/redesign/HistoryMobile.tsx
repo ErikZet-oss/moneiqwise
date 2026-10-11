@@ -96,12 +96,12 @@ export default function HistoryMobile() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { formatCurrency, convertPrice } = useCurrency();
-  const { getQueryParam, isAllPortfolios, selectedPortfolio } = usePortfolio();
+  const { getQueryParam, isAllPortfolios, selectedPortfolio, scopeLabel } = usePortfolio();
   const { hideAmounts } = useChartSettings();
   const portfolioParam = getQueryParam();
   const rangeLabel = isAllPortfolios
     ? "Rozsah: všetky viditeľné portfóliá."
-    : `Rozsah: ${selectedPortfolio?.name || "portfólio"}.`;
+    : `Rozsah: ${scopeLabel}.`;
   const mask = (s: string) => (hideAmounts ? "••••••" : s);
 
   const [typeFilter, setTypeFilter] = useState("all");

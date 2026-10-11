@@ -7,6 +7,7 @@ import {
   userAssetMetadata,
   userSettings,
   portfolios,
+  portfolioCategories,
   optionTrades,
   watchlistItems,
   type User,
@@ -19,6 +20,8 @@ import {
   type UserSettings,
   type Portfolio,
   type InsertPortfolio,
+  type PortfolioCategory,
+  type InsertPortfolioCategory,
   type OptionTrade,
   type InsertOptionTrade,
   type UserAssetMetadata,
@@ -61,6 +64,20 @@ export interface IStorage {
   deletePendingRegistrationUser(userId: string): Promise<void>;
   countRegistrationUsersByStatus(): Promise<{ pending: number; approved: number; blocked: number }>;
   
+  // Portfolio category operations
+  getPortfolioCategoriesByUser(userId: string): Promise<PortfolioCategory[]>;
+  getPortfolioCategoryById(categoryId: string, userId: string): Promise<PortfolioCategory | undefined>;
+  createPortfolioCategory(data: InsertPortfolioCategory): Promise<PortfolioCategory>;
+  updatePortfolioCategory(
+    categoryId: string,
+    userId: string,
+    data: Partial<Pick<InsertPortfolioCategory, "name" | "color" | "sortOrder">>,
+  ): Promise<PortfolioCategory>;
+  deletePortfolioCategory(categoryId: string, userId: string): Promise<void>;
+  reorderPortfolioCategories(userId: string, orderedIds: string[]): Promise<void>;
+  getNextPortfolioCategorySortOrder(userId: string): Promise<number>;
+  getVisiblePortfolioIdsInCategory(userId: string, categoryId: string): Promise<string[]>;
+
   // Portfolio operations
   getPortfoliosByUser(userId: string): Promise<Portfolio[]>;
   getVisiblePortfolioIdsByUser(userId: string): Promise<string[]>;
@@ -348,6 +365,134 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return user;
+  }
+
+  // Portfolio category operations
+  async getPortfolioCategoriesByUser(userId: string): Promise<PortfolioCategory[]> {
+    return await db
+      .select()
+      .from(portfolioCategories)
+      .where(eq(portfolioCategories.userId, userId))
+      .orderBy(asc(portfolioCategories.sortOrder), asc(portfolioCategories.createdAt));
+  }
+
+  async getPortfolioCategoryById(
+    categoryId: string,
+    userId: string,
+  ): Promise<PortfolioCategory | undefined> {
+    const [row] = await db
+      .select()
+      .from(portfolioCategories)
+      .where(
+        and(eq(portfolioCategories.id, categoryId), eq(portfolioCategories.userId, userId)),
+      );
+    return row;
+  }
+
+  async createPortfolioCategory(data: InsertPortfolioCategory): Promise<PortfolioCategory> {
+    const [result] = await db.insert(portfolioCategories).values(data).returning();
+    return result!;
+  }
+
+  async updatePortfolioCategory(
+    categoryId: string,
+    userId: string,
+    data: Partial<Pick<InsertPortfolioCategory, "name" | "color" | "sortOrder">>,
+  ): Promise<PortfolioCategory> {
+    const [result] = await db
+      .update(portfolioCategories)
+      .set({ ...data, updatedAt: new Date() })
+      .where(
+        and(eq(portfolioCategories.id, categoryId), eq(portfolioCategories.userId, userId)),
+      )
+      .returning();
+    if (!result) throw new Error("UPDATE_CATEGORY_NO_ROW");
+    return result;
+  }
+
+  async deletePortfolioCategory(categoryId: string, userId: string): Promise<void> {
+    // ON DELETE SET NULL on portfolios.category_id; still clear explicitly for older DBs.
+    await db
+      .update(portfolios)
+      .set({ categoryId: null, updatedAt: new Date() })
+      .where(and(eq(portfolios.userId, userId), eq(portfolios.categoryId, categoryId)));
+    await db
+      .delete(portfolioCategories)
+      .where(
+        and(eq(portfolioCategories.id, categoryId), eq(portfolioCategories.userId, userId)),
+      );
+  }
+
+  async getNextPortfolioCategorySortOrder(userId: string): Promise<number> {
+    const rows = await db
+      .select({ sortOrder: portfolioCategories.sortOrder })
+      .from(portfolioCategories)
+      .where(eq(portfolioCategories.userId, userId));
+    if (rows.length === 0) return 0;
+    const max = Math.max(...rows.map((r) => Number(r.sortOrder ?? 0)));
+    return (Number.isFinite(max) ? max : 0) + 1;
+  }
+
+  async reorderPortfolioCategories(userId: string, orderedIds: string[]): Promise<void> {
+    const serverOrdered = await this.getPortfolioCategoriesByUser(userId);
+    const serverIds = serverOrdered.map((c) => c.id);
+    const serverSet = new Set(serverIds);
+    const seen = new Set<string>();
+    const fromClient: string[] = [];
+    for (const id of orderedIds) {
+      if (typeof id !== "string" || !serverSet.has(id) || seen.has(id)) continue;
+      seen.add(id);
+      fromClient.push(id);
+    }
+    const merged = [...fromClient];
+    for (const id of serverIds) {
+      if (!seen.has(id)) {
+        merged.push(id);
+        seen.add(id);
+      }
+    }
+    await db.transaction(async (tx) => {
+      for (let i = 0; i < merged.length; i++) {
+        await tx
+          .update(portfolioCategories)
+          .set({ sortOrder: i, updatedAt: new Date() })
+          .where(
+            and(eq(portfolioCategories.id, merged[i]!), eq(portfolioCategories.userId, userId)),
+          );
+      }
+    });
+  }
+
+  async getVisiblePortfolioIdsInCategory(
+    userId: string,
+    categoryId: string,
+  ): Promise<string[]> {
+    const rows = await db
+      .select({ id: portfolios.id })
+      .from(portfolios)
+      .where(
+        and(
+          eq(portfolios.userId, userId),
+          eq(portfolios.categoryId, categoryId),
+          or(isNull(portfolios.isHidden), eq(portfolios.isHidden, false)),
+        ),
+      )
+      .orderBy(asc(portfolios.sortOrder), asc(portfolios.createdAt));
+    return rows.map((r) => r.id);
+  }
+
+  /** Expand `cat:<id>` → ids / `__empty__`; leave `all` / uuid / csv unchanged. */
+  private async expandPortfolioParam(
+    userId: string,
+    portfolioId?: string | null,
+  ): Promise<string> {
+    let param = (portfolioId ?? "all").trim() || "all";
+    if (param.startsWith("cat:")) {
+      const ids = await this.getVisiblePortfolioIdsInCategory(userId, param.slice(4));
+      if (ids.length === 0) return "__empty__";
+      return ids.length === 1 ? ids[0]! : ids.join(",");
+    }
+    return param;
   }
 
   // Portfolio operations
@@ -715,12 +860,15 @@ export class DatabaseStorage implements IStorage {
     portfolioId?: string | null,
     opts?: { includeHidden?: boolean },
   ): Promise<Transaction[]> {
-    if (portfolioId && portfolioId !== "all") {
-      // Viac portfólií: "id1,id2,id3" (Profit multi-select).
-      if (portfolioId.includes(",")) {
+    const param = await this.expandPortfolioParam(userId, portfolioId);
+    if (param === "__empty__") return [];
+
+    if (param && param !== "all") {
+      // Viac portfólií: "id1,id2,id3" (Profit multi-select / kategória).
+      if (param.includes(",")) {
         const ids = Array.from(
           new Set(
-            portfolioId
+            param
               .split(",")
               .map((s) => s.trim())
               .filter(Boolean),
@@ -757,8 +905,8 @@ export class DatabaseStorage implements IStorage {
         .where(
           and(
             eq(transactions.userId, userId),
-            eq(transactions.portfolioId, portfolioId)
-          )
+            eq(transactions.portfolioId, param),
+          ),
         )
         .orderBy(desc(transactions.transactionDate));
     }
@@ -791,7 +939,27 @@ export class DatabaseStorage implements IStorage {
     portfolioId?: string | null,
     opts?: { includeHidden?: boolean },
   ): Promise<Transaction[]> {
-    if (portfolioId && portfolioId !== "all") {
+    const param = await this.expandPortfolioParam(userId, portfolioId);
+    if (param === "__empty__") return [];
+
+    if (param && param !== "all") {
+      if (param.includes(",")) {
+        const ids = Array.from(
+          new Set(param.split(",").map((s) => s.trim()).filter(Boolean)),
+        );
+        if (ids.length === 0) return [];
+        return await db
+          .select()
+          .from(transactions)
+          .where(
+            and(
+              eq(transactions.userId, userId),
+              eq(transactions.ticker, ticker),
+              inArray(transactions.portfolioId, ids),
+            ),
+          )
+          .orderBy(desc(transactions.transactionDate));
+      }
       return await db
         .select()
         .from(transactions)
@@ -799,8 +967,8 @@ export class DatabaseStorage implements IStorage {
           and(
             eq(transactions.userId, userId),
             eq(transactions.ticker, ticker),
-            eq(transactions.portfolioId, portfolioId)
-          )
+            eq(transactions.portfolioId, param),
+          ),
         )
         .orderBy(desc(transactions.transactionDate));
     }
@@ -874,32 +1042,58 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getHoldingsByUser(userId: string, portfolioId?: string | null): Promise<Holding[]> {
-    if (portfolioId && portfolioId !== "all") {
+    const param = await this.expandPortfolioParam(userId, portfolioId);
+    if (param === "__empty__") return [];
+
+    if (param && param !== "all") {
+      // Multi: "id1,id2" (category / Profit multi-select) — aggregate by ticker.
+      if (param.includes(",")) {
+        const ids = Array.from(
+          new Set(
+            param
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean),
+          ),
+        );
+        if (ids.length === 0) return [];
+        if (ids.length === 1) {
+          return await db
+            .select()
+            .from(holdings)
+            .where(and(eq(holdings.userId, userId), eq(holdings.portfolioId, ids[0]!)));
+        }
+        const rows = await db
+          .select()
+          .from(holdings)
+          .where(and(eq(holdings.userId, userId), inArray(holdings.portfolioId, ids)));
+        return this.aggregateHoldingsByTicker(rows);
+      }
+
       return await db
         .select()
         .from(holdings)
-        .where(
-          and(
-            eq(holdings.userId, userId),
-            eq(holdings.portfolioId, portfolioId)
-          )
-        );
+        .where(and(eq(holdings.userId, userId), eq(holdings.portfolioId, param)));
     }
-    
+
     // When viewing all portfolios, aggregate holdings by ticker (excluding hidden portfolios)
     const visibleIds = await this.getVisiblePortfolioIdsByUser(userId);
-    const portfolioFilter = visibleIds.length > 0
-      ? or(isNull(holdings.portfolioId), inArray(holdings.portfolioId, visibleIds))
-      : isNull(holdings.portfolioId);
+    const portfolioFilter =
+      visibleIds.length > 0
+        ? or(isNull(holdings.portfolioId), inArray(holdings.portfolioId, visibleIds))
+        : isNull(holdings.portfolioId);
 
     const allHoldings = await db
       .select()
       .from(holdings)
       .where(and(eq(holdings.userId, userId), portfolioFilter));
-    
-    // Aggregate by ticker
+
+    return this.aggregateHoldingsByTicker(allHoldings);
+  }
+
+  private aggregateHoldingsByTicker(allHoldings: Holding[]): Holding[] {
     const aggregatedMap = new Map<string, Holding>();
-    
+
     for (const holding of allHoldings) {
       const existing = aggregatedMap.get(holding.ticker);
       if (existing) {
@@ -907,17 +1101,17 @@ export class DatabaseStorage implements IStorage {
         const existingInvested = parseFloat(existing.totalInvested);
         const newShares = parseFloat(holding.shares);
         const newInvested = parseFloat(holding.totalInvested);
-        
+
         const totalShares = existingShares + newShares;
         const totalInvested = existingInvested + newInvested;
         const avgCost = totalShares > 0 ? totalInvested / totalShares : 0;
-        
+
         aggregatedMap.set(holding.ticker, {
           ...existing,
           shares: totalShares.toString(),
           totalInvested: totalInvested.toString(),
           averageCost: avgCost.toString(),
-          portfolioId: null, // Aggregated across portfolios
+          portfolioId: null,
           tcgImageUrl: existing.tcgImageUrl || holding.tcgImageUrl,
           tcgExternalId: existing.tcgExternalId || holding.tcgExternalId,
           tcgProductName: existing.tcgProductName || holding.tcgProductName,
@@ -927,7 +1121,7 @@ export class DatabaseStorage implements IStorage {
         aggregatedMap.set(holding.ticker, { ...holding, portfolioId: null });
       }
     }
-    
+
     return Array.from(aggregatedMap.values());
   }
 
@@ -1748,12 +1942,29 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getOptionTradesByUser(userId: string, portfolioId?: string | null): Promise<OptionTrade[]> {
-    if (portfolioId && portfolioId !== "all") {
+    const param = await this.expandPortfolioParam(userId, portfolioId);
+    if (param === "__empty__") return [];
+
+    if (param && param !== "all") {
+      if (param.includes(",")) {
+        const ids = Array.from(
+          new Set(param.split(",").map((s) => s.trim()).filter(Boolean)),
+        );
+        if (ids.length === 0) return [];
+        return await db
+          .select()
+          .from(optionTrades)
+          .where(and(eq(optionTrades.userId, userId), inArray(optionTrades.portfolioId, ids)))
+          .orderBy(desc(optionTrades.openDate));
+      }
       return await db
         .select()
         .from(optionTrades)
         .where(
-          and(eq(optionTrades.userId, userId), or(eq(optionTrades.portfolioId, portfolioId), isNull(optionTrades.portfolioId)))
+          and(
+            eq(optionTrades.userId, userId),
+            or(eq(optionTrades.portfolioId, param), isNull(optionTrades.portfolioId)),
+          ),
         )
         .orderBy(desc(optionTrades.openDate));
     }

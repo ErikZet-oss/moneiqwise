@@ -519,7 +519,12 @@ export default function OptionsMobile() {
           <ImportOptionsFields
             pending={importMutation.isPending}
             onSubmit={(rows) => {
-              const portfolioId = selectedPortfolioId === "all" ? portfolios[0]?.id || null : selectedPortfolioId;
+              const portfolioId =
+                selectedPortfolioId &&
+                selectedPortfolioId !== "all" &&
+                !selectedPortfolioId.startsWith("cat:")
+                  ? selectedPortfolioId
+                  : portfolios[0]?.id || null;
               importMutation.mutate({ trades: rows, portfolioId });
             }}
           />

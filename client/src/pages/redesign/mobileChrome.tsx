@@ -112,14 +112,21 @@ export function PortfolioSwitcher({
   open: boolean;
   onClose: () => void;
 }) {
-  const { portfolios, selectedPortfolioId, setSelectedPortfolioId } = usePortfolio();
+  const {
+    portfolios,
+    categories,
+    selectedPortfolioId,
+    setSelectedPortfolioId,
+    encodeCategoryScope,
+  } = usePortfolio();
   const pick = (id: string) => {
     setSelectedPortfolioId(id);
     onClose();
   };
+  const uncategorized = portfolios.filter((p) => !p.categoryId);
   return (
     <Dialog open={open} title="Portfólio" body="Výber je zdieľaný s ostatnými obrazovkami." onClose={onClose}>
-      <div className="mt-3 flex flex-col gap-1">
+      <div className="mt-3 flex max-h-[60vh] flex-col gap-1 overflow-y-auto">
         <button
           type="button"
           onClick={() => pick("all")}
@@ -133,26 +140,86 @@ export function PortfolioSwitcher({
           </span>
           Všetky portfóliá
         </button>
-        {portfolios.map((portfolio) => (
-          <button
-            key={portfolio.id}
-            type="button"
-            onClick={() => pick(portfolio.id)}
-            className={cn(
-              "flex min-h-[40px] items-center gap-2 rounded-[var(--rd-radius-sm)] px-2 text-left text-sm",
-              selectedPortfolioId === portfolio.id ? "text-[var(--rd-profit)]" : "text-[var(--rd-text-primary)]",
-            )}
-          >
-            {portfolio.brokerCode ? (
-              <BrokerLogo brokerCode={portfolio.brokerCode} size="xs" />
-            ) : (
-              <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)] text-[var(--rd-text-secondary)]">
-                <Layers className="size-3" aria-hidden />
-              </span>
-            )}
-            {portfolio.name}
-          </button>
-        ))}
+
+        {categories.map((category) => {
+          const scope = encodeCategoryScope(category.id);
+          const inCat = portfolios.filter((p) => p.categoryId === category.id);
+          return (
+            <div key={category.id} className="mt-1">
+              <button
+                type="button"
+                onClick={() => pick(scope)}
+                className={cn(
+                  "flex min-h-[36px] w-full items-center gap-2 rounded-[var(--rd-radius-sm)] px-2 text-left text-xs font-semibold uppercase tracking-wide",
+                  selectedPortfolioId === scope
+                    ? "text-[var(--rd-profit)]"
+                    : "text-[var(--rd-text-secondary)]",
+                )}
+              >
+                <span
+                  className="size-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: category.color }}
+                  aria-hidden
+                />
+                {category.name}
+              </button>
+              {inCat.map((portfolio) => (
+                <button
+                  key={portfolio.id}
+                  type="button"
+                  onClick={() => pick(portfolio.id)}
+                  className={cn(
+                    "flex min-h-[40px] w-full items-center gap-2 rounded-[var(--rd-radius-sm)] py-1 pl-6 pr-2 text-left text-sm",
+                    selectedPortfolioId === portfolio.id
+                      ? "text-[var(--rd-profit)]"
+                      : "text-[var(--rd-text-primary)]",
+                  )}
+                >
+                  {portfolio.brokerCode ? (
+                    <BrokerLogo brokerCode={portfolio.brokerCode} size="xs" />
+                  ) : (
+                    <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)] text-[var(--rd-text-secondary)]">
+                      <Layers className="size-3" aria-hidden />
+                    </span>
+                  )}
+                  {portfolio.name}
+                </button>
+              ))}
+            </div>
+          );
+        })}
+
+        {uncategorized.length > 0 ? (
+          <div className="mt-1">
+            {categories.length > 0 ? (
+              <p className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-[var(--rd-text-tertiary)]">
+                Bez kategórie
+              </p>
+            ) : null}
+            {uncategorized.map((portfolio) => (
+              <button
+                key={portfolio.id}
+                type="button"
+                onClick={() => pick(portfolio.id)}
+                className={cn(
+                  "flex min-h-[40px] w-full items-center gap-2 rounded-[var(--rd-radius-sm)] px-2 text-left text-sm",
+                  selectedPortfolioId === portfolio.id
+                    ? "text-[var(--rd-profit)]"
+                    : "text-[var(--rd-text-primary)]",
+                )}
+              >
+                {portfolio.brokerCode ? (
+                  <BrokerLogo brokerCode={portfolio.brokerCode} size="xs" />
+                ) : (
+                  <span className="inline-flex size-4 shrink-0 items-center justify-center rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface-raised)] text-[var(--rd-text-secondary)]">
+                    <Layers className="size-3" aria-hidden />
+                  </span>
+                )}
+                {portfolio.name}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
     </Dialog>
   );

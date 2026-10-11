@@ -119,7 +119,18 @@ export function AppSidebar() {
     if (isMobile) setOpenMobile(false);
   };
   const { user } = useAuth();
-  const { portfolios, selectedPortfolioId, selectedPortfolio, setSelectedPortfolioId, isAllPortfolios } = usePortfolio();
+  const {
+    portfolios,
+    categories,
+    selectedPortfolioId,
+    selectedPortfolio,
+    selectedCategory,
+    setSelectedPortfolioId,
+    isAllPortfolios,
+    isCategoryScope,
+    scopeLabel,
+    encodeCategoryScope,
+  } = usePortfolio();
   const { theme, toggleTheme } = useTheme();
 
   const getInitials = (user: UserType | undefined) => {
@@ -143,10 +154,7 @@ export function AppSidebar() {
     return "Používateľ";
   };
 
-  const getSelectedPortfolioName = () => {
-    if (isAllPortfolios) return "Všetky portfóliá";
-    return selectedPortfolio?.name || "Vybrať portfólio";
-  };
+  const getSelectedPortfolioName = () => scopeLabel || "Vybrať portfólio";
 
   const handleLogout = async () => {
     closeMobileSidebar();
@@ -181,6 +189,11 @@ export function AppSidebar() {
                 >
                   {selectedPortfolio?.brokerCode ? (
                     <BrokerLogo brokerCode={selectedPortfolio.brokerCode} size="xs" />
+                  ) : selectedCategory ? (
+                    <span
+                      className="inline-block h-3 w-3 shrink-0 rounded-full"
+                      style={{ backgroundColor: selectedCategory.color }}
+                    />
                   ) : (
                     <Briefcase className="h-4 w-4 text-muted-foreground" />
                   )}
@@ -188,7 +201,7 @@ export function AppSidebar() {
                   <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuContent align="start" className="w-56 max-h-[70vh] overflow-y-auto">
                 <DropdownMenuItem 
                   onClick={() => {
                     setSelectedPortfolioId("all");
@@ -202,27 +215,85 @@ export function AppSidebar() {
                     {isAllPortfolios && <Check className="h-4 w-4 text-primary" />}
                   </div>
                 </DropdownMenuItem>
-                {portfolios.length > 0 && <DropdownMenuSeparator />}
-                {portfolios.map((portfolio) => (
-                  <DropdownMenuItem
-                    key={portfolio.id}
-                    onClick={() => {
-                      setSelectedPortfolioId(portfolio.id);
-                      closeMobileSidebar();
-                    }}
-                    data-testid={`select-portfolio-${portfolio.id}`}
-                  >
-                    <div className="flex items-center gap-2 w-full">
-                      {portfolio.brokerCode ? (
-                        <BrokerLogo brokerCode={portfolio.brokerCode} size="xs" />
-                      ) : (
-                        <Briefcase className="h-4 w-4" />
-                      )}
-                      <span className="flex-1 truncate">{portfolio.name}</span>
-                      {selectedPortfolioId === portfolio.id && <Check className="h-4 w-4 text-primary" />}
+                {categories.map((category) => {
+                  const scope = encodeCategoryScope(category.id);
+                  const inCat = portfolios.filter((p) => p.categoryId === category.id);
+                  return (
+                    <div key={category.id}>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setSelectedPortfolioId(scope);
+                          closeMobileSidebar();
+                        }}
+                        data-testid={`select-category-${category.id}`}
+                      >
+                        <div className="flex items-center gap-2 w-full">
+                          <span
+                            className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: category.color }}
+                          />
+                          <span className="flex-1 truncate font-medium">{category.name}</span>
+                          {(isCategoryScope && selectedPortfolioId === scope) && (
+                            <Check className="h-4 w-4 text-primary" />
+                          )}
+                        </div>
+                      </DropdownMenuItem>
+                      {inCat.map((portfolio) => (
+                        <DropdownMenuItem
+                          key={portfolio.id}
+                          onClick={() => {
+                            setSelectedPortfolioId(portfolio.id);
+                            closeMobileSidebar();
+                          }}
+                          data-testid={`select-portfolio-${portfolio.id}`}
+                          className="pl-6"
+                        >
+                          <div className="flex items-center gap-2 w-full">
+                            {portfolio.brokerCode ? (
+                              <BrokerLogo brokerCode={portfolio.brokerCode} size="xs" />
+                            ) : (
+                              <Briefcase className="h-4 w-4" />
+                            )}
+                            <span className="flex-1 truncate">{portfolio.name}</span>
+                            {selectedPortfolioId === portfolio.id && (
+                              <Check className="h-4 w-4 text-primary" />
+                            )}
+                          </div>
+                        </DropdownMenuItem>
+                      ))}
                     </div>
-                  </DropdownMenuItem>
-                ))}
+                  );
+                })}
+                {portfolios.filter((p) => !p.categoryId).length > 0 && (
+                  <>
+                    {categories.length > 0 && <DropdownMenuSeparator />}
+                    {portfolios
+                      .filter((p) => !p.categoryId)
+                      .map((portfolio) => (
+                        <DropdownMenuItem
+                          key={portfolio.id}
+                          onClick={() => {
+                            setSelectedPortfolioId(portfolio.id);
+                            closeMobileSidebar();
+                          }}
+                          data-testid={`select-portfolio-${portfolio.id}`}
+                        >
+                          <div className="flex items-center gap-2 w-full">
+                            {portfolio.brokerCode ? (
+                              <BrokerLogo brokerCode={portfolio.brokerCode} size="xs" />
+                            ) : (
+                              <Briefcase className="h-4 w-4" />
+                            )}
+                            <span className="flex-1 truncate">{portfolio.name}</span>
+                            {selectedPortfolioId === portfolio.id && (
+                              <Check className="h-4 w-4 text-primary" />
+                            )}
+                          </div>
+                        </DropdownMenuItem>
+                      ))}
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </SidebarGroupContent>

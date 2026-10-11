@@ -18,6 +18,12 @@ import { usePortfolio } from "@/hooks/usePortfolio";
 import { useQuickNavFab } from "@/hooks/useQuickNavFab";
 import { useToast } from "@/hooks/use-toast";
 import { CHART_BENCHMARK_OPTIONS } from "@/lib/chartBenchmarks";
+import {
+  formatCategoryCashSum,
+  groupPortfoliosByCategory,
+  PORTFOLIO_CATEGORY_COLORS,
+  type PortfolioCategoryColor,
+} from "@/lib/portfolioCategories";
 import { MAX_QUICK_NAV_ITEMS, QUICK_NAV_SECTIONS } from "@/lib/quickNavSections";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
@@ -33,6 +39,8 @@ import {
 } from "@/redesign/ui";
 import { BROKER_CODES, type BrokerCode, type Currency } from "@shared/schema";
 import { KvRow, PageBody } from "./mobileChrome";
+
+const NEW_CATEGORY_OPTION = "__new_category__";
 
 interface ApiSettings {
   preferredCurrency: Currency;
@@ -101,8 +109,20 @@ function brokerLabel(code: BrokerCode | null) {
 
 export default function SettingsMobile() {
   const { toast } = useToast();
-  const { allPortfolios, createPortfolio, updatePortfolio, deletePortfolio, setPortfolioHidden, reorderPortfolios } =
-    usePortfolio();
+  const {
+    allPortfolios,
+    categories,
+    createPortfolio,
+    updatePortfolio,
+    setPortfolioCategory,
+    deletePortfolio,
+    setPortfolioHidden,
+    reorderPortfolios,
+    createCategory,
+    updateCategory,
+    deleteCategory,
+    reorderCategories,
+  } = usePortfolio();
   const {
     showChart,
     showTooltip,
@@ -139,15 +159,28 @@ export default function SettingsMobile() {
 
   const [newPortfolioName, setNewPortfolioName] = useState("");
   const [newPortfolioBroker, setNewPortfolioBroker] = useState<BrokerCode | undefined>(undefined);
+  const [newPortfolioCategoryId, setNewPortfolioCategoryId] = useState<string>("none");
   const [editingPortfolio, setEditingPortfolio] = useState<{
     id: string;
     name: string;
     brokerCode: BrokerCode | null;
+    categoryId: string | null;
   } | null>(null);
   const [deletePortfolioId, setDeletePortfolioId] = useState<string | null>(null);
+  const [movingPortfolioId, setMovingPortfolioId] = useState<string | null>(null);
+  const [categoryForm, setCategoryForm] = useState<{
+    id: string | null;
+    name: string;
+    color: PortfolioCategoryColor;
+    afterCreateAssignPortfolioId?: string | null;
+    afterCreateTarget: "newPortfolio" | "editPortfolio" | "move" | null;
+  } | null>(null);
+  const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isSavingCategory, setIsSavingCategory] = useState(false);
+  const [reorderingCategory, setReorderingCategory] = useState(false);
   const [togglingHiddenId, setTogglingHiddenId] = useState<string | null>(null);
   const [reorderingPortfolio, setReorderingPortfolio] = useState(false);
   const [wipeDialogOpen, setWipeDialogOpen] = useState(false);
@@ -417,14 +450,48 @@ export default function SettingsMobile() {
     }
   };
 
+  const handleMoveCategory = async (index: number, direction: "up" | "down") => {
+    const target = direction === "up" ? index - 1 : index + 1;
+    if (target < 0 || target >= categories.length) return;
+    const ids = categories.map((c) => c.id);
+    const tmp = ids[index];
+    ids[index] = ids[target]!;
+    ids[target] = tmp!;
+    setReorderingCategory(true);
+    try {
+      await reorderCategories(ids);
+    } catch (err) {
+      const msg =
+        err instanceof Error && err.message.trim() ? err.message : "Nepodarilo sa uložiť poradie kategórií.";
+      toast({ title: "Chyba", description: msg, variant: "destructive" });
+    } finally {
+      setReorderingCategory(false);
+    }
+  };
+
+  const openNewCategory = (opts?: {
+    afterCreateAssignPortfolioId?: string | null;
+    afterCreateTarget?: "newPortfolio" | "editPortfolio" | "move" | null;
+  }) => {
+    setCategoryForm({
+      id: null,
+      name: "",
+      color: PORTFOLIO_CATEGORY_COLORS[0],
+      afterCreateAssignPortfolioId: opts?.afterCreateAssignPortfolioId ?? null,
+      afterCreateTarget: opts?.afterCreateTarget ?? null,
+    });
+  };
+
   const handleCreatePortfolio = async () => {
     if (!newPortfolioName.trim()) return;
     setIsCreating(true);
     try {
-      await createPortfolio(newPortfolioName.trim(), newPortfolioBroker);
+      const catId = newPortfolioCategoryId === "none" ? null : newPortfolioCategoryId;
+      await createPortfolio(newPortfolioName.trim(), newPortfolioBroker, catId);
       toast({ title: "Vytvorené", description: "Nové portfólio bolo úspešne vytvorené." });
       setNewPortfolioName("");
       setNewPortfolioBroker(undefined);
+      setNewPortfolioCategoryId("none");
     } catch (error) {
       const msg =
         error instanceof Error && error.message.trim() ? error.message : "Nepodarilo sa vytvoriť portfólio.";
@@ -438,7 +505,12 @@ export default function SettingsMobile() {
     if (!editingPortfolio || !editingPortfolio.name.trim()) return;
     setIsUpdating(true);
     try {
-      await updatePortfolio(editingPortfolio.id, editingPortfolio.name.trim(), editingPortfolio.brokerCode);
+      await updatePortfolio(
+        editingPortfolio.id,
+        editingPortfolio.name.trim(),
+        editingPortfolio.brokerCode,
+        editingPortfolio.categoryId,
+      );
       toast({ title: "Uložené", description: "Portfólio bolo úspešne aktualizované." });
       setEditingPortfolio(null);
     } catch {
@@ -447,6 +519,71 @@ export default function SettingsMobile() {
       setIsUpdating(false);
     }
   };
+
+  const handleSaveCategory = async () => {
+    if (!categoryForm || !categoryForm.name.trim()) {
+      toast({ title: "Chyba", description: "Zadajte názov kategórie.", variant: "destructive" });
+      return;
+    }
+    setIsSavingCategory(true);
+    try {
+      if (categoryForm.id) {
+        await updateCategory(categoryForm.id, categoryForm.name.trim(), categoryForm.color);
+        toast({ title: "Uložené", description: "Kategória bola aktualizovaná." });
+      } else {
+        const created = await createCategory(categoryForm.name.trim(), categoryForm.color);
+        toast({ title: "Vytvorené", description: "Nová kategória bola vytvorená." });
+        if (categoryForm.afterCreateTarget === "newPortfolio") {
+          setNewPortfolioCategoryId(created.id);
+        } else if (categoryForm.afterCreateTarget === "editPortfolio" && editingPortfolio) {
+          setEditingPortfolio({ ...editingPortfolio, categoryId: created.id });
+        } else if (categoryForm.afterCreateTarget === "move" && categoryForm.afterCreateAssignPortfolioId) {
+          await setPortfolioCategory(categoryForm.afterCreateAssignPortfolioId, created.id);
+          setMovingPortfolioId(null);
+        }
+      }
+      setCategoryForm(null);
+    } catch (error) {
+      const msg =
+        error instanceof Error && error.message.trim() ? error.message : "Nepodarilo sa uložiť kategóriu.";
+      toast({ title: "Chyba", description: msg, variant: "destructive" });
+    } finally {
+      setIsSavingCategory(false);
+    }
+  };
+
+  const handleDeleteCategory = async () => {
+    if (!deleteCategoryId) return;
+    setIsDeleting(true);
+    try {
+      await deleteCategory(deleteCategoryId);
+      toast({
+        title: "Vymazané",
+        description: "Kategória bola vymazaná. Portfóliá ostali v Bez kategórie.",
+      });
+      setDeleteCategoryId(null);
+    } catch {
+      toast({ title: "Chyba", description: "Nepodarilo sa vymazať kategóriu.", variant: "destructive" });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleAssignCategory = async (portfolioId: string, categoryId: string | null) => {
+    try {
+      await setPortfolioCategory(portfolioId, categoryId);
+      setMovingPortfolioId(null);
+      toast({ title: "Presunuté", description: "Portfólio bolo priradené do kategórie." });
+    } catch {
+      toast({ title: "Chyba", description: "Nepodarilo sa presunúť portfólio.", variant: "destructive" });
+    }
+  };
+
+  const categorySelectOptions = [
+    { value: "none", label: "Bez kategórie" },
+    ...categories.map((c) => ({ value: c.id, label: c.name })),
+    { value: NEW_CATEGORY_OPTION, label: "+ Nová kategória..." },
+  ];
 
   const handleToggleHidden = async (id: string, currentlyHidden: boolean) => {
     setTogglingHiddenId(id);
@@ -486,6 +623,12 @@ export default function SettingsMobile() {
       ? settings.averageCostDisplayCurrency
       : "same-as-display";
   const deleteTarget = allPortfolios.find((p) => p.id === deletePortfolioId);
+  const movingTarget = allPortfolios.find((p) => p.id === movingPortfolioId);
+  const deleteCategoryTarget = categories.find((c) => c.id === deleteCategoryId);
+  const categoryGroups = groupPortfoliosByCategory(allPortfolios, categories, {
+    includeEmptyCategories: true,
+    includeEmptyUncategorized: true,
+  });
   const snapshotPoints = (snapshotDevData?.points ?? []).slice(-120);
 
   return (
@@ -574,11 +717,24 @@ export default function SettingsMobile() {
               </Card>
             </SettingsSection>
 
-            <SettingsSection title="Správa portfólií">
+            <SettingsSection
+              title="Správa portfólií"
+              action={
+                <Button
+                  variant="Secondary"
+                  className="h-8 px-2 text-xs"
+                  onClick={() => openNewCategory()}
+                  data-testid="button-add-category"
+                >
+                  <Plus className="mr-1 size-3.5" />
+                  Kategória
+                </Button>
+              }
+            >
               <Card>
                 <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">
-                  Vytvárajte a spravujte svoje investičné portfóliá. Poradie v zozname určuje aj poradie v menu
-                  aplikácie.
+                  Portfóliá sú zoskupené v kategóriách. Poradie kategórií a portfólií určuje aj poradie v prepínači
+                  naprieč aplikáciou.
                 </p>
                 <Input
                   label="Názov nového portfólia"
@@ -599,6 +755,18 @@ export default function SettingsMobile() {
                     if (code === "pokemon" && !newPortfolioName.trim()) setNewPortfolioName("Pokémon TCG");
                   }}
                 />
+                <Select
+                  label="Kategória"
+                  value={newPortfolioCategoryId}
+                  options={categorySelectOptions}
+                  onChange={(value) => {
+                    if (value === NEW_CATEGORY_OPTION) {
+                      openNewCategory({ afterCreateTarget: "newPortfolio" });
+                      return;
+                    }
+                    setNewPortfolioCategoryId(value);
+                  }}
+                />
                 <Button
                   className="w-full"
                   onClick={() => void handleCreatePortfolio()}
@@ -607,74 +775,162 @@ export default function SettingsMobile() {
                 >
                   {isCreating ? "Vytváram..." : "Vytvoriť portfólio"}
                 </Button>
-                {allPortfolios.length === 0 ? (
-                  <EmptyState title="Zatiaľ nemáte žiadne portfóliá." body="Zadajte názov a vytvorte prvé portfólio." />
-                ) : (
-                  <div className="flex flex-col gap-3 border-t border-[var(--rd-border-subtle)] pt-3">
-                    {allPortfolios.map((portfolio, index) => (
-                      <div
-                        key={portfolio.id}
-                        className="flex items-center gap-1.5"
-                        data-testid={`portfolio-item-${portfolio.id}`}
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p
-                            className={`truncate rd-type-body-strong ${
-                              portfolio.isHidden ? "line-through opacity-70" : ""
-                            }`}
-                          >
-                            {portfolio.name}
+
+                {categories.length === 0 && allPortfolios.length === 0 ? (
+                  <EmptyState
+                    title="Zatiaľ žiadne kategórie"
+                    body="Vytvorte kategóriu (napr. Akcie, Krypto) a priraďte do nej portfóliá."
+                  />
+                ) : null}
+
+                <div className="flex flex-col gap-4 border-t border-[var(--rd-border-subtle)] pt-3">
+                  {categoryGroups.map((group) => {
+                    const cat = group.category;
+                    const catIndex = cat ? categories.findIndex((c) => c.id === cat.id) : -1;
+                    return (
+                      <div key={cat?.id ?? "uncategorized"} className="flex flex-col gap-2">
+                        <div className="flex items-center gap-1.5">
+                          {cat ? (
+                            <span
+                              className="size-2.5 shrink-0 rounded-full"
+                              style={{ backgroundColor: cat.color }}
+                              aria-hidden
+                            />
+                          ) : (
+                            <span className="size-2.5 shrink-0 rounded-full bg-[var(--rd-text-tertiary)]" aria-hidden />
+                          )}
+                          <p className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wide text-[var(--rd-text-secondary)]">
+                            {cat?.name ?? "Bez kategórie"}
                           </p>
-                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                            {portfolio.isDefault ? <Badge label="Predvolené" tone="Profit" /> : null}
-                            {portfolio.isHidden ? <Badge label="Skryté" tone="Neutral" /> : null}
-                            <span className="rd-type-body-sm text-[var(--rd-text-tertiary)]">
-                              {brokerLabel(portfolio.brokerCode)}
-                            </span>
-                          </div>
+                          <span className="shrink-0 text-xs text-[var(--rd-text-tertiary)]">
+                            {formatCategoryCashSum(group.portfolios)}
+                          </span>
+                          {cat ? (
+                            <>
+                              <IconButton
+                                label="Posunúť kategóriu nahor"
+                                disabled={catIndex <= 0 || reorderingCategory}
+                                onClick={() => void handleMoveCategory(catIndex, "up")}
+                              >
+                                <ChevronUp className="size-3.5" />
+                              </IconButton>
+                              <IconButton
+                                label="Posunúť kategóriu nadol"
+                                disabled={catIndex < 0 || catIndex >= categories.length - 1 || reorderingCategory}
+                                onClick={() => void handleMoveCategory(catIndex, "down")}
+                              >
+                                <ChevronDown className="size-3.5" />
+                              </IconButton>
+                              <IconButton
+                                label="Upraviť kategóriu"
+                                onClick={() =>
+                                  setCategoryForm({
+                                    id: cat.id,
+                                    name: cat.name,
+                                    color: (PORTFOLIO_CATEGORY_COLORS as readonly string[]).includes(cat.color)
+                                      ? (cat.color as PortfolioCategoryColor)
+                                      : PORTFOLIO_CATEGORY_COLORS[0],
+                                    afterCreateTarget: null,
+                                  })
+                                }
+                              >
+                                <Pencil className="size-3.5" />
+                              </IconButton>
+                              <IconButton label="Zmazať kategóriu" onClick={() => setDeleteCategoryId(cat.id)}>
+                                <Trash2 className="size-3.5 text-[var(--rd-loss)]" />
+                              </IconButton>
+                            </>
+                          ) : null}
                         </div>
-                        <IconButton
-                          label="Posunúť nahor"
-                          disabled={index === 0 || reorderingPortfolio}
-                          onClick={() => void handleMovePortfolio(index, "up")}
-                        >
-                          <ChevronUp className="size-4" />
-                        </IconButton>
-                        <IconButton
-                          label="Posunúť nadol"
-                          disabled={index === allPortfolios.length - 1 || reorderingPortfolio}
-                          onClick={() => void handleMovePortfolio(index, "down")}
-                        >
-                          <ChevronDown className="size-4" />
-                        </IconButton>
-                        <IconButton
-                          label={portfolio.isHidden ? "Odkryť portfólio" : "Skryť portfólio"}
-                          disabled={togglingHiddenId === portfolio.id}
-                          onClick={() => void handleToggleHidden(portfolio.id, !!portfolio.isHidden)}
-                        >
-                          {portfolio.isHidden ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                        </IconButton>
-                        <IconButton
-                          label="Upraviť portfólio"
-                          onClick={() =>
-                            setEditingPortfolio({
-                              id: portfolio.id,
-                              name: portfolio.name,
-                              brokerCode: portfolio.brokerCode,
-                            })
-                          }
-                        >
-                          <Pencil className="size-4" />
-                        </IconButton>
-                        {allPortfolios.length > 1 ? (
-                          <IconButton label="Vymazať portfólio" onClick={() => setDeletePortfolioId(portfolio.id)}>
-                            <Trash2 className="size-4 text-[var(--rd-loss)]" />
-                          </IconButton>
-                        ) : null}
+
+                        {group.portfolios.length === 0 ? (
+                          <p className="pl-4 text-xs text-[var(--rd-text-tertiary)]">Žiadne portfóliá</p>
+                        ) : (
+                          group.portfolios.map((portfolio) => {
+                            const globalIndex = allPortfolios.findIndex((p) => p.id === portfolio.id);
+                            return (
+                              <div
+                                key={portfolio.id}
+                                className="flex items-start gap-1.5 rounded-[var(--rd-radius-sm)] bg-[var(--rd-bg-surface-raised)] px-2 py-2"
+                                data-testid={`portfolio-item-${portfolio.id}`}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <p
+                                    className={`truncate rd-type-body-strong ${
+                                      portfolio.isHidden ? "line-through opacity-70" : ""
+                                    }`}
+                                  >
+                                    {portfolio.name}
+                                  </p>
+                                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                    {portfolio.isDefault ? <Badge label="Predvolené" tone="Profit" /> : null}
+                                    {portfolio.isHidden ? <Badge label="Skryté" tone="Neutral" /> : null}
+                                    <span className="rd-type-body-sm text-[var(--rd-text-tertiary)]">
+                                      {brokerLabel(portfolio.brokerCode)}
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="mt-1.5 text-xs font-medium text-[var(--rd-accent)]"
+                                    onClick={() => setMovingPortfolioId(portfolio.id)}
+                                  >
+                                    Presunúť
+                                  </button>
+                                </div>
+                                <IconButton
+                                  label="Posunúť nahor"
+                                  disabled={globalIndex <= 0 || reorderingPortfolio}
+                                  onClick={() => void handleMovePortfolio(globalIndex, "up")}
+                                >
+                                  <ChevronUp className="size-4" />
+                                </IconButton>
+                                <IconButton
+                                  label="Posunúť nadol"
+                                  disabled={
+                                    globalIndex < 0 ||
+                                    globalIndex >= allPortfolios.length - 1 ||
+                                    reorderingPortfolio
+                                  }
+                                  onClick={() => void handleMovePortfolio(globalIndex, "down")}
+                                >
+                                  <ChevronDown className="size-4" />
+                                </IconButton>
+                                <IconButton
+                                  label={portfolio.isHidden ? "Odkryť portfólio" : "Skryť portfólio"}
+                                  disabled={togglingHiddenId === portfolio.id}
+                                  onClick={() => void handleToggleHidden(portfolio.id, !!portfolio.isHidden)}
+                                >
+                                  {portfolio.isHidden ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                                </IconButton>
+                                <IconButton
+                                  label="Upraviť portfólio"
+                                  onClick={() =>
+                                    setEditingPortfolio({
+                                      id: portfolio.id,
+                                      name: portfolio.name,
+                                      brokerCode: portfolio.brokerCode,
+                                      categoryId: portfolio.categoryId ?? null,
+                                    })
+                                  }
+                                >
+                                  <Pencil className="size-4" />
+                                </IconButton>
+                                {allPortfolios.length > 1 ? (
+                                  <IconButton
+                                    label="Vymazať portfólio"
+                                    onClick={() => setDeletePortfolioId(portfolio.id)}
+                                  >
+                                    <Trash2 className="size-4 text-[var(--rd-loss)]" />
+                                  </IconButton>
+                                ) : null}
+                              </div>
+                            );
+                          })
+                        )}
                       </div>
-                    ))}
-                  </div>
-                )}
+                    );
+                  })}
+                </div>
               </Card>
             </SettingsSection>
 
@@ -1038,7 +1294,7 @@ export default function SettingsMobile() {
       <Dialog
         open={!!editingPortfolio}
         title="Upraviť portfólio"
-        body="Upravte názov a brokera pre toto portfólio."
+        body="Upravte názov, brokera a kategóriu."
         onClose={() => {
           if (!isUpdating) setEditingPortfolio(null);
         }}
@@ -1060,6 +1316,20 @@ export default function SettingsMobile() {
               )
             }
           />
+          <Select
+            label="Kategória"
+            value={editingPortfolio?.categoryId || "none"}
+            options={categorySelectOptions}
+            onChange={(value) => {
+              if (value === NEW_CATEGORY_OPTION) {
+                openNewCategory({ afterCreateTarget: "editPortfolio" });
+                return;
+              }
+              setEditingPortfolio((prev) =>
+                prev ? { ...prev, categoryId: value === "none" ? null : value } : null,
+              );
+            }}
+          />
           <div className="flex gap-2">
             <Button variant="Secondary" className="flex-1" onClick={() => setEditingPortfolio(null)} disabled={isUpdating}>
               Zrušiť
@@ -1071,6 +1341,146 @@ export default function SettingsMobile() {
               data-testid="button-save-portfolio-name"
             >
               {isUpdating ? "Ukladám..." : "Uložiť"}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={!!movingPortfolioId}
+        title={movingTarget ? `Presunúť „${movingTarget.name}"` : "Presunúť portfólio"}
+        body="Kliknutím priraďte portfólio do kategórie."
+        onClose={() => setMovingPortfolioId(null)}
+      >
+        <div className="mt-3 flex flex-col gap-1">
+          <button
+            type="button"
+            className="flex min-h-[44px] items-center justify-between rounded-[var(--rd-radius-sm)] px-2 text-left text-sm"
+            onClick={() => movingPortfolioId && void handleAssignCategory(movingPortfolioId, null)}
+          >
+            <span>Bez kategórie</span>
+            <span className="text-xs text-[var(--rd-text-tertiary)]">
+              {allPortfolios.filter((p) => !p.categoryId).length} portf.
+            </span>
+          </button>
+          {categories.map((cat) => (
+            <button
+              key={cat.id}
+              type="button"
+              className="flex min-h-[44px] items-center justify-between gap-2 rounded-[var(--rd-radius-sm)] px-2 text-left text-sm"
+              onClick={() => movingPortfolioId && void handleAssignCategory(movingPortfolioId, cat.id)}
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: cat.color }} aria-hidden />
+                <span className="truncate">{cat.name}</span>
+              </span>
+              <span className="shrink-0 text-xs text-[var(--rd-text-tertiary)]">
+                {allPortfolios.filter((p) => p.categoryId === cat.id).length} portf.
+              </span>
+            </button>
+          ))}
+          <Button
+            variant="Secondary"
+            className="mt-2 w-full"
+            onClick={() =>
+              openNewCategory({
+                afterCreateAssignPortfolioId: movingPortfolioId,
+                afterCreateTarget: "move",
+              })
+            }
+          >
+            <Plus className="mr-1 size-3.5" />
+            Nová kategória...
+          </Button>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={!!categoryForm}
+        title={categoryForm?.id ? "Upraviť kategóriu" : "Nová kategória"}
+        onClose={() => {
+          if (!isSavingCategory) setCategoryForm(null);
+        }}
+      >
+        <div className="mt-3 space-y-3">
+          <Input
+            label="Názov kategórie"
+            placeholder="napr. Akcie"
+            value={categoryForm?.name || ""}
+            onChange={(e) =>
+              setCategoryForm((prev) => (prev ? { ...prev, name: e.target.value } : null))
+            }
+            data-testid="input-category-name"
+          />
+          <div>
+            <p className="mb-1.5 text-xs font-medium text-[var(--rd-text-secondary)]">Farba</p>
+            <div className="flex flex-wrap gap-2">
+              {PORTFOLIO_CATEGORY_COLORS.map((color) => {
+                const selected = categoryForm?.color === color;
+                return (
+                  <button
+                    key={color}
+                    type="button"
+                    aria-label={`Farba ${color}`}
+                    className={`size-8 rounded-full border-2 ${
+                      selected ? "border-[var(--rd-text-primary)]" : "border-transparent"
+                    }`}
+                    style={{ backgroundColor: color }}
+                    onClick={() => setCategoryForm((prev) => (prev ? { ...prev, color } : null))}
+                  />
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="Secondary"
+              className="flex-1"
+              onClick={() => setCategoryForm(null)}
+              disabled={isSavingCategory}
+            >
+              Zrušiť
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={() => void handleSaveCategory()}
+              disabled={!categoryForm?.name.trim() || isSavingCategory}
+              data-testid="button-save-category"
+            >
+              {isSavingCategory ? "Ukladám..." : "Uložiť"}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={!!deleteCategoryId}
+        title={deleteCategoryTarget ? `Zmazať kategóriu „${deleteCategoryTarget.name}"?` : "Zmazať kategóriu?"}
+        onClose={() => {
+          if (!isDeleting) setDeleteCategoryId(null);
+        }}
+      >
+        <div className="mt-3 space-y-3">
+          <p className="rd-type-body text-[var(--rd-text-secondary)]">
+            Portfóliá v tejto kategórii sa nevymažú — presunú sa do skupiny Bez kategórie.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="Secondary"
+              className="flex-1"
+              onClick={() => setDeleteCategoryId(null)}
+              disabled={isDeleting}
+            >
+              Zrušiť
+            </Button>
+            <Button
+              variant="Secondary"
+              className="flex-1 border-[var(--rd-loss)] bg-[var(--rd-loss-dim)] text-[var(--rd-loss)]"
+              onClick={() => void handleDeleteCategory()}
+              disabled={isDeleting}
+              data-testid="button-confirm-delete-category"
+            >
+              {isDeleting ? "Mažem..." : "Zmazať"}
             </Button>
           </div>
         </div>
@@ -1183,10 +1593,21 @@ export default function SettingsMobile() {
   );
 }
 
-function SettingsSection({ title, children }: { title: string; children: ReactNode }) {
+function SettingsSection({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <section className="flex flex-col gap-1.5">
-      <p className="rd-type-overline text-[var(--rd-text-tertiary)]">{title}</p>
+      <div className="flex items-center gap-2">
+        <p className="min-w-0 flex-1 rd-type-overline text-[var(--rd-text-tertiary)]">{title}</p>
+        {action}
+      </div>
       {children}
     </section>
   );

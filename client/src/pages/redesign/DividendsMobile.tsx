@@ -136,7 +136,7 @@ function formatCompactAmount(n: number): string {
 export default function DividendsMobile() {
   const { formatCurrency: formatRaw } = useCurrency();
   const { hideAmounts } = useChartSettings();
-  const { getQueryParam, isAllPortfolios, selectedPortfolio } = usePortfolio();
+  const { getQueryParam, isAllPortfolios, selectedPortfolio, scopeLabel } = usePortfolio();
   const formatCurrency = (n: number) => {
     if (hideAmounts) return "••••••";
     if (!Number.isFinite(n)) return "—";
@@ -556,7 +556,7 @@ export default function DividendsMobile() {
   return (
     <div className="bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
       <TopBar
-        overline={isAllPortfolios ? "Všetky portfóliá" : selectedPortfolio?.name || "Portfólio"}
+        overline={scopeLabel}
         title="Dividendy"
         onOverlineClick={() => setPickerOpen(true)}
       />

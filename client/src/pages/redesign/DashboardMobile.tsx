@@ -399,7 +399,7 @@ export default function DashboardMobile() {
     formatCurrency,
     formatAverageCostCurrency,
   } = useCurrency();
-  const { getQueryParam, selectedPortfolio, isAllPortfolios, portfolios } = usePortfolio();
+  const { getQueryParam, selectedPortfolio, isAllPortfolios, portfolios, scopeLabel } = usePortfolio();
   const {
     hideAmounts,
     mobileAssetsSortBy,
@@ -426,7 +426,7 @@ export default function DashboardMobile() {
 
   const portfolioParam = getQueryParam();
   const mask = (s: string) => (hideAmounts ? "••••••" : s);
-  const overline = isAllPortfolios ? "Všetky portfóliá" : selectedPortfolio?.name || "Portfólio";
+  const overline = scopeLabel;
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [settingsWidgetId, setSettingsWidgetId] = useState<DashboardWidgetId | null>(null);

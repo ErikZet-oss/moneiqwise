@@ -21,6 +21,13 @@ export async function resolveAuditorPortfolioId(
 ): Promise<string> {
   const portfolioId = (rawPortfolioId && String(rawPortfolioId).trim()) || "all";
   if (portfolioId === "all") return "all";
+  // Category aggregate scope (`cat:<id>`) — keep as-is when category exists.
+  if (portfolioId.startsWith("cat:")) {
+    const categoryId = portfolioId.slice(4).trim();
+    if (!categoryId) return "all";
+    const cat = await storage.getPortfolioCategoryById(categoryId, userId);
+    return cat ? portfolioId : "all";
+  }
   const pf = await storage.getPortfolioById(portfolioId, userId);
   return pf ? portfolioId : "all";
 }

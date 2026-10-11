@@ -39,7 +39,7 @@ function actionPill(action: "BUY" | "HOLD" | "TRIM" | "SELL") {
 
 export function DashboardAiMacroAuditWidget() {
   const [, setLocation] = useLocation();
-  const { getQueryParam, selectedPortfolio, isAllPortfolios } = usePortfolio();
+  const { getQueryParam, scopeLabel } = usePortfolio();
   const portfolioId = getQueryParam();
 
   const { data, isLoading } = useQuery<AiAuditorLatestResponse>({
@@ -59,9 +59,7 @@ export function DashboardAiMacroAuditWidget() {
   const usage = data?.usage;
   const score = analysis?.healthScore ?? null;
   const scoreColor = score == null ? undefined : scoreToBarColor(score);
-  const pfName = isAllPortfolios
-    ? "Všetky portfóliá"
-    : selectedPortfolio?.name || "Portfólio";
+  const pfName = scopeLabel;
   const createdAt = data?.run?.createdAt
     ? format(new Date(data.run.createdAt), "HH:mm", { locale: sk })
     : null;

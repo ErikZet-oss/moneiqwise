@@ -847,7 +847,7 @@ interface UpcomingMacroEventsRes {
 function DashboardClassic() {
   const [, setLocation] = useLocation();
   const { currency, convertPrice, convertAverageCostPrice, getTickerCurrency, resolveHoldingCostCurrency, pnlInvestedForDisplay, formatCurrency, formatAverageCostCurrency } = useCurrency();
-  const { getQueryParam, selectedPortfolio, isAllPortfolios, portfolios } = usePortfolio();
+  const { getQueryParam, selectedPortfolio, isAllPortfolios, portfolios, scopeLabel } = usePortfolio();
   const {
     hideAmounts,
     showNews,
@@ -1769,9 +1769,7 @@ function DashboardClassic() {
       };
     });
   }, [athReachedPortfolios, athHistoryByPortfolio]);
-  const dashboardPortfolioLabel = isAllPortfolios
-    ? "Všetky portfóliá"
-    : selectedPortfolio?.name ?? "Vybrané portfólio";
+  const dashboardPortfolioLabel = scopeLabel;
 
   const importantNotifications = useMemo<PortfolioNotificationItem[]>(() => {
     const items: PortfolioNotificationItem[] = [];
