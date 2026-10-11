@@ -54,6 +54,12 @@ function priorityLabel(p: "high" | "medium" | "low") {
   return "Stredná";
 }
 
+function priorityTone(p: "high" | "medium" | "low"): BadgeTone {
+  if (p === "high") return "Loss";
+  if (p === "low") return "Neutral";
+  return "Warning";
+}
+
 export default function AiMacroAuditMobile() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -187,6 +193,7 @@ export default function AiMacroAuditMobile() {
           </Button>
           <p className="rd-type-overline text-[var(--rd-text-tertiary)]">
             Dnes {usage ? `${usage.used}/${usage.limit}` : "—"} · {pfName}
+            {limitReached ? " · ďalšia analýza zajtra" : ""}
           </p>
         </Card>
 
@@ -302,48 +309,94 @@ export default function AiMacroAuditMobile() {
               <div className="flex flex-col gap-2">
                 {riskItems.map((item) => {
                   const open = openRisk === item.id;
+                  const canExpand = Boolean(
+                    item.deepDive?.trim() || item.mitigation?.trim(),
+                  );
+                  const topSectors =
+                    item.id === "sector"
+                      ? analysis.macroStress.sectorConcentration.topSectors
+                      : [];
                   return (
                     <button
                       key={item.id}
                       type="button"
-                      onClick={() => setOpenRisk((cur) => (cur === item.id ? null : item.id))}
+                      onClick={() => {
+                        if (!canExpand) return;
+                        setOpenRisk((cur) => (cur === item.id ? null : item.id));
+                      }}
                       className={cn(
                         "w-full rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface)] p-3 text-left",
                         open && "border-[var(--rd-ai)]/40",
+                        !canExpand && "cursor-default",
                       )}
-                      aria-expanded={open}
+                      aria-expanded={canExpand ? open : undefined}
                       data-testid={`button-ai-macro-risk-${item.id}`}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <p className="rd-type-body-strong flex items-center gap-1 text-[var(--rd-text-primary)]">
                           {item.title}
-                          <ChevronDown
-                            className={cn(
-                              "size-3.5 text-[var(--rd-text-tertiary)] transition-transform",
-                              open && "rotate-180",
-                            )}
-                            aria-hidden
-                          />
+                          {canExpand ? (
+                            <ChevronDown
+                              className={cn(
+                                "size-3.5 text-[var(--rd-text-tertiary)] transition-transform",
+                                open && "rotate-180",
+                              )}
+                              aria-hidden
+                            />
+                          ) : null}
                         </p>
                         {item.badge}
                       </div>
                       <p className="mt-1 rd-type-body-sm text-[var(--rd-text-secondary)]">
                         {item.detail}
                       </p>
-                      {open ? (
-                        <div className="mt-2 flex flex-col gap-2">
-                          <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">
-                            {item.deepDive}
-                          </p>
-                          <div className="rounded-[var(--rd-radius-xs)] border border-[var(--rd-warning)]/25 bg-[var(--rd-warning-dim)] p-2">
-                            <p className="mb-0.5 flex items-center gap-1 rd-type-overline text-[var(--rd-warning)]">
-                              <Lightbulb className="size-3" aria-hidden />
-                              Návrh na riešenie
-                            </p>
-                            <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">
-                              {item.mitigation}
-                            </p>
-                          </div>
+                      {topSectors.length > 0 ? (
+                        <ul className="mt-2 flex flex-col gap-1.5">
+                          {topSectors.map((s) => (
+                            <li key={s.name} className="flex flex-col gap-1">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="truncate rd-type-body-sm text-[var(--rd-text-primary)]">
+                                  {s.name}
+                                </span>
+                                <span className="shrink-0 tabular-nums rd-type-body-sm text-[var(--rd-text-tertiary)]">
+                                  {s.weightPct.toFixed(1)}%
+                                </span>
+                              </div>
+                              <div className="h-1.5 overflow-hidden rounded-full bg-[var(--rd-bg-surface-raised)]">
+                                <div
+                                  className="h-full rounded-full bg-[var(--rd-text-secondary)]"
+                                  style={{
+                                    width: `${Math.max(2, Math.min(100, s.weightPct))}%`,
+                                  }}
+                                />
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      {open && canExpand ? (
+                        <div className="mt-2 flex flex-col gap-2 border-t border-[var(--rd-border-subtle)] pt-2">
+                          {item.deepDive?.trim() ? (
+                            <div className="flex flex-col gap-0.5">
+                              <p className="rd-type-overline text-[var(--rd-text-tertiary)]">
+                                Hĺbkový rozbor
+                              </p>
+                              <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">
+                                {item.deepDive}
+                              </p>
+                            </div>
+                          ) : null}
+                          {item.mitigation?.trim() ? (
+                            <div className="rounded-[var(--rd-radius-xs)] border border-[var(--rd-warning)]/25 bg-[var(--rd-warning-dim)] p-2">
+                              <p className="mb-0.5 flex items-center gap-1 rd-type-overline text-[var(--rd-warning)]">
+                                <Lightbulb className="size-3" aria-hidden />
+                                Návrh na riešenie
+                              </p>
+                              <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">
+                                {item.mitigation}
+                              </p>
+                            </div>
+                          ) : null}
                         </div>
                       ) : null}
                     </button>
@@ -410,7 +463,7 @@ export default function AiMacroAuditMobile() {
                     >
                       <div className="flex items-start justify-between gap-2">
                         <p className="rd-type-body-strong text-[var(--rd-text-primary)]">{r.title}</p>
-                        <Badge label={priorityLabel(r.priority)} tone="Neutral" />
+                        <Badge label={priorityLabel(r.priority)} tone={priorityTone(r.priority)} />
                       </div>
                       <p className="mt-1 rd-type-body-sm text-[var(--rd-text-secondary)]">{r.detail}</p>
                     </div>
@@ -423,6 +476,7 @@ export default function AiMacroAuditMobile() {
               brief={analysis.actionBrief}
               error={analysis.actionBriefError}
               showEmptyHint
+              variant="redesign"
             />
           </>
         )}
@@ -436,16 +490,28 @@ export default function AiMacroAuditMobile() {
       >
         {newsDetail ? (
           <div className="mt-2 flex flex-col gap-2">
-            <Badge
-              label={sentimentLabelSk(newsDetail.sentiment)}
-              tone={sentimentTone(newsDetail.sentiment)}
-              className="self-start"
-            />
+            <div className="flex items-center gap-2">
+              <span className="rd-type-body-strong tabular-nums text-[var(--rd-text-primary)]">
+                {newsDetail.ticker}
+              </span>
+              <Badge
+                label={sentimentLabelSk(newsDetail.sentiment)}
+                tone={sentimentTone(newsDetail.sentiment)}
+              />
+            </div>
             <p className="rd-type-body-strong text-[var(--rd-text-primary)]">{newsDetail.headline}</p>
-            <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">{newsDetail.whyItMatters}</p>
             {newsDetail.portfolioImpactDetail ? (
-              <p className="rd-type-body-sm text-[var(--rd-text-tertiary)]">
-                {newsDetail.portfolioImpactDetail}
+              <div className="flex flex-col gap-0.5">
+                <p className="rd-type-overline text-[var(--rd-text-tertiary)]">
+                  Prečo to vplýva na tvoje portfólio
+                </p>
+                <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">
+                  {newsDetail.portfolioImpactDetail}
+                </p>
+              </div>
+            ) : newsDetail.whyItMatters ? (
+              <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">
+                {newsDetail.whyItMatters}
               </p>
             ) : null}
             {newsDetail.sourceUrl ? (
@@ -455,7 +521,7 @@ export default function AiMacroAuditMobile() {
                 rel="noreferrer"
                 className="inline-flex items-center gap-1 rd-type-label text-[var(--rd-profit)]"
               >
-                Otvoriť článok
+                Otvoriť pôvodný článok
                 <ExternalLink className="size-3.5" aria-hidden />
               </a>
             ) : null}

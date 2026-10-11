@@ -605,6 +605,7 @@ function AiMacroAuditClassic() {
             brief={analysis.actionBrief}
             error={analysis.actionBriefError}
             showEmptyHint
+            variant="classic"
           />
 
           <Dialog
