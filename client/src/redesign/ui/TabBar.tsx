@@ -97,7 +97,7 @@ export function TabBar() {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface)] px-1.5 pt-1.5 pb-[max(16px,env(safe-area-inset-bottom))]"
+      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-[var(--rd-border-subtle,#272c32)] bg-[var(--rd-bg-surface,#15181c)] px-1.5 pt-1.5 pb-[max(16px,env(safe-area-inset-bottom))]"
       data-testid="redesign-tab-bar"
       aria-label="Hlavná navigácia"
     >

@@ -431,7 +431,10 @@ function AuthenticatedLayout() {
     return (
       <PortfolioProvider>
         <AppUnlockGate>
-          <div className="rd-app-shell flex h-dvh w-full flex-col bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
+          <div
+            className="rd-app-shell flex h-dvh w-full flex-col bg-[var(--rd-bg-base,#050607)] text-[var(--rd-text-primary,#f3f5f6)]"
+            data-mobile-ui="redesign"
+          >
             <TickerTape />
             <main className="min-h-0 flex-1 overflow-auto pb-[calc(72px+env(safe-area-inset-bottom))]">
               <Router />

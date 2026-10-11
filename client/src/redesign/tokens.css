@@ -124,10 +124,19 @@
   --rd-page-gutter: 12px;
 }
 
-/* Prevent mobile browsers from inflating px type when system font size is larger. */
+/* Prevent mobile browsers from inflating px type when system font size is larger.
+   Also paint html/body dark so iOS Safari chrome / safe-area never flash white
+   when the app theme is light (body.bg-background would otherwise show through). */
 html[data-mobile-ui="redesign"] {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  background-color: #050607;
+  color-scheme: dark;
+}
+
+html[data-mobile-ui="redesign"] body {
+  background-color: #050607;
+  color-scheme: dark;
 }
 
 /* Scope color/font to redesign surfaces only — never paint classic UI via <html>. */
