@@ -28,9 +28,19 @@ import {
   MoreHorizontal,
   Pencil,
   RefreshCw,
+  Sparkles,
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
+import { HealthScoreBar, scoreToBarColor } from "@/components/AiMacroScoreGauge";
+import {
+  ensureAnalysisShape,
+  impactLabelSk,
+  riskLabelSk,
+  type AiAuditorImpact,
+  type AiAuditorLatestResponse,
+  type AiAuditorRiskLevel,
+} from "@/lib/aiAuditor";
 import type { HoldingWithCostCurrency } from "@shared/holdingCostCurrency";
 import type { BrokerCode } from "@shared/schema";
 import {
@@ -88,6 +98,7 @@ import {
   StatTile,
   TopBar,
   trendFromNumber,
+  type BadgeTone,
   type DeltaTrend,
   type HoldingLot,
 } from "@/redesign/ui";
@@ -153,6 +164,29 @@ function formatDashDate(isoDate: string): string {
       return isoDate;
     }
   }
+}
+
+function impactTone(impact: AiAuditorImpact): BadgeTone {
+  if (impact === "positive") return "Profit";
+  if (impact === "negative") return "Loss";
+  if (impact === "mixed") return "Warning";
+  return "Neutral";
+}
+
+function riskTone(level: AiAuditorRiskLevel): BadgeTone {
+  if (level === "low") return "Profit";
+  if (level === "high") return "Loss";
+  return "Warning";
+}
+
+function countActions(
+  rows: Array<{ action: string }> | null | undefined,
+): Record<"BUY" | "HOLD" | "TRIM" | "SELL", number> {
+  const counts = { BUY: 0, HOLD: 0, TRIM: 0, SELL: 0 };
+  for (const row of rows ?? []) {
+    if (row.action in counts) counts[row.action as keyof typeof counts] += 1;
+  }
+  return counts;
 }
 
 const CHART_RANGES = [
@@ -564,6 +598,20 @@ export default function DashboardMobile() {
 
   const earningsItems = earningsRes?.all ?? [];
   const macroItems = macroRes?.all ?? [];
+
+  const { data: macroAuditLatest } = useQuery<AiAuditorLatestResponse>({
+    queryKey: ["/api/ai-auditor/latest", portfolioParam],
+    enabled: editing || isVisible("aiMacroAudit"),
+    staleTime: 60_000,
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/ai-auditor/latest?portfolioId=${encodeURIComponent(portfolioParam)}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) throw new Error("latest");
+      return res.json();
+    },
+  });
 
   const cashValue = useMemo(() => {
     if (isAllPortfolios) {
@@ -1384,12 +1432,14 @@ export default function DashboardMobile() {
                     {currentEarnings?.date ? formatDashDate(currentEarnings.date) : "Žiadne nadchádzajúce"}
                   </span>
                 </button>
-                {earningsItems.length > 1 ? (
+                {earningsItems.length > 0 ? (
                   <button
                     type="button"
                     aria-label="Ďalší earnings"
                     className="inline-flex size-4 shrink-0 items-center justify-center text-[var(--rd-warning)]"
-                    onClick={() => setEarningsIndex((prev) => (prev + 1) % earningsItems.length)}
+                    onClick={() =>
+                      setEarningsIndex((prev) => (prev + 1) % Math.max(1, earningsItems.length))
+                    }
                   >
                     <ChevronRight className="size-4" />
                   </button>
@@ -1437,12 +1487,14 @@ export default function DashboardMobile() {
                     {currentTopPosition ? `${currentTopPosition.pct.toFixed(2)}%` : "—"}
                   </span>
                 </button>
-                {topPositions.length > 1 ? (
+                {topPositions.length > 0 ? (
                   <button
                     type="button"
                     aria-label="Ďalšia pozícia"
                     className="inline-flex size-4 shrink-0 items-center justify-center text-[var(--rd-profit)]"
-                    onClick={() => setTopPositionIndex((prev) => (prev + 1) % topPositions.length)}
+                    onClick={() =>
+                      setTopPositionIndex((prev) => (prev + 1) % Math.max(1, topPositions.length))
+                    }
                   >
                     <ChevronRight className="size-4" />
                   </button>
@@ -1473,7 +1525,11 @@ export default function DashboardMobile() {
                 ) : (
                   <Calendar className="size-[18px] shrink-0 text-[var(--rd-info)]" aria-hidden />
                 )}
-                <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                  onClick={() => setLocation("/events")}
+                >
                   <span className="rd-type-overline shrink-0 text-[var(--rd-info)]">Udalosť</span>
                   <span className="min-w-0 flex-1 truncate rd-type-body-strong text-[var(--rd-text-primary)]">
                     {currentMacro?.shortLabel || currentMacro?.title || "—"}
@@ -1481,13 +1537,15 @@ export default function DashboardMobile() {
                   <span className="shrink-0 rd-type-body-strong text-[var(--rd-text-primary)]">
                     {currentMacro?.date ? formatDashDate(currentMacro.date) : "Bez najbližšej udalosti"}
                   </span>
-                </div>
-                {macroItems.length > 1 ? (
+                </button>
+                {macroItems.length > 0 ? (
                   <button
                     type="button"
                     aria-label="Ďalšia makro udalosť"
                     className="inline-flex size-4 shrink-0 items-center justify-center text-[var(--rd-info)]"
-                    onClick={() => setMacroIndex((prev) => (prev + 1) % macroItems.length)}
+                    onClick={() =>
+                      setMacroIndex((prev) => (prev + 1) % Math.max(1, macroItems.length))
+                    }
                   >
                     <ChevronRight className="size-4" />
                   </button>
@@ -1834,7 +1892,7 @@ export default function DashboardMobile() {
                   aria-hidden
                 >
                   <div className="absolute inset-[18%] flex flex-col items-center justify-center rounded-full bg-[var(--rd-bg-surface)]">
-                    <p className="rd-type-overline text-[var(--rd-text-tertiary)]">Celkom</p>
+                    <p className="rd-type-overline text-[var(--rd-text-tertiary)]">CELKOM</p>
                     <p className="rd-type-data-sm text-[var(--rd-text-primary)]">
                       {mask(formatCurrency(metrics.stockValue))}
                     </p>
@@ -1889,23 +1947,135 @@ export default function DashboardMobile() {
           </Card>,
         );
 
-      case "aiMacroAudit":
+      case "aiMacroAudit": {
+        const analysis = ensureAnalysisShape(macroAuditLatest?.run?.analysis ?? null);
+        const usage = macroAuditLatest?.usage;
+        const score = analysis?.healthScore ?? null;
+        const scoreColor = score == null ? "var(--rd-text-tertiary)" : scoreToBarColor(score);
+        const actionCounts = countActions(analysis?.actionBrief?.portfolioAudit);
+        const createdAt = macroAuditLatest?.run?.createdAt
+          ? format(new Date(macroAuditLatest.run.createdAt), "HH:mm", { locale: sk })
+          : null;
+        const metaParts = [
+          createdAt ? `Dnes ${createdAt}` : null,
+          usage ? `Dnes ${usage.used}/${usage.limit} analýz` : null,
+          overline,
+        ].filter(Boolean);
+        const showActionCounts =
+          (actionCounts.BUY + actionCounts.HOLD + actionCounts.TRIM + actionCounts.SELL) > 0;
+
         return frame(
-          <Card>
-            <div className="flex items-center justify-between gap-2">
-              <SectionHeader title="AI Macro Audit" />
-              <button type="button" className="text-sm font-medium text-[var(--rd-ai)]" onClick={() => setLocation("/ai-macro-audit")}>
+          <Card className="gap-2 p-3" data-testid="card-dashboard-ai-macro-audit">
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="size-4 shrink-0 text-[var(--rd-ai)]" aria-hidden />
+              <p className="min-w-0 flex-1 rd-type-h3 text-[var(--rd-text-primary)]">AI Macro Audit</p>
+              <button
+                type="button"
+                className="inline-flex items-center gap-0.5 rd-type-label text-[var(--rd-profit)]"
+                onClick={() => setLocation("/ai-macro-audit")}
+                data-testid="button-ai-macro-audit-see-more"
+              >
                 Viac
+                <ChevronRight className="size-3" aria-hidden />
               </button>
             </div>
-            <p className="text-xs text-[var(--rd-text-secondary)]">
-              Health, makro riziká a akcie BUY/SELL/TRIM/HOLD · {overline}
-            </p>
-            <Button variant="Secondary" className="mt-3 w-full" onClick={() => setLocation("/ai-macro-audit")}>
-              Otvoriť AI Macro Audit
-            </Button>
+
+            {analysis ? (
+              <>
+                <div className="flex items-start gap-3">
+                  <div className="flex w-[84px] shrink-0 flex-col gap-1">
+                    <div className="flex items-end gap-1">
+                      <span
+                        className="rd-type-display-lg tabular-nums leading-none"
+                        style={{ color: scoreColor }}
+                      >
+                        {score ?? "—"}
+                      </span>
+                      <span className="pb-0.5 rd-type-body-sm text-[var(--rd-text-tertiary)]">
+                        / 100
+                      </span>
+                    </div>
+                    <HealthScoreBar score={score} className="h-1" />
+                  </div>
+                  <div className="min-w-0 flex-1 flex flex-col gap-1">
+                    <p className="rd-type-body-strong text-[var(--rd-text-primary)] line-clamp-2">
+                      {analysis.healthLabel || analysis.summaryOneLiner}
+                    </p>
+                    {metaParts.length > 0 ? (
+                      <p className="rd-type-body-sm text-[var(--rd-text-tertiary)] truncate">
+                        {metaParts.join(" · ")}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-1.5" data-testid="macro-risks">
+                  <div className="flex flex-col items-start gap-1 rounded-[var(--rd-radius-sm)] bg-[var(--rd-bg-surface-raised)] p-2">
+                    <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">Fed</p>
+                    <Badge
+                      label={impactLabelSk(analysis.macroStress.fedRates.impact)}
+                      tone={impactTone(analysis.macroStress.fedRates.impact)}
+                    />
+                  </div>
+                  <div className="flex flex-col items-start gap-1 rounded-[var(--rd-radius-sm)] bg-[var(--rd-bg-surface-raised)] p-2">
+                    <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">Inflácia</p>
+                    <Badge
+                      label={impactLabelSk(analysis.macroStress.inflation.impact)}
+                      tone={impactTone(analysis.macroStress.inflation.impact)}
+                    />
+                  </div>
+                  <div className="flex flex-col items-start gap-1 rounded-[var(--rd-radius-sm)] bg-[var(--rd-bg-surface-raised)] p-2">
+                    <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">Sektor</p>
+                    <Badge
+                      label={riskLabelSk(analysis.macroStress.sectorConcentration.level)}
+                      tone={riskTone(analysis.macroStress.sectorConcentration.level)}
+                    />
+                  </div>
+                </div>
+
+                {showActionCounts || analysis.actionBriefPending ? (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <p className="min-w-0 flex-1 rd-type-body-sm text-[var(--rd-text-primary)]">
+                      {analysis.actionBriefPending
+                        ? "Dopĺňam akcie…"
+                        : "Akcie na pozíciách"}
+                    </p>
+                    {showActionCounts ? (
+                      <>
+                        {actionCounts.BUY > 0 ? (
+                          <Badge label={`BUY ${actionCounts.BUY}`} tone="Profit" />
+                        ) : null}
+                        {actionCounts.HOLD > 0 ? (
+                          <Badge label={`HOLD ${actionCounts.HOLD}`} tone="Info" />
+                        ) : null}
+                        {actionCounts.TRIM > 0 ? (
+                          <Badge label={`TRIM ${actionCounts.TRIM}`} tone="Warning" />
+                        ) : null}
+                        {actionCounts.SELL > 0 ? (
+                          <Badge label={`SELL ${actionCounts.SELL}`} tone="Loss" />
+                        ) : null}
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
+              </>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">
+                  Zatiaľ bez auditu. Spusti analýzu v AI Macro Audit.
+                </p>
+                <Button
+                  variant="Secondary"
+                  className="w-full"
+                  onClick={() => setLocation("/ai-macro-audit")}
+                >
+                  Otvoriť AI Macro Audit
+                </Button>
+              </div>
+            )}
           </Card>,
         );
+      }
 
       case "optionsInsight":
         return frame(
