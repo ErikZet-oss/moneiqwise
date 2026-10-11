@@ -106,6 +106,8 @@ export type AiAuditorAnalysis = {
   recommendations: AiAuditorRecommendation[];
   actionBrief: AiAuditorActionBrief | null;
   actionBriefError: string | null;
+  /** Pass 2 (akcie) ešte beží na pozadí. */
+  actionBriefPending?: boolean;
   model: string;
   sourcesUsed: string[];
 };
@@ -131,6 +133,7 @@ export type AiAuditorUsage = {
 export type AiAuditorLatestResponse = {
   run: AiAuditorRun | null;
   usage: AiAuditorUsage;
+  actionsPending?: boolean;
 };
 
 export function impactLabelSk(impact: AiAuditorImpact): string {
@@ -249,6 +252,7 @@ export function ensureAnalysisShape(raw: AiAuditorAnalysis | null | undefined): 
       typeof raw.actionBriefError === "string" && raw.actionBriefError.trim()
         ? raw.actionBriefError.trim()
         : null,
+    actionBriefPending: raw.actionBriefPending === true,
     summaryOneLiner:
       String(raw.summaryOneLiner || "").trim() ||
       "Analýza portfólia voči aktuálnemu makro prostrediu.",

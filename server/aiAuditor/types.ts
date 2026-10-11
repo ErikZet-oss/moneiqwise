@@ -113,6 +113,8 @@ export type AiAuditorAnalysis = {
   actionBrief: AiAuditorActionBrief | null;
   /** Ak pass 2 zlyhal, Macro ostane; UI ukáže hlášku. */
   actionBriefError: string | null;
+  /** Pass 2 beží na pozadí — UI polluje /latest. */
+  actionBriefPending?: boolean;
   model: string;
   sourcesUsed: string[];
 };

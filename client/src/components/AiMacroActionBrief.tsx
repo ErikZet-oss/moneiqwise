@@ -232,12 +232,15 @@ export function AiMacroActionBriefSection({
   brief,
   error,
   showEmptyHint = false,
+  pending = false,
   variant = "classic",
 }: {
   brief: AiAuditorActionBrief | null;
   error?: string | null;
   /** Starý audit bez pass 2 — ukáž kartu s výzvou Spustiť znova. */
   showEmptyHint?: boolean;
+  /** Pass 2 práve beží na pozadí. */
+  pending?: boolean;
   variant?: "classic" | "redesign";
 }) {
   const redesign = variant === "redesign";
@@ -296,6 +299,36 @@ export function AiMacroActionBriefSection({
   }
 
   if (!brief) {
+    if (pending) {
+      if (redesign) {
+        return (
+          <Card className="gap-2 p-3" data-testid="card-ai-macro-actions-pending">
+            <div className="flex items-center gap-1.5">
+              <Crosshair className="size-4 shrink-0 text-[var(--rd-ai)]" aria-hidden />
+              <h3 className="rd-type-h3 text-[var(--rd-text-primary)]">Akcie na pozíciách</h3>
+            </div>
+            <p className="rd-type-body-sm text-[var(--rd-text-secondary)]">
+              Makro audit je hotový. Dopĺňam BUY/SELL/TRIM/HOLD na pozície…
+            </p>
+          </Card>
+        );
+      }
+      return (
+        <ClassicCard data-testid="card-ai-macro-actions-pending">
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <Crosshair className="h-4 w-4 text-primary" />
+              Akcie na pozíciách
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Makro audit je hotový. Dopĺňam BUY/SELL/TRIM/HOLD na pozície…
+            </p>
+          </CardContent>
+        </ClassicCard>
+      );
+    }
     if (!showEmptyHint) return null;
     if (redesign) {
       return (

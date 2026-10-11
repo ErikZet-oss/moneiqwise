@@ -80,16 +80,25 @@ export default function AiMacroAuditMobile() {
       return res.json();
     },
     staleTime: 30_000,
+    refetchInterval: (q) =>
+      q.state.data?.run?.analysis?.actionBriefPending === true ? 4_000 : false,
   });
 
   const runMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/ai-auditor/run", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ portfolioId }),
-      });
+      let res: Response;
+      try {
+        res = await fetch("/api/ai-auditor/run", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ portfolioId }),
+        });
+      } catch {
+        throw new Error(
+          "Spojenie so serverom spadlo (Failed to fetch). Skús znova — makro audit môže chvíľu trvať.",
+        );
+      }
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.message || "Spustenie zlyhalo");
       return body as AiAuditorLatestResponse;
@@ -99,10 +108,12 @@ export default function AiMacroAuditMobile() {
       void queryClient.invalidateQueries({ queryKey: ["/api/ai-auditor/latest", portfolioId] });
       const a = ensureAnalysisShape(payload.run?.analysis ?? null);
       const actions = a?.actionBrief?.portfolioAudit?.length ?? 0;
+      const pending = a?.actionBriefPending === true || payload.actionsPending === true;
       toast({
-        title: "Audit hotový",
-        description:
-          actions > 0
+        title: pending ? "Makro audit hotový" : "Audit hotový",
+        description: pending
+          ? `Skóre ${a?.healthScore ?? "—"}/100 · dopĺňam akcie…`
+          : actions > 0
             ? `Skóre ${a?.healthScore ?? "—"}/100 · ${actions} akcií`
             : `Skóre ${a?.healthScore ?? "—"}/100`,
       });
@@ -113,6 +124,7 @@ export default function AiMacroAuditMobile() {
         description: err.message,
         variant: "destructive",
       });
+      void queryClient.invalidateQueries({ queryKey: ["/api/ai-auditor/latest", portfolioId] });
     },
   });
 
@@ -475,6 +487,7 @@ export default function AiMacroAuditMobile() {
             <AiMacroActionBriefSection
               brief={analysis.actionBrief}
               error={analysis.actionBriefError}
+              pending={analysis.actionBriefPending === true}
               showEmptyHint
               variant="redesign"
             />

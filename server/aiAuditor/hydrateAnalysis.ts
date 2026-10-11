@@ -173,6 +173,7 @@ export function hydrateAiAuditorAnalysis(raw: any): AiAuditorAnalysis {
       typeof raw?.actionBriefError === "string" && raw.actionBriefError.trim()
         ? raw.actionBriefError.trim()
         : null,
+    actionBriefPending: raw?.actionBriefPending === true,
     model: String(raw?.model || ""),
     sourcesUsed: Array.isArray(raw?.sourcesUsed) ? raw.sourcesUsed : [],
   };

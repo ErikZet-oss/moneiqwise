@@ -7,6 +7,11 @@ import { createServer } from "http";
 
 const app = express();
 const httpServer = createServer(app);
+// Macro Audit (Claude) môže bežať dlho — default Node idle timeout (≈2 min) inak
+// ukončí spojenie a klient uvidí "Failed to fetch".
+httpServer.requestTimeout = 0;
+httpServer.headersTimeout = 0;
+httpServer.timeout = 0;
 
 app.use(
   helmet({

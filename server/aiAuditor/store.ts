@@ -122,6 +122,25 @@ export async function insertAiAuditorRun(input: {
   return mapRun(row);
 }
 
+export async function updateAiAuditorRunAnalysis(input: {
+  runId: string;
+  userId: string;
+  analysis: AiAuditorAnalysis;
+  model?: string | null;
+}): Promise<AiAuditorRun | null> {
+  await ensureAiAuditorTables();
+  const result = await db.execute(sql`
+    UPDATE ai_auditor_runs
+    SET
+      analysis_json = ${JSON.stringify(input.analysis)}::jsonb,
+      model = COALESCE(${input.model ?? null}, model)
+    WHERE id = ${input.runId} AND user_id = ${input.userId}
+    RETURNING id, user_id, portfolio_id, portfolio_label, analysis_json, model, created_at
+  `);
+  const row = asRows(result)[0];
+  return row ? mapRun(row) : null;
+}
+
 export async function countAiAuditorRunsToday(
   userId: string,
   portfolioId: string,

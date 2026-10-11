@@ -79,8 +79,18 @@ export function registerAiAuditorRoutes(app: Express, isAuthenticated: any) {
         userId,
         portfolioFromReq(req),
       );
-      const { run, usage } = await runAiAuditorForUser({ userId, portfolioId });
-      res.json({ run, usage });
+      // Long Claude calls — don't let idle sockets kill the response mid-flight.
+      try {
+        (req as any).setTimeout?.(0);
+        (res as any).setTimeout?.(0);
+      } catch {
+        /* ignore */
+      }
+      const { run, usage, actionsPending } = await runAiAuditorForUser({
+        userId,
+        portfolioId,
+      });
+      res.json({ run, usage, actionsPending });
     } catch (error: any) {
       if (error?.message === "AI_AUDITOR_LIMIT") {
         return res.status(429).json({
@@ -94,10 +104,13 @@ export function registerAiAuditorRoutes(app: Express, isAuthenticated: any) {
         error?.message || error,
         cause ? `| cause: ${cause?.message || cause}` : "",
       );
-      const msg =
+      let msg =
         error instanceof Error && error.message
           ? error.message
           : "Nepodarilo sa spustiť AI Macro Audit.";
+      if (msg === "ANTHROPIC_API_KEY_MISSING") {
+        msg = "Chýba ANTHROPIC_API_KEY na serveri.";
+      }
       res.status(502).json({ message: msg });
     }
   });
