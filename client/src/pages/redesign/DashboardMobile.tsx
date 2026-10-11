@@ -103,7 +103,6 @@ import {
   type HoldingLot,
 } from "@/redesign/ui";
 import {
-  CHART_COLORS,
   HelpButton,
   PageBody,
   PortfolioSwitcher,
