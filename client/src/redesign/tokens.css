@@ -142,13 +142,13 @@ html[data-mobile-ui="redesign"] {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   background-color: #050607;
-  color-scheme: dark;
+  color-scheme: only dark;
 }
 
 html[data-mobile-ui="redesign"] body {
   /* Override Tailwind @apply bg-background even when .light is on <html>. */
   background-color: #050607 !important;
-  color-scheme: dark;
+  color-scheme: only dark;
 }
 
 html[data-mobile-ui="redesign"] #root {

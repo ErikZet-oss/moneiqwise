@@ -1,0 +1,10 @@
+{
+  "name": "Moneiqwise",
+  "short_name": "Moneiqwise",
+  "description": "Investičný portfólio tracker",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050607",
+  "theme_color": "#15181c",
+  "lang": "sk"
+}

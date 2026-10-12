@@ -97,38 +97,44 @@ export function TabBar() {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-[var(--rd-border-subtle,#272c32)] bg-[var(--rd-bg-surface,#15181c)] px-1.5 pt-1.5 pb-[max(16px,env(safe-area-inset-bottom,0px))] relative after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-[max(48px,env(safe-area-inset-bottom,0px))] after:bg-[var(--rd-bg-surface,#15181c)]"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--rd-border-subtle,#272c32)] bg-[var(--rd-bg-surface,#15181c)]"
       data-testid="redesign-tab-bar"
       aria-label="Hlavná navigácia"
+      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
-      {tabs.map((tab) => {
-        const Icon = tabIcon(tab.path);
-        const isActive = isOnPath(location, tab.path);
-        const label = tabLabel(tab.path);
-        return (
-          <button
-            key={tab.path}
-            type="button"
-            onClick={() => setLocation(tab.path)}
-            className="flex min-h-[40px] min-w-0 flex-1 flex-col items-center gap-0.5 py-1"
-            aria-current={isActive ? "page" : undefined}
-            data-testid={`tab-${tab.path === "/" ? "home" : tab.path.slice(1).replace(/\//g, "-")}`}
-          >
-            <Icon
-              className={cn("size-[18px]", isActive ? "text-[var(--rd-profit)]" : "text-[var(--rd-text-tertiary)]")}
-              strokeWidth={1.75}
-            />
-            <span
-              className={cn(
-                "max-w-full truncate px-0.5 text-[11px] font-medium leading-[14px] tracking-normal",
-                isActive ? "text-[var(--rd-text-primary)]" : "text-[var(--rd-text-tertiary)]",
-              )}
+      <div className="flex px-1.5 pt-1.5 pb-1.5">
+        {tabs.map((tab) => {
+          const Icon = tabIcon(tab.path);
+          const isActive = isOnPath(location, tab.path);
+          const label = tabLabel(tab.path);
+          return (
+            <button
+              key={tab.path}
+              type="button"
+              onClick={() => setLocation(tab.path)}
+              className="flex min-h-[40px] min-w-0 flex-1 flex-col items-center gap-0.5 py-1"
+              aria-current={isActive ? "page" : undefined}
+              data-testid={`tab-${tab.path === "/" ? "home" : tab.path.slice(1).replace(/\//g, "-")}`}
             >
-              {label}
-            </span>
-          </button>
-        );
-      })}
+              <Icon
+                className={cn(
+                  "size-[18px]",
+                  isActive ? "text-[var(--rd-profit)]" : "text-[var(--rd-text-tertiary)]",
+                )}
+                strokeWidth={1.75}
+              />
+              <span
+                className={cn(
+                  "max-w-full truncate px-0.5 text-[11px] font-medium leading-[14px] tracking-normal",
+                  isActive ? "text-[var(--rd-text-primary)]" : "text-[var(--rd-text-tertiary)]",
+                )}
+              >
+                {label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </nav>
   );
 }

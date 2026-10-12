@@ -21,16 +21,22 @@ function applyDocumentMode(active: boolean) {
     meta.setAttribute("name", "theme-color");
     document.head.appendChild(meta);
   }
+  const schemeMeta = document.querySelector('meta[name="color-scheme"]');
   if (active) {
     root.setAttribute("data-mobile-ui", "redesign");
-    root.style.colorScheme = "dark";
+    root.style.colorScheme = "only dark";
     document.body.style.backgroundColor = BASE_BG;
+    document.querySelectorAll('meta[name="theme-color"]').forEach((el) => {
+      el.setAttribute("content", THEME_COLOR);
+    });
     meta.setAttribute("content", THEME_COLOR);
+    schemeMeta?.setAttribute("content", "only dark");
   } else {
     root.removeAttribute("data-mobile-ui");
     root.style.colorScheme = "";
     document.body.style.backgroundColor = "";
     meta.setAttribute("content", "");
+    schemeMeta?.setAttribute("content", "dark light");
   }
 }
 

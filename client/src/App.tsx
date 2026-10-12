@@ -439,11 +439,6 @@ function AuthenticatedLayout() {
             <main className="min-h-0 flex-1 overflow-auto pb-[calc(72px+env(safe-area-inset-bottom,0px))]">
               <Router />
             </main>
-            {/* Paint under Android system nav / home-indicator when safe-area is 0. */}
-            <div
-              aria-hidden
-              className="pointer-events-none fixed inset-x-0 bottom-0 z-30 h-[max(48px,env(safe-area-inset-bottom,0px))] bg-[var(--rd-bg-surface,#15181c)]"
-            />
             <TabBar />
           </div>
         </AppUnlockGate>
