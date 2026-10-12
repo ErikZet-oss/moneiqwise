@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Cell, Pie, PieChart, ResponsiveContainer } from "recharts";
+import { Cell, Pie, PieChart, ResponsiveContainer, Sector } from "recharts";
 import type { Holding } from "@shared/schema";
 import { CASH_INTEREST_DISPLAY_NAME, CASH_INTEREST_TICKER } from "@shared/tickerCurrency";
 import { isPokemonTicker, POKEMON_GROUP_TICKER } from "@shared/pokemonTcg";
@@ -8,6 +8,7 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useChartSettings } from "@/hooks/useChartSettings";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button, Card, Chip, EmptyState, Select, TopBar } from "@/redesign/ui";
 import { CHART_COLORS, PageBody, PortfolioSwitcher } from "./mobileChrome";
@@ -54,6 +55,57 @@ function aggregate(rows: Slice[]): Slice[] {
     .sort((a, b) => b.value - a.value);
 }
 
+/** Recharts on narrow mobile can mount with width 0 — wait one frame. */
+function useChartReady() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setReady(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+  return ready;
+}
+
+type ActiveShapeProps = {
+  cx?: number;
+  cy?: number;
+  innerRadius?: number;
+  outerRadius?: number;
+  startAngle?: number;
+  endAngle?: number;
+  fill?: string;
+};
+
+function ActiveDonutShape(props: ActiveShapeProps) {
+  const { cx = 0, cy = 0, innerRadius = 0, outerRadius = 0, startAngle = 0, endAngle = 0, fill } =
+    props;
+  return (
+    <g>
+      <Sector
+        cx={cx}
+        cy={cy}
+        innerRadius={Math.max(0, innerRadius - 1)}
+        outerRadius={outerRadius + 5}
+        startAngle={startAngle}
+        endAngle={endAngle}
+        fill={fill}
+        cornerRadius={4}
+        style={{ filter: fill ? `drop-shadow(0 0 10px ${fill})` : undefined }}
+      />
+      <Sector
+        cx={cx}
+        cy={cy}
+        innerRadius={outerRadius + 7}
+        outerRadius={outerRadius + 10}
+        startAngle={startAngle}
+        endAngle={endAngle}
+        fill={fill}
+        opacity={0.35}
+        cornerRadius={3}
+      />
+    </g>
+  );
+}
+
 function DonutCard({
   title,
   subtitle,
@@ -62,6 +114,7 @@ function DonutCard({
   mode,
   formatCurrency,
   mask,
+  chartId,
 }: {
   title: string;
   subtitle: string;
@@ -70,15 +123,41 @@ function DonutCard({
   mode: "percent" | "value";
   formatCurrency: (n: number) => string;
   mask: (s: string) => string;
+  chartId: string;
 }) {
-  const top = slices.slice(0, 5);
-  const rest = slices.slice(5).reduce((sum, slice) => sum + slice.value, 0);
-  const chart = rest > 0 ? [...top, { name: "Ostatné", value: rest }] : top;
+  const chartReady = useChartReady();
+  const lastSelectAt = useRef(0);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [expanded, setExpanded] = useState(false);
-  const visible = expanded ? slices : chart;
-  const pct = (value: number) => (total > 0 ? Math.round((value / total) * 100) : 0);
+
+  const chartData = useMemo(() => {
+    const top = slices.slice(0, 5);
+    const rest = slices.slice(5).reduce((sum, slice) => sum + slice.value, 0);
+    const base = rest > 0 ? [...top, { name: "Ostatné", value: rest }] : top;
+    return base.map((slice, index) => ({
+      ...slice,
+      fill: CHART_COLORS[index % CHART_COLORS.length]!,
+    }));
+  }, [slices]);
+
+  const legendRows = expanded ? slices : chartData;
+  const pct = (value: number) => (total > 0 ? (value / total) * 100 : 0);
   const label = (value: number) =>
-    mode === "percent" ? `${pct(value)}%` : mask(formatCurrency(value));
+    mode === "percent" ? `${Math.round(pct(value))}%` : mask(formatCurrency(value));
+
+  const selectSlice = (index: number) => {
+    const now = Date.now();
+    if (now - lastSelectAt.current < 280) return;
+    lastSelectAt.current = now;
+    setActiveIndex((prev) => (prev === index ? null : index));
+  };
+
+  useEffect(() => {
+    setActiveIndex(null);
+  }, [slices, mode]);
+
+  const active = activeIndex != null ? chartData[activeIndex] : null;
+  const activePct = active ? pct(active.value) : null;
 
   return (
     <Card className="gap-2">
@@ -86,52 +165,108 @@ function DonutCard({
         <p className="rd-type-h2">{title}</p>
         <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">{subtitle}</p>
       </div>
-      {chart.length === 0 ? (
+      {chartData.length === 0 ? (
         <p className="text-xs text-[var(--rd-text-secondary)]">Zatiaľ nie je čo rozložiť.</p>
       ) : (
         <>
           <div className="flex w-full items-start justify-center">
-            <div className="relative size-[148px] shrink-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={chart} dataKey="value" innerRadius={48} outerRadius={70} paddingAngle={2} stroke="none">
-                    {chart.map((slice, index) => (
-                      <Cell key={slice.name} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <p className="text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--rd-text-tertiary)]">
-                  Celkom
-                </p>
-                <p className="font-mono text-[11px] font-medium leading-[14px] text-[var(--rd-text-primary)]">
-                  {mask(formatCurrency(total))}
-                </p>
+            <div className="relative size-[168px] shrink-0">
+              {!chartReady ? (
+                <div className="size-full animate-pulse rounded-full bg-[var(--rd-bg-surface-hover)]" />
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={chartData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius="52%"
+                      outerRadius="88%"
+                      paddingAngle={2}
+                      cornerRadius={4}
+                      stroke="none"
+                      isAnimationActive
+                      animationDuration={550}
+                      activeIndex={activeIndex ?? undefined}
+                      activeShape={ActiveDonutShape}
+                      onClick={(_, index, e) => {
+                        e?.stopPropagation?.();
+                        selectSlice(index);
+                      }}
+                      style={{ cursor: "pointer", outline: "none", touchAction: "manipulation" }}
+                    >
+                      {chartData.map((slice, index) => (
+                        <Cell
+                          key={`${chartId}-${slice.name}`}
+                          fill={slice.fill}
+                          className="outline-none"
+                          style={{
+                            opacity: activeIndex == null || activeIndex === index ? 1 : 0.35,
+                            cursor: "pointer",
+                          }}
+                        />
+                      ))}
+                    </Pie>
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-3 text-center">
+                <div className="min-w-[5.5rem] rounded-full bg-[var(--rd-bg-base)]/70 px-2.5 py-2 backdrop-blur-[2px]">
+                  <p className="max-w-[104px] truncate text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--rd-text-tertiary)]">
+                    {active ? active.name : "Celkom"}
+                  </p>
+                  <p className="mt-0.5 max-w-[112px] truncate font-mono text-[11px] font-medium leading-[14px] text-[var(--rd-text-primary)]">
+                    {mask(formatCurrency(active ? active.value : total))}
+                  </p>
+                  {activePct != null ? (
+                    <p className="mt-0.5 font-mono text-[10px] text-[var(--rd-text-secondary)]">
+                      {activePct.toFixed(1)} %
+                    </p>
+                  ) : null}
+                </div>
               </div>
             </div>
           </div>
-          <ul className="flex w-full flex-col gap-2">
-            {visible.map((slice, index) => {
-              const color = CHART_COLORS[index % CHART_COLORS.length];
+          <ul className="flex w-full flex-col gap-1">
+            {legendRows.map((slice, index) => {
+              const color = CHART_COLORS[index % CHART_COLORS.length]!;
               const widthPct = pct(slice.value);
+              const isActive = activeIndex === index;
+              const chartIndex = chartData.findIndex((row) => row.name === slice.name);
               return (
-                <li key={slice.name} className="flex flex-col gap-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <i className="size-2 shrink-0 rounded-full" style={{ background: color }} />
-                    <span className="min-w-0 flex-1 truncate text-[11px] leading-[14px] text-[var(--rd-text-secondary)]">
-                      {slice.name}
-                    </span>
-                    <span className="font-mono text-[11px] font-medium leading-[14px] text-[var(--rd-text-primary)]">
-                      {label(slice.value)}
-                    </span>
-                  </div>
-                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--rd-bg-surface-hover)]">
-                    <div
-                      className="h-full rounded-full"
-                      style={{ width: `${Math.min(100, Math.max(0, widthPct))}%`, background: color }}
-                    />
-                  </div>
+                <li key={`${slice.name}-${index}`}>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex w-full flex-col gap-1.5 rounded-[var(--rd-radius-sm)] px-1.5 py-1.5 text-left transition-colors",
+                      isActive ? "bg-[var(--rd-bg-surface-hover)]" : "active:bg-[var(--rd-bg-surface-hover)]/60",
+                    )}
+                    onClick={() => {
+                      if (chartIndex >= 0) selectSlice(chartIndex);
+                    }}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <i className="size-2 shrink-0 rounded-full" style={{ background: color }} />
+                      <span className="min-w-0 flex-1 truncate text-[11px] leading-[14px] text-[var(--rd-text-secondary)]">
+                        {slice.name}
+                      </span>
+                      <span className="font-mono text-[11px] font-medium leading-[14px] text-[var(--rd-text-primary)]">
+                        {label(slice.value)}
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--rd-bg-surface-hover)]">
+                      <div
+                        className="h-full rounded-full transition-[width] duration-300"
+                        style={{
+                          width: `${Math.min(100, Math.max(0, widthPct))}%`,
+                          background: color,
+                          opacity: activeIndex == null || isActive ? 1 : 0.4,
+                        }}
+                      />
+                    </div>
+                  </button>
                 </li>
               );
             })}
@@ -344,8 +479,9 @@ export default function AllocationMobile() {
         ) : (
           <>
             <DonutCard
+              chartId="ticker"
               title="Podľa akcií"
-              subtitle="Každý ticker + hotovosť"
+              subtitle="Každý ticker + hotovosť · ťukni na výsek alebo riadok"
               slices={groups.byTicker}
               total={groups.total}
               mode={mode}
@@ -353,8 +489,9 @@ export default function AllocationMobile() {
               mask={mask}
             />
             <DonutCard
+              chartId="sector"
               title="Podľa sektorov"
-              subtitle="Odvetvie podľa Yahoo"
+              subtitle="Odvetvie podľa Yahoo · ťukni na výsek alebo riadok"
               slices={groups.bySector}
               total={groups.total}
               mode={mode}
@@ -362,8 +499,9 @@ export default function AllocationMobile() {
               mask={mask}
             />
             <DonutCard
+              chartId="country"
               title="Podľa krajín"
-              subtitle="Krajina sídla emitenta"
+              subtitle="Krajina sídla emitenta · ťukni na výsek alebo riadok"
               slices={groups.byCountry}
               total={groups.total}
               mode={mode}
@@ -371,8 +509,9 @@ export default function AllocationMobile() {
               mask={mask}
             />
             <DonutCard
+              chartId="type"
               title="Podľa typu"
-              subtitle="Akcia, ETF, krypto…"
+              subtitle="Akcia, ETF, krypto… · ťukni na výsek alebo riadok"
               slices={groups.byType}
               total={groups.total}
               mode={mode}
