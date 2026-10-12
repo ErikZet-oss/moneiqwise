@@ -130,17 +130,20 @@ function DonutCard({
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [expanded, setExpanded] = useState(false);
 
+  // Collapsed: top 5 + aggregated "Ostatné". Expanded: every slice on both legend and pie.
   const chartData = useMemo(() => {
-    const top = slices.slice(0, 5);
-    const rest = slices.slice(5).reduce((sum, slice) => sum + slice.value, 0);
-    const base = rest > 0 ? [...top, { name: "Ostatné", value: rest }] : top;
+    const base = (() => {
+      if (expanded || slices.length <= 5) return slices;
+      const top = slices.slice(0, 5);
+      const rest = slices.slice(5).reduce((sum, slice) => sum + slice.value, 0);
+      return rest > 0 ? [...top, { name: "Ostatné", value: rest }] : top;
+    })();
     return base.map((slice, index) => ({
       ...slice,
       fill: CHART_COLORS[index % CHART_COLORS.length]!,
     }));
-  }, [slices]);
+  }, [slices, expanded]);
 
-  const legendRows = expanded ? slices : chartData;
   const pct = (value: number) => (total > 0 ? (value / total) * 100 : 0);
   const label = (value: number) =>
     mode === "percent" ? `${Math.round(pct(value))}%` : mask(formatCurrency(value));
@@ -154,7 +157,7 @@ function DonutCard({
 
   useEffect(() => {
     setActiveIndex(null);
-  }, [slices, mode]);
+  }, [slices, mode, expanded]);
 
   const active = activeIndex != null ? chartData[activeIndex] : null;
   const activePct = active ? pct(active.value) : null;
@@ -230,11 +233,9 @@ function DonutCard({
             </div>
           </div>
           <ul className="flex w-full flex-col gap-1">
-            {legendRows.map((slice, index) => {
-              const color = CHART_COLORS[index % CHART_COLORS.length]!;
+            {chartData.map((slice, index) => {
               const widthPct = pct(slice.value);
               const isActive = activeIndex === index;
-              const chartIndex = chartData.findIndex((row) => row.name === slice.name);
               return (
                 <li key={`${slice.name}-${index}`}>
                   <button
@@ -243,12 +244,10 @@ function DonutCard({
                       "flex w-full flex-col gap-1.5 rounded-[var(--rd-radius-sm)] px-1.5 py-1.5 text-left transition-colors",
                       isActive ? "bg-[var(--rd-bg-surface-hover)]" : "active:bg-[var(--rd-bg-surface-hover)]/60",
                     )}
-                    onClick={() => {
-                      if (chartIndex >= 0) selectSlice(chartIndex);
-                    }}
+                    onClick={() => selectSlice(index)}
                   >
                     <div className="flex items-center gap-1.5">
-                      <i className="size-2 shrink-0 rounded-full" style={{ background: color }} />
+                      <i className="size-2 shrink-0 rounded-full" style={{ background: slice.fill }} />
                       <span className="min-w-0 flex-1 truncate text-[11px] leading-[14px] text-[var(--rd-text-secondary)]">
                         {slice.name}
                       </span>
@@ -261,7 +260,7 @@ function DonutCard({
                         className="h-full rounded-full transition-[width] duration-300"
                         style={{
                           width: `${Math.min(100, Math.max(0, widthPct))}%`,
-                          background: color,
+                          background: slice.fill,
                           opacity: activeIndex == null || isActive ? 1 : 0.4,
                         }}
                       />
