@@ -8,23 +8,29 @@ export type MobileUiMode = "classic" | "redesign";
  * selectable. Mobile always uses the Figma redesign; desktop stays classic.
  */
 const REDESIGN_LOCKED = true;
-const THEME_COLOR = "#050607";
+/** Align with TabBar surface so Android system nav matches the app chrome. */
+const THEME_COLOR = "#15181c";
+const BASE_BG = "#050607";
 
 function applyDocumentMode(active: boolean) {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
+  let meta = document.querySelector('meta[name="theme-color"]');
+  if (!meta) {
+    meta = document.createElement("meta");
+    meta.setAttribute("name", "theme-color");
+    document.head.appendChild(meta);
+  }
   if (active) {
     root.setAttribute("data-mobile-ui", "redesign");
-    let meta = document.querySelector('meta[name="theme-color"]');
-    if (!meta) {
-      meta = document.createElement("meta");
-      meta.setAttribute("name", "theme-color");
-      document.head.appendChild(meta);
-    }
+    root.style.colorScheme = "dark";
+    document.body.style.backgroundColor = BASE_BG;
     meta.setAttribute("content", THEME_COLOR);
   } else {
     root.removeAttribute("data-mobile-ui");
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", "");
+    root.style.colorScheme = "";
+    document.body.style.backgroundColor = "";
+    meta.setAttribute("content", "");
   }
 }
 

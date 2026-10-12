@@ -136,8 +136,8 @@
 }
 
 /* Prevent mobile browsers from inflating px type when system font size is larger.
-   Also paint html/body dark so iOS Safari chrome / safe-area never flash white
-   when the app theme is light (body.bg-background would otherwise show through). */
+   Also paint html/body/#root dark so Android system nav + iOS Safari chrome
+   never stick on Tailwind light `bg-background` under the redesign shell. */
 html[data-mobile-ui="redesign"] {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
@@ -146,8 +146,15 @@ html[data-mobile-ui="redesign"] {
 }
 
 html[data-mobile-ui="redesign"] body {
-  background-color: #050607;
+  /* Override Tailwind @apply bg-background even when .light is on <html>. */
+  background-color: #050607 !important;
   color-scheme: dark;
+}
+
+html[data-mobile-ui="redesign"] #root {
+  background-color: #050607;
+  min-height: 100%;
+  min-height: 100dvh;
 }
 
 /* Scope color/font to redesign surfaces only — never paint classic UI via <html>. */
