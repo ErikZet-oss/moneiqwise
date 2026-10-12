@@ -399,7 +399,14 @@ export default function DashboardMobile() {
     formatCurrency,
     formatAverageCostCurrency,
   } = useCurrency();
-  const { getQueryParam, selectedPortfolio, isAllPortfolios, portfolios, scopeLabel } = usePortfolio();
+  const {
+    getQueryParam,
+    selectedPortfolio,
+    isAllPortfolios,
+    portfolios,
+    scopedPortfolios,
+    scopeLabel,
+  } = usePortfolio();
   const {
     hideAmounts,
     mobileAssetsSortBy,
@@ -613,18 +620,11 @@ export default function DashboardMobile() {
   });
 
   const cashValue = useMemo(() => {
-    if (isAllPortfolios) {
-      return portfolios.reduce((sum, p) => {
-        const n = parseFloat(p.cashBalance ?? "0");
-        return sum + convertPrice(Number.isFinite(n) ? n : 0, "EUR");
-      }, 0);
-    }
-    if (selectedPortfolio) {
-      const n = parseFloat(selectedPortfolio.cashBalance ?? "0");
-      return convertPrice(Number.isFinite(n) ? n : 0, "EUR");
-    }
-    return 0;
-  }, [isAllPortfolios, portfolios, selectedPortfolio, convertPrice]);
+    return scopedPortfolios.reduce((sum, p) => {
+      const n = parseFloat(p.cashBalance ?? "0");
+      return sum + convertPrice(Number.isFinite(n) ? n : 0, "EUR");
+    }, 0);
+  }, [scopedPortfolios, convertPrice]);
 
   const metrics = useMemo(() => {
     const stockRealized = convertPrice(realized?.realizedGainTotal ?? realized?.totalRealized ?? 0, "EUR");

@@ -32,13 +32,42 @@ export function groupPortfoliosByCategory(
 }
 
 export function formatCategoryCashSum(portfolios: Portfolio[]): string {
-  const sum = portfolios.reduce((acc, p) => {
-    const n = parseFloat(p.cashBalance || "0");
-    return acc + (Number.isFinite(n) ? n : 0);
-  }, 0);
+  const sum = sumPortfolioCashEur(portfolios);
   return new Intl.NumberFormat("sk-SK", {
     style: "currency",
     currency: "EUR",
     maximumFractionDigits: 0,
   }).format(sum);
+}
+
+/** Sum `cashBalance` (EUR ledger) for the given portfolios. */
+export function sumPortfolioCashEur(portfolios: Portfolio[]): number {
+  return portfolios.reduce((acc, p) => {
+    const n = parseFloat(p.cashBalance || "0");
+    return acc + (Number.isFinite(n) ? n : 0);
+  }, 0);
+}
+
+/**
+ * Visible portfolios that belong to the current dashboard scope
+ * (all / one portfolio / one category).
+ */
+export function portfoliosForScope(
+  portfolios: Portfolio[],
+  opts: {
+    isAllPortfolios: boolean;
+    isCategoryScope: boolean;
+    selectedCategoryId: string | null | undefined;
+    selectedPortfolioId: string | null | undefined;
+  },
+): Portfolio[] {
+  if (opts.isAllPortfolios) return portfolios;
+  if (opts.isCategoryScope && opts.selectedCategoryId) {
+    return portfolios.filter((p) => p.categoryId === opts.selectedCategoryId);
+  }
+  if (opts.selectedPortfolioId) {
+    const one = portfolios.find((p) => p.id === opts.selectedPortfolioId);
+    return one ? [one] : [];
+  }
+  return [];
 }

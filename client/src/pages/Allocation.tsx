@@ -204,6 +204,7 @@ function AllocationClassic() {
     portfolios,
     selectedPortfolio,
     isAllPortfolios,
+    scopedPortfolios,
     getQueryParam,
     isLoading: portfoliosLoading,
   } = usePortfolio();
@@ -334,18 +335,11 @@ function AllocationClassic() {
   });
 
   const cashValueConv = useMemo(() => {
-    if (isAllPortfolios) {
-      return portfolios.reduce((sum, p) => {
-        const n = parseFloat(p.cashBalance ?? "0");
-        return sum + convertPrice(Number.isFinite(n) ? n : 0, "EUR");
-      }, 0);
-    }
-    if (selectedPortfolio) {
-      const n = parseFloat(selectedPortfolio.cashBalance ?? "0");
-      return convertPrice(Number.isFinite(n) ? n : 0, "EUR");
-    }
-    return 0;
-  }, [isAllPortfolios, portfolios, selectedPortfolio, convertPrice]);
+    return scopedPortfolios.reduce((sum, p) => {
+      const n = parseFloat(p.cashBalance ?? "0");
+      return sum + convertPrice(Number.isFinite(n) ? n : 0, "EUR");
+    }, 0);
+  }, [scopedPortfolios, convertPrice]);
 
   const { byTicker, bySector, byCountry, byType, totalMarket } = useMemo(() => {
     const sectorRows: Slice[] = [];

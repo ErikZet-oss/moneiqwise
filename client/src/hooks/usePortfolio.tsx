@@ -7,6 +7,7 @@ import {
   parsePortfolioScope,
   type ParsedPortfolioScope,
 } from "@shared/portfolioScope";
+import { portfoliosForScope } from "@/lib/portfolioCategories";
 
 export interface Portfolio {
   id: string;
@@ -40,6 +41,8 @@ interface PortfolioContextType {
   selectedPortfolio: Portfolio | null;
   selectedCategory: PortfolioCategory | null;
   selectedScope: ParsedPortfolioScope;
+  /** Visible portfolios included in the current all / category / single scope. */
+  scopedPortfolios: Portfolio[];
   scopeLabel: string;
   setSelectedPortfolioId: (id: string | null) => void;
   isLoading: boolean;
@@ -146,6 +149,17 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
   const scopeLabel = isAllPortfolios
     ? "Všetky portfóliá"
     : selectedCategory?.name ?? selectedPortfolio?.name ?? "Portfólio";
+
+  const scopedPortfolios = useMemo(
+    () =>
+      portfoliosForScope(portfolios, {
+        isAllPortfolios,
+        isCategoryScope,
+        selectedCategoryId: selectedCategory?.id ?? null,
+        selectedPortfolioId: selectedPortfolio?.id ?? null,
+      }),
+    [portfolios, isAllPortfolios, isCategoryScope, selectedCategory?.id, selectedPortfolio?.id],
+  );
 
   useEffect(() => {
     if (selectedPortfolioId) {
@@ -391,6 +405,7 @@ export function PortfolioProvider({ children }: { children: ReactNode }) {
         selectedPortfolio,
         selectedCategory,
         selectedScope,
+        scopedPortfolios,
         scopeLabel,
         setSelectedPortfolioId,
         isLoading: portfoliosLoading || categoriesLoading,

@@ -154,7 +154,15 @@ function DonutCard({
 export default function AllocationMobile() {
   const { currency, convertPrice, getTickerCurrency, formatCurrency } = useCurrency();
   const { toast } = useToast();
-  const { portfolios, selectedPortfolio, isAllPortfolios, getQueryParam, isLoading, scopeLabel } = usePortfolio();
+  const {
+    portfolios,
+    selectedPortfolio,
+    isAllPortfolios,
+    scopedPortfolios,
+    getQueryParam,
+    isLoading,
+    scopeLabel,
+  } = usePortfolio();
   const { hideAmounts } = useChartSettings();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [mode, setMode] = useState<"percent" | "value">("percent");
@@ -257,11 +265,11 @@ export default function AllocationMobile() {
   });
 
   const cashValue = useMemo(() => {
-    if (isAllPortfolios) {
-      return portfolios.reduce((sum, portfolio) => sum + convertPrice(parseFloat(portfolio.cashBalance ?? "0") || 0, "EUR"), 0);
-    }
-    return convertPrice(parseFloat(selectedPortfolio?.cashBalance ?? "0") || 0, "EUR");
-  }, [isAllPortfolios, portfolios, selectedPortfolio, convertPrice]);
+    return scopedPortfolios.reduce(
+      (sum, portfolio) => sum + convertPrice(parseFloat(portfolio.cashBalance ?? "0") || 0, "EUR"),
+      0,
+    );
+  }, [scopedPortfolios, convertPrice]);
 
   const groups = useMemo(() => {
     const sectorRows: Slice[] = [];

@@ -847,7 +847,14 @@ interface UpcomingMacroEventsRes {
 function DashboardClassic() {
   const [, setLocation] = useLocation();
   const { currency, convertPrice, convertAverageCostPrice, getTickerCurrency, resolveHoldingCostCurrency, pnlInvestedForDisplay, formatCurrency, formatAverageCostCurrency } = useCurrency();
-  const { getQueryParam, selectedPortfolio, isAllPortfolios, portfolios, scopeLabel } = usePortfolio();
+  const {
+    getQueryParam,
+    selectedPortfolio,
+    isAllPortfolios,
+    portfolios,
+    scopedPortfolios,
+    scopeLabel,
+  } = usePortfolio();
   const {
     hideAmounts,
     showNews,
@@ -1937,19 +1944,13 @@ function DashboardClassic() {
   };
 
   // Hotovosť = disponibilné EUR (vklady/výbery mínus nákupy + predaje + dividendy/dane; GET /api/portfolios).
+  // Category scope sums cash from every visible portfolio in that category.
   const cashValue = useMemo(() => {
-    if (isAllPortfolios) {
-      return portfolios.reduce((sum, p) => {
-        const n = parseFloat(p.cashBalance ?? "0");
-        return sum + convertPrice(Number.isFinite(n) ? n : 0, "EUR");
-      }, 0);
-    }
-    if (selectedPortfolio) {
-      const n = parseFloat(selectedPortfolio.cashBalance ?? "0");
-      return convertPrice(Number.isFinite(n) ? n : 0, "EUR");
-    }
-    return 0;
-  }, [isAllPortfolios, portfolios, selectedPortfolio, convertPrice]);
+    return scopedPortfolios.reduce((sum, p) => {
+      const n = parseFloat(p.cashBalance ?? "0");
+      return sum + convertPrice(Number.isFinite(n) ? n : 0, "EUR");
+    }, 0);
+  }, [scopedPortfolios, convertPrice]);
 
   const calculatePortfolioMetrics = () => {
     const hasHoldings = holdings && holdings.length > 0 && quotes;
