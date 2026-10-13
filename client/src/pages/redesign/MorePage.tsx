@@ -12,6 +12,7 @@ import {
   Layers,
   LineChart,
   LogOut,
+  MessageSquare,
   PieChart,
   Scale,
   Settings,
@@ -60,7 +61,8 @@ const GROUPS: { title: string; items: NavItem[] }[] = [
     title: "AI",
     items: [
       { href: "/ai-agent/bot", title: "AI Agent", subtitle: "Bot, paper, alerty, skener", icon: Brain },
-      { href: "/ai-macro-audit", title: "AI Macro Audit", subtitle: "Health, makro riziká a akcie na pozície", icon: Sparkles },
+      { href: "/ai-chat", title: "AI Chat", subtitle: "Chat s AI o portfóliu, Gemy", icon: MessageSquare },
+      { href: "/ai-macro-audit", title: "AI Macro Audit", subtitle: "Health score a makro riziká", icon: Sparkles },
     ],
   },
   {
@@ -161,9 +163,15 @@ export default function MorePage() {
           ]}
         />
 
-        {GROUPS.slice(0, 3).map((group) => (
+        {GROUPS.slice(0, 2).map((group) => (
           <NavGroup key={group.title} title={group.title} items={group.items} onNavigate={setLocation} />
         ))}
+        <NavGroup
+          title="AI"
+          items={GROUPS[2]!.items}
+          onNavigate={setLocation}
+          tint="ai"
+        />
         <NavGroup title="Nástroje" items={toolItems} onNavigate={setLocation} />
 
         <section className="flex flex-col gap-2">
@@ -200,15 +208,32 @@ function NavGroup({
   title,
   items,
   onNavigate,
+  tint,
 }: {
   title: string;
   items: NavItem[];
   onNavigate: (href: string) => void;
+  tint?: "ai";
 }) {
+  const isAi = tint === "ai";
   return (
     <section className="flex flex-col gap-2">
-      <h2 className="text-[13px] font-medium leading-4 text-[var(--rd-text-tertiary)]">{title}</h2>
-      <Card className="gap-0 px-4 py-1">
+      <h2
+        className={
+          isAi
+            ? "text-[13px] font-medium leading-4 text-[var(--rd-ai)]"
+            : "text-[13px] font-medium leading-4 text-[var(--rd-text-tertiary)]"
+        }
+      >
+        {title}
+      </h2>
+      <Card
+        className={
+          isAi
+            ? "gap-0 border-[var(--rd-ai)]/20 bg-[var(--rd-ai-dim)] px-4 py-1"
+            : "gap-0 px-4 py-1"
+        }
+      >
         {items.map((item) => {
           const Icon = item.icon;
           return (
@@ -216,14 +241,28 @@ function NavGroup({
               key={item.href}
               type="button"
               onClick={() => onNavigate(item.href)}
-              className="flex min-h-[62px] w-full items-center gap-3 border-b border-[var(--rd-border-subtle)] py-3 text-left last:border-b-0"
+              className={
+                isAi
+                  ? "flex min-h-[62px] w-full items-center gap-3 border-b border-[var(--rd-ai)]/15 py-3 text-left last:border-b-0"
+                  : "flex min-h-[62px] w-full items-center gap-3 border-b border-[var(--rd-border-subtle)] py-3 text-left last:border-b-0"
+              }
             >
-              <IconBubble icon={<Icon className="size-[18px]" />} />
+              <IconBubble
+                icon={<Icon className="size-[18px]" />}
+                tint={isAi ? "ai" : undefined}
+              />
               <span className="min-w-0 flex-1">
                 <span className="block text-sm leading-5">{item.title}</span>
                 <span className="block text-xs leading-4 text-[var(--rd-text-tertiary)]">{item.subtitle}</span>
               </span>
-              <ChevronRight className="size-4 shrink-0 text-[var(--rd-text-tertiary)]" aria-hidden />
+              <ChevronRight
+                className={
+                  isAi
+                    ? "size-4 shrink-0 text-[var(--rd-ai)]/70"
+                    : "size-4 shrink-0 text-[var(--rd-text-tertiary)]"
+                }
+                aria-hidden
+              />
             </button>
           );
         })}
@@ -232,9 +271,15 @@ function NavGroup({
   );
 }
 
-function IconBubble({ icon }: { icon: ReactNode }) {
+function IconBubble({ icon, tint }: { icon: ReactNode; tint?: "ai" }) {
   return (
-    <span className="inline-flex size-[30px] shrink-0 items-center justify-center rounded-[var(--rd-radius-sm)] bg-[var(--rd-bg-surface-raised)] text-[var(--rd-text-secondary)]">
+    <span
+      className={
+        tint === "ai"
+          ? "inline-flex size-[30px] shrink-0 items-center justify-center rounded-[var(--rd-radius-sm)] bg-[var(--rd-ai)]/15 text-[var(--rd-ai)]"
+          : "inline-flex size-[30px] shrink-0 items-center justify-center rounded-[var(--rd-radius-sm)] bg-[var(--rd-bg-surface-raised)] text-[var(--rd-text-secondary)]"
+      }
+    >
       {icon}
     </span>
   );
