@@ -86,9 +86,11 @@ function ToolSteps({ steps, open, streaming }: { steps: string[]; open?: boolean
 function HistoryPanel({
   c,
   className,
+  variant = "mobile",
 }: {
   c: AiChatController;
   className?: string;
+  variant?: "mobile" | "desktop";
 }) {
   return (
     <div className={cn("flex h-full flex-col bg-[var(--rd-bg-surface)]", className)}>
@@ -175,7 +177,11 @@ function HistoryPanel({
                   c.setGemFormOpen(true);
                 }}
               >
-                <Pencil className="size-3.5" />
+                {variant === "mobile" ? (
+                  <MoreHorizontal className="size-4" />
+                ) : (
+                  <Pencil className="size-3.5" />
+                )}
               </button>
             </div>
           ))}
@@ -533,7 +539,11 @@ export function AiChatView({
       )}
     >
       {variant === "desktop" ? (
-        <HistoryPanel c={c} className="w-[300px] shrink-0 border-r border-[var(--rd-border-subtle)]" />
+        <HistoryPanel
+          c={c}
+          variant="desktop"
+          className="w-[300px] shrink-0 border-r border-[var(--rd-border-subtle)]"
+        />
       ) : null}
 
       <div className="relative flex min-w-0 flex-1 flex-col">
@@ -628,7 +638,7 @@ export function AiChatView({
                         c.setGemFormOpen(true);
                       }}
                     >
-                      <Pencil className="size-3" />
+                      <MoreHorizontal className="size-3.5" />
                     </button>
                     <button
                       type="button"
@@ -718,7 +728,7 @@ export function AiChatView({
 
         {variant === "mobile" && c.historyOpen ? (
           <div className="absolute inset-0 z-40 flex bg-black/50">
-            <HistoryPanel c={c} className="w-[318px] max-w-[85%]" />
+            <HistoryPanel c={c} variant="mobile" className="w-[318px] max-w-[85%]" />
             <button
               type="button"
               className="flex-1"
