@@ -1,6 +1,7 @@
 import { buildAiBotContext } from "../aiBot/contextBuilder";
 import { getLatestAiAuditorRun } from "../aiAuditor/store";
 import { resolveAuditorPortfolioId } from "../aiAuditor/runner";
+import { buildAiChatPerformance } from "./performance";
 import { DEFAULT_CONTEXT_FLAGS, type AiChatContextFlags, type AiChatGem } from "./types";
 
 export type AiChatBuiltContext = {
@@ -52,11 +53,37 @@ export async function buildAiChatContext(input: {
       name: h.companyName,
       weightPct: h.weightPct != null ? Number(h.weightPct.toFixed(2)) : null,
       price: h.price,
-      changePercent: h.changePercent,
+      /** Denná zmena — NIE týždenná. Pre týždeň použi performance.holdingsWeekMoves. */
+      changePercentToday: h.changePercent,
       unrealizedPnlPct:
         h.unrealizedPnlPct != null ? Number(h.unrealizedPnlPct.toFixed(2)) : null,
       marketValue: h.marketValue != null ? Math.round(h.marketValue) : null,
     }));
+
+    try {
+      const performance = await buildAiChatPerformance({
+        userId: input.userId,
+        portfolioScope,
+        totalMarketValue: ctx.totalMarketValue,
+        holdings: ctx.holdings.map((h) => ({
+          ticker: h.ticker,
+          marketValue: h.marketValue,
+          price: h.price,
+          shares: h.shares,
+        })),
+      });
+      summary.performance = performance;
+      if (performance.source !== "none") {
+        const pct =
+          performance.weekChangePct != null
+            ? `${performance.weekChangePct > 0 ? "+" : ""}${performance.weekChangePct} %`
+            : "n/a";
+        toolSteps.push(`Výkonnosť 1W (${pct})`);
+      }
+    } catch (err) {
+      console.warn("[ai-chat] performance block failed:", err);
+    }
+
     if (flags.news) {
       summary.news = (ctx.news || []).slice(0, 12).map((n) => ({
         title: n.title,
