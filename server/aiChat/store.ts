@@ -35,6 +35,7 @@ function mapGem(row: any): AiChatGem {
     userId: String(row.user_id),
     name: String(row.name),
     color: String(row.color || "#B48CE0"),
+    description: String(row.description || ""),
     instructions: String(row.instructions || ""),
     contextFlags: parseFlags(row.context_flags),
     starters: parseStarters(row.starters),
@@ -79,6 +80,7 @@ export async function ensureAiChatTables() {
       user_id varchar NOT NULL REFERENCES users(id),
       name varchar(120) NOT NULL,
       color varchar(32) NOT NULL DEFAULT '#B48CE0',
+      description varchar(160) NOT NULL DEFAULT '',
       instructions text NOT NULL DEFAULT '',
       context_flags jsonb NOT NULL DEFAULT '{}'::jsonb,
       starters jsonb NOT NULL DEFAULT '[]'::jsonb,
@@ -86,6 +88,10 @@ export async function ensureAiChatTables() {
       created_at timestamp DEFAULT now(),
       updated_at timestamp DEFAULT now()
     );
+  `);
+  await db.execute(sql`
+    ALTER TABLE ai_chat_gems
+    ADD COLUMN IF NOT EXISTS description varchar(160) NOT NULL DEFAULT '';
   `);
   await db.execute(sql`
     CREATE INDEX IF NOT EXISTS ai_chat_gems_user_idx
@@ -126,6 +132,7 @@ export async function ensureAiChatTables() {
 const DEFAULT_GEMS: Array<{
   name: string;
   color: string;
+  description: string;
   instructions: string;
   starters: string[];
   contextFlags: AiChatContextFlags;
@@ -133,11 +140,18 @@ const DEFAULT_GEMS: Array<{
   {
     name: "Dividendový analytik",
     color: "#B48CE0",
+    description: "Výnosy, payout, kalendár výplat",
     instructions:
-      "Si analytik dividendových akcií. Pri každej odpovedi uveď dividendový výnos, payout ratio a najbližší ex-dividend dátum. Výsledky zhrň do tabuľky a odporuč, či pozíciu držať pre príjem.",
+      "Si dividendový analytik MoneIQWise. Hovor po slovensky. Pri každej odpovedi:\n" +
+      "1) Zhrň očakávaný dividendový príjem z portfólia (mesačne / do konca roka).\n" +
+      "2) Uveď yield, payout ratio a najbližší ex-dividend dátum, ak sú známe.\n" +
+      "3) Výsledky daj do tabuľky ai-table (Ticker, Yield, Ex-date, Odhad €).\n" +
+      "4) Odporuč HOLD/TRIM podľa príjmu, nie špekulácie. Používaj callout.info pre dátumy výplat.",
     starters: [
       "Aké dividendy ma čakajú tento mesiac?",
-      "Ktoré pozície majú najvyšší výnos?",
+      "Ktoré pozície majú najvyšší dividendový výnos?",
+      "Koľko hrubých dividend môžem čakať do konca roka?",
+      "Ktoré holdingy majú najbližší ex-dividend dátum?",
     ],
     contextFlags: {
       portfolio: true,
@@ -150,11 +164,19 @@ const DEFAULT_GEMS: Array<{
   {
     name: "Rizikový manažér",
     color: "#F0667E",
+    description: "Koncentrácia, drawdown, riziká",
     instructions:
-      "Si rizikový manažér portfólia. Sleduj koncentráciu, drawdown, koreláciu sektorov a najväčšie riziká. Odporúčania formuluj ako konkrétne akcie (TRIM/HOLD/ADD) s dôvodom.",
+      "Si rizikový manažér portfólia. Hovor po slovensky. Sleduj:\n" +
+      "- koncentráciu (top pozície, sektory),\n" +
+      "- drawdown a volatilitu veľkých holdingov,\n" +
+      "- koreláciu / klastre (napr. AI, fintech),\n" +
+      "- varovania z posledného makro auditu.\n" +
+      "Odporúčania formuluj ako TRIM / HOLD / ADD s dôvodom. Použi kpi-grid, ai-table a callout.warning / callout.loss.",
     starters: [
       "Ktoré pozície sú najrizikovejšie a prečo?",
-      "Kde mám najväčšiu koncentráciu?",
+      "Kde mám najväčšiu koncentráciu v portfóliu?",
+      "Aké riziká vyplývajú z posledného makro auditu?",
+      "Ktorý sektor alebo klaster ma najviac ohrozuje?",
     ],
     contextFlags: {
       portfolio: true,
@@ -167,11 +189,16 @@ const DEFAULT_GEMS: Array<{
   {
     name: "Earnings briefing",
     color: "#6BB0F5",
+    description: "Pred a po výsledkoch firiem",
     instructions:
-      "Pripravuješ earnings briefing pred a po výsledkoch. Zhrň očakávania, kľúčové metriky a dopad na portfólio. Používaj callouty pre dátumy earnings.",
+      "Pripravuješ earnings briefing pred a po výsledkoch. Hovor po slovensky.\n" +
+      "Pre relevantné holdingy zhrň: dátum výsledkov, očakávania, kľúčové metriky (EPS, revenue), sentiment správ a dopad na váhu v portfóliu.\n" +
+      "Použi callout.info pre dátumy, callout.warning pre riziká gapu, tabuľku ai-table pre prehľad.",
     starters: [
       "Aké earnings ma čakajú tento mesiac?",
       "Ktoré holdingy majú najbližšie výsledky?",
+      "Zhrň čo sledovať pri najbližších earnings v portfóliu",
+      "Ktoré výsledky môžu najviac hýbať mojím portfóliom?",
     ],
     contextFlags: {
       portfolio: true,
@@ -185,28 +212,48 @@ const DEFAULT_GEMS: Array<{
 
 export async function ensureDefaultGems(userId: string): Promise<void> {
   const existing = await db.execute(sql`
-    SELECT id FROM ai_chat_gems
+    SELECT id, name FROM ai_chat_gems
     WHERE user_id = ${userId} AND is_default = true
-    LIMIT 1
   `);
-  if ((existing.rows?.length ?? 0) > 0) return;
+  const byName = new Map(
+    (existing.rows as any[]).map((r) => [String(r.name), String(r.id)]),
+  );
 
   for (const gem of DEFAULT_GEMS) {
+    const id = byName.get(gem.name);
+    if (!id) {
+      await db.execute(sql`
+        INSERT INTO ai_chat_gems (
+          id, user_id, name, color, description, instructions, context_flags, starters, is_default, created_at, updated_at
+        ) VALUES (
+          gen_random_uuid(),
+          ${userId},
+          ${gem.name},
+          ${gem.color},
+          ${gem.description},
+          ${gem.instructions},
+          ${JSON.stringify(gem.contextFlags)}::jsonb,
+          ${JSON.stringify(gem.starters)}::jsonb,
+          true,
+          NOW(),
+          NOW()
+        )
+      `);
+      continue;
+    }
+    // Doplň preddefinovaný text len ak ešte chýba popis (neruší ručné úpravy).
     await db.execute(sql`
-      INSERT INTO ai_chat_gems (
-        id, user_id, name, color, instructions, context_flags, starters, is_default, created_at, updated_at
-      ) VALUES (
-        gen_random_uuid(),
-        ${userId},
-        ${gem.name},
-        ${gem.color},
-        ${gem.instructions},
-        ${JSON.stringify(gem.contextFlags)}::jsonb,
-        ${JSON.stringify(gem.starters)}::jsonb,
-        true,
-        NOW(),
-        NOW()
-      )
+      UPDATE ai_chat_gems SET
+        color = ${gem.color},
+        description = ${gem.description},
+        instructions = ${gem.instructions},
+        context_flags = ${JSON.stringify(gem.contextFlags)}::jsonb,
+        starters = ${JSON.stringify(gem.starters)}::jsonb,
+        updated_at = NOW()
+      WHERE id = ${id}
+        AND user_id = ${userId}
+        AND is_default = true
+        AND COALESCE(description, '') = ''
     `);
   }
 }
@@ -235,6 +282,7 @@ export async function createGem(input: {
   userId: string;
   name: string;
   color?: string;
+  description?: string;
   instructions?: string;
   contextFlags?: Partial<AiChatContextFlags>;
   starters?: string[];
@@ -243,12 +291,13 @@ export async function createGem(input: {
   const starters = parseStarters(input.starters ?? []);
   const result = await db.execute(sql`
     INSERT INTO ai_chat_gems (
-      id, user_id, name, color, instructions, context_flags, starters, is_default, created_at, updated_at
+      id, user_id, name, color, description, instructions, context_flags, starters, is_default, created_at, updated_at
     ) VALUES (
       gen_random_uuid(),
       ${input.userId},
       ${input.name.trim().slice(0, 120)},
       ${(input.color || "#B48CE0").slice(0, 32)},
+      ${(input.description || "").trim().slice(0, 160)},
       ${(input.instructions || "").slice(0, 2000)},
       ${JSON.stringify(flags)}::jsonb,
       ${JSON.stringify(starters)}::jsonb,
@@ -267,6 +316,7 @@ export async function updateGem(
   patch: {
     name?: string;
     color?: string;
+    description?: string;
     instructions?: string;
     contextFlags?: Partial<AiChatContextFlags>;
     starters?: string[];
@@ -276,6 +326,10 @@ export async function updateGem(
   if (!existing) return null;
   const name = patch.name != null ? patch.name.trim().slice(0, 120) : existing.name;
   const color = patch.color != null ? patch.color.slice(0, 32) : existing.color;
+  const description =
+    patch.description != null
+      ? patch.description.trim().slice(0, 160)
+      : existing.description;
   const instructions =
     patch.instructions != null ? patch.instructions.slice(0, 2000) : existing.instructions;
   const flags = patch.contextFlags
@@ -286,6 +340,7 @@ export async function updateGem(
     UPDATE ai_chat_gems SET
       name = ${name},
       color = ${color},
+      description = ${description},
       instructions = ${instructions},
       context_flags = ${JSON.stringify(flags)}::jsonb,
       starters = ${JSON.stringify(starters)}::jsonb,

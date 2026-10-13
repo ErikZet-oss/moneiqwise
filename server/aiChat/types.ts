@@ -19,6 +19,8 @@ export type AiChatGem = {
   userId: string;
   name: string;
   color: string;
+  /** Krátky popis na karte / v zozname (max ~80 znakov). */
+  description: string;
   instructions: string;
   contextFlags: AiChatContextFlags;
   starters: string[];

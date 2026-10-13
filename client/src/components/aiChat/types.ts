@@ -10,6 +10,7 @@ export type AiChatGem = {
   id: string;
   name: string;
   color: string;
+  description: string;
   instructions: string;
   contextFlags: AiChatContextFlags;
   starters: string[];

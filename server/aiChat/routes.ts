@@ -70,6 +70,8 @@ export function registerAiChatRoutes(
         userId,
         name,
         color: typeof req.body?.color === "string" ? req.body.color : undefined,
+        description:
+          typeof req.body?.description === "string" ? req.body.description : undefined,
         instructions:
           typeof req.body?.instructions === "string" ? req.body.instructions : undefined,
         contextFlags:
@@ -94,6 +96,8 @@ export function registerAiChatRoutes(
       const gem = await updateGem(userId, gemId, {
         name: typeof req.body?.name === "string" ? req.body.name : undefined,
         color: typeof req.body?.color === "string" ? req.body.color : undefined,
+        description:
+          typeof req.body?.description === "string" ? req.body.description : undefined,
         instructions:
           typeof req.body?.instructions === "string" ? req.body.instructions : undefined,
         contextFlags:

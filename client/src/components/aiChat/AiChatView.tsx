@@ -12,6 +12,7 @@ import {
   Mic,
   Newspaper,
   Paperclip,
+  MoreHorizontal,
   Pencil,
   Pin,
   Plus,
@@ -140,25 +141,43 @@ function HistoryPanel({
         </div>
         <div className="mb-4 space-y-1">
           {c.gems.map((g) => (
-            <button
+            <div
               key={g.id}
-              type="button"
-              className="flex w-full items-center gap-2 rounded-[8px] px-1.5 py-1.5 text-left hover:bg-[var(--rd-bg-surface-hover)]"
-              onClick={() => void c.startNewChat(g.id)}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                c.setEditingGem(g);
-                c.setGemFormOpen(true);
-              }}
+              className="flex w-full items-center gap-1 rounded-[8px] px-1 py-1 hover:bg-[var(--rd-bg-surface-hover)]"
             >
-              <span
-                className="inline-flex size-6 items-center justify-center rounded-md"
-                style={{ background: `${g.color}33`, color: g.color }}
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-2 px-0.5 py-1 text-left"
+                onClick={() => void c.startNewChat(g.id)}
               >
-                <Diamond className="size-3.5" />
-              </span>
-              <span className="truncate text-[13px]">{g.name}</span>
-            </button>
+                <span
+                  className="inline-flex size-6 shrink-0 items-center justify-center rounded-md"
+                  style={{ background: `${g.color}33`, color: g.color }}
+                >
+                  <Diamond className="size-3.5" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px]">{g.name}</span>
+                  {g.description ? (
+                    <span className="block truncate text-[11px] text-[var(--rd-text-tertiary)]">
+                      {g.description}
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+              <button
+                type="button"
+                className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-[var(--rd-text-tertiary)] hover:text-[var(--rd-ai)]"
+                aria-label={`Upraviť ${g.name}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  c.setEditingGem(g);
+                  c.setGemFormOpen(true);
+                }}
+              >
+                <Pencil className="size-3.5" />
+              </button>
+            </div>
           ))}
         </div>
 
@@ -169,23 +188,43 @@ function HistoryPanel({
             </p>
             <div className="space-y-0.5">
               {items.map((item) => (
-                <button
+                <div
                   key={item.id}
-                  type="button"
                   className={cn(
-                    "flex w-full items-center gap-2 rounded-[8px] px-2 py-2 text-left text-[13px] hover:bg-[var(--rd-bg-surface-hover)]",
+                    "flex w-full items-center gap-0.5 rounded-[8px] px-1 py-0.5 hover:bg-[var(--rd-bg-surface-hover)]",
                     c.chatId === item.id && "bg-[var(--rd-bg-surface-hover)]",
                   )}
-                  onClick={() => void c.loadChat(item.id)}
                 >
-                  {item.gemId ? (
-                    <Diamond className="size-3.5 shrink-0" style={{ color: item.gemColor || "#B48CE0" }} />
-                  ) : (
-                    <Sparkles className="size-3.5 shrink-0 text-[var(--rd-text-tertiary)]" />
-                  )}
-                  <span className="min-w-0 flex-1 truncate">{item.title}</span>
-                  {item.pinned ? <Pin className="size-3 shrink-0 text-[var(--rd-ai)]" /> : null}
-                </button>
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-2 px-1 py-1.5 text-left text-[13px]"
+                    onClick={() => void c.loadChat(item.id)}
+                  >
+                    {item.gemId ? (
+                      <Diamond className="size-3.5 shrink-0" style={{ color: item.gemColor || "#B48CE0" }} />
+                    ) : (
+                      <Sparkles className="size-3.5 shrink-0 text-[var(--rd-text-tertiary)]" />
+                    )}
+                    <span className="min-w-0 flex-1 truncate">{item.title}</span>
+                    {item.pinned ? <Pin className="size-3 shrink-0 text-[var(--rd-ai)]" /> : null}
+                  </button>
+                  <button
+                    type="button"
+                    className="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-[var(--rd-text-tertiary)] hover:text-[var(--rd-text-primary)]"
+                    aria-label={`Akcie: ${item.title}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      c.openChatActions({
+                        id: item.id,
+                        title: item.title,
+                        pinned: item.pinned,
+                        gemId: item.gemId,
+                      });
+                    }}
+                  >
+                    <MoreHorizontal className="size-4" />
+                  </button>
+                </div>
               ))}
             </div>
           </div>
@@ -296,6 +335,7 @@ function GemForm({ c }: { c: AiChatController }) {
   const g = c.editingGem;
   const [name, setName] = useState(g?.name || "");
   const [color, setColor] = useState(g?.color || GEM_COLORS[0]);
+  const [description, setDescription] = useState(g?.description || "");
   const [instructions, setInstructions] = useState(g?.instructions || "");
   const [flags, setFlags] = useState<AiChatContextFlags>(
     g?.contextFlags || {
@@ -339,6 +379,7 @@ function GemForm({ c }: { c: AiChatController }) {
               id: g?.id,
               name,
               color,
+              description,
               instructions,
               contextFlags: flags,
               starters: starters.filter((s) => s.trim()),
@@ -363,6 +404,13 @@ function GemForm({ c }: { c: AiChatController }) {
             className="h-[58px] flex-1 rounded-[12px] border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface)] px-3 text-[15px] outline-none"
           />
         </div>
+        <p className="mt-4 text-[12px] text-[var(--rd-text-tertiary)]">Krátky popis</p>
+        <input
+          value={description}
+          onChange={(e) => setDescription(e.target.value.slice(0, 160))}
+          placeholder="Napr. Výnosy, payout, kalendár"
+          className="mt-2 h-11 w-full rounded-[12px] border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface)] px-3 text-[13px] outline-none"
+        />
         <p className="mt-4 text-[12px] text-[var(--rd-text-tertiary)]">Farba</p>
         <div className="mt-2 flex gap-2">
           {GEM_COLORS.map((col) => (
@@ -503,15 +551,12 @@ export function AiChatView({
           <button
             type="button"
             className="min-w-0 flex-1 text-center"
-            onClick={() => {
-              if (!c.chatId) return;
-              c.setRenameValue(c.chat?.title || "");
-              c.setActionsOpen(true);
-            }}
+            onClick={() => c.openChatActions()}
             onContextMenu={(e) => {
               if (!c.chatId) return;
               e.preventDefault();
-              c.setRenameValue(c.chat?.title || "");
+              c.openChatActions();
+              c.setActionsOpen(false);
               c.setRenameOpen(true);
             }}
           >
@@ -570,23 +615,38 @@ export function AiChatView({
               </div>
               <div className="mt-2 flex gap-3 overflow-x-auto pb-1">
                 {c.gems.map((g) => (
-                  <button
+                  <div
                     key={g.id}
-                    type="button"
-                    className="w-[140px] shrink-0 rounded-[12px] border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface)] p-3 text-left"
-                    onClick={() => void c.startNewChat(g.id)}
+                    className="relative w-[140px] shrink-0 rounded-[12px] border border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface)] p-3 text-left"
                   >
-                    <span
-                      className="inline-flex size-7 items-center justify-center rounded-lg"
-                      style={{ background: `${g.color}33`, color: g.color }}
+                    <button
+                      type="button"
+                      className="absolute right-1.5 top-1.5 inline-flex size-6 items-center justify-center rounded-md text-[var(--rd-text-tertiary)] hover:text-[var(--rd-ai)]"
+                      aria-label={`Upraviť ${g.name}`}
+                      onClick={() => {
+                        c.setEditingGem(g);
+                        c.setGemFormOpen(true);
+                      }}
                     >
-                      <Diamond className="size-3.5" />
-                    </span>
-                    <span className="mt-2 block text-[13px] font-semibold leading-[18px]">{g.name}</span>
-                    <span className="mt-1 block text-[11px] leading-[14px] text-[var(--rd-text-tertiary)]">
-                      {g.starters[0] || g.instructions.slice(0, 40)}
-                    </span>
-                  </button>
+                      <Pencil className="size-3" />
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full text-left"
+                      onClick={() => void c.startNewChat(g.id)}
+                    >
+                      <span
+                        className="inline-flex size-7 items-center justify-center rounded-lg"
+                        style={{ background: `${g.color}33`, color: g.color }}
+                      >
+                        <Diamond className="size-3.5" />
+                      </span>
+                      <span className="mt-2 block text-[13px] font-semibold leading-[18px]">{g.name}</span>
+                      <span className="mt-1 block text-[11px] leading-[14px] text-[var(--rd-text-tertiary)]">
+                        {g.description || g.starters[0] || g.instructions.slice(0, 40)}
+                      </span>
+                    </button>
+                  </div>
                 ))}
               </div>
 
@@ -668,29 +728,42 @@ export function AiChatView({
           </div>
         ) : null}
 
-        {c.actionsOpen ? (
+        {c.actionsOpen && c.actionsTarget ? (
           <div className="absolute inset-0 z-50 flex flex-col justify-end bg-black/50">
-            <button type="button" className="flex-1" onClick={() => c.setActionsOpen(false)} />
+            <button
+              type="button"
+              className="flex-1"
+              onClick={() => {
+                c.setActionsOpen(false);
+                c.setActionsTarget(null);
+              }}
+            />
             <div className="rounded-t-[16px] bg-[var(--rd-bg-surface)] px-4 pb-8 pt-2">
               <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-[var(--rd-border-strong)]" />
-              <p className="text-[15px] font-semibold">{c.chat?.title}</p>
+              <p className="text-[15px] font-semibold">{c.actionsTarget.title}</p>
               <p className="text-[12px] text-[var(--rd-text-tertiary)]">
-                {c.messages.length} správ
+                {c.chatId === c.actionsTarget.id
+                  ? `${c.messages.length} správ`
+                  : "Akcie chatu"}
               </p>
               <div className="mt-3 space-y-1">
                 <ActionBtn
                   icon={<Pencil className="size-[18px]" />}
                   label="Premenovať"
                   onClick={() => {
+                    c.setRenameValue(c.actionsTarget!.title);
                     c.setActionsOpen(false);
                     c.setRenameOpen(true);
                   }}
                 />
                 <ActionBtn
                   icon={<Pin className="size-[18px]" />}
-                  label={c.chat?.pinned ? "Odopnúť" : "Pripnúť hore"}
+                  label={c.actionsTarget.pinned ? "Odopnúť" : "Pripnúť hore"}
                   onClick={() => {
-                    c.patchChat.mutate({ pinned: !c.chat?.pinned });
+                    c.patchChat.mutate({
+                      chatId: c.actionsTarget!.id,
+                      pinned: !c.actionsTarget!.pinned,
+                    });
                     c.setActionsOpen(false);
                   }}
                 />
@@ -698,9 +771,8 @@ export function AiChatView({
                   icon={<Diamond className="size-[18px] text-[var(--rd-ai)]" />}
                   label="Presunúť do Gemu…"
                   onClick={() => {
-                    const first = c.gems[0];
-                    if (first) c.patchChat.mutate({ gemId: first.id });
                     c.setActionsOpen(false);
+                    c.setMoveGemOpen(true);
                   }}
                 />
                 <ActionBtn
@@ -712,7 +784,8 @@ export function AiChatView({
                   icon={<Download className="size-[18px]" />}
                   label="Exportovať (Markdown)"
                   onClick={() => {
-                    c.exportMarkdown();
+                    if (c.chatId === c.actionsTarget?.id) c.exportMarkdown();
+                    else c.showSoon("Export — otvor chat a skús znova");
                     c.setActionsOpen(false);
                   }}
                 />
@@ -721,11 +794,49 @@ export function AiChatView({
                   label="Zmazať chat"
                   danger
                   onClick={() => {
-                    if (c.chatId && confirm("Naozaj zmazať chat?")) {
-                      c.deleteChat.mutate(c.chatId);
+                    if (c.actionsTarget && confirm("Naozaj zmazať chat?")) {
+                      c.deleteChat.mutate(c.actionsTarget.id);
                     }
                   }}
                 />
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {c.moveGemOpen && c.actionsTarget ? (
+          <div className="absolute inset-0 z-50 flex flex-col justify-end bg-black/50">
+            <button
+              type="button"
+              className="flex-1"
+              onClick={() => c.setMoveGemOpen(false)}
+            />
+            <div className="rounded-t-[16px] bg-[var(--rd-bg-surface)] px-4 pb-8 pt-2">
+              <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-[var(--rd-border-strong)]" />
+              <p className="text-[15px] font-semibold">Presunúť do Gemu</p>
+              <p className="text-[12px] text-[var(--rd-text-tertiary)]">{c.actionsTarget.title}</p>
+              <div className="mt-3 space-y-1">
+                <ActionBtn
+                  icon={<Sparkles className="size-[18px]" />}
+                  label="Bez Gemu (bežný chat)"
+                  onClick={() => {
+                    c.patchChat.mutate({ chatId: c.actionsTarget!.id, gemId: null });
+                    c.setMoveGemOpen(false);
+                    c.setActionsTarget(null);
+                  }}
+                />
+                {c.gems.map((g) => (
+                  <ActionBtn
+                    key={g.id}
+                    icon={<Diamond className="size-[18px]" style={{ color: g.color }} />}
+                    label={g.name}
+                    onClick={() => {
+                      c.patchChat.mutate({ chatId: c.actionsTarget!.id, gemId: g.id });
+                      c.setMoveGemOpen(false);
+                      c.setActionsTarget(null);
+                    }}
+                  />
+                ))}
               </div>
             </div>
           </div>
@@ -767,8 +878,12 @@ export function AiChatView({
                   type="button"
                   className="h-9 flex-1 rounded-[8px] bg-[var(--rd-ai)] text-[13px] font-semibold text-[var(--rd-text-on-brand,#03130e)]"
                   onClick={() => {
-                    c.patchChat.mutate({ title: c.renameValue });
+                    c.patchChat.mutate({
+                      chatId: c.actionsTarget?.id || c.chatId || undefined,
+                      title: c.renameValue,
+                    });
                     c.setRenameOpen(false);
+                    c.setActionsTarget(null);
                   }}
                 >
                   Uložiť

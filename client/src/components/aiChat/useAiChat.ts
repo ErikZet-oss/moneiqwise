@@ -23,6 +23,13 @@ export function useAiChat() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyQuery, setHistoryQuery] = useState("");
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [actionsTarget, setActionsTarget] = useState<{
+    id: string;
+    title: string;
+    pinned: boolean;
+    gemId: string | null;
+  } | null>(null);
+  const [moveGemOpen, setMoveGemOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [gemFormOpen, setGemFormOpen] = useState(false);
@@ -230,14 +237,51 @@ export function useAiChat() {
     ],
   );
 
+  const openChatActions = useCallback(
+    (target?: { id: string; title: string; pinned: boolean; gemId: string | null } | null) => {
+      const t =
+        target ??
+        (chatId && chat
+          ? {
+              id: chatId,
+              title: chat.title,
+              pinned: chat.pinned,
+              gemId: chat.gemId,
+            }
+          : null);
+      if (!t) return;
+      setActionsTarget(t);
+      setRenameValue(t.title);
+      setActionsOpen(true);
+    },
+    [chat, chatId],
+  );
+
   const patchChat = useMutation({
-    mutationFn: async (patch: { title?: string; pinned?: boolean; gemId?: string | null }) => {
-      if (!chatId) throw new Error("no chat");
-      const res = await apiRequest("PATCH", `/api/ai-chat/chats/${chatId}`, patch);
+    mutationFn: async (patch: {
+      chatId?: string;
+      title?: string;
+      pinned?: boolean;
+      gemId?: string | null;
+    }) => {
+      const id = patch.chatId || actionsTarget?.id || chatId;
+      if (!id) throw new Error("no chat");
+      const { chatId: _ignore, ...body } = patch;
+      const res = await apiRequest("PATCH", `/api/ai-chat/chats/${id}`, body);
       return res.json() as Promise<{ chat: AiChatRow }>;
     },
     onSuccess: (data) => {
-      setChat(data.chat);
+      if (chatId === data.chat.id) setChat(data.chat);
+      setActionsTarget((t) =>
+        t && t.id === data.chat.id
+          ? {
+              id: data.chat.id,
+              title: data.chat.title,
+              pinned: data.chat.pinned,
+              gemId: data.chat.gemId,
+            }
+          : t,
+      );
       void qc.invalidateQueries({ queryKey: ["/api/ai-chat/chats"] });
     },
   });
@@ -263,6 +307,7 @@ export function useAiChat() {
       id?: string;
       name: string;
       color: string;
+      description: string;
       instructions: string;
       contextFlags: AiChatGem["contextFlags"];
       starters: string[];
@@ -294,13 +339,17 @@ export function useAiChat() {
 
   const suggestTitle = useMutation({
     mutationFn: async () => {
-      if (!chatId) throw new Error("no chat");
-      const res = await apiRequest("POST", `/api/ai-chat/chats/${chatId}/suggest-title`, {});
+      const id = actionsTarget?.id || chatId;
+      if (!id) throw new Error("no chat");
+      const res = await apiRequest("POST", `/api/ai-chat/chats/${id}/suggest-title`, {});
       return res.json() as Promise<{ title: string; chat: AiChatRow }>;
     },
     onSuccess: (data) => {
       setRenameValue(data.title);
-      setChat(data.chat);
+      if (chatId === data.chat.id) setChat(data.chat);
+      setActionsTarget((t) =>
+        t && t.id === data.chat.id ? { ...t, title: data.chat.title } : t,
+      );
       void qc.invalidateQueries({ queryKey: ["/api/ai-chat/chats"] });
     },
   });
@@ -377,6 +426,11 @@ export function useAiChat() {
     setHistoryQuery,
     actionsOpen,
     setActionsOpen,
+    actionsTarget,
+    setActionsTarget,
+    openChatActions,
+    moveGemOpen,
+    setMoveGemOpen,
     renameOpen,
     setRenameOpen,
     renameValue,
