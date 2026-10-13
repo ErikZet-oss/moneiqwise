@@ -1,8 +1,8 @@
 /**
  * Dočasný gate na Anthropic/Claude spotrebu.
  *
- * Default: zapnuté — Claude beží LEN pre AI Macro Audit (manuálne).
- * Obnovenie ostatných: CLAUDE_MACRO_AUDIT_ONLY=0 (alebo false/off) v env.
+ * Default: zapnuté — Claude beží pre AI Macro Audit + AI Chat.
+ * Ostatné (bot, alerts, scanner, paper): CLAUDE_MACRO_AUDIT_ONLY=0.
  */
 export function isClaudeMacroAuditOnly(): boolean {
   const raw = process.env.CLAUDE_MACRO_AUDIT_ONLY?.trim().toLowerCase();
@@ -21,9 +21,10 @@ export type ClaudeFeature =
   | "paper-bot-ai";
 
 export function isClaudeFeatureEnabled(feature: ClaudeFeature): boolean {
-  if (feature === "macro-audit") return true;
+  // Primárne Claude sekcie — vždy povolené (Macro Audit + AI Chat).
+  if (feature === "macro-audit" || feature === "ai-chat") return true;
   return !isClaudeMacroAuditOnly();
 }
 
 export const CLAUDE_DISABLED_MESSAGE =
-  "Claude je dočasne vypnutý okrem AI Macro Audit (šetriace tokeny). Nastav CLAUDE_MACRO_AUDIT_ONLY=0 na serveri pre obnovu.";
+  "Claude je dočasne vypnutý okrem AI Macro Audit a AI Chat (šetriace tokeny). Nastav CLAUDE_MACRO_AUDIT_ONLY=0 na serveri pre obnovu.";
