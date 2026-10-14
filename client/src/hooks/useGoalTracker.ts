@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import {
+  buildGoalChartData,
   buildGoalModel,
   buildMonthlySeries,
   defaultGoalSettings,
@@ -167,14 +168,12 @@ export function useGoalTracker() {
     ? model.currentValue ?? settings.anchorValue
     : settings.manualInitialAmount;
 
-  const chartData = useMemo(
-    () =>
-      model.months.map((m) => ({
-        ...m,
-        targetValue: m.planValue,
-      })),
-    [model.months],
+  const chart = useMemo(
+    () => buildGoalChartData(model, settings.goalAmount),
+    [model, settings.goalAmount],
   );
+  const chartData = chart.points;
+  const chartYDomain = chart.yDomain;
 
   return {
     portfolioParam,
@@ -202,6 +201,7 @@ export function useGoalTracker() {
     selectedDetail,
     model,
     chartData,
+    chartYDomain,
     effectiveInitialDisplay,
     latestActualValue,
     goalAmount: settings.goalAmount,

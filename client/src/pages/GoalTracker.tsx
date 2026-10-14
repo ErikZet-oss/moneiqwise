@@ -1,4 +1,14 @@
-import { Area, AreaChart, CartesianGrid, Line, ReferenceLine, ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis } from "recharts";
+import {
+  Area,
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip as RTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { Target } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,7 +21,7 @@ import { useMobileRedesign } from "@/hooks/useMobileUi";
 import { useGoalTracker } from "@/hooks/useGoalTracker";
 import GoalTrackerMobile from "@/pages/redesign/GoalTrackerMobile";
 import { HelpTip } from "@/components/HelpTip";
-import { MONTHS_SK, calendarTileAmount, type GoalMonthPoint } from "@/lib/goalTracker";
+import { MONTHS_SK, calendarTileAmount, type GoalChartPoint, type GoalMonthPoint } from "@/lib/goalTracker";
 
 function statusLabel(status: GoalMonthPoint["status"]): string {
   switch (status) {
@@ -69,6 +79,7 @@ function GoalTrackerClassic() {
     selectedDetail,
     model,
     chartData,
+    chartYDomain,
     effectiveInitialDisplay,
     latestActualValue,
     goalAmount,
@@ -252,13 +263,13 @@ function GoalTrackerClassic() {
           <CardTitle className="text-sm font-medium flex items-center gap-1">
             Cieľ vs realita
             <HelpTip title="Graf cieľ vs realita">
-              <p>Prerušovaná čiara je plán (target), plocha je skutočný stav portfólia (actual).</p>
-              <p>Vodorovná zelená čiara je tvoja cieľová suma.</p>
-              <p>Sivá čiara ukazuje len tvoje čisté vklady bez zhodnotenia.</p>
+              <p>Zelená/modrá plocha = skutočná hodnota portfólia v minulosti.</p>
+              <p>Prerušovaná čiara = plán (pri zapnutom live toggle od dneška dopredu).</p>
+              <p>Vodorovná zelená čiara = cieľová suma.</p>
             </HelpTip>
           </CardTitle>
           <CardDescription>
-            Prerušovaná čiara = cieľový plán. Plocha = reálna historická hodnota portfólia.
+            Plocha = realita. Prerušovaná čiara = plán. Vodorovná = cieľová suma.
           </CardDescription>
         </CardHeader>
         <CardContent className={isMobile ? "relative h-[260px] overflow-hidden px-2" : "relative h-[340px] overflow-hidden"}>
@@ -267,11 +278,13 @@ function GoalTrackerClassic() {
             <div className="h-full rounded-md border bg-muted/20 animate-pulse" />
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
+              <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" opacity={0.4} />
                 <XAxis dataKey="label" minTickGap={isMobile ? 18 : 24} tick={{ fontSize: isMobile ? 10 : 12 }} />
                 <YAxis
                   width={isMobile ? 40 : 56}
+                  domain={chartYDomain}
+                  allowDataOverflow
                   tick={{ fontSize: isMobile ? 10 : 12 }}
                   tickFormatter={(v) =>
                     new Intl.NumberFormat("sk-SK", { notation: "compact", maximumFractionDigits: 1 }).format(v)
@@ -280,17 +293,22 @@ function GoalTrackerClassic() {
                 <RTooltip
                   content={({ active, payload, label }) => {
                     if (!active || !payload?.length) return null;
-                    const row = payload[0]?.payload as GoalMonthPoint & { targetValue: number };
-                    const diff = row.delta;
+                    const row = payload[0]?.payload as GoalChartPoint;
+                    const diff =
+                      row.actualValue != null && row.planValue != null
+                        ? row.actualValue - row.planValue
+                        : row.delta;
                     return (
                       <div className="rounded-md border bg-background/95 p-2 text-[11px] sm:text-xs shadow-md max-w-[220px]">
                         <p className="font-medium mb-1">{label}</p>
-                        <p>Cieľ: {formatCurrency(row.planValue)}</p>
-                        <p className="text-muted-foreground">
-                          Vklady bez výnosu: {formatCurrency(row.contributionOnlyValue)}
-                        </p>
+                        <p>Plán: {formatCurrency(row.planValue)}</p>
+                        {row.contributionOnlyValue != null && (
+                          <p className="text-muted-foreground">
+                            Vklady bez výnosu: {formatCurrency(row.contributionOnlyValue)}
+                          </p>
+                        )}
                         <p>Realita: {row.actualValue != null ? formatCurrency(row.actualValue) : "—"}</p>
-                        {diff != null && (
+                        {diff != null && row.actualValue != null && (
                           <p className={diff >= 0 ? "text-emerald-600" : "text-rose-600"}>
                             {diff >= 0 ? "Si nad plánom: " : "Zaostávaš: "}
                             {formatCurrency(Math.abs(diff))}
@@ -309,33 +327,48 @@ function GoalTrackerClassic() {
                     label={{ value: "Cieľ", position: "insideTopRight", fill: "hsl(142 60% 40%)", fontSize: 11 }}
                   />
                 )}
+                {chartData.some((p) => p.isCurrent) && (
+                  <ReferenceLine
+                    x={chartData.find((p) => p.isCurrent)!.label}
+                    stroke="hsl(var(--muted-foreground))"
+                    strokeDasharray="2 2"
+                    ifOverflow="hidden"
+                  />
+                )}
                 <Area
                   type="monotone"
                   dataKey="actualValue"
-                  name="Reality"
+                  name="Realita"
                   stroke="hsl(var(--primary))"
                   fill="hsl(var(--primary) / 0.18)"
                   strokeWidth={2}
                   connectNulls={false}
+                  isAnimationActive={false}
                 />
                 <Line
                   type="monotone"
                   dataKey="targetValue"
-                  name="Cieľ"
+                  name="Plán"
                   stroke="hsl(var(--foreground))"
                   strokeDasharray="6 4"
                   dot={false}
-                  strokeWidth={2}
+                  strokeWidth={2.25}
+                  connectNulls={false}
+                  isAnimationActive={false}
                 />
-                <Line
-                  type="monotone"
-                  dataKey="contributionOnlyValue"
-                  name="Vklady bez výnosu"
-                  stroke="hsl(var(--muted-foreground))"
-                  dot={false}
-                  strokeWidth={1.75}
-                />
-              </AreaChart>
+                {!useCurrentPortfolioAsInitial && (
+                  <Line
+                    type="monotone"
+                    dataKey="contributionOnlyValue"
+                    name="Vklady bez výnosu"
+                    stroke="hsl(var(--muted-foreground))"
+                    dot={false}
+                    strokeWidth={1.5}
+                    connectNulls={false}
+                    isAnimationActive={false}
+                  />
+                )}
+              </ComposedChart>
             </ResponsiveContainer>
           )}
         </CardContent>

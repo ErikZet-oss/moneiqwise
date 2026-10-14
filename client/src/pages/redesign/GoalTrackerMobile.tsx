@@ -1,10 +1,20 @@
 import { useState } from "react";
-import { Area, AreaChart, CartesianGrid, Line, ReferenceLine, ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis } from "recharts";
+import {
+  Area,
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip as RTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { useCurrency } from "@/hooks/useCurrency";
 import { useGoalTracker } from "@/hooks/useGoalTracker";
 import { Badge, Card, Input, Select, Toggle, TopBar } from "@/redesign/ui";
 import { HelpButton, KvRow, PageBody, PortfolioSwitcher, signedMoney, signedPct, toneOf } from "./mobileChrome";
-import { MONTHS_SK, calendarTileAmount, type GoalMonthPoint } from "@/lib/goalTracker";
+import { MONTHS_SK, calendarTileAmount, type GoalChartPoint, type GoalMonthPoint } from "@/lib/goalTracker";
 
 function statusLabel(status: GoalMonthPoint["status"]): string {
   switch (status) {
@@ -61,6 +71,7 @@ export default function GoalTrackerMobile() {
     selectedDetail,
     model,
     chartData,
+    chartYDomain,
     effectiveInitialDisplay,
     goalAmount,
   } = g;
@@ -71,6 +82,8 @@ export default function GoalTrackerMobile() {
         year: "numeric",
       })
     : "—";
+
+  const currentLabel = chartData.find((p) => p.isCurrent)?.label;
 
   return (
     <div className="bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
@@ -185,19 +198,19 @@ export default function GoalTrackerMobile() {
               <p className="min-w-0 flex-1 rd-type-h2">Cieľ vs realita</p>
               <HelpButton
                 title="Graf cieľ vs realita"
-                body="Prerušovaná čiara je cieľový plán. Plocha je reálna hodnota portfólia. Vodorovná čiara je cieľová suma."
+                body="Zelená plocha = realita. Prerušovaná čiara = plán od dnes do cieľa. Vodorovná čiara = cieľová suma."
               />
             </div>
             <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">
-              Prerušovaná čiara = cieľový plán. Plocha = reálna hodnota portfólia.
+              Plocha = realita. Prerušovaná čiara = plán (od dnes).
             </p>
           </div>
-          <div className="h-40 w-full">
+          <div className="h-44 w-full">
             {isLoading ? (
               <p className="text-xs text-[var(--rd-text-tertiary)]">Načítavam históriu…</p>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 8, right: 0, left: 0, bottom: 0 }}>
+                <ComposedChart data={chartData} margin={{ top: 8, right: 4, left: 0, bottom: 0 }}>
                   <CartesianGrid stroke="var(--rd-border-subtle)" vertical={false} />
                   <XAxis
                     dataKey="label"
@@ -206,15 +219,15 @@ export default function GoalTrackerMobile() {
                     axisLine={false}
                     tickLine={false}
                   />
-                  <YAxis hide />
+                  <YAxis hide domain={chartYDomain} allowDataOverflow />
                   <RTooltip
                     content={({ active, payload }) => {
                       if (!active || !payload?.length) return null;
-                      const row = payload[0]?.payload as GoalMonthPoint & { targetValue: number };
+                      const row = payload[0]?.payload as GoalChartPoint;
                       return (
                         <div className="rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-strong)] bg-[var(--rd-bg-surface-raised)] p-2 text-xs">
                           <p>{row.label}</p>
-                          <p>Cieľ: {formatCurrency(row.planValue)}</p>
+                          <p>Plán: {formatCurrency(row.planValue)}</p>
                           <p>Realita: {row.actualValue != null ? formatCurrency(row.actualValue) : "—"}</p>
                         </div>
                       );
@@ -223,22 +236,34 @@ export default function GoalTrackerMobile() {
                   {goalAmount > 0 ? (
                     <ReferenceLine y={goalAmount} stroke="var(--rd-profit)" strokeDasharray="4 4" />
                   ) : null}
+                  {currentLabel ? (
+                    <ReferenceLine
+                      x={currentLabel}
+                      stroke="var(--rd-text-tertiary)"
+                      strokeDasharray="2 2"
+                    />
+                  ) : null}
                   <Area
                     type="monotone"
                     dataKey="actualValue"
                     stroke="var(--rd-profit)"
                     fill="var(--rd-profit)"
                     fillOpacity={0.2}
+                    strokeWidth={2}
                     connectNulls={false}
+                    isAnimationActive={false}
                   />
                   <Line
                     type="monotone"
                     dataKey="targetValue"
-                    stroke="var(--rd-text-secondary)"
+                    stroke="var(--rd-text-primary)"
                     strokeDasharray="6 4"
+                    strokeWidth={2}
                     dot={false}
+                    connectNulls={false}
+                    isAnimationActive={false}
                   />
-                </AreaChart>
+                </ComposedChart>
               </ResponsiveContainer>
             )}
           </div>
@@ -247,7 +272,7 @@ export default function GoalTrackerMobile() {
               <i className="size-2 rounded-full bg-[var(--rd-profit)]" /> Realita
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <i className="size-2 rounded-full bg-[var(--rd-text-secondary)]" /> Plán
+              <i className="size-2 rounded-full bg-[var(--rd-text-primary)]" /> Plán
             </span>
             <span className="inline-flex items-center gap-1.5">
               <i className="size-2 rounded-full border border-[var(--rd-profit)] bg-transparent" /> Cieľ

@@ -56,6 +56,23 @@ export function calendarTileAmount(row: GoalMonthPoint): number {
   return row.actualValue;
 }
 
+export type GoalChartPoint = {
+  label: string;
+  monthKey: string;
+  /** Realita — null = budúcnosť (Area sa skončí). */
+  actualValue: number | null;
+  /**
+   * Plánovaná krivka.
+   * Pri „použiť aktuálnu hodnotu“: null v minulosti (čiara ide od dnes dopredu),
+   * inak celá historická plánovaná krivka.
+   */
+  targetValue: number | null;
+  contributionOnlyValue: number | null;
+  isCurrent: boolean;
+  planValue: number;
+  delta: number | null;
+};
+
 export type GoalEta = {
   months: number | null;
   hitDate: string | null;
@@ -83,6 +100,72 @@ export type GoalModelResult = {
     avgMonthlyDeposit: number | null;
   };
 };
+
+/**
+ * Dáta pre graf: od T_start po dosiahnutie cieľa (+ rezerva), bez 100-ročného chvosta.
+ * Y-domain pri live toggle zoomuje na pásmo reality/plánu (nie na starý nízky benchmark).
+ */
+export function buildGoalChartData(
+  model: GoalModelResult,
+  goalAmount: number,
+): { points: GoalChartPoint[]; yDomain: [number, number] | ["auto", "auto"] } {
+  const months = model.months;
+  if (months.length === 0) {
+    return { points: [], yDomain: ["auto", "auto"] };
+  }
+
+  const curIdx = months.findIndex((m) => m.monthKey === model.currentMonthKey);
+  const goalHitIdx = months.findIndex(
+    (m) =>
+      goalAmount > 0 &&
+      m.planValue >= goalAmount &&
+      (curIdx < 0 || m.idx >= (months[curIdx]?.idx ?? 0)),
+  );
+  const endIdx = Math.min(
+    months.length - 1,
+    Math.max(
+      curIdx >= 0 ? curIdx + 24 : 36,
+      goalHitIdx >= 0 ? goalHitIdx + 3 : (curIdx >= 0 ? curIdx : 0) + 36,
+      18,
+    ),
+  );
+
+  const useLive = model.settings.useCurrentPortfolioAsInitial;
+  const points: GoalChartPoint[] = months.slice(0, endIdx + 1).map((m) => {
+    const isFuture = m.monthKey > model.currentMonthKey;
+    const isPast = m.monthKey < model.currentMonthKey;
+    // Pri live toggle: plánová čiara od aktuálneho mesiaca (bez skoku z nízkeho hist. plánu).
+    const showPlan = !useLive || !isPast;
+    return {
+      label: m.label,
+      monthKey: m.monthKey,
+      actualValue: isFuture ? null : m.actualValue,
+      targetValue: showPlan ? m.planValue : null,
+      contributionOnlyValue: showPlan ? m.contributionOnlyValue : null,
+      isCurrent: m.monthKey === model.currentMonthKey,
+      planValue: m.planValue,
+      delta: m.delta,
+    };
+  });
+
+  const nums: number[] = [];
+  for (const p of points) {
+    if (p.actualValue != null && Number.isFinite(p.actualValue)) nums.push(p.actualValue);
+    if (p.targetValue != null && Number.isFinite(p.targetValue)) nums.push(p.targetValue);
+  }
+  if (goalAmount > 0) nums.push(goalAmount);
+
+  if (nums.length === 0) {
+    return { points, yDomain: ["auto", "auto"] };
+  }
+
+  const lo = Math.min(...nums);
+  const hi = Math.max(...nums);
+  const pad = Math.max((hi - lo) * 0.08, hi * 0.02, 1);
+  const yMin = useLive ? Math.max(0, lo - pad) : 0;
+  const yMax = hi + pad;
+  return { points, yDomain: [yMin, yMax] };
+}
 
 export function monthKeyFromDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
