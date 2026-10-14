@@ -11,7 +11,7 @@ import { useMobileRedesign } from "@/hooks/useMobileUi";
 import { useGoalTracker } from "@/hooks/useGoalTracker";
 import GoalTrackerMobile from "@/pages/redesign/GoalTrackerMobile";
 import { HelpTip } from "@/components/HelpTip";
-import { MONTHS_SK, type GoalMonthPoint } from "@/lib/goalTracker";
+import { MONTHS_SK, calendarTileAmount, type GoalMonthPoint } from "@/lib/goalTracker";
 
 function statusLabel(status: GoalMonthPoint["status"]): string {
   switch (status) {
@@ -348,13 +348,16 @@ function GoalTrackerClassic() {
               <CardTitle className="text-sm font-medium flex items-center gap-1">
                 Mesačný kalendár (4 × 3)
                 <HelpTip title="Ako čítať mesačný grid">
-                  <p>Na bunke je plánovaná hodnota portfólia na koniec daného mesiaca.</p>
+                  <p>
+                    Na bunke je tvoja skutočná hodnota portfólia na koniec mesiaca. Budúce mesiace
+                    ukazujú plán.
+                  </p>
                   <p>Minulé: zelená = realita ≥ plán, červená = pod plánom.</p>
                   <p>Aktuálny mesiac = žltá (prebieha). Budúce mesiace = sivé (predikcia).</p>
                 </HelpTip>
               </CardTitle>
               <CardDescription>
-                Číslo = koľko by si mal mať na konci mesiaca podľa plánu.
+                Číslo = skutočná hodnota portfólia na konci mesiaca (budúce = plán).
               </CardDescription>
             </div>
             <Select value={String(effectiveSelectedYear)} onValueChange={setSelectedYear}>
@@ -386,7 +389,7 @@ function GoalTrackerClassic() {
                 >
                   <p className="text-xs sm:text-sm font-medium">{MONTHS_SK[m]}</p>
                   <p className="text-[11px] sm:text-xs text-muted-foreground mt-1 leading-tight tabular-nums">
-                    {row ? formatCurrency(row.planValue) : "—"}
+                    {row ? formatCurrency(calendarTileAmount(row)) : "—"}
                   </p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">
                     {row ? statusLabel(row.status) : "—"}

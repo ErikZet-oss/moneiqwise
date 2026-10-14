@@ -4,7 +4,7 @@ import { useCurrency } from "@/hooks/useCurrency";
 import { useGoalTracker } from "@/hooks/useGoalTracker";
 import { Badge, Card, Input, Select, Toggle, TopBar } from "@/redesign/ui";
 import { HelpButton, KvRow, PageBody, PortfolioSwitcher, signedMoney, signedPct, toneOf } from "./mobileChrome";
-import { MONTHS_SK, type GoalMonthPoint } from "@/lib/goalTracker";
+import { MONTHS_SK, calendarTileAmount, type GoalMonthPoint } from "@/lib/goalTracker";
 
 function statusLabel(status: GoalMonthPoint["status"]): string {
   switch (status) {
@@ -261,11 +261,11 @@ export default function GoalTrackerMobile() {
               <p className="min-w-0 flex-1 rd-type-h2">Mesačný kalendár</p>
               <HelpButton
                 title="Ako čítať mesačný grid"
-                body="Minulé: zelená = realita ≥ plán, červená = pod plánom. Aktuálny = prebieha. Budúce = sivé (predikcia)."
+                body="Číslo = skutočná hodnota portfólia na konci mesiaca. Budúce mesiace ukazujú plán. Farba: zelená = nad plánom, červená = pod plánom."
               />
             </div>
             <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">
-              Číslo = koľko by si mal mať na konci mesiaca podľa plánu.
+              Číslo = skutočná hodnota portfólia na konci mesiaca (budúce = plán).
             </p>
           </div>
           <Select
@@ -287,7 +287,7 @@ export default function GoalTrackerMobile() {
                 >
                   <p className="text-xs font-medium text-[var(--rd-text-primary)]">{MONTHS_SK[month]}</p>
                   <p className="mt-1 font-mono text-[10px] leading-3 tabular-nums">
-                    {row ? formatCurrency(row.planValue) : "—"}
+                    {row ? formatCurrency(calendarTileAmount(row)) : "—"}
                   </p>
                   <p className="mt-0.5 text-[9px] leading-3 opacity-80">
                     {row ? statusLabel(row.status) : "—"}

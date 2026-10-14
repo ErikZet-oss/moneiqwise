@@ -50,6 +50,12 @@ export type GoalMonthPoint = {
   status: MonthStatus;
 };
 
+/** Číslo v kalendári: realita (minulosť/teraz), plán (budúcnosť / bez dát). */
+export function calendarTileAmount(row: GoalMonthPoint): number {
+  if (row.status === "future" || row.actualValue == null) return row.planValue;
+  return row.actualValue;
+}
+
 export type GoalEta = {
   months: number | null;
   hitDate: string | null;
