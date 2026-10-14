@@ -1,185 +1,99 @@
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Area, AreaChart, CartesianGrid, Line, ReferenceLine, ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis } from "recharts";
-import { usePortfolio } from "@/hooks/usePortfolio";
 import { useCurrency } from "@/hooks/useCurrency";
+import { useGoalTracker } from "@/hooks/useGoalTracker";
 import { Badge, Card, Input, Select, Toggle, TopBar } from "@/redesign/ui";
 import { HelpButton, KvRow, PageBody, PortfolioSwitcher, signedMoney, signedPct, toneOf } from "./mobileChrome";
+import { MONTHS_SK, type GoalMonthPoint } from "@/lib/goalTracker";
 
-type HistoryPoint = { date: string; totalValue: number; netInvested: number };
-type MonthlyActual = { monthKey: string; date: string; actualValue: number };
-type ProjectionPoint = {
-  idx: number;
-  monthKey: string;
-  date: string;
-  year: number;
-  month: number;
-  label: string;
-  targetValue: number;
-  contributionOnlyValue: number;
-  actualValue: number | null;
-};
-
-const MONTHS_SK = ["Jan", "Feb", "Mar", "Apr", "Máj", "Jún", "Júl", "Aug", "Sep", "Okt", "Nov", "Dec"];
-
-function monthKeyFromDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+function statusLabel(status: GoalMonthPoint["status"]): string {
+  switch (status) {
+    case "met":
+      return "Splnené";
+    case "missed":
+      return "Nesplnené";
+    case "current":
+      return "Prebieha";
+    case "future":
+      return "Plán";
+    case "no_data":
+      return "Bez dát";
+    default:
+      return "—";
+  }
 }
 
-function parseNumberInput(raw: string, fallback: number): number {
-  const n = Number.parseFloat(raw.replace(",", "."));
-  return Number.isFinite(n) ? n : fallback;
+function tileTone(status: GoalMonthPoint["status"] | null): string {
+  switch (status) {
+    case "met":
+      return "border-[var(--rd-profit)] bg-[var(--rd-profit-dim)] text-[var(--rd-profit)]";
+    case "missed":
+      return "border-[var(--rd-loss)] bg-[var(--rd-loss-dim)] text-[var(--rd-loss)]";
+    case "current":
+      return "border-[var(--rd-warning,#d97706)] bg-[color-mix(in_srgb,var(--rd-warning,#d97706)_18%,transparent)] text-[var(--rd-warning,#d97706)]";
+    default:
+      return "border-[var(--rd-border-subtle)] text-[var(--rd-text-tertiary)]";
+  }
 }
 
 export default function GoalTrackerMobile() {
-  const { getQueryParam, selectedPortfolio, isAllPortfolios, scopeLabel } = usePortfolio();
   const { formatCurrency } = useCurrency();
-  const portfolioParam = getQueryParam();
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [initialAmountInput, setInitialAmountInput] = useState("10000");
-  const [goalAmountInput, setGoalAmountInput] = useState("50000");
-  const [monthlyDepositInput, setMonthlyDepositInput] = useState("300");
-  const [annualReturnInput, setAnnualReturnInput] = useState("8");
-  const [useCurrentPortfolioAsInitial, setUseCurrentPortfolioAsInitial] = useState(true);
-  const [selectedYear, setSelectedYear] = useState("");
-  const [selectedMonthKey, setSelectedMonthKey] = useState("");
+  const g = useGoalTracker();
+  const {
+    scopeLabel,
+    isLoading,
+    goalAmountInput,
+    setGoalAmountInput,
+    monthlyDepositInput,
+    setMonthlyDepositInput,
+    annualReturnInput,
+    setAnnualReturnInput,
+    initialAmountInput,
+    setInitialAmountInput,
+    useCurrentPortfolioAsInitial,
+    onToggleUseCurrent,
+    setSelectedYear,
+    setSelectedMonthKey,
+    effectiveSelectedYear,
+    yearsList,
+    yearRows,
+    selectedDetail,
+    model,
+    chartData,
+    effectiveInitialDisplay,
+    goalAmount,
+  } = g;
 
-  const { data: history, isLoading } = useQuery<{ points: HistoryPoint[] }>({
-    queryKey: ["/api/portfolio-history", portfolioParam, "all", "goal-tracker"],
-    queryFn: async () => {
-      const params = new URLSearchParams({ portfolio: portfolioParam, range: "all" });
-      const res = await fetch(`/api/portfolio-history?${params.toString()}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Nepodarilo sa načítať históriu pre Môj cieľ.");
-      return res.json();
-    },
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const points = history?.points ?? [];
-  const latestActualValue = points.length > 0 ? points[points.length - 1]?.totalValue ?? null : null;
-  const monthlyActualMap = useMemo(() => {
-    const map = new Map<string, MonthlyActual>();
-    for (const point of points) {
-      const date = new Date(`${point.date}T12:00:00`);
-      if (Number.isNaN(date.getTime()) || !Number.isFinite(point.totalValue)) continue;
-      const key = monthKeyFromDate(date);
-      map.set(key, { monthKey: key, date: point.date, actualValue: point.totalValue });
-    }
-    return map;
-  }, [points]);
-
-  const firstActualDate = useMemo(() => {
-    if (points.length === 0) return null;
-    const date = new Date(`${points[0]?.date ?? ""}T12:00:00`);
-    return Number.isNaN(date.getTime()) ? null : date;
-  }, [points]);
-
-  const simulationStart = useMemo(() => {
-    if (useCurrentPortfolioAsInitial) {
-      const now = new Date();
-      return new Date(now.getFullYear(), now.getMonth(), 1);
-    }
-    const base = firstActualDate ?? new Date();
-    return new Date(base.getFullYear(), base.getMonth(), 1);
-  }, [firstActualDate, useCurrentPortfolioAsInitial]);
-
-  const initialAmount = Math.max(0, parseNumberInput(initialAmountInput, 0));
-  const goalAmount = Math.max(0, parseNumberInput(goalAmountInput, 0));
-  const effectiveInitialAmount =
-    useCurrentPortfolioAsInitial && latestActualValue != null && Number.isFinite(latestActualValue)
-      ? Math.max(0, latestActualValue)
-      : initialAmount;
-  const monthlyDeposit = parseNumberInput(monthlyDepositInput, 0);
-  const annualReturn = parseNumberInput(annualReturnInput, 0);
-
-  const projection = useMemo(() => {
-    const out: ProjectionPoint[] = [];
-    const rMonthly = annualReturn / 100 / 12;
-    let balance = effectiveInitialAmount;
-    let contributionOnly = effectiveInitialAmount;
-    const finiteGoal = goalAmount > 0 ? goalAmount : Number.POSITIVE_INFINITY;
-    for (let i = 0; i <= 12 * 100; i++) {
-      const date = new Date(simulationStart.getFullYear(), simulationStart.getMonth() + i, 1);
-      if (i > 0) {
-        balance = balance * (1 + rMonthly) + monthlyDeposit;
-        contributionOnly += monthlyDeposit;
-      }
-      const key = monthKeyFromDate(date);
-      out.push({
-        idx: i,
-        monthKey: key,
-        date: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-01`,
-        year: date.getFullYear(),
-        month: date.getMonth(),
-        label: `${MONTHS_SK[date.getMonth()]} ${String(date.getFullYear()).slice(-2)}`,
-        targetValue: balance,
-        contributionOnlyValue: contributionOnly,
-        actualValue: monthlyActualMap.get(key)?.actualValue ?? null,
-      });
-      if (balance >= finiteGoal && i >= 12) break;
-    }
-    return out;
-  }, [annualReturn, effectiveInitialAmount, monthlyDeposit, monthlyActualMap, simulationStart, goalAmount]);
-
-  const goalHitPoint = useMemo(() => {
-    if (!(goalAmount > 0)) return null;
-    return projection.find((point) => point.targetValue >= goalAmount) ?? null;
-  }, [projection, goalAmount]);
-
-  const summary = useMemo(() => {
-    const last = goalHitPoint ?? projection[projection.length - 1] ?? null;
-    const plannedMonths = goalHitPoint?.idx ?? Math.max(projection.length - 1, 0);
-    const totalPlannedDeposits = monthlyDeposit * plannedMonths;
-    const totalOwnContributions = effectiveInitialAmount + totalPlannedDeposits;
-    const projectedFinalValue = last?.targetValue ?? effectiveInitialAmount;
-    const projectedGrowth = projectedFinalValue - totalOwnContributions;
-    return {
-      projectedFinalValue,
-      totalPlannedDeposits,
-      totalOwnContributions,
-      projectedGrowth,
-      projectedGrowthPct: totalOwnContributions > 0 ? (projectedGrowth / totalOwnContributions) * 100 : 0,
-      monthsToGoal: goalHitPoint?.idx ?? null,
-      goalHitDate: goalHitPoint?.date ?? null,
-    };
-  }, [projection, goalHitPoint, monthlyDeposit, effectiveInitialAmount]);
-
-  const yearsList = useMemo(() => {
-    const set = new Set<number>();
-    for (const point of projection) set.add(point.year);
-    return Array.from(set).sort((a, b) => a - b);
-  }, [projection]);
-  const effectiveSelectedYear =
-    selectedYear && yearsList.includes(Number(selectedYear)) ? Number(selectedYear) : yearsList[0] ?? new Date().getFullYear();
-  const yearRows = projection.filter((point) => point.year === effectiveSelectedYear);
-  const selectedDetail =
-    (selectedMonthKey ? projection.find((point) => point.monthKey === selectedMonthKey) : null) ?? yearRows[0] ?? null;
-  const overline = scopeLabel;
-  const hitLabel = summary.goalHitDate ? new Date(summary.goalHitDate).toLocaleDateString("sk-SK") : "—";
-  const currentMonthKey = monthKeyFromDate(new Date());
+  const planHitLabel = model.etaPlan.hitDate
+    ? new Date(`${model.etaPlan.hitDate}T12:00:00`).toLocaleDateString("sk-SK", {
+        month: "short",
+        year: "numeric",
+      })
+    : "—";
 
   return (
     <div className="bg-[var(--rd-bg-base)] text-[var(--rd-text-primary)]">
-      <TopBar overline={overline} title="Môj cieľ" onOverlineClick={() => setPickerOpen(true)} />
+      <TopBar overline={scopeLabel} title="Môj cieľ" onOverlineClick={() => setPickerOpen(true)} />
       <PortfolioSwitcher open={pickerOpen} onClose={() => setPickerOpen(false)} />
       <PageBody>
         <div className="flex items-center gap-1.5">
           <p className="min-w-0 flex-1 text-xs leading-4 text-[var(--rd-text-secondary)]">
-            Porovnanie plánu zloženého úročenia s realitou tvojho portfólia.
+            Živý tracker: plán vs. realita v minulosti aj v budúcnosti.
           </p>
           <HelpButton
             title="Ako funguje sekcia Môj cieľ"
-            body="Porovnáva plán zloženého úročenia s realitou z histórie portfólia. Plán sa počíta mesačne z počiatočnej sumy, mesačného vkladu a ročného úroku."
+            body="Plánovaná krivka (zložené úročenie) vs. skutočná hodnota portfólia. ETA má dve verzie: cieľový výnos a reálne tempo za posledné mesiace."
           />
         </div>
 
         <Card className="gap-2">
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-1.5">
-              <p className="min-w-0 flex-1 rd-type-h2">Nastavenie simulácie</p>
+              <p className="min-w-0 flex-1 rd-type-h2">Nastavenie cieľa</p>
               <HelpButton
-                title="Vstupy simulácie"
-                body="Zadaj cieľovú hodnotu, mesačný vklad a ročný výnos. Počiatočná suma môže ísť z aktuálnej hodnoty portfólia."
+                title="Vstupy"
+                body="Zadaj cieľovú hodnotu, mesačný vklad a ročný výnos. Počiatočná suma môže ísť z aktuálnej hodnoty portfólia — budúci plán sa potom rebaseuje z live hodnoty."
               />
             </div>
             <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">
@@ -189,7 +103,11 @@ export default function GoalTrackerMobile() {
           <div className="grid grid-cols-2 gap-2">
             <Input
               label="Počiatočná suma"
-              value={useCurrentPortfolioAsInitial ? String(Math.round(effectiveInitialAmount)) : initialAmountInput}
+              value={
+                useCurrentPortfolioAsInitial
+                  ? String(Math.round(effectiveInitialDisplay))
+                  : initialAmountInput
+              }
               onChange={(event) => setInitialAmountInput(event.target.value)}
               inputMode="decimal"
               disabled={useCurrentPortfolioAsInitial}
@@ -217,11 +135,11 @@ export default function GoalTrackerMobile() {
             <p className="min-w-0 flex-1 text-sm leading-5">Použiť aktuálnu hodnotu portfólia</p>
             <HelpButton
               title="Automatické predvyplnenie"
-              body="Keď je zapnuté, počiatočná suma sa berie z poslednej reálnej hodnoty portfólia."
+              body="Keď je zapnuté, počiatočná suma a budúci plán sa berú z live hodnoty portfólia. Minulé mesiace sa porovnávajú s plánom od začiatku histórie."
             />
             <Toggle
               checked={useCurrentPortfolioAsInitial}
-              onCheckedChange={setUseCurrentPortfolioAsInitial}
+              onCheckedChange={onToggleUseCurrent}
               label="Použiť aktuálnu hodnotu portfólia"
             />
           </div>
@@ -229,27 +147,33 @@ export default function GoalTrackerMobile() {
 
         <Card className="gap-2">
           <div className="flex items-center gap-1.5">
-            <p className="min-w-0 flex-1 rd-type-overline text-[var(--rd-text-tertiary)]">Odhad na konci cieľa</p>
+            <p className="min-w-0 flex-1 rd-type-overline text-[var(--rd-text-tertiary)]">Kedy dosiahnem cieľ?</p>
             <HelpButton
-              title="Ako čítať tento odhad"
-              body="Odhadovaná hodnota pri dosiahnutí cieľa podľa plánu. Dátum a počet mesiacov sú z mesačnej projekcie."
+              title="Dve predikcie"
+              body="Statický plán = cieľový výnos + PMT. Reálny trend = priemerné mesačné zhodnotenie a vklady z histórie."
             />
           </div>
           <p className="rd-type-display-hero" data-testid="text-goal-projected-final-value">
-            {formatCurrency(summary.projectedFinalValue)}
+            {formatCurrency(model.summary.projectedFinalValue)}
           </p>
           <div className="flex items-center gap-2">
-            <Badge label={hitLabel} tone="Profit" />
+            <Badge label={planHitLabel} tone="Profit" />
             <p className="text-xs text-[var(--rd-text-secondary)]">
-              {summary.monthsToGoal != null ? `${summary.monthsToGoal} mesiacov` : "mimo horizontu"}
+              {model.etaPlan.months != null ? `${model.etaPlan.months} mes.` : "mimo horizontu"}
             </p>
           </div>
-          <KvRow label="Vklady spolu" value={formatCurrency(summary.totalOwnContributions)} />
-          <KvRow label="Mesačné vklady spolu" value={formatCurrency(summary.totalPlannedDeposits)} />
+          <p className="text-xs leading-4 text-[var(--rd-text-secondary)]" data-testid="text-goal-hit-date">
+            {model.etaPlan.label}
+          </p>
+          <p className="text-xs leading-4 text-[var(--rd-text-secondary)]" data-testid="text-goal-hit-date-real">
+            {model.etaReal.label}
+          </p>
+          <KvRow label="Vklady spolu" value={formatCurrency(model.summary.totalOwnContributions)} />
+          <KvRow label="Mesačné vklady spolu" value={formatCurrency(model.summary.totalPlannedDeposits)} />
           <KvRow
             label="Zhodnotenie"
-            value={`${signedMoney(formatCurrency, summary.projectedGrowth)} (${signedPct(summary.projectedGrowthPct, 1)})`}
-            tone={toneOf(summary.projectedGrowth)}
+            value={`${signedMoney(formatCurrency, model.summary.projectedGrowth)} (${signedPct(model.summary.projectedGrowthPct, 1)})`}
+            tone={toneOf(model.summary.projectedGrowth)}
           />
         </Card>
 
@@ -271,7 +195,7 @@ export default function GoalTrackerMobile() {
               <p className="text-xs text-[var(--rd-text-tertiary)]">Načítavam históriu…</p>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={projection} margin={{ top: 8, right: 0, left: 0, bottom: 0 }}>
+                <AreaChart data={chartData} margin={{ top: 8, right: 0, left: 0, bottom: 0 }}>
                   <CartesianGrid stroke="var(--rd-border-subtle)" vertical={false} />
                   <XAxis
                     dataKey="label"
@@ -284,17 +208,19 @@ export default function GoalTrackerMobile() {
                   <RTooltip
                     content={({ active, payload }) => {
                       if (!active || !payload?.length) return null;
-                      const row = payload[0]?.payload as ProjectionPoint;
+                      const row = payload[0]?.payload as GoalMonthPoint & { targetValue: number };
                       return (
                         <div className="rounded-[var(--rd-radius-sm)] border border-[var(--rd-border-strong)] bg-[var(--rd-bg-surface-raised)] p-2 text-xs">
                           <p>{row.label}</p>
-                          <p>Cieľ: {formatCurrency(row.targetValue)}</p>
+                          <p>Cieľ: {formatCurrency(row.planValue)}</p>
                           <p>Realita: {row.actualValue != null ? formatCurrency(row.actualValue) : "—"}</p>
                         </div>
                       );
                     }}
                   />
-                  {goalAmount > 0 ? <ReferenceLine y={goalAmount} stroke="var(--rd-profit)" strokeDasharray="4 4" /> : null}
+                  {goalAmount > 0 ? (
+                    <ReferenceLine y={goalAmount} stroke="var(--rd-profit)" strokeDasharray="4 4" />
+                  ) : null}
                   <Area
                     type="monotone"
                     dataKey="actualValue"
@@ -303,7 +229,13 @@ export default function GoalTrackerMobile() {
                     fillOpacity={0.2}
                     connectNulls={false}
                   />
-                  <Line type="monotone" dataKey="targetValue" stroke="var(--rd-text-secondary)" strokeDasharray="6 4" dot={false} />
+                  <Line
+                    type="monotone"
+                    dataKey="targetValue"
+                    stroke="var(--rd-text-secondary)"
+                    strokeDasharray="6 4"
+                    dot={false}
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             )}
@@ -327,11 +259,11 @@ export default function GoalTrackerMobile() {
               <p className="min-w-0 flex-1 rd-type-h2">Mesačný kalendár</p>
               <HelpButton
                 title="Ako čítať mesačný grid"
-                body="Na bunke je plánovaná hodnota na koniec mesiaca. Po prechode mesiaca: zelená = realita ≥ plán, červená = realita pod plánom. Budúce mesiace zostávajú sivé."
+                body="Minulé: zelená = realita ≥ plán, červená = pod plánom. Aktuálny = prebieha. Budúce = sivé (predikcia)."
               />
             </div>
             <p className="text-xs leading-4 text-[var(--rd-text-tertiary)]">
-              Číslo = koľko by si mal mať na konci mesiaca. Zelená = mesiac splnený.
+              Číslo = koľko by si mal mať na konci mesiaca podľa plánu.
             </p>
           </div>
           <Select
@@ -343,31 +275,21 @@ export default function GoalTrackerMobile() {
           <div className="grid grid-cols-4 gap-2">
             {Array.from({ length: 12 }, (_, month) => {
               const row = yearRows.find((point) => point.month === month) ?? null;
-              const monthPassed = row != null && row.monthKey < currentMonthKey;
-              const met =
-                monthPassed && row.actualValue != null ? row.actualValue >= row.targetValue : null;
               const active = selectedDetail?.monthKey === row?.monthKey;
-              const tone =
-                met === true
-                  ? "border-[var(--rd-profit)] bg-[var(--rd-profit-dim)] text-[var(--rd-profit)]"
-                  : met === false
-                    ? "border-[var(--rd-loss)] bg-[var(--rd-loss-dim)] text-[var(--rd-loss)]"
-                    : "border-[var(--rd-border-subtle)] text-[var(--rd-text-tertiary)]";
-              const cellLabel = row
-                ? formatCurrency(row.targetValue)
-                : "—";
-              const statusHint =
-                met === true ? "Splnené" : met === false ? "Nesplnené" : monthPassed ? "Bez dát" : "Plán";
               return (
                 <button
                   key={`${effectiveSelectedYear}-${month}`}
                   type="button"
                   onClick={() => row && setSelectedMonthKey(row.monthKey)}
-                  className={`min-h-[64px] rounded-[var(--rd-radius-sm)] border bg-[var(--rd-bg-surface-raised)] px-2 py-2 text-left ${tone} ${active ? "ring-1 ring-[var(--rd-text-primary)]" : ""}`}
+                  className={`min-h-[64px] rounded-[var(--rd-radius-sm)] border bg-[var(--rd-bg-surface-raised)] px-2 py-2 text-left ${tileTone(row?.status ?? null)} ${active ? "ring-1 ring-[var(--rd-text-primary)]" : ""}`}
                 >
                   <p className="text-xs font-medium text-[var(--rd-text-primary)]">{MONTHS_SK[month]}</p>
-                  <p className="mt-1 font-mono text-[10px] leading-3 tabular-nums">{cellLabel}</p>
-                  <p className="mt-0.5 text-[9px] leading-3 opacity-80">{statusHint}</p>
+                  <p className="mt-1 font-mono text-[10px] leading-3 tabular-nums">
+                    {row ? formatCurrency(row.planValue) : "—"}
+                  </p>
+                  <p className="mt-0.5 text-[9px] leading-3 opacity-80">
+                    {row ? statusLabel(row.status) : "—"}
+                  </p>
                 </button>
               );
             })}
@@ -375,22 +297,28 @@ export default function GoalTrackerMobile() {
           {selectedDetail ? (
             <div className="flex flex-col gap-2 rounded-[var(--rd-radius-sm)] bg-[var(--rd-bg-surface-raised)] p-3">
               <p className="text-sm font-semibold">
-                {MONTHS_SK[selectedDetail.month]} {selectedDetail.year}
+                {MONTHS_SK[selectedDetail.month]} {selectedDetail.year}{" "}
+                <span className="font-normal text-[var(--rd-text-tertiary)]">
+                  ({statusLabel(selectedDetail.status)})
+                </span>
               </p>
               <KvRow label="Finálny cieľ (celkový)" value={formatCurrency(goalAmount)} />
-              <KvRow label="Plán na koniec mesiaca" value={formatCurrency(selectedDetail.targetValue)} />
+              <KvRow label="Plán na koniec mesiaca" value={formatCurrency(selectedDetail.planValue)} />
               <KvRow
                 label="Tvoja reálna hodnota"
                 value={selectedDetail.actualValue != null ? formatCurrency(selectedDetail.actualValue) : "Bez dát"}
               />
+              {selectedDetail.depositMonth != null ? (
+                <KvRow label="Čistý vklad v mesiaci" value={formatCurrency(selectedDetail.depositMonth)} />
+              ) : null}
               <KvRow
                 label="Stav voči mesačnému plánu"
                 value={
-                  selectedDetail.actualValue != null
-                    ? signedMoney(formatCurrency, selectedDetail.actualValue - selectedDetail.targetValue)
+                  selectedDetail.delta != null
+                    ? signedMoney(formatCurrency, selectedDetail.delta)
                     : "—"
                 }
-                tone={toneOf((selectedDetail.actualValue ?? 0) - selectedDetail.targetValue)}
+                tone={toneOf(selectedDetail.delta ?? 0)}
               />
             </div>
           ) : null}

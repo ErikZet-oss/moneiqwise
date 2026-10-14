@@ -1,5 +1,3 @@
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Area, AreaChart, CartesianGrid, Line, ReferenceLine, ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis } from "recharts";
 import { Target } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,199 +5,74 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { usePortfolio } from "@/hooks/usePortfolio";
 import { useCurrency } from "@/hooks/useCurrency";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useMobileRedesign } from "@/hooks/useMobileUi";
+import { useGoalTracker } from "@/hooks/useGoalTracker";
 import GoalTrackerMobile from "@/pages/redesign/GoalTrackerMobile";
 import { HelpTip } from "@/components/HelpTip";
+import { MONTHS_SK, type GoalMonthPoint } from "@/lib/goalTracker";
 
-type HistoryPoint = {
-  date: string;
-  totalValue: number;
-  netInvested: number;
-};
-
-type PortfolioHistoryRes = {
-  points: HistoryPoint[];
-};
-
-type MonthlyActual = {
-  monthKey: string;
-  date: string;
-  actualValue: number;
-};
-
-type ProjectionPoint = {
-  idx: number;
-  monthKey: string;
-  date: string;
-  year: number;
-  month: number;
-  label: string;
-  targetValue: number;
-  contributionOnlyValue: number;
-  actualValue: number | null;
-};
-
-const MONTHS_SK = ["Jan", "Feb", "Mar", "Apr", "Maj", "Jún", "Júl", "Aug", "Sep", "Okt", "Nov", "Dec"];
-
-function monthKeyFromDate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  return `${y}-${m}`;
+function statusLabel(status: GoalMonthPoint["status"]): string {
+  switch (status) {
+    case "met":
+      return "Splnené";
+    case "missed":
+      return "Nesplnené";
+    case "current":
+      return "Prebieha";
+    case "future":
+      return "Plán";
+    case "no_data":
+      return "Bez dát";
+    default:
+      return "—";
+  }
 }
 
-function parseNumberInput(raw: string, fallback: number): number {
-  const n = Number.parseFloat(raw.replace(",", "."));
-  return Number.isFinite(n) ? n : fallback;
+function tileClass(status: GoalMonthPoint["status"] | null): string {
+  switch (status) {
+    case "met":
+      return "bg-emerald-100 dark:bg-emerald-900/30 border-emerald-500/40";
+    case "missed":
+      return "bg-rose-100 dark:bg-rose-900/25 border-rose-500/40";
+    case "current":
+      return "bg-amber-100 dark:bg-amber-900/25 border-amber-500/40";
+    default:
+      return "bg-slate-100 dark:bg-slate-900";
+  }
 }
 
 function GoalTrackerClassic() {
-  const { getQueryParam, selectedPortfolio, isAllPortfolios } = usePortfolio();
   const { formatCurrency } = useCurrency();
-  const portfolioParam = getQueryParam();
   const isMobile = useIsMobile();
-
-  const [initialAmountInput, setInitialAmountInput] = useState("10000");
-  const [goalAmountInput, setGoalAmountInput] = useState("50000");
-  const [monthlyDepositInput, setMonthlyDepositInput] = useState("300");
-  const [annualReturnInput, setAnnualReturnInput] = useState("8");
-  const [useCurrentPortfolioAsInitial, setUseCurrentPortfolioAsInitial] = useState(true);
-  const [selectedYear, setSelectedYear] = useState<string>("");
-  const [selectedMonthKey, setSelectedMonthKey] = useState<string>("");
-
-  const { data: history, isLoading } = useQuery<PortfolioHistoryRes>({
-    queryKey: ["/api/portfolio-history", portfolioParam, "all", "goal-tracker"],
-    queryFn: async () => {
-      const u = new URLSearchParams();
-      u.set("portfolio", portfolioParam);
-      u.set("range", "all");
-      const res = await fetch(`/api/portfolio-history?${u.toString()}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Nepodarilo sa načítať históriu pre Môj cieľ.");
-      return res.json();
-    },
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const points = history?.points ?? [];
-  const latestActualValue = points.length > 0 ? points[points.length - 1]?.totalValue ?? null : null;
-
-  const monthlyActualMap = useMemo(() => {
-    const map = new Map<string, MonthlyActual>();
-    for (const p of points) {
-      const d = new Date(`${p.date}T12:00:00`);
-      if (Number.isNaN(d.getTime()) || !Number.isFinite(p.totalValue)) continue;
-      const key = monthKeyFromDate(d);
-      map.set(key, { monthKey: key, date: p.date, actualValue: p.totalValue });
-    }
-    return map;
-  }, [points]);
-
-  const firstActualDate = useMemo(() => {
-    if (points.length === 0) return null;
-    const d = new Date(`${points[0]?.date ?? ""}T12:00:00`);
-    return Number.isNaN(d.getTime()) ? null : d;
-  }, [points]);
-
-  const simulationStart = useMemo(() => {
-    if (useCurrentPortfolioAsInitial) {
-      const now = new Date();
-      return new Date(now.getFullYear(), now.getMonth(), 1);
-    }
-    const base = firstActualDate ?? new Date();
-    return new Date(base.getFullYear(), base.getMonth(), 1);
-  }, [firstActualDate, useCurrentPortfolioAsInitial]);
-
-  const initialAmount = Math.max(0, parseNumberInput(initialAmountInput, 0));
-  const goalAmount = Math.max(0, parseNumberInput(goalAmountInput, 0));
-  const effectiveInitialAmount =
-    useCurrentPortfolioAsInitial && latestActualValue != null && Number.isFinite(latestActualValue)
-      ? Math.max(0, latestActualValue)
-      : initialAmount;
-  const monthlyDeposit = parseNumberInput(monthlyDepositInput, 0);
-  const annualReturn = parseNumberInput(annualReturnInput, 0);
-
-  const projection = useMemo(() => {
-    const out: ProjectionPoint[] = [];
-    const rMonthly = annualReturn / 100 / 12;
-    const monthCount = 12 * 100;
-    const minRenderMonths = 12;
-    let balance = effectiveInitialAmount;
-    let contributionOnly = effectiveInitialAmount;
-    const finiteGoal = goalAmount > 0 ? goalAmount : Number.POSITIVE_INFINITY;
-    for (let i = 0; i <= monthCount; i++) {
-      const d = new Date(simulationStart.getFullYear(), simulationStart.getMonth() + i, 1);
-      if (i > 0) {
-        balance = balance * (1 + rMonthly) + monthlyDeposit;
-        contributionOnly += monthlyDeposit;
-      }
-      const key = monthKeyFromDate(d);
-      const actual = monthlyActualMap.get(key)?.actualValue ?? null;
-      out.push({
-        idx: i,
-        monthKey: key,
-        date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`,
-        year: d.getFullYear(),
-        month: d.getMonth(),
-        label: `${MONTHS_SK[d.getMonth()]} ${String(d.getFullYear()).slice(-2)}`,
-        targetValue: balance,
-        contributionOnlyValue: contributionOnly,
-        actualValue: actual,
-      });
-      // Keep at least one visible year so the chart is readable even when target is already hit at start.
-      if (balance >= finiteGoal && i >= minRenderMonths) break;
-    }
-    return out;
-  }, [annualReturn, effectiveInitialAmount, monthlyDeposit, monthlyActualMap, simulationStart, goalAmount]);
-
-  const goalHitPoint = useMemo(() => {
-    if (!(goalAmount > 0)) return null;
-    return projection.find((p) => p.targetValue >= goalAmount) ?? null;
-  }, [projection, goalAmount]);
-
-  const projectionSummary = useMemo(() => {
-    const last = goalHitPoint ?? projection[projection.length - 1] ?? null;
-    const plannedMonths = goalHitPoint?.idx ?? projection.length - 1;
-    const totalPlannedDeposits = monthlyDeposit * plannedMonths;
-    const totalOwnContributions = effectiveInitialAmount + totalPlannedDeposits;
-    const projectedFinalValue = last?.targetValue ?? effectiveInitialAmount;
-    const projectedGrowth = projectedFinalValue - totalOwnContributions;
-    const projectedGrowthPct =
-      totalOwnContributions > 0 ? (projectedGrowth / totalOwnContributions) * 100 : 0;
-    return {
-      projectedFinalValue,
-      totalPlannedDeposits,
-      totalOwnContributions,
-      projectedGrowth,
-      projectedGrowthPct,
-      monthsToGoal: goalHitPoint?.idx ?? null,
-      goalHitDate: goalHitPoint?.date ?? null,
-    };
-  }, [projection, goalHitPoint, monthlyDeposit, effectiveInitialAmount]);
-
-  const yearsList = useMemo(() => {
-    const set = new Set<number>();
-    for (const p of projection) set.add(p.year);
-    return Array.from(set).sort((a, b) => a - b);
-  }, [projection]);
-
-  const effectiveSelectedYear = useMemo(() => {
-    if (selectedYear && yearsList.includes(Number(selectedYear))) return Number(selectedYear);
-    return yearsList[0] ?? new Date().getFullYear();
-  }, [selectedYear, yearsList]);
-
-  const yearRows = useMemo(
-    () => projection.filter((p) => p.year === effectiveSelectedYear),
-    [projection, effectiveSelectedYear],
-  );
-
-  const selectedDetail = useMemo(() => {
-    if (selectedMonthKey) return projection.find((p) => p.monthKey === selectedMonthKey) ?? null;
-    return yearRows[0] ?? null;
-  }, [projection, selectedMonthKey, yearRows]);
-
-  const currentMonthKey = monthKeyFromDate(new Date());
+  const g = useGoalTracker();
+  const {
+    isAllPortfolios,
+    selectedPortfolio,
+    isLoading,
+    goalAmountInput,
+    setGoalAmountInput,
+    monthlyDepositInput,
+    setMonthlyDepositInput,
+    annualReturnInput,
+    setAnnualReturnInput,
+    initialAmountInput,
+    setInitialAmountInput,
+    useCurrentPortfolioAsInitial,
+    onToggleUseCurrent,
+    setSelectedYear,
+    setSelectedMonthKey,
+    effectiveSelectedYear,
+    yearsList,
+    yearRows,
+    selectedDetail,
+    model,
+    chartData,
+    effectiveInitialDisplay,
+    latestActualValue,
+    goalAmount,
+  } = g;
 
   return (
     <div className="max-w-6xl mx-auto flex flex-col gap-3 md:gap-6 px-3 sm:px-0 pb-4 sm:pb-0">
@@ -208,8 +81,17 @@ function GoalTrackerClassic() {
           <Target className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
           Môj cieľ
           <HelpTip title="Ako funguje sekcia Môj cieľ">
-            <p>Porovnáva plán zloženého úročenia s realitou z histórie tvojho portfólia.</p>
-            <p>Plán sa počíta mesačne zo zadaných inputov (počiatočná suma, mesačný vklad, ročný úrok, roky).</p>
+            <p>
+              Živý tracker: plánovaná krivka (zložené úročenie) vs. skutočná hodnota portfólia
+              mesiac po mesiaci — aj do minulosti, aj do budúcnosti.
+            </p>
+            <p>
+              Mesačný úrok: (1 + r<sub>pa</sub>)<sup>1/12</sup> − 1. Plán(t) = Plán(t−1)·(1+r) + PMT.
+            </p>
+            <p>
+              Odhad dátumu cieľa má dve verzie: podľa cieľového výnosu a podľa tvojho reálneho tempa
+              za posledné mesiace.
+            </p>
           </HelpTip>
         </h1>
         <p className="text-xs text-muted-foreground">
@@ -220,16 +102,16 @@ function GoalTrackerClassic() {
       <Card>
         <CardHeader className="p-4 pb-2">
           <CardTitle className="text-sm font-medium flex items-center gap-1">
-            Nastavenie simulácie
-            <HelpTip title="Vstupy simulácie">
-              <p>Počiatočná suma = štartový kapitál.</p>
-              <p>Mesačný vklad = pravidelné dokladanie každý mesiac.</p>
-              <p>Cieľový úrok je ročné zhodnotenie, ktoré sa prepočítava na mesiace.</p>
-              <p>Cieľová suma je hodnota, ktorú chceš dosiahnuť; appka vypočíta odhadovaný mesiac dosiahnutia.</p>
+            Nastavenie cieľa
+            <HelpTip title="Vstupy">
+              <p>Počiatočná suma = štart sledovania (alebo live hodnota pri zapnutom prepínači).</p>
+              <p>Mesačný vklad = plánované dokladanie každý mesiac.</p>
+              <p>Cieľový úrok je ročné zhodnotenie, prepočítané na zložený mesačný úrok.</p>
+              <p>Cieľová suma je hodnota, ktorú chceš dosiahnuť.</p>
             </HelpTip>
           </CardTitle>
           <CardDescription>
-            Zadaj cieľovú hodnotu, mesačný vklad a ročný výnos. Výpočet určí kedy (mesiac/rok) by si mal cieľ dosiahnuť.
+            Nastav cieľ, vklad a výnos. Kalendár a ETA sa prepočítajú z histórie aj z live hodnoty.
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 pt-3 grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
@@ -237,7 +119,11 @@ function GoalTrackerClassic() {
             <Label htmlFor="goal-initial" className="text-xs sm:text-sm">Počiatočná suma</Label>
             <Input
               id="goal-initial"
-              value={initialAmountInput}
+              value={
+                useCurrentPortfolioAsInitial
+                  ? String(Math.round(effectiveInitialDisplay))
+                  : initialAmountInput
+              }
               onChange={(e) => setInitialAmountInput(e.target.value)}
               className="h-9 sm:h-10"
               inputMode="decimal"
@@ -285,8 +171,8 @@ function GoalTrackerClassic() {
                   Použiť aktuálnu hodnotu portfólia
                   <HelpTip title="Automatické predvyplnenie počiatočnej sumy">
                     <p>
-                      Keď je zapnuté, počiatočná suma sa berie z poslednej reálnej hodnoty portfólia
-                      z histórie (bez manuálneho prepisovania).
+                      Keď je zapnuté, počiatočná suma a budúci plán sa berú z live hodnoty portfólia.
+                      Minulé mesiace sa stále porovnávajú s plánom od začiatku histórie.
                     </p>
                   </HelpTip>
                 </p>
@@ -298,7 +184,7 @@ function GoalTrackerClassic() {
               </div>
               <Switch
                 checked={useCurrentPortfolioAsInitial}
-                onCheckedChange={setUseCurrentPortfolioAsInitial}
+                onCheckedChange={onToggleUseCurrent}
                 data-testid="switch-goal-use-current-portfolio"
               />
             </div>
@@ -309,43 +195,49 @@ function GoalTrackerClassic() {
       <Card>
         <CardHeader className="p-4 pb-2">
           <CardTitle className="text-sm font-medium flex items-center gap-1">
-            Odhad na konci cieľa
-            <HelpTip title="Ako čítať tento odhad">
+            Kedy dosiahnem cieľ?
+            <HelpTip title="Dve predikcie">
               <p>
-                Toto je odhad dátumu a sumy, kedy by mala cieľová krivka prvýkrát dosiahnuť tvoj cieľ.
+                <strong>Plán</strong> — pri tvojom cieľovom výnose a mesačnom vklade.
               </p>
               <p>
-                „Zhodnotenie“ je rozdiel medzi odhadovanou hodnotou a tvojimi vlastnými vkladmi.
+                <strong>Reálny trend</strong> — z priemerného mesačného zhodnotenia a vkladov za posledné
+                mesiace histórie.
               </p>
             </HelpTip>
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-4 pt-3 space-y-2">
+        <CardContent className="p-4 pt-3 space-y-3">
           <p className="text-2xl font-semibold leading-tight tracking-tight" data-testid="text-goal-projected-final-value">
-            {formatCurrency(projectionSummary.projectedFinalValue)}
+            {formatCurrency(model.summary.projectedFinalValue)}
           </p>
-          <p className="text-xs sm:text-sm text-muted-foreground" data-testid="text-goal-hit-date">
-            {projectionSummary.goalHitDate
-              ? `Odhad dosiahnutia cieľa: ${new Date(projectionSummary.goalHitDate).toLocaleDateString("sk-SK")} (${projectionSummary.monthsToGoal ?? 0} mesiacov)`
-              : "Cieľ pri týchto vstupoch zatiaľ nie je dosiahnutý v horizonte simulácie."}
-          </p>
+          <div className="grid gap-2 sm:grid-cols-2 text-xs sm:text-sm">
+            <div className="rounded-md border p-2.5 space-y-1" data-testid="text-goal-hit-date">
+              <p className="text-[11px] sm:text-xs text-muted-foreground font-medium">Statický plán</p>
+              <p>{model.etaPlan.label}</p>
+            </div>
+            <div className="rounded-md border p-2.5 space-y-1" data-testid="text-goal-hit-date-real">
+              <p className="text-[11px] sm:text-xs text-muted-foreground font-medium">Reálny trend</p>
+              <p>{model.etaReal.label}</p>
+            </div>
+          </div>
           <div className="grid gap-2 sm:grid-cols-3 text-xs sm:text-sm">
             <div className="rounded-md border p-2.5">
               <p className="text-muted-foreground text-[11px] sm:text-xs">Vklady spolu</p>
-              <p className="font-semibold mt-0.5">{formatCurrency(projectionSummary.totalOwnContributions)}</p>
+              <p className="font-semibold mt-0.5">{formatCurrency(model.summary.totalOwnContributions)}</p>
             </div>
             <div className="rounded-md border p-2.5">
               <p className="text-muted-foreground text-[11px] sm:text-xs">Mesačné vklady spolu</p>
-              <p className="font-semibold mt-0.5">{formatCurrency(projectionSummary.totalPlannedDeposits)}</p>
+              <p className="font-semibold mt-0.5">{formatCurrency(model.summary.totalPlannedDeposits)}</p>
             </div>
             <div className="rounded-md border p-2.5">
               <p className="text-muted-foreground text-[11px] sm:text-xs">Zhodnotenie</p>
               <p
-                className={`font-semibold mt-0.5 ${projectionSummary.projectedGrowth >= 0 ? "text-emerald-600" : "text-rose-600"}`}
+                className={`font-semibold mt-0.5 ${model.summary.projectedGrowth >= 0 ? "text-emerald-600" : "text-rose-600"}`}
                 data-testid="text-goal-projected-growth"
               >
-                {projectionSummary.projectedGrowth >= 0 ? "+" : "-"}
-                {formatCurrency(Math.abs(projectionSummary.projectedGrowth))} ({projectionSummary.projectedGrowthPct.toFixed(1)}%)
+                {model.summary.projectedGrowth >= 0 ? "+" : "-"}
+                {formatCurrency(Math.abs(model.summary.projectedGrowth))} ({model.summary.projectedGrowthPct.toFixed(1)}%)
               </p>
             </div>
           </div>
@@ -360,7 +252,6 @@ function GoalTrackerClassic() {
               <p>Prerušovaná čiara je plán (target), plocha je skutočný stav portfólia (actual).</p>
               <p>Vodorovná zelená čiara je tvoja cieľová suma.</p>
               <p>Sivá čiara ukazuje len tvoje čisté vklady bez zhodnotenia.</p>
-              <p>V tooltipe vidíš rozdiel: či si nad plánom alebo zaostávaš.</p>
             </HelpTip>
           </CardTitle>
           <CardDescription>
@@ -373,25 +264,28 @@ function GoalTrackerClassic() {
             <div className="h-full rounded-md border bg-muted/20 animate-pulse" />
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={projection}>
+              <AreaChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" opacity={0.4} />
                 <XAxis dataKey="label" minTickGap={isMobile ? 18 : 24} tick={{ fontSize: isMobile ? 10 : 12 }} />
                 <YAxis
                   width={isMobile ? 40 : 56}
                   tick={{ fontSize: isMobile ? 10 : 12 }}
-                  tickFormatter={(v) => new Intl.NumberFormat("sk-SK", { notation: "compact", maximumFractionDigits: 1 }).format(v)}
+                  tickFormatter={(v) =>
+                    new Intl.NumberFormat("sk-SK", { notation: "compact", maximumFractionDigits: 1 }).format(v)
+                  }
                 />
                 <RTooltip
-                  formatter={(value: number, name: string) => [formatCurrency(value), name]}
                   content={({ active, payload, label }) => {
                     if (!active || !payload?.length) return null;
-                    const row = payload[0]?.payload as ProjectionPoint;
-                    const diff = row.actualValue != null ? row.actualValue - row.targetValue : null;
+                    const row = payload[0]?.payload as GoalMonthPoint & { targetValue: number };
+                    const diff = row.delta;
                     return (
                       <div className="rounded-md border bg-background/95 p-2 text-[11px] sm:text-xs shadow-md max-w-[220px]">
                         <p className="font-medium mb-1">{label}</p>
-                        <p>Cieľ: {formatCurrency(row.targetValue)}</p>
-                        <p className="text-muted-foreground">Vklady bez výnosu: {formatCurrency(row.contributionOnlyValue)}</p>
+                        <p>Cieľ: {formatCurrency(row.planValue)}</p>
+                        <p className="text-muted-foreground">
+                          Vklady bez výnosu: {formatCurrency(row.contributionOnlyValue)}
+                        </p>
                         <p>Realita: {row.actualValue != null ? formatCurrency(row.actualValue) : "—"}</p>
                         {diff != null && (
                           <p className={diff >= 0 ? "text-emerald-600" : "text-rose-600"}>
@@ -452,12 +346,12 @@ function GoalTrackerClassic() {
                 Mesačný kalendár (4 × 3)
                 <HelpTip title="Ako čítať mesačný grid">
                   <p>Na bunke je plánovaná hodnota portfólia na koniec daného mesiaca.</p>
-                  <p>Po prechode mesiaca: zelená = realita ≥ mesačný plán, červená = pod plánom.</p>
-                  <p>Budúce mesiace a mesiace bez dát zostávajú sivé. Po kliknutí uvidíš detail.</p>
+                  <p>Minulé: zelená = realita ≥ plán, červená = pod plánom.</p>
+                  <p>Aktuálny mesiac = žltá (prebieha). Budúce mesiace = sivé (predikcia).</p>
                 </HelpTip>
               </CardTitle>
               <CardDescription>
-                Číslo = koľko by si mal mať na konci mesiaca. Zelená = mesiac splnený.
+                Číslo = koľko by si mal mať na konci mesiaca podľa plánu.
               </CardDescription>
             </div>
             <Select value={String(effectiveSelectedYear)} onValueChange={setSelectedYear}>
@@ -478,31 +372,22 @@ function GoalTrackerClassic() {
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
             {Array.from({ length: 12 }, (_, m) => {
               const row = yearRows.find((p) => p.month === m) ?? null;
-              const monthPassed = row != null && row.monthKey < currentMonthKey;
-              const met =
-                monthPassed && row.actualValue != null ? row.actualValue >= row.targetValue : null;
-              const bg =
-                met === true
-                  ? "bg-emerald-100 dark:bg-emerald-900/30 border-emerald-500/40"
-                  : met === false
-                    ? "bg-rose-100 dark:bg-rose-900/25 border-rose-500/40"
-                    : "bg-slate-100 dark:bg-slate-900";
               const active = selectedDetail?.monthKey === row?.monthKey;
-              const statusHint =
-                met === true ? "Splnené" : met === false ? "Nesplnené" : monthPassed ? "Bez dát" : "Plán";
               return (
                 <button
                   key={`${effectiveSelectedYear}-${m}`}
                   type="button"
                   onClick={() => row && setSelectedMonthKey(row.monthKey)}
-                  className={`rounded-md border px-2.5 sm:px-3 py-2 text-left min-h-[64px] sm:min-h-[70px] ${bg} ${active ? "ring-2 ring-primary" : ""}`}
+                  className={`rounded-md border px-2.5 sm:px-3 py-2 text-left min-h-[64px] sm:min-h-[70px] ${tileClass(row?.status ?? null)} ${active ? "ring-2 ring-primary" : ""}`}
                   data-testid={`goal-month-${effectiveSelectedYear}-${m + 1}`}
                 >
                   <p className="text-xs sm:text-sm font-medium">{MONTHS_SK[m]}</p>
                   <p className="text-[11px] sm:text-xs text-muted-foreground mt-1 leading-tight tabular-nums">
-                    {row ? formatCurrency(row.targetValue) : "—"}
+                    {row ? formatCurrency(row.planValue) : "—"}
                   </p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">{statusHint}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {row ? statusLabel(row.status) : "—"}
+                  </p>
                 </button>
               );
             })}
@@ -512,25 +397,29 @@ function GoalTrackerClassic() {
             <div className="rounded-md border p-3 text-xs sm:text-sm space-y-1.5" data-testid="goal-month-detail">
               <p className="font-medium">
                 {MONTHS_SK[selectedDetail.month]} {selectedDetail.year}
+                <span className="ml-2 text-muted-foreground font-normal">
+                  ({statusLabel(selectedDetail.status)})
+                </span>
               </p>
               <p>Finálny cieľ (celkový): {formatCurrency(goalAmount)}</p>
-              <p>Plán na koniec mesiaca: {formatCurrency(selectedDetail.targetValue)}</p>
+              <p>Plán na koniec mesiaca: {formatCurrency(selectedDetail.planValue)}</p>
               <p>
                 Tvoja reálna hodnota:{" "}
                 {selectedDetail.actualValue != null ? formatCurrency(selectedDetail.actualValue) : "Bez dát"}
               </p>
+              {selectedDetail.depositMonth != null && (
+                <p className="text-muted-foreground">
+                  Čistý vklad v mesiaci: {formatCurrency(selectedDetail.depositMonth)}
+                </p>
+              )}
               <p
                 className={
-                  (selectedDetail.actualValue ?? 0) - selectedDetail.targetValue >= 0
-                    ? "text-emerald-600"
-                    : "text-rose-600"
+                  (selectedDetail.delta ?? 0) >= 0 ? "text-emerald-600" : "text-rose-600"
                 }
               >
                 Stav voči mesačnému plánu:{" "}
-                {selectedDetail.actualValue != null
-                  ? `${selectedDetail.actualValue - selectedDetail.targetValue >= 0 ? "+" : "-"}${formatCurrency(
-                      Math.abs(selectedDetail.actualValue - selectedDetail.targetValue),
-                    )}`
+                {selectedDetail.delta != null
+                  ? `${selectedDetail.delta >= 0 ? "+" : "-"}${formatCurrency(Math.abs(selectedDetail.delta))}`
                   : "—"}
               </p>
             </div>
@@ -545,4 +434,3 @@ export default function GoalTracker() {
   const redesign = useMobileRedesign();
   return redesign ? <GoalTrackerMobile /> : <GoalTrackerClassic />;
 }
-
