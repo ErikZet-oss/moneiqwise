@@ -71,3 +71,50 @@ export function portfoliosForScope(
   }
   return [];
 }
+
+/** Filter value on Portfóliá overview: all | categoryId | uncategorized */
+export const OVERVIEW_CATEGORY_ALL = "all";
+export const OVERVIEW_CATEGORY_UNCATEGORIZED = "uncategorized";
+
+export function filterPortfoliosByOverviewCategory(
+  portfolios: Portfolio[],
+  filter: string,
+): Portfolio[] {
+  if (!filter || filter === OVERVIEW_CATEGORY_ALL) return portfolios;
+  if (filter === OVERVIEW_CATEGORY_UNCATEGORIZED) {
+    return portfolios.filter((p) => !p.categoryId);
+  }
+  return portfolios.filter((p) => p.categoryId === filter);
+}
+
+export function overviewCategoryLabel(
+  filter: string,
+  categories: PortfolioCategory[],
+): string {
+  if (!filter || filter === OVERVIEW_CATEGORY_ALL) return "Všetky portfóliá";
+  if (filter === OVERVIEW_CATEGORY_UNCATEGORIZED) return "Bez kategórie";
+  return categories.find((c) => c.id === filter)?.name ?? "Portfóliá";
+}
+
+/** Figma dropdown options: „Všetky kategórie“ + „Názov · N“. */
+export function overviewCategorySelectOptions(
+  portfolios: Portfolio[],
+  categories: PortfolioCategory[],
+): Array<{ value: string; label: string }> {
+  const uncategorizedCount = portfolios.filter((p) => !p.categoryId).length;
+  const options: Array<{ value: string; label: string }> = [
+    { value: OVERVIEW_CATEGORY_ALL, label: "Všetky kategórie" },
+  ];
+  for (const category of categories) {
+    const count = portfolios.filter((p) => p.categoryId === category.id).length;
+    options.push({
+      value: category.id,
+      label: `${category.name} · ${count}`,
+    });
+  }
+  options.push({
+    value: OVERVIEW_CATEGORY_UNCATEGORIZED,
+    label: `Bez kategórie · ${uncategorizedCount}`,
+  });
+  return options;
+}

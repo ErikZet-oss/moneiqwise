@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type MouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Loader2, Moon, RefreshCw } from "lucide-react";
@@ -13,8 +13,14 @@ import {
   shouldShowExtendedQuote,
   shouldUseExtendedQuotes,
 } from "@/lib/usMarketSession";
-import { Badge, Card, EmptyState, TopBar } from "@/redesign/ui";
+import { Badge, Card, EmptyState, Select, TopBar } from "@/redesign/ui";
 import { IconButton, KvRow, PageBody, signedMoney, signedPct, toneOf } from "./mobileChrome";
+import {
+  OVERVIEW_CATEGORY_ALL,
+  filterPortfoliosByOverviewCategory,
+  overviewCategoryLabel,
+  overviewCategorySelectOptions,
+} from "@/lib/portfolioCategories";
 
 interface StockQuote {
   ticker: string;
@@ -81,12 +87,30 @@ async function fetchQuotes(tickers: string[], refresh: boolean): Promise<Record<
 export default function OverviewMobile() {
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
-  const { portfolios, setSelectedPortfolioId, isLoading: portfoliosLoading } = usePortfolio();
+  const {
+    portfolios,
+    categories,
+    setSelectedPortfolioId,
+    isLoading: portfoliosLoading,
+  } = usePortfolio();
   const { convertPrice, getTickerCurrency, resolveHoldingCostCurrency, pnlInvestedForDisplay, formatCurrency } =
     useCurrency();
   const { hideAmounts } = useChartSettings();
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState(OVERVIEW_CATEGORY_ALL);
   const mask = (value: string) => (hideAmounts ? "••••••" : value);
+
+  const categoryOptions = useMemo(
+    () => overviewCategorySelectOptions(portfolios, categories),
+    [portfolios, categories],
+  );
+
+  const visiblePortfolios = useMemo(
+    () => filterPortfoliosByOverviewCategory(portfolios, categoryFilter),
+    [portfolios, categoryFilter],
+  );
+
+  const summaryTitle = overviewCategoryLabel(categoryFilter, categories);
 
   const { data: overview, isPending } = useQuery({
     queryKey: ["/api/overview"],
@@ -286,7 +310,7 @@ export default function OverviewMobile() {
   ]);
 
   const aggregated = useMemo(() => {
-    if (metricsById.size === 0) return null;
+    if (visiblePortfolios.length === 0 || metricsById.size === 0) return null;
     const sum: Metrics = {
       totalValue: 0,
       stockValue: 0,
@@ -301,7 +325,9 @@ export default function OverviewMobile() {
       passiveIncome: 0,
       passiveIncomePercent: 0,
     };
-    metricsById.forEach((metrics) => {
+    for (const portfolio of visiblePortfolios) {
+      const metrics = metricsById.get(portfolio.id);
+      if (!metrics) continue;
       sum.totalValue += metrics.totalValue;
       sum.stockValue += metrics.stockValue;
       sum.cashValue += metrics.cashValue;
@@ -311,18 +337,18 @@ export default function OverviewMobile() {
       sum.totalProfit += metrics.totalProfit;
       sum.dailyChange += metrics.dailyChange;
       sum.passiveIncome += metrics.passiveIncome;
-    });
+    }
     const base = sum.stockValue - sum.dailyChange;
     sum.totalProfitPercent = sum.totalInvested > 0 ? (sum.totalProfit / sum.totalInvested) * 100 : 0;
     sum.dailyChangePercent = base > 0 ? (sum.dailyChange / base) * 100 : 0;
     sum.passiveIncomePercent = sum.stockValue > 0 ? (sum.passiveIncome / sum.stockValue) * 100 : 0;
     return sum;
-  }, [metricsById]);
+  }, [metricsById, visiblePortfolios]);
 
   const weightedYtd = useMemo(() => {
     let weight = 0;
     let acc = 0;
-    for (const portfolio of portfolios) {
+    for (const portfolio of visiblePortfolios) {
       const ytd = ytdByPortfolioId[portfolio.id];
       const value = metricsById.get(portfolio.id)?.totalValue ?? 0;
       if (ytd == null || !(value > 0)) continue;
@@ -330,7 +356,7 @@ export default function OverviewMobile() {
       weight += value;
     }
     return weight > 0 ? acc / weight : null;
-  }, [portfolios, ytdByPortfolioId, metricsById]);
+  }, [visiblePortfolios, ytdByPortfolioId, metricsById]);
 
   const usSessionState = getUsMarketSessionState();
   const showExtendedSession = shouldUseExtendedQuotes(usSessionState);
@@ -394,9 +420,19 @@ export default function OverviewMobile() {
 
   const aggregatedPreOpen = useMemo(() => {
     if (!overview?.byPortfolioId) return EMPTY_PRE_OPEN;
-    const allHoldings = Object.values(overview.byPortfolioId).flatMap((row) => row.holdings ?? []);
-    return computePreOpenPreview(allHoldings);
-  }, [overview, computePreOpenPreview]);
+    const holdings = visiblePortfolios.flatMap(
+      (p) => overview.byPortfolioId[p.id]?.holdings ?? [],
+    );
+    return computePreOpenPreview(holdings);
+  }, [overview, computePreOpenPreview, visiblePortfolios]);
+
+  useEffect(() => {
+    if (categoryFilter === OVERVIEW_CATEGORY_ALL) return;
+    if (categoryFilter === "uncategorized") return;
+    if (!categories.some((c) => c.id === categoryFilter)) {
+      setCategoryFilter(OVERVIEW_CATEGORY_ALL);
+    }
+  }, [categories, categoryFilter]);
 
   const refreshAll = useCallback(async () => {
     if (allTickers.length === 0) return;
@@ -516,21 +552,36 @@ export default function OverviewMobile() {
           />
         </div>
 
+        {categories.length > 0 || portfolios.some((p) => !p.categoryId) ? (
+          <Select
+            label="Kategória"
+            value={categoryFilter}
+            onChange={setCategoryFilter}
+            options={categoryOptions}
+            showCheck
+          />
+        ) : null}
+
         {portfoliosLoading || isPending ? (
           <Card>
             <p className="text-sm text-[var(--rd-text-secondary)]">Načítavam portfóliá…</p>
           </Card>
-        ) : portfolios.length === 0 || !aggregated ? (
+        ) : portfolios.length === 0 ? (
           <EmptyState title="Žiadne portfólio" body="Po vytvorení portfólia sa tu zobrazí súhrn hodnoty a zisku." />
+        ) : visiblePortfolios.length === 0 || !aggregated ? (
+          <EmptyState
+            title="Žiadne portfólio v tejto kategórii"
+            body="Vyber inú kategóriu alebo pridaj portfólio do tejto skupiny v Nastaveniach."
+          />
         ) : (
           <>
             <Card className="gap-1.5">
-              {renderCardHeader("Všetky portfóliá", weightedYtd)}
+              {renderCardHeader(summaryTitle, weightedYtd)}
               {renderMetricBody(aggregated, aggregatedPreOpen)}
             </Card>
 
             <p className="rd-type-overline text-[var(--rd-text-tertiary)]">Portfóliá</p>
-            {portfolios.map((portfolio) => {
+            {visiblePortfolios.map((portfolio) => {
               const metrics = metricsById.get(portfolio.id);
               const ytd = ytdByPortfolioId[portfolio.id];
               if (!metrics) return null;

@@ -1,9 +1,17 @@
-import { useCallback, useMemo, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Tooltip,
   TooltipContent,
@@ -30,6 +38,12 @@ import {
   shouldShowExtendedQuote,
   shouldUseExtendedQuotes,
 } from "@/lib/usMarketSession";
+import {
+  OVERVIEW_CATEGORY_ALL,
+  filterPortfoliosByOverviewCategory,
+  overviewCategoryLabel,
+  overviewCategorySelectOptions,
+} from "@/lib/portfolioCategories";
 
 interface StockQuote {
   ticker: string;
@@ -134,14 +148,34 @@ function OverviewClassic() {
   );
   const {
     portfolios,
+    categories,
     setSelectedPortfolioId,
     isLoading: portfoliosLoading,
   } = usePortfolio();
   const { convertPrice, getTickerCurrency, resolveHoldingCostCurrency, pnlInvestedForDisplay, formatCurrency } = useCurrency();
   const { hideAmounts } = useChartSettings();
   const [, setLocation] = useLocation();
+  const [categoryFilter, setCategoryFilter] = useState(OVERVIEW_CATEGORY_ALL);
 
   const maskAmount = (amount: string) => (hideAmounts ? "••••••" : amount);
+
+  const categoryOptions = useMemo(
+    () => overviewCategorySelectOptions(portfolios, categories),
+    [portfolios, categories],
+  );
+  const visiblePortfolios = useMemo(
+    () => filterPortfoliosByOverviewCategory(portfolios, categoryFilter),
+    [portfolios, categoryFilter],
+  );
+  const summaryTitle = overviewCategoryLabel(categoryFilter, categories);
+
+  useEffect(() => {
+    if (categoryFilter === OVERVIEW_CATEGORY_ALL) return;
+    if (categoryFilter === "uncategorized") return;
+    if (!categories.some((c) => c.id === categoryFilter)) {
+      setCategoryFilter(OVERVIEW_CATEGORY_ALL);
+    }
+  }, [categories, categoryFilter]);
 
   const {
     data: overview,
@@ -549,7 +583,7 @@ function OverviewClassic() {
   const showExtendedSession = shouldUseExtendedQuotes(usSessionState);
 
   const aggregatedMetrics = useMemo((): PortfolioMetrics | null => {
-    if (metricsByPortfolioId.size === 0) return null;
+    if (visiblePortfolios.length === 0 || metricsByPortfolioId.size === 0) return null;
     let totalValue = 0;
     let stockValue = 0;
     let cashValue = 0;
@@ -561,7 +595,9 @@ function OverviewClassic() {
     let passiveIncome = 0;
     let hasQuotes = false;
 
-    metricsByPortfolioId.forEach((m) => {
+    for (const p of visiblePortfolios) {
+      const m = metricsByPortfolioId.get(p.id);
+      if (!m) continue;
       totalValue += m.totalValue;
       stockValue += m.stockValue;
       cashValue += m.cashValue;
@@ -572,7 +608,7 @@ function OverviewClassic() {
       dailyChange += m.dailyChange;
       passiveIncome += m.passiveIncome;
       if (m.hasQuotes) hasQuotes = true;
-    });
+    }
 
     const totalProfitPercent = totalInvested > 0 ? (totalProfit / totalInvested) * 100 : 0;
     const baseValue = stockValue - dailyChange;
@@ -594,47 +630,35 @@ function OverviewClassic() {
       passiveIncomePercent,
       hasQuotes,
     };
-  }, [metricsByPortfolioId]);
+  }, [metricsByPortfolioId, visiblePortfolios]);
 
   const allHoldingsFlat = useMemo(() => {
     if (!overview?.byPortfolioId) return [] as HoldingWithCostCurrency[];
     const out: HoldingWithCostCurrency[] = [];
-    for (const p of portfolios) {
+    for (const p of visiblePortfolios) {
       const holdings = overview.byPortfolioId[p.id]?.holdings ?? [];
       out.push(...holdings);
     }
     return out;
-  }, [overview, portfolios]);
+  }, [overview, visiblePortfolios]);
 
   const aggregatedPreOpen = useMemo(
     () => computePreOpenPreview(allHoldingsFlat),
     [computePreOpenPreview, allHoldingsFlat],
   );
 
-  const { data: ytdAllPortfolios = null } = useQuery<number | null>({
-    queryKey: ["/api/portfolio-history", "overview-ytd", "all"],
-    enabled: portfolios.length > 0,
-    queryFn: async () => {
-      try {
-        const params = new URLSearchParams();
-        params.set("portfolio", "all");
-        params.set("range", "ytd");
-        const res = await fetch(`/api/portfolio-history?${params.toString()}`, {
-          credentials: "include",
-        });
-        if (!res.ok) return null;
-        const data = (await res.json()) as PortfolioHistoryYtdRes;
-        const last = data.points?.[data.points.length - 1];
-        return last && Number.isFinite(last.portfolioCumulativePct)
-          ? last.portfolioCumulativePct
-          : null;
-      } catch {
-        return null;
-      }
-    },
-    staleTime: 15 * 60 * 1000,
-    refetchOnWindowFocus: false,
-  });
+  const ytdAllPortfolios = useMemo(() => {
+    let weight = 0;
+    let acc = 0;
+    for (const p of visiblePortfolios) {
+      const ytd = ytdByPortfolioId[p.id];
+      const value = metricsByPortfolioId.get(p.id)?.totalValue ?? 0;
+      if (ytd == null || !(value > 0)) continue;
+      acc += ytd * value;
+      weight += value;
+    }
+    return weight > 0 ? acc / weight : null;
+  }, [visiblePortfolios, ytdByPortfolioId, metricsByPortfolioId]);
 
   const overviewLoading = overviewPending || (!overview && overviewFetching);
 
@@ -786,22 +810,49 @@ function OverviewClassic() {
 
   return (
     <div className="flex flex-col gap-3 md:gap-5 pb-6 md:pb-0">
-      <div className="min-w-0">
-        <h1
-          className="text-lg md:text-xl font-semibold text-foreground truncate"
-          data-testid="text-overview-title"
-        >
-          Prehľad portfólií
-        </h1>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Rýchly prehľad výkonnosti všetkých vašich portfólií.
-        </p>
+      <div className="min-w-0 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <h1
+            className="text-lg md:text-xl font-semibold text-foreground truncate"
+            data-testid="text-overview-title"
+          >
+            Prehľad portfólií
+          </h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Rýchly prehľad výkonnosti všetkých vašich portfólií.
+          </p>
+        </div>
+        {(categories.length > 0 || portfolios.some((p) => !p.categoryId)) && (
+          <div className="w-full sm:w-[240px] space-y-1.5 shrink-0">
+            <Label htmlFor="overview-category" className="text-xs">
+              Kategória
+            </Label>
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger id="overview-category" data-testid="select-overview-category">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {categoryOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       {portfolios.length === 0 ? (
         <Card>
           <CardContent className="p-4 py-6 text-center text-muted-foreground text-xs">
             Zatiaľ nemáte žiadne portfóliá. Vytvorte si prvé v sekcii Nastavenia.
+          </CardContent>
+        </Card>
+      ) : visiblePortfolios.length === 0 ? (
+        <Card>
+          <CardContent className="p-4 py-6 text-center text-muted-foreground text-xs">
+            V tejto kategórii nie sú žiadne portfóliá.
           </CardContent>
         </Card>
       ) : (
@@ -815,7 +866,7 @@ function OverviewClassic() {
                 <div className="flex items-center gap-2 min-w-0">
                   <Briefcase className="h-4 w-4 text-muted-foreground shrink-0" />
                   <span className="text-xs font-medium text-muted-foreground truncate">
-                    Celková hodnota
+                    {summaryTitle}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
@@ -875,7 +926,7 @@ function OverviewClassic() {
             </CardContent>
           </Card>
 
-          {portfolios.map((portfolio) => {
+          {visiblePortfolios.map((portfolio) => {
             const m = metricsByPortfolioId.get(portfolio.id);
             const bundleRow = overview?.byPortfolioId[portfolio.id];
             const preOpen = preOpenByPortfolioId.get(portfolio.id) ?? EMPTY_PRE_OPEN;
