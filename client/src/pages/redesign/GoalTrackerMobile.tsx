@@ -79,7 +79,9 @@ export default function GoalTrackerMobile() {
       <PageBody>
         <div className="flex items-center gap-1.5">
           <p className="min-w-0 flex-1 text-xs leading-4 text-[var(--rd-text-secondary)]">
-            Živý tracker: plán vs. realita v minulosti aj v budúcnosti.
+            {g.firstMonthKey
+              ? `Plán od ${g.firstMonthKey} (prvá transakcia) — minulé mesiace zelená/červená podľa splnenia.`
+              : "Živý tracker: plán vs. realita v minulosti aj v budúcnosti."}
           </p>
           <HelpButton
             title="Ako funguje sekcia Môj cieľ"

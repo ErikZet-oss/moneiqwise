@@ -82,6 +82,32 @@ export function stepDaysForIsoSpan(startIso: string, endIso: string): number {
   return 30;
 }
 
+/** Koniec každého mesiaca od start do end (vrátane prvého a posledného dňa). */
+export function monthEndDates(startIso: string, endIso: string): string[] {
+  if (startIso > endIso) return [];
+  const out: string[] = [startIso.slice(0, 10)];
+  const end = new Date(`${endIso}T12:00:00.000Z`);
+  let y = Number(startIso.slice(0, 4));
+  let m = Number(startIso.slice(5, 7)) - 1; // 0-based
+  // Posuň na koniec aktuálneho mesiaca, potom každý ďalší.
+  for (;;) {
+    const lastDay = new Date(Date.UTC(y, m + 1, 0, 12, 0, 0));
+    const iso = lastDay.toISOString().slice(0, 10);
+    if (iso > endIso) break;
+    if (iso >= startIso) out.push(iso);
+    m += 1;
+    if (m > 11) {
+      m = 0;
+      y += 1;
+    }
+    // Safety: stop if past end year+1
+    if (y > end.getUTCFullYear() + 1) break;
+  }
+  const last = endIso.slice(0, 10);
+  if (out[out.length - 1] !== last) out.push(last);
+  return Array.from(new Set(out)).sort();
+}
+
 /** Dátumy od start do end s pevným krokom (vždy vrátane začiatku a konca). */
 export function dateRangeWithStep(
   startIso: string,

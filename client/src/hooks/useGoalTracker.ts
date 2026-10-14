@@ -24,8 +24,6 @@ export function useGoalTracker() {
   const [initialAmountInput, setInitialAmountInput] = useState("10000");
   const [useCurrentPortfolioAsInitial, setUseCurrentPortfolioAsInitial] =
     useState(true);
-  const [anchorMonthKey, setAnchorMonthKey] = useState(monthKeyFromDate(new Date()));
-  const [anchorValue, setAnchorValue] = useState(10000);
   const [hydrated, setHydrated] = useState(false);
   const [selectedYear, setSelectedYear] = useState("");
   const [selectedMonthKey, setSelectedMonthKey] = useState("");
@@ -33,11 +31,18 @@ export function useGoalTracker() {
   const { data: history, isLoading } = useQuery<{
     points: Array<{ date: string; totalValue: number; netInvested: number }>;
   }>({
-    queryKey: ["/api/portfolio-history", portfolioParam, "all", "goal-tracker-v2"],
+    queryKey: [
+      "/api/portfolio-history",
+      portfolioParam,
+      "all",
+      "goal-tracker-monthly-v3",
+    ],
     queryFn: async () => {
       const params = new URLSearchParams({
         portfolio: portfolioParam,
         range: "all",
+        granularity: "monthly",
+        benchmark: "0",
       });
       const res = await fetch(`/api/portfolio-history?${params.toString()}`, {
         credentials: "include",
@@ -56,8 +61,11 @@ export function useGoalTracker() {
     const keys = Array.from(monthlyMap.keys()).sort();
     return keys[0] ?? null;
   }, [monthlyMap]);
+  const firstMonthValue = firstMonthKey
+    ? monthlyMap.get(firstMonthKey)?.actualValue ?? null
+    : null;
 
-  // Rehydrate settings when portfolio scope changes (not on every history tick).
+  // Rehydrate user inputs when portfolio scope changes.
   useEffect(() => {
     setHydrated(false);
     const saved = loadGoalSettings(scopeKey);
@@ -67,35 +75,20 @@ export function useGoalTracker() {
     setAnnualReturnInput(String(next.annualReturnPct));
     setInitialAmountInput(String(next.manualInitialAmount));
     setUseCurrentPortfolioAsInitial(next.useCurrentPortfolioAsInitial);
-    setAnchorMonthKey(next.anchorMonthKey);
-    setAnchorValue(next.anchorValue);
     setHydrated(true);
   }, [scopeKey]);
-
-  // Doplň T_start z histórie, keď príde (bez resetu užívateľských inputov).
-  useEffect(() => {
-    if (!hydrated || !firstMonthKey) return;
-    if (monthlyMap.has(anchorMonthKey)) return;
-    const first = monthlyMap.get(firstMonthKey);
-    if (!first) return;
-    setAnchorMonthKey(firstMonthKey);
-    setAnchorValue(first.actualValue);
-  }, [hydrated, firstMonthKey, monthlyMap, anchorMonthKey]);
 
   const settings: GoalSettings = useMemo(() => {
     const goalAmount = Math.max(0, parseNumberInput(goalAmountInput, 0));
     const monthlyDeposit = parseNumberInput(monthlyDepositInput, 0);
     const annualReturnPct = parseNumberInput(annualReturnInput, 0);
     const manualInitialAmount = Math.max(0, parseNumberInput(initialAmountInput, 0));
-    let aValue = Math.max(0, anchorValue);
-    const aMonth = anchorMonthKey;
 
+    // T_start = vždy mesiac prvej transakcie (ak história existuje).
+    const aMonth = firstMonthKey ?? monthKeyFromDate(new Date());
+    let aValue: number;
     if (useCurrentPortfolioAsInitial) {
-      if (monthlyMap.has(aMonth)) {
-        aValue = Math.max(0, monthlyMap.get(aMonth)!.actualValue);
-      } else if (latestActualValue != null) {
-        aValue = Math.max(0, latestActualValue);
-      }
+      aValue = Math.max(0, firstMonthValue ?? latestActualValue ?? 0);
     } else {
       aValue = manualInitialAmount;
     }
@@ -115,10 +108,9 @@ export function useGoalTracker() {
     annualReturnInput,
     initialAmountInput,
     useCurrentPortfolioAsInitial,
-    anchorMonthKey,
-    anchorValue,
+    firstMonthKey,
+    firstMonthValue,
     latestActualValue,
-    monthlyMap,
   ]);
 
   useEffect(() => {
@@ -130,13 +122,6 @@ export function useGoalTracker() {
     setUseCurrentPortfolioAsInitial(on);
     if (on && latestActualValue != null) {
       setInitialAmountInput(String(Math.round(latestActualValue)));
-      if (firstMonthKey && monthlyMap.has(firstMonthKey)) {
-        setAnchorMonthKey(firstMonthKey);
-        setAnchorValue(monthlyMap.get(firstMonthKey)!.actualValue);
-      } else {
-        setAnchorMonthKey(monthKeyFromDate(new Date()));
-        setAnchorValue(latestActualValue);
-      }
     }
   };
 
@@ -220,6 +205,7 @@ export function useGoalTracker() {
     effectiveInitialDisplay,
     latestActualValue,
     goalAmount: settings.goalAmount,
+    firstMonthKey,
   };
 }
 

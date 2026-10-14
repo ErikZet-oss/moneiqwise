@@ -149,7 +149,7 @@ export function buildMonthlySeries(points: GoalHistoryPoint[]): Map<
   string,
   { monthKey: string; date: string; actualValue: number; netInvested: number }
 > {
-  const map = new Map<
+  const raw = new Map<
     string,
     { monthKey: string; date: string; actualValue: number; netInvested: number }
   >();
@@ -157,14 +157,37 @@ export function buildMonthlySeries(points: GoalHistoryPoint[]): Map<
     const d = new Date(`${p.date}T12:00:00`);
     if (Number.isNaN(d.getTime()) || !Number.isFinite(p.totalValue)) continue;
     const key = monthKeyFromDate(d);
-    map.set(key, {
+    raw.set(key, {
       monthKey: key,
       date: p.date,
       actualValue: p.totalValue,
       netInvested: Number.isFinite(p.netInvested) ? p.netInvested : 0,
     });
   }
-  return map;
+
+  // Doplň medzery medzi prvým a posledným mesiacom (forward-fill),
+  // aby kalendár vedel vyhodnotiť každý mesiac od prvej transakcie.
+  const keys = Array.from(raw.keys()).sort();
+  if (keys.length === 0) return raw;
+  const first = keys[0]!;
+  const last = keys[keys.length - 1]!;
+  const filled = new Map(raw);
+  let cursor = first;
+  let prev = raw.get(first)!;
+  while (cursor < last) {
+    cursor = addMonthsKey(cursor, 1);
+    if (filled.has(cursor)) {
+      prev = filled.get(cursor)!;
+    } else {
+      filled.set(cursor, {
+        monthKey: cursor,
+        date: `${cursor}-28`,
+        actualValue: prev.actualValue,
+        netInvested: prev.netInvested,
+      });
+    }
+  }
+  return filled;
 }
 
 function depositForMonth(
@@ -261,8 +284,24 @@ export function buildGoalModel(input: {
 
   const s = input.settings;
   const rMonthly = monthlyRateFromAnnualPct(s.annualReturnPct);
-  const anchorKey = s.anchorMonthKey || currentMonthKey;
-  const planStartValue = Math.max(0, s.anchorValue);
+
+  // Vždy sleduj od prvej dostupnej histórie (prvá transakcia), nie od „teraz“.
+  const histKeysAsc = Array.from(map.keys()).sort();
+  const firstHistKey = histKeysAsc[0] ?? null;
+  const firstHistVal = firstHistKey ? map.get(firstHistKey)?.actualValue ?? null : null;
+  const anchorKey =
+    firstHistKey && (!s.anchorMonthKey || s.anchorMonthKey > firstHistKey)
+      ? firstHistKey
+      : s.anchorMonthKey || firstHistKey || currentMonthKey;
+  const planStartValue = Math.max(
+    0,
+    // Pri live toggle: minulý plán štartuje z reálnej hodnoty pri T_start.
+    s.useCurrentPortfolioAsInitial && firstHistVal != null && anchorKey === firstHistKey
+      ? firstHistVal
+      : s.anchorValue > 0
+        ? s.anchorValue
+        : firstHistVal ?? 0,
+  );
 
   // Horizont: od anchora aspoň po cieľ + 12 mesiacov, max 100 rokov.
   const etaFromAnchor = monthsToReachGoal({

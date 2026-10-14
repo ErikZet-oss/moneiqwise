@@ -96,6 +96,9 @@ function GoalTrackerClassic() {
         </h1>
         <p className="text-xs text-muted-foreground">
           {isAllPortfolios ? "Všetky portfóliá" : `Portfólio: ${selectedPortfolio?.name ?? "Vybrané"}`}
+          {g.firstMonthKey
+            ? ` · Sledovanie od ${g.firstMonthKey} (prvá transakcia)`
+            : null}
         </p>
       </div>
 

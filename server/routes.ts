@@ -59,6 +59,7 @@ import {
   computePortfolioHistorySeries,
   computeSp500PercentForRange,
   hybridSnapshotDates,
+  monthEndDates,
   stepDaysForHistoryRange,
   stepDaysForIsoSpan,
   subsampleRowsByStepDays,
@@ -2620,8 +2621,9 @@ function portfolioHistoryCacheKey(
   portfolioParam: string,
   range: string,
   includeBenchmark: boolean,
+  granularity = "default",
 ): string {
-  return `${userId}:${portfolioParam || "all"}:${range}:bench${includeBenchmark ? 1 : 0}:v1`;
+  return `${userId}:${portfolioParam || "all"}:${range}:bench${includeBenchmark ? 1 : 0}:g=${granularity}:v2`;
 }
 
 function invalidatePerformanceCache(userId: string): void {
@@ -6539,12 +6541,19 @@ export async function registerRoutes(
         benchRaw === "off" ||
         benchRaw === "none"
       );
+      // Môj cieľ: mesačné kotvy (koniec mesiaca) od prvej transakcie.
+      const granularityRaw = String(req.query.granularity ?? "").toLowerCase();
+      const monthlyGranularity =
+        granularityRaw === "month" ||
+        granularityRaw === "monthly" ||
+        granularityRaw === "1m";
 
       const histCacheKey = portfolioHistoryCacheKey(
         userId,
         portfolioParam,
         range,
         includeBenchmark,
+        monthlyGranularity ? "monthly" : "default",
       );
       const histCached = portfolioHistoryCache.get(histCacheKey);
       if (
@@ -6647,12 +6656,39 @@ export async function registerRoutes(
         todayIso,
         range,
         150,
+        monthlyGranularity
+          ? {
+              dates: (() => {
+                if (sorted.length === 0) return [todayIso];
+                const firstTxIso = new Date(
+                  sorted[0]!.transactionDate as unknown as string,
+                )
+                  .toISOString()
+                  .slice(0, 10);
+                let startIso = firstTxIso;
+                // range=all → od prvej TX; inak respektuj range start
+                if (range !== "all") {
+                  const end = new Date(`${todayIso}T12:00:00.000Z`);
+                  const start = new Date(end);
+                  if (range === "ytd") start.setUTCMonth(0, 1);
+                  else if (range === "1y") start.setUTCFullYear(start.getUTCFullYear() - 1);
+                  else if (range === "6m") start.setUTCMonth(start.getUTCMonth() - 6);
+                  else if (range === "3m") start.setUTCMonth(start.getUTCMonth() - 3);
+                  else if (range === "1m") start.setUTCMonth(start.getUTCMonth() - 1);
+                  const iso = start.toISOString().slice(0, 10);
+                  if (iso > firstTxIso) startIso = iso;
+                }
+                return monthEndDates(startIso, todayIso);
+              })(),
+            }
+          : undefined,
       );
       const payload = {
         ...out,
         range,
         portfolio: portfolioParam,
         benchmark: includeBenchmark ? "^GSPC" : null,
+        granularity: monthlyGranularity ? "monthly" : "default",
       };
       portfolioHistoryCache.set(histCacheKey, {
         data: payload,
