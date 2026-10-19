@@ -234,11 +234,11 @@ function OptionsClassic() {
   };
 
   return (
-    <div className="flex flex-col gap-3 md:gap-6">
+    <div className="flex flex-col gap-3">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-lg font-semibold" data-testid="text-options-title">Opcie</h1>
-          <p className="text-xs text-muted-foreground">Sledovanie opčných obchodov</p>
+          <p className="mt-1 text-[13px] leading-[18px] text-muted-foreground">Sledovanie opčných obchodov</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={handleDownloadTemplate} data-testid="button-download-template">
@@ -313,8 +313,8 @@ function OptionsClassic() {
       ) : stats ? (
         <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 gap-1 p-4 pb-2">
-              <CardTitle className="text-sm font-medium">Celkový zisk</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 gap-1 px-4 pb-0 pt-3.5">
+              <p className="text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-tertiary">Celkový zisk</p>
               {parseFloat(stats.totalRealizedGain) >= 0 ? (
                 <TrendingUp className="h-3 w-3 md:h-4 md:w-4 text-green-500" />
               ) : (
@@ -322,7 +322,7 @@ function OptionsClassic() {
               )}
             </CardHeader>
             <CardContent className="p-4 pt-3">
-              <div className={`text-2xl font-semibold leading-tight tracking-tight truncate ${parseFloat(stats.totalRealizedGain) >= 0 ? "text-green-600" : "text-red-600"}`} data-testid="text-options-total-gain">
+              <div className={`text-[22px] font-bold leading-[26px] tracking-[-0.33px] truncate ${parseFloat(stats.totalRealizedGain) >= 0 ? "text-green-600" : "text-red-600"}`} data-testid="text-options-total-gain">
                 {formatUSD(parseFloat(stats.totalRealizedGain))}
               </div>
               <p className="text-xs text-muted-foreground mt-1 truncate">
@@ -332,12 +332,12 @@ function OptionsClassic() {
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 gap-1 p-4 pb-2">
-              <CardTitle className="text-sm font-medium">Win Rate</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 gap-1 px-4 pb-0 pt-3.5">
+              <p className="text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-tertiary">Win Rate</p>
               <Target className="h-3 w-3 md:h-4 md:w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent className="p-4 pt-3">
-              <div className="text-2xl font-semibold leading-tight tracking-tight" data-testid="text-options-win-rate">
+              <div className="text-[22px] font-bold leading-[26px] tracking-[-0.33px]" data-testid="text-options-win-rate">
                 {stats.winRate}%
               </div>
               <p className="text-xs text-muted-foreground mt-1">
@@ -347,12 +347,12 @@ function OptionsClassic() {
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 gap-1 p-4 pb-2">
-              <CardTitle className="text-sm font-medium">Otvorené</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 gap-1 px-4 pb-0 pt-3.5">
+              <p className="text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-tertiary">Otvorené</p>
               <Clock className="h-3 w-3 md:h-4 md:w-4 text-blue-500" />
             </CardHeader>
             <CardContent className="p-4 pt-3">
-              <div className="text-2xl font-semibold leading-tight tracking-tight" data-testid="text-options-open">
+              <div className="text-[22px] font-bold leading-[26px] tracking-[-0.33px]" data-testid="text-options-open">
                 {stats.openTrades}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
@@ -362,12 +362,12 @@ function OptionsClassic() {
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 gap-1 p-4 pb-2">
-              <CardTitle className="text-sm font-medium">Priem. obchod</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 gap-1 px-4 pb-0 pt-3.5">
+              <p className="text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-tertiary">Priem. obchod</p>
               <TrendingUp className="h-3 w-3 md:h-4 md:w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent className="p-4 pt-3">
-              <div className="text-2xl font-semibold leading-tight tracking-tight truncate" data-testid="text-options-avg">
+              <div className="text-[22px] font-bold leading-[26px] tracking-[-0.33px] truncate" data-testid="text-options-avg">
                 {formatUSD(parseFloat(stats.avgWin))}
               </div>
               <p className="text-xs text-muted-foreground mt-1 truncate">
@@ -382,34 +382,25 @@ function OptionsClassic() {
         <CardHeader className="p-4 pb-2">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
             <CardTitle className="text-sm font-medium">Opčné obchody</CardTitle>
-            <div className="flex gap-1 md:gap-2">
-              <Button
-                variant={filter === "all" ? "default" : "outline"}
-                size="sm"
-                className="text-xs px-2 md:px-3"
-                onClick={() => setFilter("all")}
-                data-testid="button-filter-all"
-              >
-                Všetky
-              </Button>
-              <Button
-                variant={filter === "open" ? "default" : "outline"}
-                size="sm"
-                className="text-xs px-2 md:px-3"
-                onClick={() => setFilter("open")}
-                data-testid="button-filter-open"
-              >
-                Otvorené
-              </Button>
-              <Button
-                variant={filter === "closed" ? "default" : "outline"}
-                size="sm"
-                className="text-xs px-2 md:px-3"
-                onClick={() => setFilter("closed")}
-                data-testid="button-filter-closed"
-              >
-                Uzatvorené
-              </Button>
+            <div role="group" className="inline-flex w-fit items-center rounded-lg border border-border bg-background p-[3px]">
+              {([
+                { value: "all", label: "Všetky" },
+                { value: "open", label: "Otvorené" },
+                { value: "closed", label: "Uzatvorené" },
+              ] as const).map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  aria-pressed={filter === opt.value}
+                  onClick={() => setFilter(opt.value)}
+                  data-testid={`button-filter-${opt.value}`}
+                  className={`h-[26px] rounded-md px-2.5 text-[12px] font-medium leading-4 transition-colors ${
+                    filter === opt.value ? "bg-secondary text-foreground" : "text-tertiary hover:text-foreground"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
             </div>
           </div>
         </CardHeader>
@@ -463,13 +454,13 @@ function OptionsClassic() {
                 return (
                   <div 
                     key={trade.id} 
-                    className="p-3 rounded-lg border bg-card hover-elevate"
+                    className="p-3 md:px-4 md:py-3.5 rounded-lg border bg-card dark:bg-[var(--rd-bg-surface)] hover-elevate"
                     data-testid={`option-trade-${trade.id}`}
                   >
                     <div className="flex flex-col md:flex-row gap-4">
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-1.5 md:gap-2 mb-2">
-                          <span className="font-semibold text-xs">{trade.underlying}</span>
+                          <span className="font-semibold text-xs md:text-[13px]">{trade.underlying}</span>
                           {getDirectionBadge(trade.direction, trade.optionType)}
                           {getStatusBadge(trade.status)}
                           <Badge
@@ -484,14 +475,14 @@ function OptionsClassic() {
                           <div className="flex items-center gap-1.5">
                             <DollarSign className="h-4 w-4 text-muted-foreground" />
                             <div>
-                              <div className="text-muted-foreground text-[10px]">Strike</div>
+                              <div className="text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-tertiary">Strike</div>
                               <div className="font-medium">{formatUSD(parseFloat(trade.strikePrice))}</div>
                             </div>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <Calendar className="h-4 w-4 text-muted-foreground" />
                             <div>
-                              <div className="text-muted-foreground text-[10px]">Expirácia</div>
+                              <div className="text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-tertiary">Expirácia</div>
                               <div className="font-medium">
                                 {format(new Date(trade.expirationDate), "d.M.yyyy", { locale: sk })}
                                 {trade.status === "OPEN" && (
@@ -505,14 +496,14 @@ function OptionsClassic() {
                           <div className="flex items-center gap-1.5">
                             <Hash className="h-4 w-4 text-muted-foreground" />
                             <div>
-                              <div className="text-muted-foreground text-[10px]">Kontrakty</div>
+                              <div className="text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-tertiary">Kontrakty</div>
                               <div className="font-medium">{trade.contracts}</div>
                             </div>
                           </div>
                           <div className="flex items-center gap-1.5">
                             <TrendingUp className="h-4 w-4 text-muted-foreground" />
                             <div>
-                              <div className="text-muted-foreground text-[10px]">Prémia</div>
+                              <div className="text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-tertiary">Prémia</div>
                               <div className="font-medium">
                                 ${parseFloat(trade.premium).toFixed(2)}/akcia
                                 <span className="text-muted-foreground text-xs ml-1">({formatUSD(totalPremium)})</span>

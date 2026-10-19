@@ -14,7 +14,7 @@ import {
   subMonths,
 } from "date-fns";
 import { sk } from "date-fns/locale";
-import { CalendarClock, ChevronLeft, ChevronRight, ExternalLink, Moon, Sun, CalendarPlus } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, ExternalLink, Moon, Sun, CalendarPlus } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -280,37 +280,57 @@ function EventsCalendarClassic() {
     return <Badge className="bg-orange-600 hover:bg-orange-600">Macro</Badge>;
   };
 
+  const eventChipClass = (type: EventType) =>
+    type === "earnings"
+      ? "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:border-[var(--rd-accent-earnings-border)] dark:bg-[var(--rd-accent-earnings-surface)] dark:!text-[var(--rd-accent-earnings)]"
+      : type === "dividend"
+        ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:border-[var(--rd-accent-position-border)] dark:bg-[var(--rd-accent-position-surface)] dark:!text-[var(--rd-accent-position)]"
+        : "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:border-[var(--rd-accent-event-border)] dark:bg-[var(--rd-accent-event-surface)] dark:!text-[var(--rd-accent-event)]";
+
+  const filterChips: Array<{ type: EventType; letter: string; label: string; active: boolean; toggle: () => void }> = [
+    { type: "earnings", letter: "E", label: "Earnings", active: showEarnings, toggle: () => setShowEarnings((v) => !v) },
+    { type: "dividend", letter: "D", label: "Dividends", active: showDividends, toggle: () => setShowDividends((v) => !v) },
+    { type: "macro", letter: "M", label: "Macro", active: showMacro, toggle: () => setShowMacro((v) => !v) },
+  ];
+
   return (
-    <div className="flex flex-col gap-3 md:gap-6 pb-6 md:pb-8">
+    <div className="flex flex-col gap-3 pb-6 md:pb-8">
       <div>
-        <h1 className="text-lg font-semibold flex items-center gap-2 flex-wrap">
-          <CalendarClock className="h-5 w-5 sm:h-6 sm:w-6 text-primary shrink-0" />
-          Trhovy kalendar
-          <HelpTip title="Interaktivny kalendar udalosti">
-            <p>Earnings, dividend events a macro data na jednom mieste. Kliknite na den pre detail.</p>
+        <p className="text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-tertiary">
+          {isAllPortfolios ? "Všetky portfóliá" : `Portfólio: ${selectedPortfolio?.name ?? "Vybrané"}`}
+        </p>
+        <h1 className="mt-1 text-lg font-semibold flex items-center gap-2 flex-wrap">
+          Trhový kalendár
+          <HelpTip title="Interaktívny kalendár udalostí">
+            <p>Earnings, dividend events a macro data na jednom mieste. Kliknite na deň pre detail.</p>
           </HelpTip>
         </h1>
-        <p className="text-xs text-muted-foreground mt-1">
-          {isAllPortfolios ? "Vsetky portfolia" : `Portfolio: ${selectedPortfolio?.name ?? "Vybrane"}`}
-        </p>
       </div>
 
       <Card>
-        <CardHeader className="p-4 pb-2">
-          <CardTitle className="text-sm font-medium">Filtre udalosti</CardTitle>
-          <CardDescription>Vyberte, ktore typy udalosti sa maju zobrazovat v kalendari.</CardDescription>
-        </CardHeader>
-        <CardContent className="p-4 pt-3 space-y-3">
+        <CardContent className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 space-y-0.5">
+            <CardTitle className="text-sm font-medium">Filtre udalostí</CardTitle>
+            <CardDescription>Vyberte, ktoré typy udalostí sa majú zobrazovať v kalendári.</CardDescription>
+          </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant={showEarnings ? "default" : "outline"} size="sm" onClick={() => setShowEarnings((v) => !v)}>
-              <span className="mr-1">E</span> Earnings
-            </Button>
-            <Button variant={showDividends ? "default" : "outline"} size="sm" onClick={() => setShowDividends((v) => !v)}>
-              <span className="mr-1">D</span> Dividends
-            </Button>
-            <Button variant={showMacro ? "default" : "outline"} size="sm" onClick={() => setShowMacro((v) => !v)}>
-              <span className="mr-1">M</span> Macro
-            </Button>
+            {filterChips.map((chip) => (
+              <Button
+                key={chip.type}
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-pressed={chip.active}
+                onClick={chip.toggle}
+                className={`h-8 gap-2 pl-1.5 pr-2.5 text-[12px] font-medium ${chip.active ? "" : "opacity-60"}`}
+              >
+                <span className={`inline-flex size-5 items-center justify-center rounded-md border text-[10px] font-semibold ${eventChipClass(chip.type)}`}>
+                  {chip.letter}
+                </span>
+                {chip.label}
+                {chip.active ? <Check className="h-3.5 w-3.5 text-muted-foreground" /> : null}
+              </Button>
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -319,17 +339,17 @@ function EventsCalendarClassic() {
         <CardHeader className="p-4 pb-2">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle className="text-sm font-medium">Kalendar udalosti</CardTitle>
-              <CardDescription>Klikni na den pre detail udalosti.</CardDescription>
+              <CardTitle className="text-sm font-medium">Kalendár udalostí</CardTitle>
+              <CardDescription>Klikni na deň pre detail udalostí.</CardDescription>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" onClick={() => setCalendarMonth((m) => subMonths(m, 1))} aria-label="Predchadzajuci mesiac">
+              <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setCalendarMonth((m) => subMonths(m, 1))} aria-label="Predchadzajuci mesiac">
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <span className="min-w-[11rem] text-center text-sm font-medium capitalize">
+              <span className="min-w-[7.5rem] text-center text-[13px] font-semibold capitalize">
                 {format(calendarMonth, "LLLL yyyy", { locale: sk })}
               </span>
-              <Button variant="outline" size="icon" onClick={() => setCalendarMonth((m) => addMonths(m, 1))} aria-label="Nasledujuci mesiac">
+              <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setCalendarMonth((m) => addMonths(m, 1))} aria-label="Nasledujuci mesiac">
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
@@ -339,15 +359,15 @@ function EventsCalendarClassic() {
           {loading ? (
             <Skeleton className="h-[420px] w-full" />
           ) : (
-            <div className="rounded-lg border overflow-hidden touch-manipulation">
-              <div className="grid grid-cols-7 gap-px bg-border">
-                {["Po", "Ut", "St", "St", "Pi", "So", "Ne"].map((d, idx) => (
-                  <div key={`${d}-${idx}`} className="bg-muted/50 px-0.5 py-1.5 sm:py-2 text-center text-[10px] sm:text-xs font-medium text-muted-foreground">
+            <div className="touch-manipulation">
+              <div className="grid grid-cols-7 gap-1.5">
+                {["Po", "Ut", "St", "Št", "Pi", "So", "Ne"].map((d, idx) => (
+                  <div key={`${d}-${idx}`} className="px-1 pb-1.5 text-left text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-tertiary">
                     {d}
                   </div>
                 ))}
               </div>
-              <div className="grid grid-cols-7 gap-px bg-border">
+              <div className="grid grid-cols-7 gap-1.5">
                 {calendarDays.map((day) => {
                   const dayIso = format(startOfDay(day), "yyyy-MM-dd");
                   const items = eventsByDay.get(dayIso) ?? [];
@@ -357,38 +377,27 @@ function EventsCalendarClassic() {
                       key={dayIso}
                       type="button"
                       onClick={() => openDay(day)}
-                      className={`w-full min-h-[4.25rem] sm:min-h-[5rem] p-1 sm:p-1.5 flex flex-col items-stretch text-left bg-card active:bg-muted/60 transition-colors ${!inMonth ? "opacity-40" : ""} ${isToday(day) ? "ring-1 ring-inset ring-primary/50 z-[1]" : ""}`}
+                      className={`w-full min-h-[4.25rem] sm:min-h-[4.75rem] p-1 sm:p-1.5 flex flex-col items-stretch text-left rounded-lg border bg-card dark:bg-[var(--rd-bg-surface)] hover:bg-muted/60 active:bg-muted/60 transition-colors ${!inMonth ? "opacity-40" : ""} ${isToday(day) ? "border-amber-400 dark:border-[var(--rd-warning)]" : "border-border"}`}
                     >
-                      <span className={`text-[11px] sm:text-xs font-medium leading-none ${inMonth ? "text-foreground" : "text-muted-foreground"}`}>
+                      <span className={`px-0.5 text-[11px] font-medium leading-[14px] ${inMonth ? "text-foreground" : "text-muted-foreground"}`}>
                         {format(day, "d")}
                       </span>
-                      <div className="mt-1 flex items-center gap-1 flex-wrap min-h-[1rem]">
-                        {items.slice(0, 3).map((ev, idx) => {
-                          if (ev.ticker) {
-                            return (
-                              <span
-                                key={`${dayIso}-${ev.type}-${ev.title}-${idx}`}
-                                title={ev.title}
-                                className={`-ml-1 first:ml-0 ring-2 rounded-full bg-card shrink-0 ${
-                                  ev.type === "dividend" ? "ring-green-400/70" : "ring-card"
-                                }`}
-                              >
-                                <CompanyLogo ticker={ev.ticker} companyName={ev.subtitle} size="xs" />
-                              </span>
-                            );
-                          }
-                          return (
-                            <span key={`${dayIso}-${ev.type}-${ev.title}-${idx}`} title={ev.title}>
-                              {macroBadge(ev.title)}
-                            </span>
-                          );
-                        })}
+                      <div className="mt-1 flex min-w-0 flex-col gap-1">
+                        {items.slice(0, 2).map((ev, idx) => (
+                          <span
+                            key={`${dayIso}-${ev.type}-${ev.title}-${idx}`}
+                            title={ev.title}
+                            className={`truncate rounded-[4px] border px-1.5 py-px text-[10px] font-medium leading-[14px] ${eventChipClass(ev.type)}`}
+                          >
+                            {ev.ticker ?? ev.title}
+                          </span>
+                        ))}
+                        {items.length > 2 && (
+                          <span className="px-1 text-[10px] font-medium leading-3 text-muted-foreground">
+                            +{items.length - 2}
+                          </span>
+                        )}
                       </div>
-                      {items.length > 0 && (
-                        <span className="mt-auto text-[9px] sm:text-[11px] font-semibold text-muted-foreground">
-                          {items.length} events
-                        </span>
-                      )}
                     </button>
                   );
                 })}

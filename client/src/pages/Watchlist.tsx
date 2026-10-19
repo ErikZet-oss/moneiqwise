@@ -17,10 +17,10 @@ import {
   arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
+  rectSortingStrategy,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import {
-  Eye,
   ExternalLink,
   LayoutList,
   Loader2,
@@ -41,7 +41,6 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import {
   Sheet,
   SheetContent,
@@ -502,63 +501,65 @@ function WatchlistClassic() {
   const showSearchResults = debouncedSearch.length >= 1 && search.trim().length >= 1;
 
   return (
-    <div className="flex flex-col gap-3 md:gap-6 pb-6 md:pb-8">
+    <div className="flex flex-col gap-3 pb-6 md:pb-8">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-lg font-semibold flex items-center gap-2 flex-wrap">
-            <Eye className="h-5 w-5 sm:h-6 sm:w-6 text-primary shrink-0" />
+          <p className="text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-tertiary">
+            Sledované akcie
+          </p>
+          <h1 className="mt-1 text-lg font-semibold flex items-center gap-2 flex-wrap">
             Watchlist
           </h1>
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-[13px] leading-[18px] text-muted-foreground mt-1">
             Sledované akcie s metrikami, cieľovou cenou a poznámkami
           </p>
         </div>
-        <div className="shrink-0 flex flex-col items-end gap-1.5">
+        <div className="shrink-0 flex flex-wrap items-center justify-end gap-2">
           <div
-            className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2 py-1.5 text-[10px] text-muted-foreground"
+            role="group"
+            className="inline-flex items-center rounded-lg border border-border bg-background p-[3px]"
             aria-label="Mena zobrazenia cien"
           >
-            <span className={cn("font-medium tabular-nums", displayCurrency === "USD" && "text-foreground")}>
-              USD
-            </span>
-            <Switch
-              checked={displayCurrency === "EUR"}
-              onCheckedChange={(checked) =>
-                setWatchlistDisplayCurrency(checked ? "EUR" : "USD")
-              }
-              className="scale-[0.72] origin-center"
-              aria-label={displayCurrency === "EUR" ? "Prepnúť na USD" : "Prepnúť na EUR"}
-            />
-            <span className={cn("font-medium tabular-nums", displayCurrency === "EUR" && "text-foreground")}>
-              EUR
-            </span>
+            {(["USD", "EUR"] as const).map((ccy) => (
+              <button
+                key={ccy}
+                type="button"
+                aria-pressed={displayCurrency === ccy}
+                onClick={() => setWatchlistDisplayCurrency(ccy)}
+                className={cn(
+                  "h-[26px] rounded-md px-2.5 text-[12px] font-medium leading-4 tabular-nums transition-colors",
+                  displayCurrency === ccy
+                    ? "bg-secondary text-foreground"
+                    : "text-tertiary hover:text-foreground",
+                )}
+              >
+                {ccy}
+              </button>
+            ))}
           </div>
           <div
-            className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2 py-1.5 text-muted-foreground"
+            role="group"
+            className="inline-flex items-center rounded-lg border border-border bg-background p-[3px]"
             aria-label="Režim zobrazenia watchlistu"
           >
-            <LayoutList
-              className={cn(
-                "h-3.5 w-3.5 shrink-0",
-                viewMode === "classic" ? "text-foreground" : "text-muted-foreground/60",
-              )}
-              aria-hidden
-            />
-            <Switch
-              checked={viewMode === "simple"}
-              onCheckedChange={(checked) =>
-                setWatchlistViewMode(checked ? "simple" : "classic")
-              }
-              className="scale-[0.72] origin-center"
-              aria-label={viewMode === "simple" ? "Prepnúť na detailné zobrazenie" : "Prepnúť na kompaktné zobrazenie"}
-            />
-            <Rows2
-              className={cn(
-                "h-3.5 w-3.5 shrink-0",
-                viewMode === "simple" ? "text-foreground" : "text-muted-foreground/60",
-              )}
-              aria-hidden
-            />
+            {([
+              { mode: "classic", Icon: LayoutList, label: "Detailné zobrazenie" },
+              { mode: "simple", Icon: Rows2, label: "Kompaktné zobrazenie" },
+            ] as const).map(({ mode, Icon, label }) => (
+              <button
+                key={mode}
+                type="button"
+                aria-pressed={viewMode === mode}
+                aria-label={label}
+                onClick={() => setWatchlistViewMode(mode)}
+                className={cn(
+                  "inline-flex h-[26px] w-8 items-center justify-center rounded-md transition-colors",
+                  viewMode === mode ? "bg-secondary text-foreground" : "text-tertiary hover:text-foreground",
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" aria-hidden />
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -569,7 +570,7 @@ function WatchlistClassic() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Hľadať ticker alebo názov firmy…"
-          className="h-9 pl-8 text-xs"
+          className="h-9 pl-8 text-xs md:h-10 md:pl-9 md:text-[13px] md:font-normal"
         />
         {showSearchResults && (
           <Card className="absolute z-20 mt-1 w-full shadow-lg">
@@ -685,9 +686,9 @@ function WatchlistClassic() {
           >
             <SortableContext
               items={filteredItems.map((item) => item.id)}
-              strategy={verticalListSortingStrategy}
+              strategy={viewMode === "classic" ? rectSortingStrategy : verticalListSortingStrategy}
             >
-              <div className="flex flex-col gap-1.5">
+              <div className={cn("flex flex-col gap-1.5", viewMode === "classic" && "md:grid md:grid-cols-2 md:gap-3 xl:grid-cols-3")}>
                 {filteredItems.map((item) => {
             const quote = quotes[item.ticker];
             const divYield =
@@ -727,7 +728,7 @@ function WatchlistClassic() {
                     )}
                   />
                 )}
-                <CardContent className={cn("relative p-2", viewMode === "classic" && "space-y-1")}>
+                <CardContent className={cn("relative p-2", viewMode === "classic" && "space-y-1 md:space-y-2 md:p-3")}>
                   {viewMode === "simple" ? (
                     <div
                       className="cursor-pointer active:bg-muted/30 rounded-md -mx-1 px-1"
@@ -743,8 +744,8 @@ function WatchlistClassic() {
                           size="xs"
                         />
                         <div className="min-w-0 flex-1 leading-tight">
-                          <span className="text-xs font-semibold">{item.ticker}</span>
-                          <p className="truncate text-[9px] text-muted-foreground">
+                          <span className="text-xs font-semibold md:text-[13px]">{item.ticker}</span>
+                          <p className="truncate text-[9px] text-muted-foreground md:text-[11px] md:leading-[14px]">
                             {item.companyName || item.ticker}
                           </p>
                         </div>
@@ -755,7 +756,7 @@ function WatchlistClassic() {
                             <>
                               {usSessionState === "LIVE" && Number.isFinite(quote.changePercent) ? (
                                 <span
-                                  className={`text-[10px] font-medium tabular-nums ${getChangeColor(quote.change)}`}
+                                  className={`text-[10px] font-medium tabular-nums md:text-[11px] ${getChangeColor(quote.change)}`}
                                 >
                                   {formatPercent(quote.changePercent)}
                                 </span>
@@ -768,12 +769,12 @@ function WatchlistClassic() {
                                 </span>
                               ) : Number.isFinite(quote.changePercent) ? (
                                 <span
-                                  className={`text-[10px] font-medium tabular-nums ${getChangeColor(quote.change)}`}
+                                  className={`text-[10px] font-medium tabular-nums md:text-[11px] ${getChangeColor(quote.change)}`}
                                 >
                                   {formatPercent(quote.changePercent)}
                                 </span>
                               ) : null}
-                              <span className="text-xs font-semibold tabular-nums">
+                              <span className="text-xs font-semibold tabular-nums md:text-[15px] md:font-bold md:leading-5">
                                 {formatWatchlistCurrency(quote.price, item.ticker)}
                               </span>
                             </>
@@ -808,12 +809,12 @@ function WatchlistClassic() {
                       />
                       <div className="min-w-0 leading-tight">
                         <div className="flex items-center gap-1">
-                          <span className="text-xs font-semibold group-hover:text-primary">
+                          <span className="text-xs font-semibold group-hover:text-primary md:text-[13px] md:leading-[18px]">
                             {item.ticker}
                           </span>
                           <ExternalLink className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                         </div>
-                        <p className="truncate text-[9px] text-muted-foreground">
+                        <p className="truncate text-[9px] text-muted-foreground md:text-[11px] md:leading-[14px]">
                           {item.companyName || item.ticker}
                         </p>
                       </div>
@@ -826,7 +827,7 @@ function WatchlistClassic() {
                         <>
                           {usSessionState === "LIVE" && Number.isFinite(quote.changePercent) ? (
                             <span
-                              className={`text-[10px] font-medium tabular-nums ${getChangeColor(quote.change)}`}
+                              className={`text-[10px] font-medium tabular-nums md:text-[11px] ${getChangeColor(quote.change)}`}
                             >
                               {formatPercent(quote.changePercent)}
                             </span>
@@ -839,12 +840,12 @@ function WatchlistClassic() {
                             </span>
                           ) : Number.isFinite(quote.changePercent) ? (
                             <span
-                              className={`text-[10px] font-medium tabular-nums ${getChangeColor(quote.change)}`}
+                              className={`text-[10px] font-medium tabular-nums md:text-[11px] ${getChangeColor(quote.change)}`}
                             >
                               {formatPercent(quote.changePercent)}
                             </span>
                           ) : null}
-                          <span className="text-xs font-semibold tabular-nums">
+                          <span className="text-xs font-semibold tabular-nums md:text-[15px] md:font-bold md:leading-5">
                             {formatWatchlistCurrency(quote.price, item.ticker)}
                           </span>
                         </>
@@ -872,7 +873,7 @@ function WatchlistClassic() {
                       openInfo(item);
                     }}
                   >
-                  <div className="flex items-end justify-between gap-2 text-[8px] text-muted-foreground leading-tight">
+                  <div className="flex items-end justify-between gap-2 text-[8px] text-muted-foreground leading-tight md:text-[11px] md:leading-[14px]">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 min-w-0 flex-1">
                       <span>
                         P/E{" "}
