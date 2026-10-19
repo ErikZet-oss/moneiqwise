@@ -44,7 +44,7 @@ import MorePage from "@/pages/redesign/MorePage";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { startAuthentication } from "@simplewebauthn/browser";
-import { KeyRound } from "lucide-react";
+import { KeyRound, Lock } from "lucide-react";
 
 type PasskeysPayload = {
   passkeys: Array<{ id: string }>;
@@ -292,29 +292,37 @@ function AppUnlockGate({ children }: { children: ReactNode }) {
       );
     }
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <div className="w-full max-w-md rounded-xl border bg-card p-5 text-center space-y-3">
-          <div className="mx-auto w-fit rounded-full border p-3">
-            <KeyRound className="h-5 w-5 text-primary" />
+      <div className="relative min-h-screen overflow-hidden bg-background flex items-center justify-center px-4">
+        <div
+          className="pointer-events-none absolute left-1/2 top-1/2 hidden h-[720px] w-[900px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(ellipse_at_center,hsl(166_65%_30%_/_0.32),transparent_65%)] dark:block"
+          aria-hidden
+        />
+        <div className="relative w-full max-w-[420px] rounded-2xl border bg-card px-8 py-7 text-center space-y-3 dark:bg-gradient-to-b dark:from-[#1d2126] dark:to-[#16191d]">
+          <p className="text-[18px] font-bold tracking-[-0.03em]">
+            Mone<span className="text-primary">IQ</span>Wise
+          </p>
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/15">
+            <Lock className="h-6 w-6 text-primary" />
           </div>
-          <h2 className="text-base font-semibold">Odomkni aplikáciu</h2>
-          <p className="text-sm text-muted-foreground">
+          <h2 className="text-[18px] font-bold">Odomkni aplikáciu</h2>
+          <p className="text-[13px] text-muted-foreground">
             Pred pokračovaním over svoju identitu cez passkey (odtlačok, Face ID alebo PIN zariadenia).
           </p>
           {unlockError ? (
             <p className="text-xs text-destructive">{unlockError}</p>
           ) : (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[11px] text-tertiary">
               Overenie sa spúšťa automaticky. Ak sa dialóg nezobrazil, použi tlačidlo nižšie.
             </p>
           )}
           <Button
             onClick={() => handleUnlock("manual")}
             disabled={isUnlocking}
-            className="w-full"
+            className="w-full h-10 font-semibold"
             data-testid="button-passkey-unlock"
           >
-            {isUnlocking ? "Overujem..." : "Odomknúť cez passkey"}
+            <KeyRound className="mr-2 h-4 w-4" />
+            {isUnlocking ? "Overujem..." : "Overiť passkey"}
           </Button>
         </div>
       </div>
