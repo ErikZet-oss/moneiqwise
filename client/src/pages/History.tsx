@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { format } from "date-fns";
 import { sk } from "date-fns/locale";
-import { Trash2, Download, Upload, FileDown, AlertTriangle, CheckCircle2, Loader2, Pencil, PlusCircle } from "lucide-react";
+import { Trash2, Download, Upload, FileDown, AlertTriangle, CheckCircle2, Loader2, Pencil, Plus } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useCurrency } from "@/hooks/useCurrency";
@@ -31,7 +31,7 @@ import { AddTransactionForm } from "@/components/AddTransactionForm";
 import { useMobileRedesign } from "@/hooks/useMobileUi";
 import HistoryMobile from "@/pages/redesign/HistoryMobile";
 import { isPokemonPortfolio, isPokemonTicker } from "@shared/pokemonTcg";
-import { formatShareQuantity } from "@/lib/utils";
+import { cn, formatShareQuantity } from "@/lib/utils";
 import {
   buildCloseTradeFallbackPairing,
   isCloseTradeCashRow,
@@ -701,42 +701,21 @@ function HistoryClassic() {
   }
 
   return (
-    <div className="flex flex-col gap-3 md:gap-6">
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <CardTitle className="text-sm font-medium">História transakcií</CardTitle>
-              <CardDescription>
-                <span className="text-foreground font-medium block sm:inline">
+    <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <h1>História transakcií</h1>
+              <p className="mt-1 max-w-3xl text-[13px] leading-[18px] text-muted-foreground">
+                <span className="block sm:inline">
                   {isAllPortfolios
                     ? "Rozsah: všetky viditeľné portfóliá."
                     : `Rozsah: portfólio „${selectedPortfolio?.name ?? "—"}”.`}
                 </span>{" "}
                 Vklady z importu XTB patria do portfólia zvoleného na stránke Import — v bočnom paneli
                 vyber to isté portfólio alebo „Všetky“, a filtre Typ a Akcia nastav na „Všetky“.
-              </CardDescription>
+              </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Dialog open={addTransactionOpen} onOpenChange={setAddTransactionOpen}>
-                <DialogTrigger asChild>
-                  <Button
-                    size="sm"
-                    disabled={portfolios.length === 0}
-                    data-testid="button-add-transaction"
-                  >
-                    <PlusCircle className="h-4 w-4 mr-2" />
-                    Pridať transakciu
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto gap-0 p-4 sm:p-6">
-                  <AddTransactionForm
-                    embed
-                    onSuccessSubmit={() => setAddTransactionOpen(false)}
-                  />
-                </DialogContent>
-              </Dialog>
-
+            <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
               {selectedIds.size > 0 && (
                 <Button
                   variant="destructive"
@@ -748,17 +727,6 @@ function HistoryClassic() {
                   Vymazať ({selectedIds.size})
                 </Button>
               )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleExport}
-                disabled={!transactions || transactions.length === 0}
-                data-testid="button-export-csv"
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Export CSV
-              </Button>
-              
               <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
                 <DialogTrigger asChild>
                   <Button
@@ -891,13 +859,41 @@ function HistoryClassic() {
                   </div>
                 </DialogContent>
               </Dialog>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExport}
+                disabled={!transactions || transactions.length === 0}
+                data-testid="button-export-csv"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export CSV
+              </Button>
+              <Dialog open={addTransactionOpen} onOpenChange={setAddTransactionOpen}>
+                <DialogTrigger asChild>
+                  <Button
+                    size="sm"
+                    disabled={portfolios.length === 0}
+                    data-testid="button-add-transaction"
+                  >
+                    <Plus className="h-4 w-4 mr-1.5" />
+                    Pridať transakciu
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto gap-0 p-4 sm:p-6">
+                  <AddTransactionForm
+                    embed
+                    onSuccessSubmit={() => setAddTransactionOpen(false)}
+                  />
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
-        </CardHeader>
-        <CardContent className="p-4 pt-3 sm:px-6">
-          <div className="flex flex-col gap-3 mb-6 md:flex-row md:flex-wrap md:items-center md:gap-4">
-            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2 md:flex-row">
-              <span className="text-sm text-muted-foreground shrink-0">Typ</span>
+      <Card>
+        <CardContent className="p-4 pt-3.5 sm:px-4">
+          <div className="flex flex-col gap-3 mb-3.5 md:flex-row md:flex-wrap md:items-end md:gap-3">
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[11px] font-medium leading-[14px] text-muted-foreground shrink-0">Typ</span>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
                 <SelectTrigger className="w-full md:w-[160px]" data-testid="select-type-filter">
                   <SelectValue placeholder="Všetky" />
@@ -918,8 +914,8 @@ function HistoryClassic() {
             </div>
 
             {!historyIsPokemon && (
-            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2 md:flex-row">
-              <span className="text-sm text-muted-foreground shrink-0">Akcia</span>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[11px] font-medium leading-[14px] text-muted-foreground shrink-0">Akcia</span>
               <Select value={tickerFilter} onValueChange={setTickerFilter}>
                 <SelectTrigger className="w-full md:w-[160px]" data-testid="select-ticker-filter">
                   <SelectValue placeholder="Všetky" />
@@ -938,8 +934,8 @@ function HistoryClassic() {
 
             {historyIsPokemon && (
               <>
-                <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2 md:flex-row">
-                  <span className="text-sm text-muted-foreground shrink-0">Katalóg</span>
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-medium leading-[14px] text-muted-foreground shrink-0">Katalóg</span>
                   <Select value={catalogFilter} onValueChange={(value) => setCatalogFilter(value as "all" | "cards" | "products")}>
                     <SelectTrigger className="w-full md:w-[160px]" data-testid="select-pokemon-catalog-filter">
                       <SelectValue />
@@ -951,8 +947,8 @@ function HistoryClassic() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2 md:flex-row">
-                  <span className="text-sm text-muted-foreground shrink-0">Hľadať</span>
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-medium leading-[14px] text-muted-foreground shrink-0">Hľadať</span>
                   <Input
                     value={catalogQuery}
                     onChange={(e) => setCatalogQuery(e.target.value)}
@@ -961,8 +957,8 @@ function HistoryClassic() {
                     data-testid="input-pokemon-history-search"
                   />
                 </div>
-                <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2 md:flex-row">
-                  <span className="text-sm text-muted-foreground shrink-0">Sada</span>
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-[11px] font-medium leading-[14px] text-muted-foreground shrink-0">Sada</span>
                   <Input
                     value={setQuery}
                     onChange={(e) => setSetQuery(e.target.value)}
@@ -974,8 +970,9 @@ function HistoryClassic() {
               </>
             )}
 
-            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2 md:flex-row">
-              <span className="text-sm text-muted-foreground shrink-0">Zoradiť</span>
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[11px] font-medium leading-[14px] text-muted-foreground shrink-0">Zoradiť</span>
+              <div className="flex items-center gap-2">
               <Select value={sortField} onValueChange={(v) => setSortField(v as SortField)}>
                 <SelectTrigger className="w-full md:w-[180px]" data-testid="select-sort-field">
                   <SelectValue placeholder="Dátum" />
@@ -1000,7 +997,14 @@ function HistoryClassic() {
               >
                 {sortDirection === "asc" ? "Vzostupne" : "Zostupne"}
               </Button>
+              </div>
             </div>
+
+            {sortedTransactions && sortedTransactions.length > 0 && (
+              <span className="text-[11px] leading-[14px] text-tertiary md:ml-auto md:pb-2.5" data-testid="text-transactions-count">
+                {sortedTransactions.length.toLocaleString("sk-SK")} transakcií
+              </span>
+            )}
 
             {selectedIds.size > 0 && (
               <div className="flex flex-wrap items-center gap-2 md:ml-auto">
@@ -1203,7 +1207,7 @@ function HistoryClassic() {
               </div>
 
               {/* Desktop view - table */}
-              <div className="hidden md:block">
+              <div className="hidden md:block md:-mx-4 border-t border-border">
               <Table>
               <TableHeader>
                 <TableRow>
@@ -1300,13 +1304,13 @@ function HistoryClassic() {
                       <TableCell className="font-mono text-xs text-muted-foreground" data-testid={`text-id-${transaction.id}`}>
                         {transaction.id.slice(0, 8)}...
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
+                      <TableCell className="whitespace-nowrap text-muted-foreground dark:text-foreground dark:font-medium">
                         {formatDate(transaction.transactionDate)}
                       </TableCell>
                       <TableCell>
                         <Badge 
                           variant={transaction.type === "SELL" || transaction.type === "WITHDRAWAL" ? "destructive" : "default"}
-                          className={
+                          className={cn(
                             transaction.type === "BUY" 
                               ? "bg-green-500/20 text-green-600 border-green-500/30" 
                               : transaction.type === "DIVIDEND"
@@ -1315,8 +1319,18 @@ function HistoryClassic() {
                               ? "bg-emerald-500/20 text-emerald-700 border-emerald-500/30"
                               : transaction.type === "WITHDRAWAL"
                               ? "bg-amber-500/20 text-amber-800 border-amber-500/30"
-                              : ""
-                          }
+                              : "",
+                            "dark:border-transparent",
+                            transaction.type === "BUY"
+                              ? "dark:!bg-[var(--rd-info-dim)] dark:!text-[var(--rd-info)]"
+                              : transaction.type === "DIVIDEND"
+                              ? "dark:!bg-[var(--rd-profit-dim)] dark:!text-[var(--rd-profit)]"
+                              : transaction.type === "SELL"
+                              ? "dark:!bg-[var(--rd-warning-dim)] dark:!text-[var(--rd-warning)]"
+                              : transaction.type === "TAX"
+                              ? "dark:!bg-[var(--rd-loss-dim)] dark:!text-[var(--rd-loss)]"
+                              : "dark:!bg-[var(--rd-bg-surface-hover)] dark:!text-[var(--rd-text-secondary)]",
+                          )}
                         >
                           {typeLabel}
                         </Badge>
@@ -1331,9 +1345,9 @@ function HistoryClassic() {
                             size="sm"
                           />
                           <div className="flex flex-col">
-                            <span className="font-medium">{tickerLabel}</span>
+                            <span className="font-semibold">{tickerLabel}</span>
                             {companySub ? (
-                              <span className="text-xs text-muted-foreground">{companySub}</span>
+                              <span className="text-[11px] leading-[14px] text-tertiary">{companySub}</span>
                             ) : null}
                           </div>
                         </div>
@@ -1345,7 +1359,7 @@ function HistoryClassic() {
                       <TableCell className="text-right text-muted-foreground">
                         {commission > 0 ? formatCurrency(commission) : "-"}
                       </TableCell>
-                      <TableCell className="text-right font-medium">
+                      <TableCell className="text-right font-semibold tabular-nums">
                         {formatCurrency(total)}
                       </TableCell>
                       <TableCell className="text-right">
@@ -1385,19 +1399,21 @@ function HistoryClassic() {
                           <Button
                             size="icon"
                             variant="ghost"
+                            className="h-7 w-7"
                             onClick={() => handleEditClick(transaction)}
                             data-testid={`button-edit-transaction-${transaction.id}`}
                           >
-                            <Pencil className="h-4 w-4 text-blue-500" />
+                            <Pencil className="h-3.5 w-3.5 text-blue-500 dark:text-muted-foreground" />
                           </Button>
                           <Button
                             size="icon"
                             variant="ghost"
+                            className="h-7 w-7"
                             onClick={() => deleteMutation.mutate(transaction.id)}
                             disabled={deleteMutation.isPending}
                             data-testid={`button-delete-transaction-${transaction.id}`}
                           >
-                            <Trash2 className="h-4 w-4 text-red-500" />
+                            <Trash2 className="h-3.5 w-3.5 text-red-500" />
                           </Button>
                         </div>
                       </TableCell>
