@@ -1347,7 +1347,7 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
 
   return (
     <div className={cn("space-y-3", !embedded && "mx-auto max-w-3xl pb-8")}>
-      <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
+      <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200 md:px-4 md:py-2.5 md:text-[12px] md:font-semibold dark:border-[var(--rd-warning)] dark:bg-[var(--rd-warning-dim)] dark:!text-[var(--rd-warning)]">
         PAPER TRADING — fiktívne peniaze. Quant stratégia + Claude AI nudge
         (news) + exit rules. Claude sám trade nevytvára.
       </div>
@@ -1910,6 +1910,16 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
         </Card>
       ) : null}
 
+      <div
+        className={cn(
+          "space-y-3",
+          embedded &&
+            !listLoading &&
+            bots.length > 0 &&
+            "xl:grid xl:grid-cols-[300px_minmax(0,1fr)] xl:items-start xl:gap-3 xl:space-y-0",
+        )}
+      >
+      <div className="min-w-0">
       {listLoading ? (
         <Skeleton className="h-24 w-full" />
       ) : bots.length === 0 ? (
@@ -1919,7 +1929,13 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
           </CardContent>
         </Card>
       ) : (
-        <div className="flex gap-1.5 overflow-x-auto pb-1">
+        <div
+          className={cn(
+            "flex gap-1.5 overflow-x-auto pb-1",
+            embedded &&
+              "xl:flex-col xl:gap-2 xl:overflow-visible xl:rounded-xl xl:border xl:border-border xl:bg-card xl:p-3",
+          )}
+        >
           {bots.map((b) => (
             <button
               key={b.id}
@@ -1927,15 +1943,20 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
               onClick={() => setSelectedId(b.id)}
               className={cn(
                 "shrink-0 rounded-lg border px-3 py-2 text-left text-xs transition-colors",
+                embedded &&
+                  "xl:grid xl:w-full xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center xl:gap-x-3 xl:px-3 xl:py-2.5",
                 activeId === b.id
                   ? "border-primary bg-primary/5"
                   : "hover:bg-muted/60",
               )}
             >
-              <div className="font-medium">{b.name}</div>
+              <div className={cn("font-medium", embedded && "xl:col-start-1 xl:text-[13px] xl:font-semibold")}>
+                {b.name}
+              </div>
               <div
                 className={cn(
                   "text-[10px] font-medium tabular-nums",
+                  embedded && "xl:col-start-2 xl:row-span-2 xl:row-start-1 xl:text-[13px] xl:font-semibold",
                   (b.returnPct ?? 0) > 0
                     ? "text-emerald-600 dark:text-emerald-400"
                     : (b.returnPct ?? 0) < 0
@@ -1946,14 +1967,16 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
                 {(b.returnPct ?? 0) > 0 ? "+" : ""}
                 {(b.returnPct ?? 0).toFixed(2)} %
               </div>
-              <div className="text-[10px] text-muted-foreground">
+              <div className={cn("text-[10px] text-muted-foreground", embedded && "xl:col-start-1 xl:text-[11px]")}>
                 {STATUS_LABEL[b.status] ?? b.status} · {money(b.cash, b.currency)}
               </div>
             </button>
           ))}
         </div>
       )}
+      </div>
 
+      <div className="min-w-0">
       {activeId && detailLoading && !detail ? (
         <Skeleton className="h-64 w-full" />
       ) : detail ? (
@@ -2459,6 +2482,8 @@ function AiPaperBotInner({ embedded = false }: { embedded?: boolean }) {
           </Tabs>
         </div>
       ) : null}
+      </div>
+      </div>
     </div>
   );
 }

@@ -3,8 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { sk } from "date-fns/locale";
 import {
-  ArrowRight,
-  Brain,
   ChevronDown,
   ExternalLink,
   Lightbulb,
@@ -193,47 +191,56 @@ function AiMacroAuditClassic() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl space-y-3 pb-8 md:space-y-4">
+    <div className="space-y-3 pb-8">
       <div className="space-y-3 px-0.5">
-        <div className="flex items-center gap-2">
-          <Brain className="h-5 w-5 shrink-0 text-primary" />
-          <h1 className="text-lg font-semibold tracking-tight md:text-xl">
-            AI Macro Audit
-          </h1>
-          <span className="rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-600 dark:text-sky-400">
-            Beta
-          </span>
+        <div className="space-y-1">
+          <p className="text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-tertiary">
+            {pfName}
+          </p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-semibold tracking-tight md:text-xl">
+              AI Macro Audit
+            </h1>
+            <span className="rounded-md bg-violet-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.5px] text-violet-600 dark:bg-[var(--rd-ai-dim)] dark:!text-[var(--rd-ai)]">
+              Beta
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground md:text-[13px]">
+            Makro zdravie portfólia (Fed, inflácia, koncentrácia, správy) a hneď potom
+            konkrétne akcie BUY/SELL/TRIM/HOLD na každú pozíciu. Manuálne, max. 3× denne
+            na portfólio.
+          </p>
         </div>
-        <p className="text-xs text-muted-foreground md:text-sm max-w-xl">
-          Makro zdravie portfólia (Fed, inflácia, koncentrácia, správy) a hneď potom
-          konkrétne akcie BUY/SELL/TRIM/HOLD na každú pozíciu. Manuálne, max. 3× denne
-          na portfólio.
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col gap-3 rounded-xl border border-violet-500/40 bg-violet-500/10 p-3 sm:flex-row sm:items-center md:px-4 dark:border-[var(--rd-ai)] dark:bg-[var(--rd-ai-dim)]">
+          <span className="hidden size-8 shrink-0 items-center justify-center text-violet-600 sm:flex dark:!text-[var(--rd-ai)]">
+            <Sparkles className="h-4 w-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-semibold leading-[18px]">Hĺbková analýza portfólia</p>
+            <p className="text-[11px] leading-[14px] text-muted-foreground tabular-nums">
+              Analýza voči Fedu, inflácii, sektorovej koncentrácii a správam
+              {usage ? ` · Dnes ${usage.used}/${usage.limit} · ${pfName}` : ""}
+            </p>
+          </div>
           <Button
             type="button"
             disabled={!canRun}
             onClick={() => runMutation.mutate()}
-            className="h-10 rounded-lg bg-white px-4 font-semibold text-black hover:bg-white/90 dark:bg-white dark:text-black"
+            className="h-9 shrink-0 gap-1.5 rounded-lg px-4 text-[13px] font-semibold"
             data-testid="button-ai-macro-audit-run"
           >
             {runMutation.isPending ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
                 Makro + akcie…
               </>
             ) : (
               <>
+                <Sparkles className="h-3.5 w-3.5" />
                 Spustiť analýzu
-                <ArrowRight className="ml-2 h-4 w-4" />
               </>
             )}
           </Button>
-          {usage ? (
-            <span className="text-xs text-muted-foreground tabular-nums">
-              Dnes {usage.used}/{usage.limit} · {pfName}
-            </span>
-          ) : null}
         </div>
         {limitReached ? (
           <p className="text-xs text-amber-600 dark:text-amber-400">
@@ -293,10 +300,11 @@ function AiMacroAuditClassic() {
                 </span>
               </CardHeader>
               <CardContent className="px-4 pb-5 pt-1 space-y-3">
+                <div className="space-y-3 md:flex md:items-center md:gap-8 md:space-y-0">
                 <CollapsibleTrigger asChild>
                   <button
                     type="button"
-                    className="group w-full rounded-xl outline-none ring-offset-background transition focus-visible:ring-2 focus-visible:ring-ring"
+                    className="group w-full rounded-xl outline-none ring-offset-background transition focus-visible:ring-2 focus-visible:ring-ring md:w-auto md:shrink-0"
                     data-testid="button-ai-macro-score-expand"
                     aria-expanded={scoreOpen}
                   >
@@ -320,12 +328,13 @@ function AiMacroAuditClassic() {
                     </div>
                   </button>
                 </CollapsibleTrigger>
-                <p className="text-sm text-muted-foreground leading-relaxed text-center max-w-lg mx-auto">
+                <p className="text-sm text-muted-foreground leading-relaxed text-center max-w-lg mx-auto md:mx-0 md:max-w-2xl md:text-left md:text-[13px] md:leading-[19px]">
                   {analysis.summaryOneLiner}
                 </p>
+                </div>
 
                 <CollapsibleContent className="space-y-3 data-[state=open]:animate-in data-[state=closed]:animate-out">
-                  <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div className="grid grid-cols-2 gap-3 pt-1 md:grid-cols-4">
                     {SCORE_FACTOR_META.map((meta) => {
                       const factor = analysis.scoreBreakdown[meta.key];
                       return (
@@ -362,7 +371,7 @@ function AiMacroAuditClassic() {
                 Klikni na panel pre hĺbkový rozbor a návrh riešenia
               </p>
             </CardHeader>
-            <CardContent className="px-4 pb-4 space-y-3">
+            <CardContent className="grid gap-3 px-4 pb-4 md:grid-cols-3 md:items-start">
               {(
                 [
                   {
@@ -543,7 +552,7 @@ function AiMacroAuditClassic() {
                 Klikni na kartu pre detail a odkaz na článok
               </p>
             </CardHeader>
-            <CardContent className="px-4 pb-4 space-y-2">
+            <CardContent className="grid gap-2.5 px-4 pb-4 md:grid-cols-2 xl:grid-cols-3">
               {analysis.newsSentiment.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   Žiadne relevantné správy k holdingom v tomto behu.
@@ -588,7 +597,7 @@ function AiMacroAuditClassic() {
                 Odporúčania AI
               </CardTitle>
             </CardHeader>
-            <CardContent className="px-4 pb-4 space-y-2">
+            <CardContent className="grid gap-2.5 px-4 pb-4 md:grid-cols-2">
               {analysis.recommendations.map((r, i) => (
                 <div
                   key={`${r.title}-${i}`}
