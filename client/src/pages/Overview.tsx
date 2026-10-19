@@ -23,6 +23,8 @@ import {
   RefreshCw,
   HelpCircle,
   Moon,
+  Layers,
+  FileText,
 } from "lucide-react";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio } from "@/hooks/usePortfolio";
@@ -450,7 +452,9 @@ function OverviewClassic() {
   };
 
   const pctBadgeClass = (value: number) =>
-    value >= 0 ? "bg-green-500/20 text-green-500" : "bg-red-500/20 text-red-500";
+    value >= 0
+      ? "bg-green-500/20 text-green-500 dark:bg-[var(--rd-profit-dim)] dark:!text-[var(--rd-profit)]"
+      : "bg-red-500/20 text-red-500 dark:bg-[var(--rd-loss-dim)] dark:!text-[var(--rd-loss)]";
 
   const handleOpen = (id: string) => {
     setSelectedPortfolioId(id);
@@ -664,8 +668,8 @@ function OverviewClassic() {
 
   const renderYtdBadge = (ytdPct: number | null | undefined, testId: string) => (
     <span
-      className={`text-[10px] font-medium tabular-nums shrink-0 ${
-        ytdPct != null ? getChangeTone(ytdPct) : "text-muted-foreground"
+      className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-3 tracking-[0.5px] tabular-nums ${
+        ytdPct != null && ytdPct !== 0 ? pctBadgeClass(ytdPct) : "bg-secondary text-muted-foreground"
       }`}
       data-testid={testId}
       title="YTD výkonnosť"
@@ -685,11 +689,12 @@ function OverviewClassic() {
     const displayedDailyPct = usSessionState === "LIVE" ? m.dailyChangePercent : 0;
 
     return (
-      <div className="space-y-1.5">
+      <div className="space-y-2.5">
+        <div className="space-y-1.5 rounded-lg border border-border bg-muted/30 p-2.5 dark:bg-background">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[10px] text-muted-foreground">Celkový zisk</span>
+          <span className="text-[11px] text-muted-foreground">Celkový zisk</span>
           <span className="inline-flex items-center gap-1.5 min-w-0 justify-end">
-            <span className={`text-xs font-semibold tabular-nums ${getChangeTone(m.totalProfit)}`}>
+            <span className={`text-[13px] font-semibold tabular-nums ${getChangeTone(m.totalProfit)}`}>
               {maskAmount(formatSignedCurrency(m.totalProfit))}
             </span>
             <span
@@ -704,7 +709,7 @@ function OverviewClassic() {
           className="flex items-center justify-between gap-2"
           data-testid={`${opts.idPrefix}-unrealized`}
         >
-          <span className="text-[10px] text-muted-foreground">Nerealizovaný</span>
+          <span className="text-[11px] text-muted-foreground">Nerealizovaný</span>
           <span className={`text-xs font-medium tabular-nums ${getChangeTone(m.unrealizedGain)}`}>
             {maskAmount(formatSignedCurrency(m.unrealizedGain))}
           </span>
@@ -714,15 +719,18 @@ function OverviewClassic() {
           className="flex items-center justify-between gap-2"
           data-testid={`${opts.idPrefix}-realized-gain`}
         >
-          <span className="text-[10px] text-muted-foreground">Realizovaný</span>
+          <span className="text-[11px] text-muted-foreground">Realizovaný</span>
           <span className={`text-xs font-medium tabular-nums ${getChangeTone(m.realizedGain)}`}>
             {maskAmount(formatSignedCurrency(m.realizedGain))}
           </span>
         </div>
+        </div>
+
+        <div className="space-y-1.5 px-0.5">
 
         {usSessionState === "LIVE" ? (
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[10px] text-muted-foreground">Denná zmena</span>
+            <span className="text-[11px] text-muted-foreground">Denná zmena</span>
             {m.hasQuotes ? (
               <span className="inline-flex items-center gap-1.5 min-w-0 justify-end">
                 <span className={`text-xs font-medium tabular-nums ${getChangeTone(displayedDaily)}`}>
@@ -740,7 +748,7 @@ function OverviewClassic() {
           </div>
         ) : showExtendedSession ? (
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1">
+            <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
               <Moon className={`h-2.5 w-2.5 shrink-0 ${PREMARKET_MOON_CLASS}`} />
               {getExtendedSessionLabel(usSessionState)}
             </span>
@@ -764,13 +772,13 @@ function OverviewClassic() {
           </div>
         ) : (
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[10px] text-muted-foreground">Denná zmena</span>
+            <span className="text-[11px] text-muted-foreground">Denná zmena</span>
             <span className="text-xs text-muted-foreground">Trh uzatvorený</span>
           </div>
         )}
 
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1">
+          <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
             Pasívny príjem
             <Tooltip>
               <TooltipTrigger asChild>
@@ -790,11 +798,12 @@ function OverviewClassic() {
             <span className={m.passiveIncome > 0 ? "text-green-500" : "text-muted-foreground"}>
               {formatPercent(m.passiveIncomePercent)}
             </span>
-            <span className="text-[10px] text-muted-foreground">
+            <span className="text-[11px] text-muted-foreground">
               {" "}
               ({maskAmount(formatCurrency(m.passiveIncome))})
             </span>
           </span>
+        </div>
         </div>
       </div>
     );
@@ -809,7 +818,7 @@ function OverviewClassic() {
   }
 
   return (
-    <div className="flex flex-col gap-3 md:gap-5 pb-6 md:pb-0">
+    <div className="flex flex-col gap-3 md:gap-4 pb-6 md:pb-0">
       <div className="min-w-0 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           <h1
@@ -818,7 +827,7 @@ function OverviewClassic() {
           >
             Prehľad portfólií
           </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
+          <p className="text-xs md:text-[13px] text-muted-foreground mt-0.5">
             Rýchly prehľad výkonnosti všetkých vašich portfólií.
           </p>
         </div>
@@ -858,14 +867,16 @@ function OverviewClassic() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           <Card
-            className="md:col-span-2 xl:col-span-3 border-border bg-card shadow-sm"
+            className="!border-primary/60 bg-card shadow-sm"
             data-testid="overview-card-total"
           >
-            <CardContent className="p-3 md:px-4 md:py-4 space-y-2.5">
+            <CardContent className="p-3 md:px-4 md:py-3.5 space-y-2.5">
               <div className="flex items-center justify-between gap-2 min-w-0">
                 <div className="flex items-center gap-2 min-w-0">
-                  <Briefcase className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span className="text-xs font-medium text-muted-foreground truncate">
+                  <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary">
+                    <Layers className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="text-[15px] font-semibold leading-5 truncate text-foreground">
                     {summaryTitle}
                   </span>
                 </div>
@@ -901,12 +912,12 @@ function OverviewClassic() {
                 <>
                   <div>
                     <div
-                      className="text-xl md:text-2xl font-semibold leading-tight tracking-tight tabular-nums"
+                      className="text-xl md:text-[22px] md:leading-[26px] font-bold leading-tight tracking-[-0.33px] tabular-nums"
                       data-testid="text-overview-grand-total"
                     >
                       {maskAmount(formatCurrency(aggregatedMetrics.totalValue))}
                     </div>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs md:text-[11px] text-muted-foreground md:text-tertiary">
                       <span>
                         Investované: {maskAmount(formatCurrency(aggregatedMetrics.totalInvested))}
                       </span>
@@ -954,15 +965,17 @@ function OverviewClassic() {
                 }}
                 data-testid={`overview-card-${portfolio.id}`}
               >
-                <CardContent className="p-3 md:px-4 md:py-4 space-y-2.5">
+                <CardContent className="p-3 md:px-4 md:py-3.5 space-y-2.5">
                   <div className="flex items-center justify-between gap-2 min-w-0">
                     <div className="flex items-center gap-2 min-w-0">
                       {portfolio.brokerCode ? (
                         <BrokerLogo brokerCode={portfolio.brokerCode} size="xs" />
                       ) : (
-                        <Briefcase className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-secondary text-[10px] font-semibold uppercase text-muted-foreground">
+                          {portfolio.name.trim().charAt(0) || <Briefcase className="h-3.5 w-3.5" />}
+                        </span>
                       )}
-                      <span className="text-sm font-semibold truncate text-foreground">
+                      <span className="text-sm md:text-[15px] md:leading-5 font-semibold truncate text-foreground">
                         {portfolio.name}
                       </span>
                     </div>
@@ -997,12 +1010,12 @@ function OverviewClassic() {
                   ) : (
                     <div>
                       <div
-                        className="text-xl md:text-2xl font-semibold leading-tight tracking-tight tabular-nums"
+                        className="text-xl md:text-[22px] md:leading-[26px] font-bold leading-tight tracking-[-0.33px] tabular-nums"
                         data-testid={`overview-value-${portfolio.id}`}
                       >
                         {maskAmount(formatCurrency(m.totalValue))}
                       </div>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs md:text-[11px] text-muted-foreground md:text-tertiary">
                         <span>
                           Investované: {maskAmount(formatCurrency(m.totalInvested))}
                         </span>
@@ -1023,9 +1036,10 @@ function OverviewClassic() {
                       idPrefix: `overview-${portfolio.id}`,
                     })
                   ) : (
-                    <p className="text-xs text-muted-foreground">
+                    <div className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-4 text-center text-[11px] text-muted-foreground">
+                      <FileText className="h-4 w-4" />
                       V tomto portfóliu zatiaľ nie sú žiadne transakcie.
-                    </p>
+                    </div>
                   )}
                 </CardContent>
               </Card>

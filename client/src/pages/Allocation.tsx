@@ -7,9 +7,8 @@ import {
   ResponsiveContainer,
   Sector,
 } from "recharts";
-import { PieChartIcon } from "lucide-react";
+import { Check } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -456,37 +455,45 @@ function AllocationClassic() {
     cashValueConv <= 0;
 
   return (
-    <div className="flex flex-col gap-3 md:gap-5 pb-10">
+    <div className="flex flex-col gap-3 pb-10">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between min-w-0">
         <div className="min-w-0">
           <h1 className="text-lg md:text-xl font-semibold text-foreground flex items-center gap-2 truncate">
-            <PieChartIcon className="h-5 w-5 md:h-6 md:w-6 text-primary shrink-0" />
             Rozloženie portfólia
           </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
+          <p className="text-xs md:text-[13px] text-muted-foreground mt-0.5">
             Podľa tickerov, sektorov, krajín a typu aktíva. Sektor/krajina/typ vieš manuálne prepísať
             nižšie pre presnejšie koláče.
           </p>
         </div>
-        <ToggleGroup
-          type="single"
-          value={displayMode}
-          onValueChange={(v) => {
-            if (v === "percent" || v === "value") setDisplayMode(v);
-          }}
-          className="justify-start shrink-0"
+        <div
+          role="group"
+          aria-label="Zobrazenie"
+          className="inline-flex shrink-0 items-center self-start rounded-lg border border-border bg-background p-[3px] sm:self-auto"
         >
-          <ToggleGroupItem value="percent" aria-label="Percentá" className="text-xs">
-            Percentá
-          </ToggleGroupItem>
-          <ToggleGroupItem value="value" aria-label="Hodnoty" className="text-xs">
-            Hodnoty ({currency})
-          </ToggleGroupItem>
-        </ToggleGroup>
+          {([
+            ["percent", "Percentá"],
+            ["value", `Hodnoty (${currency})`],
+          ] as const).map(([mode, label]) => (
+            <button
+              key={mode}
+              type="button"
+              aria-pressed={displayMode === mode}
+              aria-label={mode === "percent" ? "Percentá" : "Hodnoty"}
+              onClick={() => setDisplayMode(mode)}
+              className={cn(
+                "h-[26px] rounded-md px-2.5 text-[12px] font-medium transition-colors",
+                displayMode === mode ? "bg-secondary text-foreground" : "text-tertiary hover:text-foreground",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {loading ? (
-        <div className="grid gap-3 md:gap-5 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2">
           {[1, 2, 3, 4].map((i) => (
             <Card key={i} className="border-border bg-card shadow-sm">
               <CardHeader className="px-3 py-2.5 md:px-4 md:py-3">
@@ -506,10 +513,10 @@ function AllocationClassic() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-3 md:gap-5 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2">
           <AllocationPieCard
             chartId="ticker"
-            title="Podľa akcií"
+            title="Podľa tickerov"
             description="Každý ticker + hotovosť"
             data={byTicker}
             total={totalMarket}
@@ -543,7 +550,7 @@ function AllocationClassic() {
           />
           <AllocationPieCard
             chartId="type"
-            title="Podľa typu"
+            title="Podľa typu aktíva"
             description="Akcia, ETF, krypto…"
             data={byType}
             total={totalMarket}
@@ -555,36 +562,52 @@ function AllocationClassic() {
         </div>
       )}
 
-      <Card className="border-border bg-card shadow-sm">
-        <CardHeader className="px-3 py-2.5 md:px-4 md:py-3 space-y-1">
-          <CardTitle className="text-sm md:text-base font-semibold">Manuálne metadáta aktív</CardTitle>
-          <CardDescription className="text-xs">
-            Prepíše sektor, krajinu a typ z Yahoo pre vybraný ticker (necháš prázdne = použije sa Yahoo).
-          </CardDescription>
+      <Card className="overflow-hidden border-border bg-card shadow-sm">
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 px-3 py-2.5 md:px-4 md:pt-3.5 md:pb-3">
+          <div className="min-w-0 space-y-1">
+            <CardTitle className="text-sm md:text-base font-semibold">Manuálne metadáta aktív</CardTitle>
+            <CardDescription className="text-xs">
+              Prepíše sektor, krajinu a typ z Yahoo pre vybraný ticker (necháš prázdne = použije sa Yahoo).
+            </CardDescription>
+          </div>
+          {!(metadataLoading && equityTickers.length > 0) && equityTickers.length > 0 && (
+            <Button
+              size="sm"
+              className="h-8 shrink-0 gap-1.5 text-[12px] font-semibold"
+              disabled={saveMetadataMutation.isPending}
+              onClick={() => saveMetadataMutation.mutate(editorRows)}
+            >
+              <Check className="h-3.5 w-3.5" />
+              Uložiť všetko
+            </Button>
+          )}
         </CardHeader>
-        <CardContent className="space-y-3 px-3 pb-3 pt-0 md:px-4 md:pb-4">
+        <CardContent className="px-3 pb-3 pt-0 md:p-0">
           {metadataLoading && equityTickers.length > 0 ? (
-            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full md:mx-4 md:mb-4 md:w-auto" />
           ) : equityTickers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Žiadne otvorené tickery na úpravu.</p>
+            <p className="text-sm text-muted-foreground md:px-4 md:pb-4">Žiadne otvorené tickery na úpravu.</p>
           ) : (
-            <div className="space-y-2">
-              <div className="flex justify-end">
-                <Button
-                  disabled={saveMetadataMutation.isPending}
-                  onClick={() => saveMetadataMutation.mutate(editorRows)}
-                >
-                  Uložiť všetko
-                </Button>
+            <div className="space-y-2 md:space-y-0 md:border-t md:border-border">
+              <div className="hidden shadcn-thead sm:grid sm:grid-cols-[180px_1fr_1fr_170px] sm:gap-2 md:px-4 md:py-2 text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-tertiary">
+                <span>Ticker</span>
+                <span>Sektor</span>
+                <span>Krajina</span>
+                <span>Typ</span>
               </div>
               {equityTickers.map((ticker) => {
                 const row = editorRows[ticker] ?? { sector: "", country: "", assetType: "" };
                 return (
                   <div
                     key={ticker}
-                    className="grid gap-2 rounded-lg border border-border/70 p-2.5 md:p-3 sm:grid-cols-[120px_1fr_1fr_170px] sm:items-center"
+                    className="grid gap-2 rounded-lg border border-border/70 p-2.5 sm:grid-cols-[180px_1fr_1fr_170px] sm:items-center md:rounded-none md:border-0 md:border-b md:border-border md:px-4 md:py-1.5 md:last:border-b-0 md:[&_button[role=combobox]]:h-8 md:[&_button[role=combobox]]:text-[12px]"
                   >
-                    <div className="font-medium text-sm">{ticker}</div>
+                    <div className="flex min-w-0 items-center gap-2 text-sm font-semibold md:text-[13px]">
+                      <span className="hidden size-6 shrink-0 items-center justify-center rounded-md bg-secondary text-[9px] font-semibold text-muted-foreground md:inline-flex">
+                        {ticker.slice(0, 2)}
+                      </span>
+                      <span className="truncate">{ticker}</span>
+                    </div>
                     <Select
                       value={row.sector || "none"}
                       onValueChange={(v) =>
@@ -719,18 +742,18 @@ function AllocationPieCard({
 
   return (
     <Card className="flex flex-col overflow-hidden border-border bg-card shadow-sm">
-      <CardHeader className="px-3 py-2.5 md:px-4 md:py-3 space-y-0.5">
+      <CardHeader className="px-3 py-2.5 md:px-4 md:pt-3.5 md:pb-2 space-y-0.5">
         <CardTitle className="text-xs font-medium text-muted-foreground">{title}</CardTitle>
-        <CardDescription className="text-[11px] md:text-xs leading-snug">{description}</CardDescription>
+        <CardDescription className="text-[11px] md:sr-only leading-snug">{description}</CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-2.5 px-3 pb-3 pt-0 md:px-4 md:pb-4">
+      <CardContent className="flex flex-col gap-2.5 px-3 pb-3 pt-0 md:flex-row md:items-center md:gap-5 md:px-4 md:pb-4">
         {chartData.length === 0 ? (
-          <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
+          <div className="flex h-[200px] w-full items-center justify-center text-sm text-muted-foreground md:h-[170px]">
             Nedostatok dát
           </div>
         ) : (
           <>
-            <div className="relative mx-auto h-[200px] w-[200px] md:h-[220px] md:w-[220px] shrink-0">
+            <div className="relative mx-auto h-[200px] w-[200px] md:mx-0 md:h-[170px] md:w-[170px] shrink-0">
               {!chartReady ? (
                 <div className="h-full w-full rounded-full bg-muted/30 animate-pulse" />
               ) : (
@@ -757,8 +780,8 @@ function AllocationPieCard({
                       nameKey="name"
                       cx="50%"
                       cy="50%"
-                      innerRadius="56%"
-                      outerRadius="92%"
+                      innerRadius="68%"
+                      outerRadius="94%"
                       paddingAngle={2}
                       cornerRadius={4}
                       stroke="transparent"
@@ -815,6 +838,7 @@ function AllocationPieCard({
               </div>
             </div>
 
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
             <ul className="space-y-0.5" data-testid={`list-allocation-legend-${chartId}`}>
               {visibleLegendSlices.map((slice, i) => {
                 const pct = total > 0 ? (slice.value / total) * 100 : 0;
@@ -822,7 +846,7 @@ function AllocationPieCard({
                 const valueLabel =
                   displayMode === "value"
                     ? mask(formatCurrency(slice.value))
-                    : `${pct.toFixed(0)}%`;
+                    : `${pct.toFixed(1)}%`;
                 return (
                   <li key={`${slice.name}-${i}`}>
                     <button
@@ -837,13 +861,13 @@ function AllocationPieCard({
                       onClick={() => selectSlice(i)}
                     >
                       <span
-                        className="h-2 w-2 shrink-0 rounded-sm shadow-[0_0_6px_currentColor]"
+                        className="h-2 w-2 shrink-0 rounded-full md:mr-1"
                         style={{ backgroundColor: slice.fill, color: slice.fill }}
                       />
-                      <span className="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight">
+                      <span className="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight md:text-[12px] md:font-normal md:text-muted-foreground">
                         {slice.name}
                       </span>
-                      <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                      <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground md:text-[12px] md:font-semibold md:text-foreground">
                         {valueLabel}
                       </span>
                     </button>
@@ -862,6 +886,7 @@ function AllocationPieCard({
                   : `+${chartData.length - legendLimit} ďalších`}
               </button>
             )}
+            </div>
           </>
         )}
       </CardContent>

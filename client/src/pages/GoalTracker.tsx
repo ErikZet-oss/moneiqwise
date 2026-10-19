@@ -43,13 +43,13 @@ function statusLabel(status: GoalMonthPoint["status"]): string {
 function tileClass(status: GoalMonthPoint["status"] | null): string {
   switch (status) {
     case "met":
-      return "bg-emerald-100 dark:bg-emerald-900/30 border-emerald-500/40";
+      return "bg-emerald-100 border-emerald-500/40 dark:bg-[var(--rd-profit-dim,rgb(6_78_59/0.3))]";
     case "missed":
-      return "bg-rose-100 dark:bg-rose-900/25 border-rose-500/40";
+      return "bg-rose-100 border-rose-500/40 dark:bg-[var(--rd-loss-dim,rgb(136_19_55/0.25))]";
     case "current":
-      return "bg-amber-100 dark:bg-amber-900/25 border-amber-500/40";
+      return "bg-amber-100 border-amber-500/40 dark:border-[var(--rd-profit,rgb(245_158_11/0.4))] dark:bg-[var(--rd-profit-dim,rgb(120_53_15/0.25))]";
     default:
-      return "bg-slate-100 dark:bg-slate-900";
+      return "bg-slate-100 border-border dark:bg-[var(--rd-bg-surface,#0f172a)]";
   }
 }
 
@@ -85,11 +85,17 @@ function GoalTrackerClassic() {
     goalAmount,
   } = g;
 
+  const tooltipBoxClass = "rounded-lg border border-border bg-popover px-3 py-2.5 text-[11px] leading-4 shadow-lg max-w-[240px]";
+  const goalLineColor = "var(--rd-warning, hsl(142 60% 40%))";
+  const overlineClass = "text-[10px] font-semibold uppercase leading-3 tracking-[0.8px]";
+
   return (
-    <div className="max-w-6xl mx-auto flex flex-col gap-3 md:gap-6 px-3 sm:px-0 pb-4 sm:pb-0">
+    <div className="flex flex-col gap-3 px-3 sm:px-0 pb-4 sm:pb-0">
       <div className="space-y-1">
+        <p className={`${overlineClass} text-tertiary`}>
+          {isAllPortfolios ? "Všetky portfóliá" : `Portfólio: ${selectedPortfolio?.name ?? "Vybrané"}`}
+        </p>
         <h1 className="text-lg font-semibold flex items-center gap-2">
-          <Target className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
           Môj cieľ
           <HelpTip title="Ako funguje sekcia Môj cieľ">
             <p>
@@ -105,14 +111,14 @@ function GoalTrackerClassic() {
             </p>
           </HelpTip>
         </h1>
-        <p className="text-xs text-muted-foreground">
-          {isAllPortfolios ? "Všetky portfóliá" : `Portfólio: ${selectedPortfolio?.name ?? "Vybrané"}`}
-          {g.firstMonthKey
-            ? ` · Sledovanie od ${g.firstMonthKey} (prvá transakcia)`
-            : null}
-        </p>
+        {g.firstMonthKey ? (
+          <p className="text-xs md:text-[13px] text-muted-foreground">
+            Sledovanie od {g.firstMonthKey} (prvá transakcia)
+          </p>
+        ) : null}
       </div>
 
+      <div className="grid gap-3 lg:grid-cols-2 lg:items-stretch">
       <Card>
         <CardHeader className="p-4 pb-2">
           <CardTitle className="text-sm font-medium flex items-center gap-1">
@@ -128,9 +134,9 @@ function GoalTrackerClassic() {
             Nastav cieľ, vklad a výnos. Kalendár a ETA sa prepočítajú z histórie aj z live hodnoty.
           </CardDescription>
         </CardHeader>
-        <CardContent className="p-4 pt-3 grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="space-y-2">
-            <Label htmlFor="goal-initial" className="text-xs sm:text-sm">Počiatočná suma</Label>
+        <CardContent className="p-4 pt-2 grid gap-3 grid-cols-1 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="goal-initial" className="text-xs sm:text-[12px] text-muted-foreground">Počiatočná suma</Label>
             <Input
               id="goal-initial"
               value={
@@ -145,8 +151,8 @@ function GoalTrackerClassic() {
               data-testid="input-goal-initial-amount"
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="goal-target" className="text-xs sm:text-sm">Cieľová suma</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="goal-target" className="text-xs sm:text-[12px] text-muted-foreground">Cieľová suma</Label>
             <Input
               id="goal-target"
               value={goalAmountInput}
@@ -156,8 +162,8 @@ function GoalTrackerClassic() {
               data-testid="input-goal-target-amount"
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="goal-monthly" className="text-xs sm:text-sm">Mesačný vklad</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="goal-monthly" className="text-xs sm:text-[12px] text-muted-foreground">Mesačný vklad</Label>
             <Input
               id="goal-monthly"
               value={monthlyDepositInput}
@@ -167,8 +173,8 @@ function GoalTrackerClassic() {
               data-testid="input-goal-monthly-deposit"
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="goal-return" className="text-xs sm:text-sm">Cieľový úrok (% p.a.)</Label>
+          <div className="space-y-1.5">
+            <Label htmlFor="goal-return" className="text-xs sm:text-[12px] text-muted-foreground">Cieľový úrok (% p.a.)</Label>
             <Input
               id="goal-return"
               value={annualReturnInput}
@@ -178,10 +184,10 @@ function GoalTrackerClassic() {
               data-testid="input-goal-annual-return"
             />
           </div>
-          <div className="sm:col-span-2 lg:col-span-4 rounded-md border p-2.5 sm:p-3">
+          <div className="sm:col-span-2 pt-0.5">
             <div className="flex items-start sm:items-center justify-between gap-3">
               <div className="space-y-0.5 min-w-0">
-                <p className="text-xs sm:text-sm font-medium flex items-center gap-1">
+                <p className="text-xs sm:text-[13px] font-medium flex items-center gap-1">
                   Použiť aktuálnu hodnotu portfólia
                   <HelpTip title="Automatické predvyplnenie počiatočnej sumy">
                     <p>
@@ -190,7 +196,7 @@ function GoalTrackerClassic() {
                     </p>
                   </HelpTip>
                 </p>
-                <p className="text-[11px] sm:text-xs text-muted-foreground">
+                <p className="text-[11px] text-muted-foreground">
                   {latestActualValue != null && Number.isFinite(latestActualValue)
                     ? `Aktuálna hodnota: ${formatCurrency(latestActualValue)}`
                     : "Aktuálna hodnota zatiaľ nie je dostupná."}
@@ -207,7 +213,7 @@ function GoalTrackerClassic() {
       </Card>
 
       <Card>
-        <CardHeader className="p-4 pb-2">
+        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-4 pb-2">
           <CardTitle className="text-sm font-medium flex items-center gap-1">
             Kedy dosiahnem cieľ?
             <HelpTip title="Dve predikcie">
@@ -220,43 +226,48 @@ function GoalTrackerClassic() {
               </p>
             </HelpTip>
           </CardTitle>
+          <Target className="h-4 w-4 shrink-0 text-primary" />
         </CardHeader>
-        <CardContent className="p-4 pt-3 space-y-3">
-          <p className="text-2xl font-semibold leading-tight tracking-tight" data-testid="text-goal-projected-final-value">
+        <CardContent className="p-4 pt-1 space-y-3">
+          <p
+            className="text-2xl md:text-[28px] md:leading-[34px] font-bold leading-tight tracking-tight text-primary tabular-nums"
+            data-testid="text-goal-projected-final-value"
+          >
             {formatCurrency(model.summary.projectedFinalValue)}
           </p>
-          <div className="grid gap-2 sm:grid-cols-2 text-xs sm:text-sm">
-            <div className="rounded-md border p-2.5 space-y-1" data-testid="text-goal-hit-date">
-              <p className="text-[11px] sm:text-xs text-muted-foreground font-medium">Statický plán</p>
-              <p>{model.etaPlan.label}</p>
+          <div className="grid gap-2 sm:grid-cols-2 text-xs">
+            <div className="rounded-lg border border-border bg-muted/30 p-2.5 space-y-1 dark:bg-background" data-testid="text-goal-hit-date">
+              <p className={`${overlineClass} text-primary dark:!text-[var(--rd-profit)]`}>Statický plán</p>
+              <p className="text-[11px] leading-4 text-muted-foreground">{model.etaPlan.label}</p>
             </div>
-            <div className="rounded-md border p-2.5 space-y-1" data-testid="text-goal-hit-date-real">
-              <p className="text-[11px] sm:text-xs text-muted-foreground font-medium">Reálny trend</p>
-              <p>{model.etaReal.label}</p>
+            <div className="rounded-lg border border-border bg-muted/30 p-2.5 space-y-1 dark:bg-background" data-testid="text-goal-hit-date-real">
+              <p className={`${overlineClass} text-amber-600 dark:!text-[var(--rd-warning)]`}>Reálny trend</p>
+              <p className="text-[11px] leading-4 text-muted-foreground">{model.etaReal.label}</p>
             </div>
           </div>
-          <div className="grid gap-2 sm:grid-cols-3 text-xs sm:text-sm">
-            <div className="rounded-md border p-2.5">
-              <p className="text-muted-foreground text-[11px] sm:text-xs">Vklady spolu</p>
-              <p className="font-semibold mt-0.5">{formatCurrency(model.summary.totalOwnContributions)}</p>
+          <div className="space-y-2 pt-1 text-xs">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[11px] text-muted-foreground">Vklady spolu</span>
+              <span className="font-semibold tabular-nums">{formatCurrency(model.summary.totalOwnContributions)}</span>
             </div>
-            <div className="rounded-md border p-2.5">
-              <p className="text-muted-foreground text-[11px] sm:text-xs">Mesačné vklady spolu</p>
-              <p className="font-semibold mt-0.5">{formatCurrency(model.summary.totalPlannedDeposits)}</p>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[11px] text-muted-foreground">Mesačné vklady spolu</span>
+              <span className="font-semibold tabular-nums">{formatCurrency(model.summary.totalPlannedDeposits)}</span>
             </div>
-            <div className="rounded-md border p-2.5">
-              <p className="text-muted-foreground text-[11px] sm:text-xs">Zhodnotenie</p>
-              <p
-                className={`font-semibold mt-0.5 ${model.summary.projectedGrowth >= 0 ? "text-emerald-600" : "text-rose-600"}`}
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[11px] text-muted-foreground">Zhodnotenie</span>
+              <span
+                className={`font-semibold tabular-nums ${model.summary.projectedGrowth >= 0 ? "text-emerald-600" : "text-rose-600"}`}
                 data-testid="text-goal-projected-growth"
               >
                 {model.summary.projectedGrowth >= 0 ? "+" : "-"}
                 {formatCurrency(Math.abs(model.summary.projectedGrowth))} ({model.summary.projectedGrowthPct.toFixed(1)}%)
-              </p>
+              </span>
             </div>
           </div>
         </CardContent>
       </Card>
+      </div>
 
       <Card>
         <CardHeader className="p-4 pb-2">
@@ -271,21 +282,53 @@ function GoalTrackerClassic() {
           <CardDescription>
             Plocha = realita. Prerušovaná čiara = plán. Vodorovná = cieľová suma.
           </CardDescription>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="size-2 rounded-sm bg-primary" />
+              Realita
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-px w-3 bg-foreground" />
+              Plán
+            </span>
+            {!useCurrentPortfolioAsInitial && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-px w-3 bg-muted-foreground" />
+                Vklady bez výnosu
+              </span>
+            )}
+            {goalAmount > 0 && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-0.5 w-3" style={{ backgroundColor: goalLineColor }} />
+                Cieľ {formatCurrency(goalAmount)}
+              </span>
+            )}
+          </div>
         </CardHeader>
-        <CardContent className={isMobile ? "relative h-[260px] overflow-hidden px-2" : "relative h-[340px] overflow-hidden"}>
+        <CardContent className={isMobile ? "relative h-[260px] overflow-hidden px-2" : "relative h-[300px] overflow-hidden"}>
           <div className="chart-fade-grid rounded-lg" aria-hidden />
           {isLoading ? (
             <div className="h-full rounded-md border bg-muted/20 animate-pulse" />
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" opacity={0.4} />
-                <XAxis dataKey="label" minTickGap={isMobile ? 18 : 24} tick={{ fontSize: isMobile ? 10 : 12 }} />
+                <CartesianGrid vertical={false} className="stroke-muted" opacity={0.5} />
+                <XAxis
+                  dataKey="label"
+                  minTickGap={isMobile ? 18 : 24}
+                  tick={{ fontSize: isMobile ? 10 : 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                  stroke="hsl(var(--muted-foreground))"
+                />
                 <YAxis
                   width={isMobile ? 40 : 56}
                   domain={chartYDomain}
                   allowDataOverflow
-                  tick={{ fontSize: isMobile ? 10 : 12 }}
+                  tick={{ fontSize: isMobile ? 10 : 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                  stroke="hsl(var(--muted-foreground))"
                   tickFormatter={(v) =>
                     new Intl.NumberFormat("sk-SK", { notation: "compact", maximumFractionDigits: 1 }).format(v)
                   }
@@ -299,17 +342,33 @@ function GoalTrackerClassic() {
                         ? row.actualValue - row.planValue
                         : row.delta;
                     return (
-                      <div className="rounded-md border bg-background/95 p-2 text-[11px] sm:text-xs shadow-md max-w-[220px]">
-                        <p className="font-medium mb-1">{label}</p>
-                        <p>Plán: {formatCurrency(row.planValue)}</p>
+                      <div className={tooltipBoxClass}>
+                        <p className="mb-1.5 font-medium text-muted-foreground">{label}</p>
+                        <p className="flex items-center gap-1.5">
+                          <span className="size-1.5 rounded-full bg-foreground" />
+                          Plán: <span className="font-semibold tabular-nums">{formatCurrency(row.planValue)}</span>
+                        </p>
                         {row.contributionOnlyValue != null && (
-                          <p className="text-muted-foreground">
+                          <p className="flex items-center gap-1.5 text-muted-foreground">
+                            <span className="size-1.5 rounded-full bg-muted-foreground" />
                             Vklady bez výnosu: {formatCurrency(row.contributionOnlyValue)}
                           </p>
                         )}
-                        <p>Realita: {row.actualValue != null ? formatCurrency(row.actualValue) : "—"}</p>
+                        <p className="flex items-center gap-1.5">
+                          <span className="size-1.5 rounded-full bg-primary" />
+                          Realita:{" "}
+                          <span className="font-semibold tabular-nums">
+                            {row.actualValue != null ? formatCurrency(row.actualValue) : "—"}
+                          </span>
+                        </p>
+                        {goalAmount > 0 && (
+                          <p className="flex items-center gap-1.5">
+                            <span className="size-1.5 rounded-full" style={{ backgroundColor: goalLineColor }} />
+                            Cieľ: <span className="font-semibold tabular-nums">{formatCurrency(goalAmount)}</span>
+                          </p>
+                        )}
                         {diff != null && row.actualValue != null && (
-                          <p className={diff >= 0 ? "text-emerald-600" : "text-rose-600"}>
+                          <p className={`mt-1 ${diff >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
                             {diff >= 0 ? "Si nad plánom: " : "Zaostávaš: "}
                             {formatCurrency(Math.abs(diff))}
                           </p>
@@ -321,10 +380,9 @@ function GoalTrackerClassic() {
                 {goalAmount > 0 && (
                   <ReferenceLine
                     y={goalAmount}
-                    stroke="hsl(142 60% 40%)"
-                    strokeDasharray="4 4"
+                    stroke={goalLineColor}
+                    strokeWidth={1.5}
                     ifOverflow="extendDomain"
-                    label={{ value: "Cieľ", position: "insideTopRight", fill: "hsl(142 60% 40%)", fontSize: 11 }}
                   />
                 )}
                 {chartData.some((p) => p.isCurrent) && (
@@ -349,10 +407,10 @@ function GoalTrackerClassic() {
                   type="monotone"
                   dataKey="targetValue"
                   name="Plán"
-                  stroke="hsl(var(--foreground))"
-                  strokeDasharray="6 4"
+                  stroke="hsl(var(--muted-foreground))"
+                  strokeDasharray="4 4"
                   dot={false}
-                  strokeWidth={2.25}
+                  strokeWidth={1.5}
                   connectNulls={false}
                   isAnimationActive={false}
                 />
@@ -362,8 +420,9 @@ function GoalTrackerClassic() {
                     dataKey="contributionOnlyValue"
                     name="Vklady bez výnosu"
                     stroke="hsl(var(--muted-foreground))"
+                    strokeOpacity={0.6}
                     dot={false}
-                    strokeWidth={1.5}
+                    strokeWidth={1.25}
                     connectNulls={false}
                     isAnimationActive={false}
                   />
@@ -394,7 +453,7 @@ function GoalTrackerClassic() {
               </CardDescription>
             </div>
             <Select value={String(effectiveSelectedYear)} onValueChange={setSelectedYear}>
-              <SelectTrigger className="w-full sm:w-[130px]" data-testid="select-goal-year">
+              <SelectTrigger className="w-full sm:w-[110px] sm:h-8 sm:text-[13px]" data-testid="select-goal-year">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -407,7 +466,7 @@ function GoalTrackerClassic() {
             </Select>
           </div>
         </CardHeader>
-        <CardContent className="p-4 pt-3 space-y-4">
+        <CardContent className="p-4 pt-3 grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start">
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
             {Array.from({ length: 12 }, (_, m) => {
               const row = yearRows.find((p) => p.month === m) ?? null;
@@ -417,14 +476,16 @@ function GoalTrackerClassic() {
                   key={`${effectiveSelectedYear}-${m}`}
                   type="button"
                   onClick={() => row && setSelectedMonthKey(row.monthKey)}
-                  className={`rounded-md border px-2.5 sm:px-3 py-2 text-left min-h-[64px] sm:min-h-[70px] ${tileClass(row?.status ?? null)} ${active ? "ring-2 ring-primary" : ""}`}
+                  className={`rounded-lg border px-2.5 sm:px-3 py-2 sm:py-2.5 text-left min-h-[64px] sm:min-h-[70px] ${tileClass(row?.status ?? null)} ${active ? "ring-2 ring-primary" : ""}`}
                   data-testid={`goal-month-${effectiveSelectedYear}-${m + 1}`}
                 >
-                  <p className="text-xs sm:text-sm font-medium">{MONTHS_SK[m]}</p>
-                  <p className="text-[11px] sm:text-xs text-muted-foreground mt-1 leading-tight tabular-nums">
+                  <p className={`text-xs sm:text-[12px] font-medium ${row?.status === "current" ? "text-primary dark:!text-[var(--rd-profit)]" : "text-muted-foreground"}`}>
+                    {MONTHS_SK[m]}
+                  </p>
+                  <p className="text-[11px] sm:text-[13px] font-semibold text-foreground mt-1 leading-tight tabular-nums">
                     {row ? formatCurrency(calendarTileAmount(row)) : "—"}
                   </p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                  <p className={`text-[10px] sm:text-[11px] mt-0.5 ${row?.status === "current" ? "text-primary dark:!text-[var(--rd-profit)]" : "text-muted-foreground"}`}>
                     {row ? statusLabel(row.status) : "—"}
                   </p>
                 </button>
@@ -433,33 +494,44 @@ function GoalTrackerClassic() {
           </div>
 
           {selectedDetail && (
-            <div className="rounded-md border p-3 text-xs sm:text-sm space-y-1.5" data-testid="goal-month-detail">
-              <p className="font-medium">
+            <div className="rounded-lg border border-border bg-muted/30 p-3.5 text-xs space-y-2 dark:bg-background" data-testid="goal-month-detail">
+              <p className="text-[13px] font-semibold">
                 {MONTHS_SK[selectedDetail.month]} {selectedDetail.year}
-                <span className="ml-2 text-muted-foreground font-normal">
+                <span className="ml-1.5 text-muted-foreground font-normal">
                   ({statusLabel(selectedDetail.status)})
                 </span>
               </p>
-              <p>Finálny cieľ (celkový): {formatCurrency(goalAmount)}</p>
-              <p>Plán na koniec mesiaca: {formatCurrency(selectedDetail.planValue)}</p>
-              <p>
-                Tvoja reálna hodnota:{" "}
-                {selectedDetail.actualValue != null ? formatCurrency(selectedDetail.actualValue) : "Bez dát"}
+              <p className="flex justify-between gap-3">
+                <span className="text-muted-foreground">Finálny cieľ (celkový)</span>
+                <span className="font-semibold tabular-nums">{formatCurrency(goalAmount)}</span>
+              </p>
+              <p className="flex justify-between gap-3">
+                <span className="text-muted-foreground">Plán na koniec mesiaca</span>
+                <span className="font-semibold tabular-nums">{formatCurrency(selectedDetail.planValue)}</span>
+              </p>
+              <p className="flex justify-between gap-3">
+                <span className="text-muted-foreground">Tvoja reálna hodnota</span>
+                <span className="font-semibold tabular-nums">
+                  {selectedDetail.actualValue != null ? formatCurrency(selectedDetail.actualValue) : "Bez dát"}
+                </span>
               </p>
               {selectedDetail.depositMonth != null && (
-                <p className="text-muted-foreground">
-                  Čistý vklad v mesiaci: {formatCurrency(selectedDetail.depositMonth)}
+                <p className="flex justify-between gap-3 text-muted-foreground">
+                  <span>Čistý vklad v mesiaci</span>
+                  <span className="tabular-nums">{formatCurrency(selectedDetail.depositMonth)}</span>
                 </p>
               )}
-              <p
-                className={
-                  (selectedDetail.delta ?? 0) >= 0 ? "text-emerald-600" : "text-rose-600"
-                }
-              >
-                Stav voči mesačnému plánu:{" "}
-                {selectedDetail.delta != null
-                  ? `${selectedDetail.delta >= 0 ? "+" : "-"}${formatCurrency(Math.abs(selectedDetail.delta))}`
-                  : "—"}
+              <p className="flex justify-between gap-3">
+                <span className="text-muted-foreground">Stav voči mesačnému plánu</span>
+                <span
+                  className={`font-semibold tabular-nums ${
+                    (selectedDetail.delta ?? 0) >= 0 ? "text-emerald-600" : "text-rose-600"
+                  }`}
+                >
+                  {selectedDetail.delta != null
+                    ? `${selectedDetail.delta >= 0 ? "+" : "-"}${formatCurrency(Math.abs(selectedDetail.delta))}`
+                    : "—"}
+                </span>
               </p>
             </div>
           )}

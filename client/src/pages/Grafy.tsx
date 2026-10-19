@@ -12,9 +12,8 @@ import {
   ResponsiveContainer,
   LineChart,
 } from "recharts";
-import { Activity } from "lucide-react";
+import { Info } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
 import {
@@ -87,22 +86,26 @@ function RangeToggle({
         className,
       )}
     >
-      <ToggleGroup
-        type="single"
-        value={value}
-        onValueChange={(v) => v && onChange(v as RangeVal)}
-        className="flex w-max min-w-full flex-nowrap justify-start gap-1 sm:w-full sm:flex-wrap"
+      <div
+        role="group"
+        aria-labelledby="grafy-range-label"
+        className="inline-flex w-max items-center rounded-lg border border-border bg-background p-[3px]"
       >
         {RANGE_OPTIONS.map((o) => (
-          <ToggleGroupItem
+          <button
             key={o.v}
-            value={o.v}
-            className="shrink-0 text-xs sm:text-sm px-2.5 data-[state=on]:z-10"
+            type="button"
+            aria-pressed={value === o.v}
+            onClick={() => onChange(o.v)}
+            className={cn(
+              "h-[30px] shrink-0 rounded-md px-3 text-[12px] font-medium transition-colors",
+              value === o.v ? "bg-secondary text-foreground" : "text-tertiary hover:text-foreground",
+            )}
           >
             {o.label}
-          </ToggleGroupItem>
+          </button>
         ))}
-      </ToggleGroup>
+      </div>
     </div>
   );
 }
@@ -183,13 +186,20 @@ function GrafyClassic() {
   const yAxisTick = { fontSize: isMobile ? 9 : 11 };
   const legendProps = isMobile
     ? { wrapperStyle: { fontSize: 10, paddingTop: 4 }, iconSize: 8 }
-    : { wrapperStyle: { fontSize: 12 }, iconSize: 10 };
+    : {
+        wrapperStyle: { fontSize: 11, paddingBottom: 8 },
+        iconSize: 8,
+        verticalAlign: "top" as const,
+        align: "left" as const,
+      };
+  const tooltipBoxClass = "rounded-lg border border-border bg-popover px-3 py-2.5 text-[11px] leading-4 shadow-lg";
+  const axisProps = { axisLine: false, tickLine: false, stroke: "hsl(var(--muted-foreground))" };
+  const benchmarkStroke = "var(--rd-chart-benchmark, hsl(var(--chart-3)))";
 
   return (
-    <div className="max-w-6xl mx-auto flex flex-col gap-3 md:gap-6 pb-6">
+    <div className="flex flex-col gap-3 pb-6">
       <div className="space-y-1">
         <h1 className="text-lg font-semibold flex items-center gap-2 flex-wrap">
-          <Activity className="h-6 w-6 sm:h-7 sm:w-7 shrink-0 text-primary" />
           Grafy
           <HelpTip title="Stránka Grafy">
             <p>
@@ -198,14 +208,16 @@ function GrafyClassic() {
             </p>
           </HelpTip>
         </h1>
-        <p className="text-xs text-muted-foreground max-w-3xl leading-relaxed">
+        <p className="text-xs md:text-[13px] text-muted-foreground max-w-3xl leading-relaxed md:leading-[18px]">
           Dáta z toho istého oceňovania a tokov (MTM, vklady/výbery) ako TWR. Benchmark: S&amp;P 500 (^GSPC)
           v rovnakom časovom režime.
         </p>
       </div>
 
       <Card className="border-border/80 shadow-sm">
-        <CardHeader className="space-y-4 p-4 pb-4">
+        <CardHeader className="space-y-3 p-4 pb-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0 space-y-1">
           <CardTitle className="text-sm font-medium flex items-center gap-1 flex-wrap">
             Zobrazenie
             <HelpTip title="Filtre grafu">
@@ -215,12 +227,13 @@ function GrafyClassic() {
               </p>
             </HelpTip>
           </CardTitle>
-          <CardDescription className="text-xs sm:text-sm">
+          <CardDescription className="text-xs">
             Vyberte portfólio a časové obdobie. Nastavenie portfólia je rovnaké ako v bočnom paneli.
           </CardDescription>
-          <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end">
-            <div className="space-y-2 w-full sm:w-auto sm:min-w-[200px] sm:flex-1 sm:max-w-xs">
-              <div className="flex items-center gap-1 text-sm font-medium leading-none text-muted-foreground">
+          </div>
+          <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end lg:flex-nowrap lg:shrink-0">
+            <div className="space-y-1.5 w-full sm:w-auto sm:min-w-[200px] sm:flex-1 sm:max-w-xs lg:w-[200px] lg:flex-none">
+              <div className="flex items-center gap-1 text-[11px] font-medium leading-none text-muted-foreground">
                 <Label htmlFor="grafy-portfolio">Portfólio</Label>
                 <HelpTip title="Výber portfólia">
                   <p>Jedno portfólio alebo agregácia „všetky“. Rovnaká voľba ako v navigácii vľavo.</p>
@@ -230,7 +243,7 @@ function GrafyClassic() {
                 value={portfolioSelectValue}
                 onValueChange={(id) => setSelectedPortfolioId(id === "all" ? "all" : id)}
               >
-                <SelectTrigger id="grafy-portfolio" className="w-full">
+                <SelectTrigger id="grafy-portfolio" className="w-full md:h-9 md:text-[13px]">
                   <SelectValue placeholder="Portfólio" />
                 </SelectTrigger>
                 <SelectContent>
@@ -243,8 +256,8 @@ function GrafyClassic() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2 w-full min-w-0 sm:flex-1 sm:min-w-[240px]">
-              <div className="flex items-center gap-1 text-sm font-medium leading-none text-muted-foreground">
+            <div className="space-y-1.5 w-full min-w-0 sm:flex-1 sm:min-w-[240px] lg:w-auto lg:flex-none">
+              <div className="flex items-center gap-1 text-[11px] font-medium leading-none text-muted-foreground">
                 <span id="grafy-range-label">Obdobie</span>
                 <HelpTip title="Časové obdobie">
                   <p>
@@ -255,17 +268,18 @@ function GrafyClassic() {
               <RangeToggle value={range} onChange={setRange} />
             </div>
           </div>
+          </div>
+          {history?.methodNote && (
+            <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2.5 text-[11px] leading-4 text-muted-foreground dark:bg-background">
+              <Info className="mt-px h-3.5 w-3.5 shrink-0 text-[hsl(var(--chart-3))] dark:text-[var(--rd-info)]" />
+              <span className="min-w-0 flex-1">{history.methodNote}</span>
+              <HelpTip title="Poznámka k metodike">
+                <p>Stručné vysvetlenie výpočtu z backendu pre zobrazenú sériu a menu.</p>
+              </HelpTip>
+            </div>
+          )}
         </CardHeader>
       </Card>
-
-      {history?.methodNote && (
-        <p className="text-xs text-muted-foreground max-w-4xl flex items-start gap-1.5">
-          <span className="min-w-0 flex-1">{history.methodNote}</span>
-          <HelpTip title="Poznámka k metodike">
-            <p>Stručné vysvetlenie výpočtu z backendu pre zobrazenú sériu a menu.</p>
-          </HelpTip>
-        </p>
-      )}
 
       {histErr && (
         <Card className="border-destructive/50">
@@ -291,7 +305,7 @@ function GrafyClassic() {
             Plocha pod trhovou krivkou: farba podľa zisku oproti tokom na konci rozsahu. Schodíky = čisté vklady
             mínus výbery.
           </CardDescription>
-          <p className="text-[11px] text-muted-foreground">
+          <p className="self-start rounded-md bg-muted px-2 py-1 text-[10px] font-semibold uppercase leading-3 tracking-[0.5px] text-muted-foreground tabular-nums md:self-end dark:bg-[var(--rd-profit-dim)] dark:!text-[var(--rd-profit)]">
             ATH portfólia:{" "}
             {athPoint
               ? `${mask(formatCurrency(athPoint.totalValue))} (${new Date(athPoint.date).toLocaleDateString("sk-SK")})`
@@ -322,15 +336,17 @@ function GrafyClassic() {
                     )}
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" opacity={0.4} />
+                <CartesianGrid vertical={false} className="stroke-muted" opacity={0.5} />
                 <XAxis
                   dataKey="date"
+                  {...axisProps}
                   tick={xAxisTick}
                   tickFormatter={(d) => d.slice(5)}
                   minTickGap={isMobile ? 28 : 14}
                   interval="preserveStartEnd"
                 />
                 <YAxis
+                  {...axisProps}
                   tick={yAxisTick}
                   width={isMobile ? 44 : undefined}
                   tickFormatter={(v) =>
@@ -347,22 +363,28 @@ function GrafyClassic() {
                     if (!active || !payload?.length) return null;
                     const row = payload[0]?.payload as HistoryPoint;
                     return (
-                      <div className="rounded-md border bg-background/95 p-2 text-xs shadow-md">
-                        <p className="font-medium mb-1">{String(label)}</p>
-                        <p>
+                      <div className={tooltipBoxClass}>
+                        <p className="mb-1.5 font-medium text-muted-foreground">{String(label)}</p>
+                        <p className="flex items-center gap-1.5">
+                          <span className="size-1.5 rounded-full bg-primary" />
                           Celková hodnota:{" "}
-                          <span className="font-mono">
+                          <span className="font-semibold tabular-nums">
                             {mask(formatCurrency(row.totalValue))}
                           </span>
                         </p>
-                        <p>
+                        <p className="flex items-center gap-1.5">
+                          <span className="size-1.5 rounded-full bg-muted-foreground" />
                           Čisté invest.:{" "}
-                          <span className="font-mono">
+                          <span className="font-semibold tabular-nums">
                             {mask(formatCurrency(row.netInvested))}
                           </span>
                         </p>
-                        <p className="text-muted-foreground">
-                          Oproti vkladom: {mask(formatCurrency(row.totalValue - row.netInvested))}
+                        <p className="flex items-center gap-1.5 text-muted-foreground">
+                          <span className="size-1.5 rounded-full bg-primary/60" />
+                          Oproti vkladom:{" "}
+                          <span className="font-semibold tabular-nums text-foreground">
+                            {mask(formatCurrency(row.totalValue - row.netInvested))}
+                          </span>
                         </p>
                       </div>
                     );
@@ -386,7 +408,8 @@ function GrafyClassic() {
                   name="Čisté vklady − výbery"
                   dot={false}
                   stroke="hsl(var(--muted-foreground))"
-                  strokeWidth={2}
+                  strokeWidth={1.5}
+                  strokeDasharray="4 4"
                 />
               </ComposedChart>
             </ResponsiveContainer>
@@ -420,15 +443,17 @@ function GrafyClassic() {
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={points} margin={chartMargin}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" opacity={0.4} />
+                <CartesianGrid vertical={false} className="stroke-muted" opacity={0.5} />
                 <XAxis
                   dataKey="date"
+                  {...axisProps}
                   tick={xAxisTick}
                   tickFormatter={(d) => d.slice(5)}
                   minTickGap={isMobile ? 28 : 14}
                   interval="preserveStartEnd"
                 />
                 <YAxis
+                  {...axisProps}
                   tick={yAxisTick}
                   width={isMobile ? 40 : undefined}
                   tickFormatter={(v) => `${v.toFixed(0)}%`}
@@ -438,10 +463,18 @@ function GrafyClassic() {
                     if (!active || !payload?.length) return null;
                     const row = payload[0]?.payload as HistoryPoint;
                     return (
-                      <div className="rounded-md border bg-background/95 p-2 text-xs shadow-md">
-                        <p className="font-medium mb-1">{String(label)}</p>
-                        <p>Portfólio: {row.portfolioCumulativePct.toFixed(2)}%</p>
-                        <p>S&amp;P 500: {row.sp500CumulativePct.toFixed(2)}%</p>
+                      <div className={tooltipBoxClass}>
+                        <p className="mb-1.5 font-medium text-muted-foreground">{String(label)}</p>
+                        <p className="flex items-center gap-1.5">
+                          <span className="size-1.5 rounded-full bg-primary" />
+                          Portfólio:{" "}
+                          <span className="font-semibold tabular-nums">{row.portfolioCumulativePct.toFixed(2)}%</span>
+                        </p>
+                        <p className="flex items-center gap-1.5">
+                          <span className="size-1.5 rounded-full" style={{ backgroundColor: benchmarkStroke }} />
+                          S&amp;P 500:{" "}
+                          <span className="font-semibold tabular-nums">{row.sp500CumulativePct.toFixed(2)}%</span>
+                        </p>
                       </div>
                     );
                   }}
@@ -458,8 +491,8 @@ function GrafyClassic() {
                   dataKey="sp500CumulativePct"
                   name="S&P 500"
                   dot={false}
-                  stroke="hsl(var(--chart-3))"
-                  strokeWidth={2}
+                  stroke={benchmarkStroke}
+                  strokeWidth={1.5}
                 />
               </LineChart>
             </ResponsiveContainer>
