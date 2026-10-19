@@ -46,8 +46,7 @@ export function formatTickerPct(pct: number) {
 }
 
 export function MarketQuoteTicker() {
-  const { isMobile, state } = useSidebar();
-  const padForSidebar = !isMobile && state === "expanded";
+  const { isMobile } = useSidebar();
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const [shouldAnimate, setShouldAnimate] = useState(false);
@@ -94,9 +93,9 @@ export function MarketQuoteTicker() {
       ? TICKER_ROWS.map((row) => (
           <div
             key={`${row.yahoo}${duplicate ? "-dup-loading" : "-loading"}`}
-            className="flex shrink-0 items-baseline gap-1.5 text-[10px] sm:text-xs"
+            className="flex shrink-0 items-center gap-1.5 text-[10px] font-medium leading-3"
           >
-            <span className="font-medium text-foreground/80">{row.label}</span>
+            <span className="text-tertiary">{row.label}</span>
             <span className="tabular-nums opacity-50">…</span>
           </div>
         ))
@@ -110,10 +109,10 @@ export function MarketQuoteTicker() {
           return (
             <div
               key={`${row.yahoo}${duplicate ? "-dup" : ""}`}
-              className="flex shrink-0 items-baseline gap-1.5 text-[10px] sm:text-xs"
+              className="flex shrink-0 items-center gap-1.5 text-[10px] font-medium leading-3"
             >
-              <span className="font-medium text-foreground/85">{row.label}</span>
-              <span className="tabular-nums text-foreground/90">
+              <span className="text-tertiary">{row.label}</span>
+              <span className="tabular-nums text-foreground">
                 {q ? formatTickerValue(q.price, row.decimals) : "—"}
               </span>
               <span className={`tabular-nums ${pctCls}`}>{q ? formatTickerPct(pct) : ""}</span>
@@ -123,10 +122,7 @@ export function MarketQuoteTicker() {
 
   return (
     <div
-      className={cn(
-        "shrink-0 border-b border-border/50 bg-muted/50 text-muted-foreground transition-[padding-left] duration-200 ease-linear",
-        padForSidebar && "md:pl-[var(--sidebar-width)]"
-      )}
+      className="shrink-0 border-b border-border bg-background text-muted-foreground"
       data-testid="market-quote-ticker"
     >
       <div
@@ -138,11 +134,11 @@ export function MarketQuoteTicker() {
         )}
       >
         <div className={cn(shouldAnimate && "market-ticker-track")}>
-          <div ref={contentRef} className="flex min-h-[28px] items-center gap-4 px-3 py-1 sm:gap-6 sm:px-4">
+          <div ref={contentRef} className="flex h-7 items-center gap-7 px-5">
             {renderItems(false)}
           </div>
           {shouldAnimate && (
-            <div className="flex min-h-[28px] items-center gap-4 px-3 py-1 sm:gap-6 sm:px-4" aria-hidden>
+            <div className="flex h-7 items-center gap-7 px-5" aria-hidden>
               {renderItems(true)}
             </div>
           )}

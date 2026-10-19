@@ -4,7 +4,7 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest } from "@/lib/queryClient";
@@ -36,7 +36,6 @@ import AdminRegistrations from "@/pages/AdminRegistrations";
 import DemoEnter from "@/pages/DemoEnter";
 import { MarketQuoteTicker } from "@/components/MarketQuoteTicker";
 import { QuickNavFab, QUICK_NAV_CONTENT_PAD } from "@/components/QuickNavFab";
-import { DashboardEditHeaderButton } from "@/components/DashboardEditHeaderButton";
 import { useQuickNavFab } from "@/hooks/useQuickNavFab";
 import { MobileUiDocumentSync, useMobileRedesign } from "@/hooks/useMobileUi";
 import { Button as RedesignButton, TabBar, TickerTape } from "@/redesign/ui";
@@ -420,6 +419,20 @@ function DemoModeBanner() {
   );
 }
 
+/** Sidebar toggle lives in the sidebar brand row; once collapsed, offer a way back. */
+function SidebarReopenButton() {
+  const { isMobile, state } = useSidebar();
+  if (!isMobile && state === "expanded") return null;
+  return (
+    <div className="shrink-0 px-2 pt-2 md:px-7 md:pt-4">
+      <SidebarTrigger
+        className="h-8 w-8 rounded-lg border border-border bg-secondary"
+        data-testid="button-sidebar-open"
+      />
+    </div>
+  );
+}
+
 function AuthenticatedLayout() {
   const { isAuthenticated, isLoading } = useAuth();
   const { enabled: quickNavEnabled } = useQuickNavFab();
@@ -449,7 +462,7 @@ function AuthenticatedLayout() {
   }
 
   const style = {
-    "--sidebar-width": "16rem",
+    "--sidebar-width": "15rem",
     "--sidebar-width-icon": "3rem",
   };
 
@@ -460,17 +473,13 @@ function AuthenticatedLayout() {
           <div className="flex h-screen w-full flex-col">
             <DemoModeBanner />
             <MarketQuoteTicker />
-            <div className="flex min-h-0 flex-1 w-full">
+            <div className="relative flex min-h-0 flex-1 w-full">
               <AppSidebar />
-              <div className="flex flex-col flex-1 overflow-hidden">
-                <header className="flex items-center gap-1.5 px-3 py-2 md:gap-2 md:p-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                  <SidebarTrigger data-testid="button-sidebar-toggle" />
-                  <div className="flex-1" />
-                  <DashboardEditHeaderButton />
-                </header>
+              <div className="flex min-w-0 flex-col flex-1 overflow-hidden">
+                <SidebarReopenButton />
                 <main
                   className={cn(
-                    "flex-1 overflow-auto p-2 md:p-6",
+                    "flex-1 overflow-auto px-2 pb-6 pt-2 md:px-7 md:pb-8 md:pt-5",
                     quickNavEnabled && QUICK_NAV_CONTENT_PAD,
                   )}
                 >

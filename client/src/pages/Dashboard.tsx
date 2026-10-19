@@ -60,6 +60,7 @@ import {
   LayoutList,
   ArrowDownUp,
   Sparkles,
+  Layers,
 } from "lucide-react";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio, type Portfolio } from "@/hooks/usePortfolio";
@@ -80,6 +81,7 @@ import { DesktopPortfolioChart } from "@/components/DesktopPortfolioChart";
 import { DashboardAllocationWidget } from "@/components/DashboardAllocationWidget";
 import { DashboardAiMacroAuditWidget } from "@/components/DashboardAiMacroAuditWidget";
 import { DashboardWidgetFrame } from "@/components/DashboardWidgetFrame";
+import { DashboardEditHeaderButton } from "@/components/DashboardEditHeaderButton";
 import type { HoldingWithCostCurrency } from "@shared/holdingCostCurrency";
 import { isPhysicalSilverTicker } from "@shared/physicalMetal";
 import {
@@ -2498,24 +2500,55 @@ function DashboardClassic() {
 
   return (
     <div className="flex flex-col gap-3 md:gap-5">
-      <div className="hidden md:flex items-center gap-2 min-w-0" data-testid="desktop-portfolio-header">
-        {!isAllPortfolios && <BrokerLogo brokerCode={selectedPortfolio?.brokerCode} size="sm" />}
-        <h1
-          className="text-lg md:text-xl font-semibold text-foreground truncate min-w-0"
-          data-testid="text-desktop-portfolio-name"
-        >
-          {dashboardPortfolioLabel}
-        </h1>
-        {athForCurrentSelection && (
-          <span
-            className="shrink-0 inline-flex items-center gap-0.5 text-sm motion-safe:animate-bounce"
-            title="ATH dnes"
-            data-testid="badge-desktop-portfolio-ath-confetti"
+      <div className="hidden md:flex items-center gap-2.5 min-w-0" data-testid="desktop-portfolio-header">
+        <span className="flex size-11 shrink-0 items-center justify-center rounded-[10px] border border-border bg-primary/15 text-primary">
+          {!isAllPortfolios && selectedPortfolio?.brokerCode ? (
+            <BrokerLogo brokerCode={selectedPortfolio.brokerCode} size="md" />
+          ) : (
+            <Layers className="size-[22px]" strokeWidth={1.75} />
+          )}
+        </span>
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <p className="text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-tertiary">
+            Prehľad
+          </p>
+          <div className="flex min-w-0 items-center gap-2">
+            <h1
+              className="min-w-0 truncate text-[22px] font-bold leading-[26px] tracking-[-0.33px] text-foreground"
+              data-testid="text-desktop-portfolio-name"
+            >
+              {dashboardPortfolioLabel}
+            </h1>
+            {athForCurrentSelection && (
+              <Badge
+                className="shrink-0"
+                title="ATH dnes"
+                data-testid="badge-desktop-portfolio-ath-confetti"
+              >
+                Nové ATH
+              </Badge>
+            )}
+          </div>
+        </div>
+        {holdings && holdings.length > 0 ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 shrink-0 [border-color:hsl(var(--border))]"
+            disabled={quotesFetching}
+            onClick={() => refreshDashboardQuotes()}
+            aria-label="Obnoviť ceny a dennú zmenu"
+            data-testid="button-dashboard-refresh-quotes"
           >
-            <span aria-hidden>🎉</span>
-            <span aria-hidden>✨</span>
-          </span>
-        )}
+            {quotesFetching ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+          </Button>
+        ) : null}
+        <DashboardEditHeaderButton />
       </div>
 
       <Dialog open={showAthPopup && athDialogOpen} onOpenChange={handleAthDialogOpenChange}>
@@ -2816,26 +2849,6 @@ function DashboardClassic() {
                 </TooltipContent>
               </Tooltip>
             </CardTitle>
-            <div className={actionClass}>
-              {holdings && holdings.length > 0 ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  disabled={quotesFetching}
-                  onClick={() => refreshDashboardQuotes()}
-                  aria-label="Obnoviť ceny a dennú zmenu"
-                  data-testid="button-dashboard-refresh-quotes"
-                >
-                  {quotesFetching ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-3.5 w-3.5" />
-                  )}
-                </Button>
-              ) : null}
-            </div>
           </CardHeader>
           <CardContent className={bodyClass}>
             <div className="min-w-0 space-y-0.5">

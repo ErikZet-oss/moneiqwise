@@ -1,16 +1,37 @@
-import { BarChart3, History, LogOut, User, TrendingUp, Settings, Briefcase, ChevronDown, Check, Target, Banknote, Upload, Sun, Moon, Layers, PieChart, Scale, LineChart, CircleHelp, CalendarClock, UserCog, Eye, Brain, Sparkles, MessageSquare } from "lucide-react";
+import {
+  Bot,
+  Briefcase,
+  Calendar,
+  ChartSpline,
+  Check,
+  ChevronDown,
+  CircleDollarSign,
+  CircleHelp,
+  Clock,
+  FileText,
+  Home,
+  Layers,
+  LineChart,
+  LogOut,
+  MessageSquare,
+  PieChart,
+  Settings,
+  Sparkles,
+  Star,
+  Sun,
+  Target,
+  TrendingUp,
+  Upload,
+  UserCheck,
+  type LucideIcon,
+} from "lucide-react";
 import { useLocation } from "wouter";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
   SidebarHeader,
+  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -27,95 +48,80 @@ import { usePortfolio } from "@/hooks/usePortfolio";
 import { useTheme } from "@/hooks/useTheme";
 import { BrokerLogo } from "@/components/BrokerLogo";
 import { apiRequest, PORTFOLIO_QUERY_CACHE_KEY, queryClient } from "@/lib/queryClient";
+import { cn } from "@/lib/utils";
 import type { User as UserType } from "@shared/schema";
 
-const menuItems = [
+type NavItem = { title: string; url: string; icon: LucideIcon };
+
+/** Groups and order match the mobile „Viac“ page (Figma Web/Sidebar). */
+const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
   {
-    title: "Prehľad",
-    url: "/",
-    icon: BarChart3,
+    title: "Portfólio",
+    items: [
+      { title: "Prehľad", url: "/", icon: Home },
+      { title: "Všetky portfóliá", url: "/overview", icon: Layers },
+      { title: "Rozloženie", url: "/allocation", icon: PieChart },
+      { title: "Grafy", url: "/grafy", icon: LineChart },
+      { title: "Môj cieľ", url: "/goal", icon: Target },
+    ],
   },
   {
-    title: "Všetky portfóliá",
-    url: "/overview",
-    icon: Layers,
+    title: "Aktivita",
+    items: [
+      { title: "História", url: "/history", icon: Clock },
+      { title: "Zisk", url: "/profit", icon: TrendingUp },
+      { title: "Dividendy", url: "/dividends", icon: CircleDollarSign },
+      { title: "Kalendár udalostí", url: "/events", icon: Calendar },
+      { title: "Watchlist", url: "/watchlist", icon: Star },
+      { title: "Opcie", url: "/options", icon: ChartSpline },
+    ],
   },
   {
-    title: "Rozloženie",
-    url: "/allocation",
-    icon: PieChart,
+    title: "AI",
+    items: [
+      { title: "AI Agent", url: "/ai-agent/bot", icon: Bot },
+      { title: "AI Chat", url: "/ai-chat", icon: MessageSquare },
+      { title: "AI Macro Audit", url: "/ai-macro-audit", icon: Sparkles },
+    ],
   },
   {
-    title: "Grafy",
-    url: "/grafy",
-    icon: LineChart,
-  },
-  {
-    title: "Môj cieľ",
-    url: "/goal",
-    icon: Target,
-  },
-  {
-    title: "História",
-    url: "/history",
-    icon: History,
-  },
-  {
-    title: "Zisk",
-    url: "/profit",
-    icon: TrendingUp,
-  },
-  {
-    title: "Dividendy",
-    url: "/dividends",
-    icon: Banknote,
-  },
-  {
-    title: "Kalendár udalostí",
-    url: "/events",
-    icon: CalendarClock,
-  },
-  {
-    title: "Watchlist",
-    url: "/watchlist",
-    icon: Eye,
-  },
-  {
-    title: "AI Agent",
-    url: "/ai-agent/bot",
-    icon: Brain,
-  },
-  {
-    title: "AI Chat",
-    url: "/ai-chat",
-    icon: MessageSquare,
-  },
-  {
-    title: "AI Macro Audit",
-    url: "/ai-macro-audit",
-    icon: Sparkles,
-  },
-  {
-    title: "Daňový asistent",
-    url: "/tax",
-    icon: Scale,
-  },
-  {
-    title: "Opcie",
-    url: "/options",
-    icon: Target,
-  },
-  {
-    title: "Import brokera",
-    url: "/import",
-    icon: Upload,
-  },
-  {
-    title: "FAQ",
-    url: "/faq",
-    icon: CircleHelp,
+    title: "Nástroje",
+    items: [
+      { title: "Daňový asistent", url: "/tax", icon: FileText },
+      { title: "Import brokera", url: "/import", icon: Upload },
+      { title: "Nastavenia", url: "/settings", icon: Settings },
+      { title: "FAQ", url: "/faq", icon: CircleHelp },
+    ],
   },
 ];
+
+const ADMIN_ITEM: NavItem = { title: "Registrácie", url: "/admin/registrations", icon: UserCheck };
+
+function navTestId(url: string) {
+  if (url === "/settings") return "nav-settings";
+  if (url === "/admin/registrations") return "nav-admin-registrations";
+  return `nav-${url.replace("/", "") || "dashboard"}`;
+}
+
+function isNavActive(location: string, url: string) {
+  if (url.startsWith("/ai-agent")) {
+    return location.startsWith("/ai-agent") || location.startsWith("/ai-skener");
+  }
+  return location === url;
+}
+
+function GroupLabel({ children, first }: { children: string; first?: boolean }) {
+  return (
+    <p
+      className={cn(
+        "px-2.5 pb-1 text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-[hsl(var(--sidebar-text-tertiary))]",
+        first ? "pt-1.5" : "pt-3",
+      )}
+    >
+      {children}
+    </p>
+  );
+}
 
 export function AppSidebar() {
   const [location, setLocation] = useLocation();
@@ -173,307 +179,239 @@ export function AppSidebar() {
     window.location.href = "/";
   };
 
+  const groups = user?.isRegistrationAdmin
+    ? [...NAV_GROUPS, { title: "Admin", items: [ADMIN_ITEM] }]
+    : NAV_GROUPS;
+
+  const renderNavItem = (item: NavItem) => {
+    const active = isNavActive(location, item.url);
+    const Icon = item.icon;
+    return (
+      <a
+        key={item.url}
+        href={item.url}
+        onClick={(e) => {
+          e.preventDefault();
+          setLocation(item.url);
+          closeMobileSidebar();
+        }}
+        data-testid={navTestId(item.url)}
+        data-active={active}
+        aria-current={active ? "page" : undefined}
+        className={cn(
+          "flex h-8 w-full items-center gap-2.5 rounded-lg border px-2.5 text-[13px] leading-[18px] transition-colors",
+          active
+            ? "border-sidebar-border bg-sidebar-accent font-semibold text-sidebar-foreground"
+            : "border-transparent text-[hsl(var(--sidebar-text-secondary))] hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+        )}
+      >
+        <Icon
+          className={cn(
+            "size-4 shrink-0",
+            active ? "text-sidebar-foreground" : "text-[hsl(var(--sidebar-text-tertiary))]",
+          )}
+          strokeWidth={1.75}
+        />
+        <span className="min-w-0 flex-1 truncate">{item.title}</span>
+      </a>
+    );
+  };
+
   return (
-    <Sidebar>
-      <SidebarHeader className="p-3 md:p-4">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="h-5 w-5 md:h-6 md:w-6 text-primary" />
-          <span className="font-bold text-sm md:text-lg">Moneiqwise</span>
+    <Sidebar className="absolute h-full">
+      <SidebarHeader className="gap-0 p-0">
+        <div className="flex items-center gap-2.5 px-4 pb-3 pt-[18px]">
+          <p className="min-w-0 flex-1 text-lg font-bold leading-[22px] tracking-[-0.18px] text-sidebar-foreground">
+            Mone<span className="text-sidebar-primary">IQ</span>Wise
+          </p>
+          <SidebarTrigger
+            className="h-7 w-7 rounded-lg text-[hsl(var(--sidebar-text-tertiary))] hover:text-sidebar-foreground [&_svg]:size-4"
+            data-testid="button-sidebar-toggle"
+          />
         </div>
-      </SidebarHeader>
-      
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-[10px] md:text-xs">Portfólio</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button 
-                  className="w-full flex items-center gap-2 px-2 md:px-3 py-1.5 md:py-2 rounded-md hover-elevate text-left text-xs md:text-sm"
-                  data-testid="button-portfolio-selector"
-                >
-                  {selectedPortfolio?.brokerCode ? (
-                    <BrokerLogo brokerCode={selectedPortfolio.brokerCode} size="xs" />
-                  ) : selectedCategory ? (
+        <div className="px-3 pb-1.5">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                className="flex w-full items-center gap-2 rounded-lg border border-sidebar-border bg-sidebar-accent px-2.5 py-2 text-left hover:bg-sidebar-accent/80"
+                data-testid="button-portfolio-selector"
+              >
+                {selectedPortfolio?.brokerCode ? (
+                  <BrokerLogo brokerCode={selectedPortfolio.brokerCode} size="xs" />
+                ) : selectedCategory ? (
+                  <span className="flex size-[22px] shrink-0 items-center justify-center rounded-md bg-sidebar">
                     <span
-                      className="inline-block h-3 w-3 shrink-0 rounded-full"
+                      className="inline-block h-2.5 w-2.5 rounded-full"
                       style={{ backgroundColor: selectedCategory.color }}
                     />
-                  ) : (
-                    <Briefcase className="h-4 w-4 text-muted-foreground" />
-                  )}
-                  <span className="flex-1 truncate">{getSelectedPortfolioName()}</span>
-                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-56 max-h-[70vh] overflow-y-auto">
-                <DropdownMenuItem 
-                  onClick={() => {
-                    setSelectedPortfolioId("all");
-                    closeMobileSidebar();
-                  }}
-                  data-testid="select-portfolio-all"
-                >
-                  <div className="flex items-center gap-2 w-full">
-                    <Briefcase className="h-4 w-4" />
-                    <span className="flex-1">Všetky portfóliá</span>
-                    {isAllPortfolios && <Check className="h-4 w-4 text-primary" />}
-                  </div>
-                </DropdownMenuItem>
-                {categories.map((category) => {
-                  const scope = encodeCategoryScope(category.id);
-                  const inCat = portfolios.filter((p) => p.categoryId === category.id);
-                  return (
-                    <div key={category.id}>
-                      <DropdownMenuSeparator />
+                  </span>
+                ) : (
+                  <span className="flex size-[22px] shrink-0 items-center justify-center rounded-md bg-primary/15 text-sidebar-primary">
+                    <Layers className="size-[13px]" strokeWidth={2} />
+                  </span>
+                )}
+                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold leading-[18px] text-sidebar-foreground">
+                  {getSelectedPortfolioName()}
+                </span>
+                <ChevronDown className="size-3 shrink-0 text-[hsl(var(--sidebar-text-tertiary))]" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-[216px] max-h-[70vh] overflow-y-auto">
+              <DropdownMenuItem
+                onClick={() => {
+                  setSelectedPortfolioId("all");
+                  closeMobileSidebar();
+                }}
+                data-testid="select-portfolio-all"
+              >
+                <div className="flex items-center gap-2 w-full">
+                  <Briefcase className="h-4 w-4" />
+                  <span className="flex-1">Všetky portfóliá</span>
+                  {isAllPortfolios && <Check className="h-4 w-4 text-primary" />}
+                </div>
+              </DropdownMenuItem>
+              {categories.map((category) => {
+                const scope = encodeCategoryScope(category.id);
+                const inCat = portfolios.filter((p) => p.categoryId === category.id);
+                return (
+                  <div key={category.id}>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => {
+                        setSelectedPortfolioId(scope);
+                        closeMobileSidebar();
+                      }}
+                      data-testid={`select-category-${category.id}`}
+                    >
+                      <div className="flex items-center gap-2 w-full">
+                        <span
+                          className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: category.color }}
+                        />
+                        <span className="flex-1 truncate font-medium">{category.name}</span>
+                        {(isCategoryScope && selectedPortfolioId === scope) && (
+                          <Check className="h-4 w-4 text-primary" />
+                        )}
+                      </div>
+                    </DropdownMenuItem>
+                    {inCat.map((portfolio) => (
                       <DropdownMenuItem
+                        key={portfolio.id}
                         onClick={() => {
-                          setSelectedPortfolioId(scope);
+                          setSelectedPortfolioId(portfolio.id);
                           closeMobileSidebar();
                         }}
-                        data-testid={`select-category-${category.id}`}
+                        data-testid={`select-portfolio-${portfolio.id}`}
+                        className="pl-6"
                       >
                         <div className="flex items-center gap-2 w-full">
-                          <span
-                            className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
-                            style={{ backgroundColor: category.color }}
-                          />
-                          <span className="flex-1 truncate font-medium">{category.name}</span>
-                          {(isCategoryScope && selectedPortfolioId === scope) && (
+                          {portfolio.brokerCode ? (
+                            <BrokerLogo brokerCode={portfolio.brokerCode} size="xs" />
+                          ) : (
+                            <Briefcase className="h-4 w-4" />
+                          )}
+                          <span className="flex-1 truncate">{portfolio.name}</span>
+                          {selectedPortfolioId === portfolio.id && (
                             <Check className="h-4 w-4 text-primary" />
                           )}
                         </div>
                       </DropdownMenuItem>
-                      {inCat.map((portfolio) => (
-                        <DropdownMenuItem
-                          key={portfolio.id}
-                          onClick={() => {
-                            setSelectedPortfolioId(portfolio.id);
-                            closeMobileSidebar();
-                          }}
-                          data-testid={`select-portfolio-${portfolio.id}`}
-                          className="pl-6"
-                        >
-                          <div className="flex items-center gap-2 w-full">
-                            {portfolio.brokerCode ? (
-                              <BrokerLogo brokerCode={portfolio.brokerCode} size="xs" />
-                            ) : (
-                              <Briefcase className="h-4 w-4" />
-                            )}
-                            <span className="flex-1 truncate">{portfolio.name}</span>
-                            {selectedPortfolioId === portfolio.id && (
-                              <Check className="h-4 w-4 text-primary" />
-                            )}
-                          </div>
-                        </DropdownMenuItem>
-                      ))}
-                    </div>
-                  );
-                })}
-                {portfolios.filter((p) => !p.categoryId).length > 0 && (
-                  <>
-                    {categories.length > 0 && <DropdownMenuSeparator />}
-                    {portfolios
-                      .filter((p) => !p.categoryId)
-                      .map((portfolio) => (
-                        <DropdownMenuItem
-                          key={portfolio.id}
-                          onClick={() => {
-                            setSelectedPortfolioId(portfolio.id);
-                            closeMobileSidebar();
-                          }}
-                          data-testid={`select-portfolio-${portfolio.id}`}
-                        >
-                          <div className="flex items-center gap-2 w-full">
-                            {portfolio.brokerCode ? (
-                              <BrokerLogo brokerCode={portfolio.brokerCode} size="xs" />
-                            ) : (
-                              <Briefcase className="h-4 w-4" />
-                            )}
-                            <span className="flex-1 truncate">{portfolio.name}</span>
-                            {selectedPortfolioId === portfolio.id && (
-                              <Check className="h-4 w-4 text-primary" />
-                            )}
-                          </div>
-                        </DropdownMenuItem>
-                      ))}
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-[10px] md:text-xs">Navigácia</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {menuItems.map((item) => (
-                <SidebarMenuItem
-                  key={item.title}
-                  className={item.url === "/faq" ? "hidden md:block" : undefined}
-                >
-                  <SidebarMenuButton 
-                    asChild
-                    isActive={
-                      item.url.startsWith("/ai-agent")
-                        ? location.startsWith("/ai-agent") || location.startsWith("/ai-skener")
-                        : location === item.url
-                    }
-                    data-testid={`nav-${item.url.replace("/", "") || "dashboard"}`}
-                    className="text-xs md:text-sm py-1.5 md:py-2"
-                  >
-                    <a 
-                      href={item.url}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setLocation(item.url);
-                        closeMobileSidebar();
-                      }}
-                    >
-                      <item.icon className="h-4 w-4 md:h-5 md:w-5" />
-                      <span>{item.title}</span>
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-              {user?.isRegistrationAdmin && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={location === "/admin/registrations"}
-                    data-testid="nav-admin-registrations"
-                    className="text-xs md:text-sm py-1.5 md:py-2"
-                  >
-                    <a
-                      href="/admin/registrations"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setLocation("/admin/registrations");
-                        closeMobileSidebar();
-                      }}
-                    >
-                      <UserCog className="h-4 w-4 md:h-5 md:w-5" />
-                      <span>Registrácie</span>
-                    </a>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+                    ))}
+                  </div>
+                );
+              })}
+              {portfolios.filter((p) => !p.categoryId).length > 0 && (
+                <>
+                  {categories.length > 0 && <DropdownMenuSeparator />}
+                  {portfolios
+                    .filter((p) => !p.categoryId)
+                    .map((portfolio) => (
+                      <DropdownMenuItem
+                        key={portfolio.id}
+                        onClick={() => {
+                          setSelectedPortfolioId(portfolio.id);
+                          closeMobileSidebar();
+                        }}
+                        data-testid={`select-portfolio-${portfolio.id}`}
+                      >
+                        <div className="flex items-center gap-2 w-full">
+                          {portfolio.brokerCode ? (
+                            <BrokerLogo brokerCode={portfolio.brokerCode} size="xs" />
+                          ) : (
+                            <Briefcase className="h-4 w-4" />
+                          )}
+                          <span className="flex-1 truncate">{portfolio.name}</span>
+                          {selectedPortfolioId === portfolio.id && (
+                            <Check className="h-4 w-4 text-primary" />
+                          )}
+                        </div>
+                      </DropdownMenuItem>
+                    ))}
+                </>
               )}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </SidebarHeader>
+
+      <SidebarContent className="gap-0 [scrollbar-color:hsl(var(--sidebar-border))_transparent] [scrollbar-width:thin]">
+        <nav className="flex flex-col gap-0.5 px-4 pb-3 pt-1" aria-label="Hlavná navigácia">
+          {groups.map((group, index) => (
+            <div key={group.title} className="contents">
+              <GroupLabel first={index === 0}>{group.title}</GroupLabel>
+              {group.items.map(renderNavItem)}
+            </div>
+          ))}
+        </nav>
       </SidebarContent>
 
-      <SidebarFooter className="p-3 md:p-4">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton 
-              asChild
-              isActive={location === "/settings"}
-              data-testid="nav-settings"
-              className="text-xs md:text-sm py-1.5 md:py-2"
-            >
-              <a 
-                href="/settings"
-                onClick={(e) => {
-                  e.preventDefault();
-                  setLocation("/settings");
-                  closeMobileSidebar();
-                }}
-              >
-                <Settings className="h-4 w-4 md:h-5 md:w-5" />
-                <span>Nastavenia</span>
-              </a>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem className="hidden md:block">
-            <div
-              className="flex items-center justify-between rounded-md px-2 py-1.5 md:px-3 md:py-2 hover:bg-sidebar-accent/50"
-              data-testid="button-theme-toggle"
-            >
-              <div className="flex items-center gap-2">
-                <Sun className={`h-4 w-4 md:h-5 md:w-5 ${theme === "dark" ? "text-muted-foreground" : "text-amber-500"}`} />
-                <span className="text-xs md:text-sm text-muted-foreground">Téma</span>
-                <Moon className={`h-4 w-4 md:h-5 md:w-5 ${theme === "dark" ? "text-indigo-400" : "text-muted-foreground"}`} />
-              </div>
-              <Switch
-                checked={theme === "dark"}
-                onCheckedChange={toggleTheme}
-                aria-label={theme === "dark" ? "Prepnúť na svetlý režim" : "Prepnúť na tmavý režim"}
-              />
-            </div>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <div className="md:hidden flex items-center justify-end gap-2">
-              <SidebarMenuButton
-                asChild
-                isActive={location === "/faq"}
-                className="h-8 px-2 text-xs"
-                data-testid="nav-faq-mobile-inline"
-              >
-                <a
-                  href="/faq"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setLocation("/faq");
-                    closeMobileSidebar();
-                  }}
-                >
-                  <CircleHelp className="h-4 w-4" />
-                  <span>FAQ</span>
-                </a>
-              </SidebarMenuButton>
-              <SidebarMenuButton
-                data-testid="button-logout-mobile-inline"
-                className="h-8 px-2 text-xs"
-                onClick={handleLogout}
-              >
-                <LogOut className="h-4 w-4" />
-                <span>Odhlásiť sa</span>
-              </SidebarMenuButton>
-            </div>
-            <SidebarMenuButton
-              data-testid="button-logout"
-              className="hidden md:flex text-xs md:text-sm py-1.5 md:py-2"
-              onClick={handleLogout}
-            >
-              <LogOut className="h-4 w-4 md:h-5 md:w-5" />
-              <span>Odhlásiť sa</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-        
-        <div className="flex items-center gap-2 md:gap-3 mt-3 md:mt-4 pt-3 md:pt-4 border-t border-sidebar-border">
-          <Avatar className="h-7 w-7 md:h-9 md:w-9">
-            <AvatarImage 
-              src={user?.profileImageUrl || undefined} 
+      <SidebarFooter className="gap-0.5 border-t border-sidebar-border px-4 pb-3.5 pt-2.5">
+        <div
+          className="flex items-center gap-2.5 px-2.5 py-[5px]"
+          data-testid="button-theme-toggle"
+        >
+          <Sun className="size-4 shrink-0 text-[hsl(var(--sidebar-text-tertiary))]" strokeWidth={1.75} />
+          <span className="min-w-0 flex-1 text-[13px] leading-[18px] text-[hsl(var(--sidebar-text-secondary))]">
+            Svetlý režim
+          </span>
+          <Switch
+            checked={theme === "light"}
+            onCheckedChange={toggleTheme}
+            aria-label={theme === "dark" ? "Prepnúť na svetlý režim" : "Prepnúť na tmavý režim"}
+          />
+        </div>
+        <button
+          type="button"
+          data-testid="button-logout"
+          className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-left text-[13px] leading-[18px] text-[hsl(var(--sidebar-text-secondary))] hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+          onClick={handleLogout}
+        >
+          <LogOut className="size-4 shrink-0 text-[hsl(var(--sidebar-text-tertiary))]" strokeWidth={1.75} />
+          <span>Odhlásiť sa</span>
+        </button>
+
+        <div className="flex items-center gap-2.5 px-2.5 pb-1 pt-2.5">
+          <Avatar className="size-[30px]">
+            <AvatarImage
+              src={user?.profileImageUrl || undefined}
               alt={getDisplayName(user)}
               className="object-cover"
             />
-            <AvatarFallback>
-              <User className="h-3 w-3 md:h-4 md:w-4" />
+            <AvatarFallback className="bg-[#14263a] text-[11px] font-medium leading-[14px] text-[#6bb0f5]">
+              {getInitials(user)}
             </AvatarFallback>
           </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs md:text-sm font-medium truncate" data-testid="text-user-name">
+          <div className="min-w-0 flex-1">
+            <p
+              className="truncate text-[13px] font-semibold leading-[18px] text-sidebar-foreground"
+              data-testid="text-user-name"
+            >
               {getDisplayName(user)}
             </p>
             {user?.email && (
-              <div className="mt-0.5 flex items-center justify-between gap-2 md:block">
-                <p className="text-[10px] md:text-xs text-muted-foreground truncate">
-                  {user.email}
-                </p>
-                <div className="md:hidden flex items-center gap-1.5">
-                  <Sun className={`h-3 w-3 ${theme === "dark" ? "text-muted-foreground" : "text-amber-500"}`} />
-                  <Switch
-                    checked={theme === "dark"}
-                    onCheckedChange={toggleTheme}
-                    className="scale-75 origin-right"
-                    aria-label={theme === "dark" ? "Prepnúť na svetlý režim" : "Prepnúť na tmavý režim"}
-                  />
-                  <Moon className={`h-3 w-3 ${theme === "dark" ? "text-indigo-400" : "text-muted-foreground"}`} />
-                </div>
-              </div>
+              <p className="truncate text-[11px] leading-[14px] text-[hsl(var(--sidebar-text-tertiary))]">
+                {user.email}
+              </p>
             )}
           </div>
         </div>

@@ -191,6 +191,261 @@ html:not(.dark) .shadcn-card {
     0 8px 22px -16px hsl(220 25% 40% / 0.12);
 }
 
+/*
+ * WEB REDESIGN (desktop shell only — mobile redesign sets data-mobile-ui and is untouched).
+ * Shape vars apply in both themes; colors only in dark (light theme keeps its palette).
+ * Shared shadcn components read these vars with fallbacks equal to their previous values.
+ */
+html:not([data-mobile-ui="redesign"]) {
+  --ui-radius-control: 8px;
+  --ui-radius-menu: 10px;
+  --ui-radius-item: 6px;
+  --ui-radius-dialog: 16px;
+  --ui-radius-badge: 6px;
+  --ui-menu-pad: 6px;
+  --ui-item-px: 10px;
+  --ui-item-py: 8px;
+  --ui-switch-w: 2.5rem;
+  --ui-switch-shift: 1rem;
+  --text-tertiary: 215 10% 52%;
+  --sidebar-text-secondary: 210 14% 78%;
+  --sidebar-text-tertiary: 214 10% 60%;
+}
+
+html.dark:not([data-mobile-ui="redesign"]) {
+  /* Figma Foundations · Color (same values as mobile --rd-*) */
+  --background: 210 17% 2%;
+  --foreground: 200 14% 96%;
+  --border: 213 12% 18%;
+
+  --card: 214 14% 10%;
+  --card-foreground: 200 14% 96%;
+  --card-border: 213 12% 18%;
+
+  --sidebar: 214 14% 10%;
+  --sidebar-foreground: 200 14% 96%;
+  --sidebar-border: 213 12% 18%;
+  --sidebar-primary: 168 70% 52%;
+  --sidebar-primary-foreground: 161 73% 4%;
+  --sidebar-accent: 213 13% 13%;
+  --sidebar-accent-foreground: 200 14% 96%;
+  --sidebar-ring: 168 70% 52%;
+  --sidebar-text-secondary: 214 10% 67%;
+  --sidebar-text-tertiary: 215 7% 45%;
+
+  --popover: 213 13% 13%;
+  --popover-foreground: 200 14% 96%;
+  --popover-border: 214 11% 25%;
+
+  --primary: 168 70% 52%;
+  --primary-foreground: 161 73% 4%;
+  --secondary: 213 13% 13%;
+  --secondary-foreground: 200 14% 96%;
+  --muted: 213 13% 13%;
+  --muted-foreground: 214 10% 67%;
+  --text-tertiary: 215 7% 45%;
+  --accent: 213 12% 18%;
+  --accent-foreground: 200 14% 96%;
+  --destructive: 350 82% 67%;
+  --destructive-foreground: 161 73% 4%;
+  --input: 214 11% 25%;
+  --ring: 168 70% 52%;
+
+  --chart-1: 168 70% 52%;
+  --chart-2: 350 82% 67%;
+  --chart-3: 210 87% 69%;
+  --chart-4: 269 58% 71%;
+  --chart-5: 39 87% 62%;
+
+  --font-mono: 'Inter', sans-serif;
+
+  --button-outline: #383e46;
+  --button-outline-bg: #1d2126;
+  --badge-outline: #383e46;
+  --badge-bg: 168 51% 12%;
+  --badge-fg: 168 70% 52%;
+  --input-background: 213 13% 13%;
+  --select-background: 214 14% 10%;
+  --select-border: 213 12% 18%;
+  --menu-border: 214 11% 25%;
+  --tabs-background: 210 17% 2%;
+  --tabs-active: 213 13% 13%;
+  --switch-off: 213 12% 18%;
+  --switch-thumb: 200 14% 96%;
+  --switch-thumb-on: 161 73% 4%;
+
+  --elevate-1: rgba(255, 255, 255, .035);
+  --elevate-2: rgba(255, 255, 255, .07);
+
+  /* Raw palette for page-level accents (web pages may read these like mobile does) */
+  --rd-bg-base: #050607;
+  --rd-bg-surface: #15181c;
+  --rd-bg-surface-raised: #1d2126;
+  --rd-bg-surface-hover: #272c32;
+  --rd-bg-surface-gradient: linear-gradient(147deg, #21262c 14.286%, #15181c 85.714%);
+  --rd-border-subtle: #272c32;
+  --rd-border-strong: #383e46;
+  --rd-text-primary: #f3f5f6;
+  --rd-text-secondary: #a3aab3;
+  --rd-text-tertiary: #6b727c;
+  --rd-text-on-brand: #03130e;
+  --rd-profit: #2fdab8;
+  --rd-profit-dim: #0f2e28;
+  --rd-loss: #f0667e;
+  --rd-loss-dim: #331920;
+  --rd-warning: #f2b84b;
+  --rd-warning-dim: #33270f;
+  --rd-info: #6bb0f5;
+  --rd-info-dim: #14263a;
+  --rd-ai: #b48ce0;
+  --rd-ai-dim: #261c33;
+  --rd-accent-earnings: #e3c690;
+  --rd-accent-earnings-surface: #282826;
+  --rd-accent-earnings-border: #4f493c;
+  --rd-accent-position: #96d9c6;
+  --rd-accent-position-surface: #21292b;
+  --rd-accent-position-border: #394e4c;
+  --rd-accent-event: #a9c5ea;
+  --rd-accent-event-surface: #22282f;
+  --rd-accent-event-border: #3e4856;
+  --rd-chart-benchmark: #f0a866;
+}
+
+html.dark:not([data-mobile-ui="redesign"]) body {
+  background-color: #050607;
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .font-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Cards: one step lighter than the canvas with the Figma surface-highlight → surface gradient */
+html.dark:not([data-mobile-ui="redesign"]) .shadcn-card {
+  background-color: #15181c;
+  background-image: linear-gradient(147deg, #21262c 14.286%, #15181c 85.714%);
+  border-color: #272c32;
+  box-shadow: none;
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .shadcn-dialog {
+  background-color: #15181c;
+  background-image: linear-gradient(131deg, #21262c 14.286%, #15181c 85.714%);
+  border-color: #383e46;
+  box-shadow: 0 20px 48px 0 rgba(0, 0, 0, 0.55);
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .shadcn-menu {
+  box-shadow: 0 20px 48px 0 rgba(0, 0, 0, 0.55);
+}
+
+html:not([data-mobile-ui="redesign"]) .shadcn-dialog-title {
+  font-size: 18px;
+  line-height: 22px;
+  font-weight: 700;
+  letter-spacing: -0.18px;
+}
+
+/* Segmented control: base well + subtle outline (inset so sizes don't shift) */
+html.dark:not([data-mobile-ui="redesign"]) .shadcn-tabs-list {
+  box-shadow: inset 0 0 0 1px #272c32;
+}
+
+html:not([data-mobile-ui="redesign"]) .shadcn-tabs-trigger {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .shadcn-tabs-trigger[data-state="inactive"] {
+  color: #6b727c;
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .shadcn-switch[data-state="unchecked"] {
+  box-shadow: inset 0 0 0 1px #383e46;
+}
+
+/* Select options: check on the right like Figma dropdowns */
+html:not([data-mobile-ui="redesign"]) .shadcn-select-item {
+  padding-left: 10px;
+  padding-right: 32px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+html:not([data-mobile-ui="redesign"]) .shadcn-select-item[data-state="checked"] {
+  font-weight: 600;
+}
+
+html:not([data-mobile-ui="redesign"]) .shadcn-select-indicator {
+  left: auto;
+  right: 10px;
+  color: hsl(var(--primary));
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .shadcn-select-item[data-state="unchecked"] {
+  color: #a3aab3;
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .shadcn-select-item[data-highlighted] {
+  color: #f3f5f6;
+}
+
+html:not([data-mobile-ui="redesign"]) .shadcn-badge {
+  font-size: 10px;
+  line-height: 12px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+html:not([data-mobile-ui="redesign"]) .shadcn-th {
+  font-size: 10px;
+  line-height: 12px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: hsl(var(--text-tertiary));
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .shadcn-tr {
+  border-color: #272c32;
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .shadcn-tr:hover {
+  background-color: rgba(255, 255, 255, 0.025);
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .text-profit,
+html.dark:not([data-mobile-ui="redesign"]) .text-green-400,
+html.dark:not([data-mobile-ui="redesign"]) .text-green-500,
+html.dark:not([data-mobile-ui="redesign"]) .text-green-600,
+html.dark:not([data-mobile-ui="redesign"]) .text-emerald-300,
+html.dark:not([data-mobile-ui="redesign"]) .text-emerald-400,
+html.dark:not([data-mobile-ui="redesign"]) .text-emerald-500,
+html.dark:not([data-mobile-ui="redesign"]) .text-emerald-600 {
+  color: #2fdab8;
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .text-loss,
+html.dark:not([data-mobile-ui="redesign"]) .text-red-400,
+html.dark:not([data-mobile-ui="redesign"]) .text-red-500,
+html.dark:not([data-mobile-ui="redesign"]) .text-red-600,
+html.dark:not([data-mobile-ui="redesign"]) .text-rose-300,
+html.dark:not([data-mobile-ui="redesign"]) .text-rose-400,
+html.dark:not([data-mobile-ui="redesign"]) .text-rose-500,
+html.dark:not([data-mobile-ui="redesign"]) .text-rose-600 {
+  color: #f0667e;
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .bg-profit {
+  background-color: #0f2e28;
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .bg-loss {
+  background-color: #331920;
+}
+
 /* Login stays dark glass regardless of app light/dark theme */
 .landing-page {
   --primary: 168 70% 52%;
