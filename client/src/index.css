@@ -348,6 +348,101 @@ html:not([data-mobile-ui="redesign"]) .shadcn-dialog-title {
   letter-spacing: -0.18px;
 }
 
+html:not([data-mobile-ui="redesign"]) .shadcn-dialog-description {
+  font-size: 12px;
+  line-height: 16px;
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .shadcn-dialog-description {
+  color: #6b727c;
+}
+
+/* Leading title icon → tinted tile in the icon's own color */
+html.dark:not([data-mobile-ui="redesign"]) .shadcn-dialog-title > svg:first-child {
+  box-sizing: content-box;
+  flex-shrink: 0;
+  padding: 6px;
+  border-radius: 8px;
+  background-color: color-mix(in srgb, currentColor 16%, transparent);
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .shadcn-dialog-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: #a3aab3;
+  opacity: 1;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .shadcn-dialog-close:hover {
+  background-color: #272c32;
+  color: #f3f5f6;
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .shadcn-dialog-close[data-state="open"] {
+  background-color: transparent;
+}
+
+/* Dialog footers: secondary (outline) action reads as a quiet text button like the Figma "Zrušiť" */
+html.dark:not([data-mobile-ui="redesign"]) .shadcn-dialog-footer [data-variant="outline"] {
+  border-color: transparent;
+  background-color: transparent;
+  box-shadow: none;
+  color: hsl(var(--primary));
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .shadcn-dialog-footer [data-variant="outline"]:hover {
+  background-color: rgba(47, 218, 184, 0.08);
+}
+
+/* New transaction: type picker as a segmented control */
+html.dark:not([data-mobile-ui="redesign"]) .atf-type-group {
+  padding: 0;
+  background-color: transparent;
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .atf-type-group > label {
+  margin-bottom: 6px;
+  font-size: 11px;
+  line-height: 14px;
+  color: #a3aab3;
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .atf-type-group > div {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 2px;
+  padding: 3px;
+  border-radius: 8px;
+  background-color: #050607;
+  box-shadow: inset 0 0 0 1px #272c32;
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .atf-type-group > div > button {
+  min-height: 30px;
+  padding: 0 8px;
+  border-color: transparent;
+  border-radius: 6px;
+  background-color: transparent;
+  box-shadow: none;
+  color: #6b727c;
+  font-size: 12px;
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .atf-type-group > div > button:hover {
+  color: #f3f5f6;
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .atf-type-group > div > button[data-variant="default"] {
+  background-color: #272c32;
+  color: #f3f5f6;
+}
+
 html:not([data-mobile-ui="redesign"]) main h1:not([data-testid="asset-detail-title"]) {
   font-size: 22px;
   line-height: 26px;

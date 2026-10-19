@@ -564,7 +564,7 @@ export function AddTransactionForm({ onSuccessSubmit, embed }: AddTransactionFor
             }}
             className="space-y-6"
           >
-            <div className="p-4 rounded-lg bg-muted">
+            <div className="atf-type-group p-4 rounded-lg bg-muted">
               <Label className="text-base font-medium mb-3 block">Typ transakcie</Label>
               <div className="flex flex-wrap gap-2">
                 <Button
