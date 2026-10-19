@@ -61,6 +61,7 @@ import {
   ArrowDownUp,
   Sparkles,
   Layers,
+  Flame,
 } from "lucide-react";
 import { useCurrency } from "@/hooks/useCurrency";
 import { usePortfolio, type Portfolio } from "@/hooks/usePortfolio";
@@ -2318,7 +2319,7 @@ function DashboardClassic() {
 
   const renderGainersCard = () => (
     <Card data-testid="dashboard-daily-gainers">
-      <CardHeader className="p-2.5 md:p-6">
+      <CardHeader className="p-2.5 md:px-4 md:pb-3 md:pt-3.5">
         <CardTitle className="text-base md:text-lg flex items-center gap-2 flex-wrap">
           <TrendingUp className="h-4 w-4 text-green-500" />
           Najlepšie (%)
@@ -2360,7 +2361,7 @@ function DashboardClassic() {
           Zmena podľa režimu trhu (RTH vs pre/post market).
         </CardDescription>
       </CardHeader>
-      <CardContent className="p-2.5 pt-0 md:p-6 md:pt-0">
+      <CardContent className="p-2.5 pt-0 md:px-4 md:pb-3.5 md:pt-0">
         {quotesFetching && !quotesData ? (
           <>
             {Array.from({ length: dailyMoversCount }, (_, i) => (
@@ -2390,7 +2391,7 @@ function DashboardClassic() {
 
   const renderLosersCard = () => (
     <Card data-testid="dashboard-daily-losers">
-      <CardHeader className="p-2.5 md:p-6">
+      <CardHeader className="p-2.5 md:px-4 md:pb-3 md:pt-3.5">
         <CardTitle className="text-base md:text-lg flex items-center gap-2 flex-wrap">
           <TrendingDown className="h-4 w-4 text-red-500" />
           Najhoršie (%)
@@ -2432,7 +2433,7 @@ function DashboardClassic() {
           Zmena podľa režimu trhu (RTH vs pre/post market).
         </CardDescription>
       </CardHeader>
-      <CardContent className="p-2.5 pt-0 md:p-6 md:pt-0">
+      <CardContent className="p-2.5 pt-0 md:px-4 md:pb-3.5 md:pt-0">
         {quotesFetching && !quotesData ? (
           <>
             {Array.from({ length: dailyMoversCount }, (_, i) => (
@@ -2499,7 +2500,7 @@ function DashboardClassic() {
   }
 
   return (
-    <div className="flex flex-col gap-3 md:gap-5">
+    <div className="flex flex-col gap-3 md:gap-3 md:[&>.relative:empty]:hidden">
       <div className="hidden md:flex items-center gap-2.5 min-w-0" data-testid="desktop-portfolio-header">
         <span className="flex size-11 shrink-0 items-center justify-center rounded-[10px] border border-border bg-primary/15 text-primary">
           {!isAllPortfolios && selectedPortfolio?.brokerCode ? (
@@ -2814,344 +2815,333 @@ function DashboardClassic() {
       >
         {(() => {
           const boxClass =
-            "h-full min-h-[148px] border-border bg-card shadow-sm flex flex-col overflow-hidden";
-          const headClass =
-            "flex flex-row items-center justify-between gap-2 space-y-0 px-3 py-2.5 min-h-[44px] shrink-0";
+            "h-full min-h-[146px] flex flex-col gap-1.5 overflow-hidden p-3";
+          const accentBoxClass = (accent: "earnings" | "position" | "event") =>
+            cn(
+              boxClass,
+              accent === "earnings" &&
+                "dark:![background-image:none] dark:!bg-[var(--rd-accent-earnings-surface)] dark:!border-[var(--rd-accent-earnings-border)]",
+              accent === "position" &&
+                "dark:![background-image:none] dark:!bg-[var(--rd-accent-position-surface)] dark:!border-[var(--rd-accent-position-border)]",
+              accent === "event" &&
+                "dark:![background-image:none] dark:!bg-[var(--rd-accent-event-surface)] dark:!border-[var(--rd-accent-event-border)]",
+            );
+          const accentTextClass = {
+            earnings: "text-amber-600 dark:text-[var(--rd-accent-earnings)]",
+            position: "text-primary dark:text-[var(--rd-accent-position)]",
+            event: "text-sky-600 dark:text-[var(--rd-accent-event)]",
+          } as const;
+          const headClass = "flex min-w-0 items-center gap-1.5";
           const titleClass =
-            "text-xs font-medium text-muted-foreground truncate min-w-0 flex items-center gap-1";
-          const actionClass =
-            "h-7 w-7 shrink-0 inline-flex items-center justify-center text-muted-foreground";
-          const bodyClass =
-            "flex flex-1 flex-col justify-between gap-2 px-3 pb-3 pt-0 min-h-0";
+            "min-w-0 flex-1 truncate text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-tertiary";
+          const nextButtonClass =
+            "inline-flex size-[18px] shrink-0 items-center justify-center rounded-md border border-border bg-secondary text-muted-foreground hover:text-foreground";
           const primaryClass =
-            "text-xl font-semibold leading-tight tracking-tight tabular-nums truncate";
-          const metaClass = "text-xs text-muted-foreground truncate";
-          const footClass = "space-y-0.5 min-w-0";
+            "text-[22px] font-bold leading-[26px] tracking-[-0.33px] tabular-nums truncate";
+          const metaClass = "text-[11px] leading-[14px] text-muted-foreground truncate";
+          const kvClass = "flex min-w-0 items-center justify-between gap-2 text-[11px] leading-[14px]";
+          const kvValueClass = "shrink-0 font-medium tabular-nums";
+          const ytdBarWidth = (value: number) => {
+            if (!ytdComparison) return "0%";
+            const max = Math.max(Math.abs(ytdComparison.portfolio), Math.abs(ytdComparison.sp500));
+            if (!Number.isFinite(max) || max <= 0) return "0%";
+            return `${Math.min(100, (Math.abs(value) / max) * 100)}%`;
+          };
 
           return (
             <>
         <Card className={boxClass} data-testid="card-total-value">
-          <CardHeader className={headClass}>
-            <CardTitle className={titleClass}>
-              Celková hodnota
-              {metrics.optionsIncluded && (
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal">
-                  + opcie
-                </Badge>
+          <div className={headClass}>
+            <p className={titleClass}>Celková hodnota</p>
+            {metrics.optionsIncluded && (
+              <span className="shrink-0 text-[11px] font-medium leading-[14px] text-tertiary">+ opcie</span>
+            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <HelpCircle className="h-3 w-3 shrink-0 text-tertiary cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[280px]">
+                <p className="font-semibold mb-1">Celková hodnota portfólia</p>
+                <p className="text-xs">Súčet aktuálnej trhovej hodnoty všetkých vašich pozícií. Pri opciách sa počíta hodnota prémia otvorených pozícií.</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+          <div className={primaryClass} data-testid="text-total-value">
+            {maskAmount(formatCurrency(metrics.totalValue))}
+          </div>
+          <p className={kvClass}>
+            <span className="min-w-0 truncate text-muted-foreground">Dnes</span>
+            <span className={`${kvValueClass} ${getChangeColor(displayedDailyChange)}`}>
+              {displayedDailyChange >= 0 ? "+" : ""}
+              {maskAmount(formatCurrency(displayedDailyChange))}
+              <span className="ml-1">({formatPercent(displayedDailyChangePercent)})</span>
+            </span>
+          </p>
+          <p className={kvClass}>
+            <span className="min-w-0 truncate text-muted-foreground">Investované</span>
+            <span className={`${kvValueClass} text-foreground`}>
+              {maskAmount(formatCurrency(metrics.totalInvested))}
+            </span>
+          </p>
+          {shouldUseExtendedQuotes(usSessionState) && (
+            <p className={kvClass} data-testid="text-pre-open-preview">
+              <span className="inline-flex min-w-0 items-center gap-1 text-muted-foreground">
+                <Moon className={`h-[11px] w-[11px] shrink-0 ${premarketMoonClass}`} />
+                <span className="truncate">{getExtendedSessionLabel(usSessionState)}</span>
+              </span>
+              {preOpenPreview.available ? (
+                <span className={`${kvValueClass} ${getChangeColor(preOpenPreview.amount)}`}>
+                  {preOpenPreview.amount >= 0 ? "+" : ""}
+                  {maskAmount(formatCurrency(preOpenPreview.amount))}
+                  <span className={`ml-1 ${getChangeColor(preOpenPreview.percent)}`}>
+                    ({formatPercent(preOpenPreview.percent)})
+                  </span>
+                </span>
+              ) : (
+                <span className={`${kvValueClass} text-muted-foreground`}>bez dát</span>
               )}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent className="max-w-[280px]">
-                  <p className="font-semibold mb-1">Celková hodnota portfólia</p>
-                  <p className="text-xs">Súčet aktuálnej trhovej hodnoty všetkých vašich pozícií. Pri opciách sa počíta hodnota prémia otvorených pozícií.</p>
-                </TooltipContent>
-              </Tooltip>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className={bodyClass}>
-            <div className="min-w-0 space-y-0.5">
-              <div className={primaryClass} data-testid="text-total-value">
-                {maskAmount(formatCurrency(metrics.totalValue))}
-              </div>
-              <p className={`${metaClass} tabular-nums ${getChangeColor(displayedDailyChange)}`}>
-                Dnes {displayedDailyChange >= 0 ? "+" : ""}
-                {maskAmount(formatCurrency(displayedDailyChange))}
-                <span className="ml-1">({formatPercent(displayedDailyChangePercent)})</span>
-              </p>
-            </div>
-            <div className={footClass}>
-              <p className={metaClass}>
-                Investované: {maskAmount(formatCurrency(metrics.totalInvested))}
-              </p>
-              {shouldUseExtendedQuotes(usSessionState) && (
-                <p className={`${metaClass} inline-flex items-center gap-1`} data-testid="text-pre-open-preview">
-                  <Moon className={`h-3 w-3 ${premarketMoonClass}`} />
-                  {getExtendedSessionLabel(usSessionState)}{" "}
-                  {preOpenPreview.available ? (
-                    <>
-                      <span className={getChangeColor(preOpenPreview.amount)}>
-                        {preOpenPreview.amount >= 0 ? "+" : ""}
-                        {maskAmount(formatCurrency(preOpenPreview.amount))}
-                      </span>
-                      <span className={`ml-1 ${getChangeColor(preOpenPreview.percent)}`}>
-                        ({formatPercent(preOpenPreview.percent)})
-                      </span>
-                    </>
-                  ) : (
-                    "bez dát"
-                  )}
-                </p>
-              )}
-            </div>
-          </CardContent>
+            </p>
+          )}
         </Card>
 
         <Card className={boxClass} data-testid="card-total-profit">
-          <CardHeader className={headClass}>
-            <CardTitle className={titleClass}>
-              Celkový profit
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent className="max-w-[300px]">
-                  <p className="font-semibold mb-1">Celkový profit (P&L)</p>
-                  <p className="text-xs mb-2">
-                    Pre akcie: kapitálový zisk (FIFO, náklad v EUR v deň D), FX a dividendy z API. Celková suma hore stále zahŕňa opcie, ak ich máš.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </CardTitle>
-            <div className={actionClass}>{getChangeIcon(metrics.totalProfit)}</div>
-          </CardHeader>
-          <CardContent className={bodyClass}>
-            <div className="min-w-0 space-y-0.5">
-              <div className="flex items-baseline gap-1.5 min-w-0">
-                <span className={`${primaryClass} ${getChangeColor(metrics.totalProfit)}`} data-testid="text-total-profit">
-                  {maskAmount(formatCurrency(metrics.totalProfit))}
-                </span>
-                <span className={`text-xs font-medium shrink-0 tabular-nums ${getChangeColor(metrics.totalProfitPercent || 0)}`} data-testid="text-total-profit-percent">
-                  {formatPercent(metrics.totalProfitPercent || 0)}
-                </span>
-              </div>
-            </div>
-            <div className={footClass}>
-              <p className={metaClass}>
-                Nerealizovaný {maskAmount(formatCurrency(metrics.unrealizedGain))}
-              </p>
-            </div>
-          </CardContent>
+          <div className={headClass}>
+            <p className={titleClass}>Celkový profit</p>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <HelpCircle className="h-3 w-3 shrink-0 text-tertiary cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent className="max-w-[300px]">
+                <p className="font-semibold mb-1">Celkový profit (P&L)</p>
+                <p className="text-xs mb-2">
+                  Pre akcie: kapitálový zisk (FIFO, náklad v EUR v deň D), FX a dividendy z API. Celková suma hore stále zahŕňa opcie, ak ich máš.
+                </p>
+              </TooltipContent>
+            </Tooltip>
+            <span className="shrink-0 [&_svg]:h-3.5 [&_svg]:w-3.5">{getChangeIcon(metrics.totalProfit)}</span>
+          </div>
+          <span className={`${primaryClass} ${getChangeColor(metrics.totalProfit)}`} data-testid="text-total-profit">
+            {maskAmount(formatCurrency(metrics.totalProfit))}
+          </span>
+          <span
+            className={cn(
+              "w-fit rounded-md px-1.5 py-0.5 text-[11px] font-medium leading-[14px] tabular-nums",
+              (metrics.totalProfitPercent || 0) >= 0 ? "bg-profit" : "bg-loss",
+              getChangeColor(metrics.totalProfitPercent || 0),
+            )}
+            data-testid="text-total-profit-percent"
+          >
+            {formatPercent(metrics.totalProfitPercent || 0)}
+          </span>
+          <p className={kvClass}>
+            <span className="min-w-0 truncate text-muted-foreground">Nerealizovaný</span>
+            <span className={`${kvValueClass} ${getChangeColor(metrics.unrealizedGain)}`}>
+              {maskAmount(formatCurrency(metrics.unrealizedGain))}
+            </span>
+          </p>
         </Card>
 
         {isDashboardWidgetVisible("earnings") && (
-          <Card className={boxClass} data-testid="card-desktop-next-earnings">
-            <CardHeader className={headClass}>
-              <CardTitle className={titleClass}>Earnings</CardTitle>
-              <div className={actionClass}>
-                {mobileEarningsItems.length > 1 ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    aria-label="Ďalší earnings"
-                    onClick={() =>
-                      setMobileEarningsIndex((prev) => (prev + 1) % mobileEarningsItems.length)
-                    }
-                    data-testid="button-desktop-next-earnings-next"
-                  >
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </Button>
-                ) : null}
-              </div>
-            </CardHeader>
-            <CardContent className={bodyClass}>
-              {currentMobileEarnings ? (
+          <Card className={accentBoxClass("earnings")} data-testid="card-desktop-next-earnings">
+            <div className={headClass}>
+              <Flame className={`h-3 w-3 shrink-0 ${accentTextClass.earnings}`} />
+              <p className={cn(titleClass, accentTextClass.earnings)}>Earnings</p>
+              {mobileEarningsItems.length > 1 ? (
                 <button
                   type="button"
-                  className="flex flex-1 flex-col justify-between gap-2 w-full text-left min-w-0"
+                  className={nextButtonClass}
+                  aria-label="Ďalší earnings"
                   onClick={() =>
-                    setLocation(`/asset/${encodeURIComponent(currentMobileEarnings.ticker)}`)
+                    setMobileEarningsIndex((prev) => (prev + 1) % mobileEarningsItems.length)
                   }
+                  data-testid="button-desktop-next-earnings-next"
                 >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <CompanyLogo
-                      ticker={currentMobileEarnings.ticker}
-                      companyName={currentMobileEarnings.companyName}
-                      size="sm"
-                    />
-                    <div className="min-w-0">
-                      <p className={`${primaryClass} text-lg`}>{currentMobileEarnings.ticker}</p>
-                      <p className={metaClass}>{currentMobileEarnings.companyName}</p>
-                    </div>
-                  </div>
-                  <div className={footClass}>
-                    <p className="text-xs font-medium tabular-nums truncate">
-                      {format(
-                        parse(currentMobileEarnings.date, "yyyy-MM-dd", new Date()),
-                        "d. MMM yyyy",
-                        { locale: sk },
-                      )}
-                    </p>
-                  </div>
+                  <ChevronRight className="h-3 w-3" />
                 </button>
-              ) : (
-                <p className="text-sm text-muted-foreground">Žiadny najbližší earnings</p>
-              )}
-            </CardContent>
+              ) : null}
+            </div>
+            {currentMobileEarnings ? (
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 flex-col gap-1.5 text-left"
+                onClick={() =>
+                  setLocation(`/asset/${encodeURIComponent(currentMobileEarnings.ticker)}`)
+                }
+              >
+                <p className={primaryClass}>{currentMobileEarnings.ticker}</p>
+                <p className={`${metaClass} w-full`}>{currentMobileEarnings.companyName}</p>
+                <p className={`text-[11px] font-medium leading-[14px] tabular-nums truncate ${accentTextClass.earnings}`}>
+                  {format(
+                    parse(currentMobileEarnings.date, "yyyy-MM-dd", new Date()),
+                    "d. MMM yyyy",
+                    { locale: sk },
+                  )}
+                </p>
+              </button>
+            ) : (
+              <p className="text-[13px] leading-[18px] text-muted-foreground">Žiadny najbližší earnings</p>
+            )}
           </Card>
         )}
 
         {isDashboardWidgetVisible("topPosition") && (
-          <Card className={boxClass} data-testid="card-desktop-top-position">
-            <CardHeader className={headClass}>
-              <CardTitle className={titleClass}>Top pozícia</CardTitle>
-              <div className={actionClass}>
-                {mobileTopPositions.length > 1 ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    aria-label="Ďalšia pozícia"
-                    onClick={() =>
-                      setMobileTopPositionIndex((prev) => (prev + 1) % mobileTopPositions.length)
-                    }
-                    data-testid="button-desktop-top-position-next"
-                  >
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </Button>
-                ) : null}
-              </div>
-            </CardHeader>
-            <CardContent className={bodyClass}>
-              {currentMobileTopPosition ? (
+          <Card className={accentBoxClass("position")} data-testid="card-desktop-top-position">
+            <div className={headClass}>
+              <TrendingUp className={`h-3 w-3 shrink-0 ${accentTextClass.position}`} />
+              <p className={cn(titleClass, accentTextClass.position)}>Top pozícia</p>
+              {mobileTopPositions.length > 1 ? (
                 <button
                   type="button"
-                  className="flex flex-1 flex-col justify-between gap-2 w-full text-left min-w-0"
+                  className={nextButtonClass}
+                  aria-label="Ďalšia pozícia"
                   onClick={() =>
-                    setLocation(`/asset/${encodeURIComponent(currentMobileTopPosition.ticker)}`)
+                    setMobileTopPositionIndex((prev) => (prev + 1) % mobileTopPositions.length)
                   }
+                  data-testid="button-desktop-top-position-next"
                 >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <CompanyLogo
-                      ticker={currentMobileTopPosition.ticker}
-                      companyName={currentMobileTopPosition.companyName}
-                      size="sm"
-                    />
-                    <div className="min-w-0">
-                      <p className={`${primaryClass} text-lg`}>{currentMobileTopPosition.ticker}</p>
-                      <p className={metaClass}>
-                        {currentMobileTopPosition.companyName || "Bez názvu"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className={footClass}>
-                    <p className="text-xs font-semibold tabular-nums text-primary truncate">
-                      {currentMobileTopPositionPct.toFixed(1)}%
-                      <span className="ml-1.5 font-normal text-muted-foreground">
-                        {maskAmount(formatCurrency(currentMobileTopPosition.value))}
-                      </span>
-                    </p>
-                  </div>
+                  <ChevronRight className="h-3 w-3" />
                 </button>
-              ) : (
-                <p className="text-sm text-muted-foreground">Žiadna top pozícia</p>
-              )}
-            </CardContent>
+              ) : null}
+            </div>
+            {currentMobileTopPosition ? (
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 flex-col gap-1.5 text-left"
+                onClick={() =>
+                  setLocation(`/asset/${encodeURIComponent(currentMobileTopPosition.ticker)}`)
+                }
+              >
+                <p className={primaryClass}>{currentMobileTopPosition.ticker}</p>
+                <p className={`${metaClass} w-full`}>
+                  {currentMobileTopPosition.companyName || "Bez názvu"}
+                </p>
+                <p className={`text-[11px] font-medium leading-[14px] tabular-nums truncate ${accentTextClass.position}`}>
+                  {currentMobileTopPositionPct.toFixed(1)}%
+                  {" · "}
+                  {maskAmount(formatCurrency(currentMobileTopPosition.value))}
+                </p>
+              </button>
+            ) : (
+              <p className="text-[13px] leading-[18px] text-muted-foreground">Žiadna top pozícia</p>
+            )}
           </Card>
         )}
 
         {isDashboardWidgetVisible("macroEvent") && (
-          <Card className={boxClass} data-testid="card-desktop-next-macro">
-            <CardHeader className={headClass}>
-              <CardTitle className={titleClass}>Udalosť</CardTitle>
-              <div className={actionClass}>
-                {mobileMacroEvents.length > 1 ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    aria-label="Ďalšia makro udalosť"
-                    onClick={() =>
-                      setMobileMacroEventIndex((prev) => (prev + 1) % mobileMacroEvents.length)
-                    }
-                    data-testid="button-desktop-next-macro-event-next"
-                  >
-                    <ChevronRight className="h-3.5 w-3.5" />
-                  </Button>
-                ) : null}
-              </div>
-            </CardHeader>
-            <CardContent className={bodyClass}>
-              {currentMobileMacroEvent ? (
-                <>
-                  <div className="min-w-0 space-y-0.5">
-                    <p className={`${primaryClass} text-lg`}>{currentMobileMacroEvent.shortLabel}</p>
-                    <p className={`${metaClass} line-clamp-2`}>{currentMobileMacroEvent.title}</p>
-                  </div>
-                  <div className={footClass}>
-                    <p className="text-xs font-medium tabular-nums truncate">
-                      {format(
-                        parse(currentMobileMacroEvent.date, "yyyy-MM-dd", new Date()),
-                        "d. MMM yyyy",
-                        { locale: sk },
-                      )}
-                    </p>
-                  </div>
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">Žiadna makro udalosť</p>
-              )}
-            </CardContent>
+          <Card className={accentBoxClass("event")} data-testid="card-desktop-next-macro">
+            <div className={headClass}>
+              <Calendar className={`h-3 w-3 shrink-0 ${accentTextClass.event}`} />
+              <p className={cn(titleClass, accentTextClass.event)}>Udalosť</p>
+              {mobileMacroEvents.length > 1 ? (
+                <button
+                  type="button"
+                  className={nextButtonClass}
+                  aria-label="Ďalšia makro udalosť"
+                  onClick={() =>
+                    setMobileMacroEventIndex((prev) => (prev + 1) % mobileMacroEvents.length)
+                  }
+                  data-testid="button-desktop-next-macro-event-next"
+                >
+                  <ChevronRight className="h-3 w-3" />
+                </button>
+              ) : null}
+            </div>
+            {currentMobileMacroEvent ? (
+              <>
+                <p className={primaryClass}>{currentMobileMacroEvent.shortLabel}</p>
+                <p className={`${metaClass} line-clamp-2 whitespace-normal`}>{currentMobileMacroEvent.title}</p>
+                <p className={`text-[11px] font-medium leading-[14px] tabular-nums truncate ${accentTextClass.event}`}>
+                  {format(
+                    parse(currentMobileMacroEvent.date, "yyyy-MM-dd", new Date()),
+                    "d. MMM yyyy",
+                    { locale: sk },
+                  )}
+                </p>
+              </>
+            ) : (
+              <p className="text-[13px] leading-[18px] text-muted-foreground">Žiadna makro udalosť</p>
+            )}
           </Card>
         )}
 
         {isDashboardWidgetVisible("ytdBenchmark") && (
           <Card className={boxClass} data-testid="card-ytd-benchmark">
-            <CardHeader className={headClass}>
-              <CardTitle className={titleClass}>
-                YTD vs S&amp;P 500
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <HelpCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground cursor-help" />
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-[300px]">
-                    <p className="font-semibold mb-1">Porovnanie od začiatku roka</p>
-                    <p className="text-xs">
-                      Porovnávame výkonnosť vášho portfólia voči S&amp;P 500 v rovnakom YTD intervale. Alpha je rozdiel
-                      portfólia mínus index.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </CardTitle>
-              <div className={actionClass} aria-hidden />
-            </CardHeader>
-            <CardContent className={bodyClass}>
-              {ytdComparison ? (
-                <>
-                  <div className="min-w-0 space-y-0.5">
-                    <div className="flex items-baseline gap-1.5 min-w-0">
-                      <span
-                        className={`${primaryClass} ${getChangeColor(ytdComparison.alpha)}`}
-                        data-testid="text-ytd-alpha"
-                      >
-                        {formatPercent(ytdComparison.alpha)}
-                      </span>
-                      <span className="text-xs text-muted-foreground shrink-0">Alpha</span>
-                    </div>
-                    <p className={metaClass}>
-                      YTD {ytdComparison.yearLabel ?? new Date().getFullYear()}
-                    </p>
+            <div className={headClass}>
+              <p className={titleClass}>YTD vs S&amp;P 500</p>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-3 w-3 shrink-0 text-tertiary cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[300px]">
+                  <p className="font-semibold mb-1">Porovnanie od začiatku roka</p>
+                  <p className="text-xs">
+                    Porovnávame výkonnosť vášho portfólia voči S&amp;P 500 v rovnakom YTD intervale. Alpha je rozdiel
+                    portfólia mínus index.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            {ytdComparison ? (
+              <>
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <span
+                    className={`${primaryClass} ${getChangeColor(ytdComparison.alpha)}`}
+                    data-testid="text-ytd-alpha"
+                  >
+                    {formatPercent(ytdComparison.alpha)}
+                  </span>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-md px-1.5 py-1 text-[10px] font-semibold uppercase leading-3 tracking-[0.8px]",
+                      ytdComparison.alpha >= 0 ? "bg-profit" : "bg-loss",
+                      getChangeColor(ytdComparison.alpha),
+                    )}
+                  >
+                    Alpha
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <p className={kvClass}>
+                    <span className="min-w-0 truncate text-muted-foreground">Portfólio</span>
+                    <span className={`${kvValueClass} ${getChangeColor(ytdComparison.portfolio)}`}>
+                      {formatPercent(ytdComparison.portfolio)}
+                    </span>
+                  </p>
+                  <div className="h-1 w-full overflow-hidden rounded-full bg-background">
+                    <div
+                      className={cn(
+                        "h-1 rounded-full",
+                        ytdComparison.portfolio >= 0 ? "bg-primary" : "bg-destructive",
+                      )}
+                      style={{ width: ytdBarWidth(ytdComparison.portfolio) }}
+                    />
                   </div>
-                  <div className={footClass}>
-                    <p className="flex items-center justify-between gap-2 text-xs">
-                      <span className="text-muted-foreground truncate">Portfólio</span>
-                      <span className={`font-semibold tabular-nums shrink-0 ${getChangeColor(ytdComparison.portfolio)}`}>
-                        {formatPercent(ytdComparison.portfolio)}
-                      </span>
-                    </p>
-                    <p className="flex items-center justify-between gap-2 text-xs">
-                      <span className="text-muted-foreground truncate">S&amp;P 500</span>
-                      <span className={`font-semibold tabular-nums shrink-0 ${getChangeColor(ytdComparison.sp500)}`}>
-                        {formatPercent(ytdComparison.sp500)}
-                      </span>
-                    </p>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <p className={kvClass}>
+                    <span className="min-w-0 truncate text-muted-foreground">S&amp;P 500</span>
+                    <span className={`${kvValueClass} text-orange-500 dark:text-[var(--rd-chart-benchmark)]`}>
+                      {formatPercent(ytdComparison.sp500)}
+                    </span>
+                  </p>
+                  <div className="h-1 w-full overflow-hidden rounded-full bg-background">
+                    <div
+                      className="h-1 rounded-full bg-orange-500 dark:bg-[var(--rd-chart-benchmark)]"
+                      style={{ width: ytdBarWidth(ytdComparison.sp500) }}
+                    />
                   </div>
-                </>
-              ) : (
-                <>
-                  <div className="min-w-0">
-                    <p className={`${primaryClass} text-muted-foreground`}>—</p>
-                    <p className={metaClass}>YTD {new Date().getFullYear()}</p>
-                  </div>
-                  <p className={metaClass}>YTD dáta sa načítavajú…</p>
-                </>
-              )}
-            </CardContent>
+                </div>
+                <p className="text-[11px] leading-[14px] text-tertiary">
+                  YTD {ytdComparison.yearLabel ?? new Date().getFullYear()}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className={`${primaryClass} text-muted-foreground`}>—</p>
+                <p className={metaClass}>YTD {new Date().getFullYear()}</p>
+                <p className={metaClass}>YTD dáta sa načítavajú…</p>
+              </>
+            )}
           </Card>
         )}
             </>
@@ -3176,7 +3166,7 @@ function DashboardClassic() {
                   emptyHint="Na mobile je graf v súhrne — oko ho zapína/vypína"
                 >
       <div
-        className={`hidden md:grid gap-4 ${
+        className={`hidden md:grid gap-3 ${
           allocationVisible ? "lg:grid-cols-3" : ""
         }`}
       >
@@ -3746,11 +3736,11 @@ function DashboardClassic() {
                 onToggleVisible={() => toggleDashboardWidget(widgetId)}
               >
       <Card>
-        <CardHeader className="p-2.5 md:p-6">
+        <CardHeader className="p-2.5 md:space-y-0.5 md:px-4 md:pb-3 md:pt-3.5">
           <CardTitle className="text-base md:text-lg">Prehľad aktív</CardTitle>
           <CardDescription className="text-xs md:text-sm">Vaše aktuálne držané akcie ({currency})</CardDescription>
         </CardHeader>
-        <CardContent className="p-2.5 pt-0 md:p-6 md:pt-0">
+        <CardContent className="p-2.5 pt-0 md:p-0">
           {!holdings || holdings.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground" data-testid="text-no-holdings">
               <p>Zatiaľ nemáte žiadne akcie.</p>
@@ -4391,7 +4381,7 @@ function DashboardClassic() {
                                 href={`https://finance.yahoo.com/quote/${holding.ticker}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="font-medium hover:text-primary hover:underline transition-colors"
+                                className="font-semibold hover:text-primary hover:underline transition-colors"
                                 data-testid={`link-ticker-${holding.ticker}`}
                                 onClick={(e) => e.stopPropagation()}
                               >

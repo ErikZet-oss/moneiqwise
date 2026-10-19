@@ -207,6 +207,9 @@ html:not([data-mobile-ui="redesign"]) {
   --ui-item-py: 8px;
   --ui-switch-w: 2.5rem;
   --ui-switch-shift: 1rem;
+  --ui-table-text: 13px;
+  --ui-th-h: 2rem;
+  --ui-td-py: 10px;
   --text-tertiary: 215 10% 52%;
   --sidebar-text-secondary: 210 14% 78%;
   --sidebar-text-tertiary: 214 10% 60%;
@@ -345,6 +348,29 @@ html:not([data-mobile-ui="redesign"]) .shadcn-dialog-title {
   letter-spacing: -0.18px;
 }
 
+html:not([data-mobile-ui="redesign"]) main h1:not([data-testid="asset-detail-title"]) {
+  font-size: 22px;
+  line-height: 26px;
+  font-weight: 700;
+  letter-spacing: -0.33px;
+}
+
+html:not([data-mobile-ui="redesign"]) .shadcn-card-title:not([class*="text-2xl"]) {
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 600;
+  letter-spacing: -0.075px;
+}
+
+html:not([data-mobile-ui="redesign"]) .shadcn-card-description {
+  font-size: 11px;
+  line-height: 14px;
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .shadcn-card-description {
+  color: #6b727c;
+}
+
 /* Segmented control: base well + subtle outline (inset so sizes don't shift) */
 html.dark:not([data-mobile-ui="redesign"]) .shadcn-tabs-list {
   box-shadow: inset 0 0 0 1px #272c32;
@@ -406,6 +432,10 @@ html:not([data-mobile-ui="redesign"]) .shadcn-th {
   letter-spacing: 0.8px;
   text-transform: uppercase;
   color: hsl(var(--text-tertiary));
+}
+
+html.dark:not([data-mobile-ui="redesign"]) .shadcn-thead {
+  background-color: #15181c;
 }
 
 html.dark:not([data-mobile-ui="redesign"]) .shadcn-tr {
