@@ -582,13 +582,12 @@ function DividendsClassic() {
   }
 
   return (
-    <div className="flex flex-col gap-3 md:gap-6 pb-6 md:pb-8">
+    <div className="flex flex-col gap-3 pb-6 md:pb-8">
       <div>
         <h1
           className="text-lg font-semibold flex items-center gap-2 flex-wrap"
           data-testid="text-page-title"
         >
-          <Banknote className="h-5 w-5 sm:h-6 sm:w-6 text-primary shrink-0" />
           Dividendy
           <HelpTip title="Stránka Dividendy">
             <p>
@@ -597,7 +596,7 @@ function DividendsClassic() {
             </p>
           </HelpTip>
         </h1>
-        <p className="text-xs text-muted-foreground mt-1">
+        <p className="text-[13px] leading-[18px] text-muted-foreground mt-1">
           Kalendár, ročný prehľad a yield analytika
         </p>
       </div>
@@ -605,7 +604,7 @@ function DividendsClassic() {
       <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
         <Card className="shadow-sm">
           <CardContent className="p-4 pt-3">
-            <p className="text-[9px] sm:text-xs text-muted-foreground leading-tight line-clamp-2 sm:line-clamp-none flex items-center gap-1">
+            <p className="text-[9px] sm:text-[10px] sm:font-semibold sm:uppercase sm:leading-3 sm:tracking-[0.8px] text-muted-foreground sm:text-tertiary leading-tight line-clamp-2 sm:line-clamp-none flex items-center gap-1">
               <span className="min-w-0">
                 <span className="sm:hidden">12M príjem</span>
                 <span className="hidden sm:inline">Forward 12M príjem</span>
@@ -617,14 +616,14 @@ function DividendsClassic() {
                 </p>
               </HelpTip>
             </p>
-            <p className="text-[11px] sm:text-2xl font-semibold tabular-nums leading-tight tracking-tight mt-0.5 sm:mt-1 break-all sm:break-normal">
+            <p className="text-[11px] sm:text-[22px] sm:leading-[26px] font-semibold sm:font-bold tabular-nums leading-tight tracking-tight sm:tracking-[-0.33px] mt-0.5 sm:mt-1.5 break-all sm:break-normal dark:text-primary">
               {formatCurrency(yieldMetrics.annualIncome)}
             </p>
           </CardContent>
         </Card>
         <Card className="shadow-sm">
           <CardContent className="p-4 pt-3">
-            <p className="text-[9px] sm:text-xs text-muted-foreground leading-tight line-clamp-2 sm:line-clamp-none flex items-center gap-1">
+            <p className="text-[9px] sm:text-[10px] sm:font-semibold sm:uppercase sm:leading-3 sm:tracking-[0.8px] text-muted-foreground sm:text-tertiary leading-tight line-clamp-2 sm:line-clamp-none flex items-center gap-1">
               <span className="min-w-0">
                 <span className="sm:hidden">Yield</span>
                 <span className="hidden sm:inline">Dividend Yield (aktuálny)</span>
@@ -636,14 +635,14 @@ function DividendsClassic() {
                 </p>
               </HelpTip>
             </p>
-            <p className="text-[11px] sm:text-2xl font-semibold tabular-nums leading-tight tracking-tight mt-0.5 sm:mt-1">
+            <p className="text-[11px] sm:text-[22px] sm:leading-[26px] font-semibold sm:font-bold tabular-nums leading-tight tracking-tight sm:tracking-[-0.33px] mt-0.5 sm:mt-1.5">
               {yieldMetrics.dividendYieldCurrent.toFixed(2)}%
             </p>
           </CardContent>
         </Card>
         <Card className="shadow-sm">
           <CardContent className="p-4 pt-3">
-            <p className="text-[9px] sm:text-xs text-muted-foreground leading-tight line-clamp-2 sm:line-clamp-none flex items-center gap-1">
+            <p className="text-[9px] sm:text-[10px] sm:font-semibold sm:uppercase sm:leading-3 sm:tracking-[0.8px] text-muted-foreground sm:text-tertiary leading-tight line-clamp-2 sm:line-clamp-none flex items-center gap-1">
               <span className="min-w-0">
                 <span className="sm:hidden">YOC</span>
                 <span className="hidden sm:inline">Yield on Cost (YOC)</span>
@@ -655,13 +654,14 @@ function DividendsClassic() {
                 </p>
               </HelpTip>
             </p>
-            <p className="text-[11px] sm:text-2xl font-semibold tabular-nums leading-tight tracking-tight mt-0.5 sm:mt-1">
+            <p className="text-[11px] sm:text-[22px] sm:leading-[26px] font-semibold sm:font-bold tabular-nums leading-tight tracking-tight sm:tracking-[-0.33px] mt-0.5 sm:mt-1.5">
               {yieldMetrics.yieldOnCost.toFixed(2)}%
             </p>
           </CardContent>
         </Card>
       </div>
 
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)] xl:items-start">
       <Card>
         <CardHeader className="p-4 pb-2">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -680,31 +680,31 @@ function DividendsClassic() {
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" onClick={() => setCalendarMonth((m) => subMonths(m, 1))} aria-label="Predchádzajúci mesiac">
+              <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setCalendarMonth((m) => subMonths(m, 1))} aria-label="Predchádzajúci mesiac">
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <span className="min-w-[11rem] text-center text-sm font-medium capitalize">
+              <span className="min-w-[7.5rem] text-center text-[13px] font-semibold capitalize">
                 {format(calendarMonth, "LLLL yyyy", { locale: sk })}
               </span>
-              <Button variant="outline" size="icon" onClick={() => setCalendarMonth((m) => addMonths(m, 1))} aria-label="Nasledujúci mesiac">
+              <Button variant="outline" size="icon" className="h-7 w-7" onClick={() => setCalendarMonth((m) => addMonths(m, 1))} aria-label="Nasledujúci mesiac">
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
           </div>
         </CardHeader>
         <CardContent className="p-4 pt-3">
-          <div className="rounded-lg border overflow-hidden touch-manipulation">
-            <div className="grid grid-cols-7 gap-px bg-border">
+          <div className="touch-manipulation">
+            <div className="grid grid-cols-7 gap-1.5">
               {["Po", "Ut", "St", "Št", "Pi", "So", "Ne"].map((d) => (
                 <div
                   key={d}
-                  className="bg-muted/50 px-0.5 py-1.5 sm:py-2 text-center text-[10px] sm:text-xs font-medium text-muted-foreground"
+                  className="px-1 pb-1.5 text-left text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-tertiary"
                 >
                   {d}
                 </div>
               ))}
             </div>
-            <div className="grid grid-cols-7 gap-px bg-border">
+            <div className="grid grid-cols-7 gap-1.5">
               {calendarDays.map((day) => {
                 const dayIso = format(startOfDay(day), "yyyy-MM-dd");
                 const bucket = calendarByDay.get(dayIso);
@@ -716,7 +716,7 @@ function DividendsClassic() {
                     key={dayIso}
                     type="button"
                     onClick={() => openCalendarDayDetail(day)}
-                    className={`w-full min-h-[4rem] sm:min-h-[5rem] p-1 sm:p-1.5 flex flex-col items-stretch text-left bg-card active:bg-muted/60 transition-colors ${!inMonth ? "opacity-40" : ""} ${isToday(day) ? "ring-1 ring-inset ring-primary/50 z-[1]" : ""}`}
+                    className={`w-full min-h-[4rem] sm:min-h-[4.5rem] p-1 sm:p-2 flex flex-col items-stretch text-left rounded-lg border bg-card dark:bg-[var(--rd-bg-surface)] hover:bg-muted/60 active:bg-muted/60 transition-colors ${!inMonth ? "opacity-40" : ""} ${isToday(day) ? "border-amber-400 dark:border-[var(--rd-warning)]" : bucket ? "border-primary/70" : "border-border"}`}
                   >
                     <span
                       className={`text-[11px] sm:text-xs font-medium leading-none ${inMonth ? "text-foreground" : "text-muted-foreground"}`}
@@ -745,7 +745,7 @@ function DividendsClassic() {
                     )}
                     {bucket && (
                       <span
-                        className={`mt-auto text-[9px] sm:text-[11px] font-semibold truncate leading-tight ${bucket.totalNet >= 0 ? "text-blue-600 dark:text-blue-400" : "text-red-600"}`}
+                        className={`mt-auto text-[9px] sm:text-[11px] font-semibold truncate leading-tight ${bucket.totalNet >= 0 ? "text-blue-600 dark:!text-[var(--rd-profit)]" : "text-red-600"}`}
                       >
                         {bucket.totalNet >= 0 ? "+" : ""}
                         {formatCurrency(bucket.totalNet)}
@@ -780,7 +780,7 @@ function DividendsClassic() {
               <Button
                 variant="outline"
                 size="icon"
-                className="h-8 w-8 sm:h-9 sm:w-9"
+                className="h-7 w-7"
                 aria-label="Predchádzajúci rok"
                 onClick={() => {
                   setChartYear((yy) => yy - 1);
@@ -789,13 +789,13 @@ function DividendsClassic() {
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <span className="min-w-[4.5rem] sm:min-w-[5.5rem] text-center text-sm sm:text-base font-semibold tabular-nums">
+              <span className="min-w-[3rem] text-center text-[13px] font-semibold tabular-nums">
                 {chartYear}
               </span>
               <Button
                 variant="outline"
                 size="icon"
-                className="h-8 w-8 sm:h-9 sm:w-9"
+                className="h-7 w-7"
                 aria-label="Nasledujúci rok"
                 onClick={() => {
                   setChartYear((yy) => yy + 1);
@@ -807,7 +807,7 @@ function DividendsClassic() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-xs sm:text-sm h-8 px-2 sm:px-3"
+                className="h-7 px-2 text-xs"
                 onClick={() => {
                   const y = new Date().getFullYear();
                   setChartYear(y);
@@ -1039,6 +1039,7 @@ function DividendsClassic() {
           })()}
         </CardContent>
       </Card>
+      </div>
 
       {dividends && dividends.byTicker.length > 0 && (
         <Card>

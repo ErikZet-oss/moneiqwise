@@ -524,7 +524,7 @@ function ProfitClassic() {
   };
 
   return (
-    <div className="max-w-full space-y-3 overflow-x-hidden pb-6 md:space-y-6 md:pb-10">
+    <div className="max-w-full space-y-3 overflow-x-hidden pb-6 md:pb-10">
       {!historySeriesLoading && dailyData.length === 0 && (
         <Alert className="px-3 py-2 text-xs md:px-4 md:py-3 md:text-sm">
           <AlertCircle className="h-3.5 w-3.5 md:h-4 md:w-4" />
@@ -535,14 +535,14 @@ function ProfitClassic() {
       )}
 
       <div className="flex items-center justify-between gap-2 min-w-0">
-        <h2 className="min-w-0 truncate text-lg font-semibold">Analýza zisku</h2>
+        <h1 className="min-w-0 truncate text-lg font-semibold">Analýza zisku</h1>
         {portfolios.length > 0 && (
           <Popover open={portfolioFilterOpen} onOpenChange={openPortfolioFilter}>
             <PopoverTrigger asChild>
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 max-w-[58%] shrink-0 gap-1.5 px-2.5 text-xs md:max-w-xs"
+                className="h-8 max-w-[58%] shrink-0 gap-1.5 px-2.5 text-xs md:max-w-xs md:px-3 md:text-[13px] md:font-semibold"
                 data-testid="button-profit-portfolio-filter"
               >
                 <Briefcase className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -649,28 +649,28 @@ function ProfitClassic() {
             Math.abs(realizedGains.closeTradeNetEur ?? 0) > 1e-9) ? (
             <div className="space-y-3 md:space-y-4">
               <div className="grid grid-cols-4 gap-1.5 md:gap-3">
-                <div className="rounded-md bg-muted/40 px-1.5 py-1.5 md:rounded-lg md:px-3 md:py-2.5">
-                  <div className="mb-0.5 text-[9px] text-muted-foreground md:text-xs">Dnes</div>
-                  <div className={`text-[11px] font-semibold tabular-nums leading-tight tracking-tight md:text-xl ${realizedGains.realizedToday >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-today">
+                <div className="rounded-md bg-muted/40 px-1.5 py-1.5 md:rounded-lg md:border md:border-border md:bg-background md:px-3 md:py-2.5">
+                  <div className="mb-0.5 text-[9px] text-muted-foreground md:mb-1 md:text-[10px] md:font-semibold md:uppercase md:leading-3 md:tracking-[0.8px] md:text-tertiary">Dnes</div>
+                  <div className={`text-[11px] font-semibold tabular-nums leading-tight tracking-tight md:text-[15px] md:leading-5 ${realizedGains.realizedToday >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-today">
                     {formatCurrency(realizedGains.realizedToday)}
                   </div>
                 </div>
-                <div className="rounded-md bg-muted/40 px-1.5 py-1.5 md:rounded-lg md:px-3 md:py-2.5">
-                  <div className="mb-0.5 text-[9px] text-muted-foreground md:text-xs">Mesiac</div>
-                  <div className={`text-[11px] font-semibold tabular-nums leading-tight tracking-tight md:text-xl ${realizedGains.realizedThisMonth >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-month">
+                <div className="rounded-md bg-muted/40 px-1.5 py-1.5 md:rounded-lg md:border md:border-border md:bg-background md:px-3 md:py-2.5">
+                  <div className="mb-0.5 text-[9px] text-muted-foreground md:mb-1 md:text-[10px] md:font-semibold md:uppercase md:leading-3 md:tracking-[0.8px] md:text-tertiary">Mesiac</div>
+                  <div className={`text-[11px] font-semibold tabular-nums leading-tight tracking-tight md:text-[15px] md:leading-5 ${realizedGains.realizedThisMonth >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-month">
                     {formatCurrency(realizedGains.realizedThisMonth)}
                   </div>
                 </div>
-                <div className="rounded-md bg-muted/40 px-1.5 py-1.5 md:rounded-lg md:px-3 md:py-2.5">
-                  <div className="mb-0.5 text-[9px] text-muted-foreground md:text-xs">YTD</div>
-                  <div className={`text-[11px] font-semibold tabular-nums leading-tight tracking-tight md:text-xl ${realizedGains.realizedYTD >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-ytd">
+                <div className="rounded-md bg-muted/40 px-1.5 py-1.5 md:rounded-lg md:border md:border-border md:bg-background md:px-3 md:py-2.5">
+                  <div className="mb-0.5 text-[9px] text-muted-foreground md:mb-1 md:text-[10px] md:font-semibold md:uppercase md:leading-3 md:tracking-[0.8px] md:text-tertiary">YTD</div>
+                  <div className={`text-[11px] font-semibold tabular-nums leading-tight tracking-tight md:text-[15px] md:leading-5 ${realizedGains.realizedYTD >= 0 ? "text-green-500" : "text-red-500"}`} data-testid="text-realized-ytd">
                     {formatCurrency(realizedGains.realizedYTD)}
                   </div>
                 </div>
-                <div className="rounded-md bg-muted/40 px-1.5 py-1.5 md:rounded-lg md:px-3 md:py-2.5">
-                  <div className="mb-0.5 text-[9px] text-muted-foreground md:text-xs">Celkovo</div>
+                <div className="rounded-md bg-muted/40 px-1.5 py-1.5 md:rounded-lg md:border md:border-border md:bg-background md:px-3 md:py-2.5">
+                  <div className="mb-0.5 text-[9px] text-muted-foreground md:mb-1 md:text-[10px] md:font-semibold md:uppercase md:leading-3 md:tracking-[0.8px] md:text-tertiary">Celkovo</div>
                   <div
-                    className={`text-[11px] font-semibold tabular-nums leading-tight tracking-tight md:text-xl ${(realizedGains.realizedGainTotal ?? realizedGains.totalRealized) >= 0 ? "text-green-500" : "text-red-500"}`}
+                    className={`text-[11px] font-semibold tabular-nums leading-tight tracking-tight md:text-[15px] md:leading-5 ${(realizedGains.realizedGainTotal ?? realizedGains.totalRealized) >= 0 ? "text-green-500" : "text-red-500"}`}
                     data-testid="text-realized-total"
                   >
                     {formatCurrency(
@@ -682,7 +682,7 @@ function ProfitClassic() {
 
               {realizedGains.byTicker.length > 0 && (
                 <div>
-                  <h4 className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground md:mb-2 md:text-xs md:normal-case md:tracking-normal">
+                  <h4 className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground md:mb-2 md:text-[15px] md:font-semibold md:normal-case md:leading-5 md:tracking-[-0.075px] md:text-foreground">
                     Podľa tickerov
                   </h4>
                   <div className="space-y-0 md:hidden" data-testid="list-realized-by-ticker-mobile">
@@ -820,8 +820,8 @@ function ProfitClassic() {
                     })}
                   </div>
                   <div className="hidden min-w-0 overflow-x-auto md:block">
-                  <Table className="min-w-[820px] text-xs">
-                    <TableHeader className="[&_th]:h-8 [&_th]:px-2 [&_th]:py-1.5">
+                  <Table className="min-w-[820px] text-[13px]">
+                    <TableHeader className="[&_th]:h-8 [&_th]:px-3 [&_th]:py-2">
                       <TableRow>
                         <TableHead>Ticker</TableHead>
                         <TableHead>Spoločnosť</TableHead>
@@ -833,7 +833,7 @@ function ProfitClassic() {
                         <TableHead className="text-right">Zisk/Strata</TableHead>
                       </TableRow>
                     </TableHeader>
-                    <TableBody className="[&_td]:px-2 [&_td]:py-1.5">
+                    <TableBody className="[&_td]:px-3 [&_td]:py-2.5">
                       {realizedGains.byTicker.map((item) => {
                         const totalCost =
                           item.totalCost ?? Math.max(0, item.totalSold - item.totalGain);
@@ -1351,10 +1351,10 @@ function YearMonthPerformance({
         </div>
         {annualized && (
           <div
-            className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md border border-border/60 bg-muted/30 px-3 py-2"
+            className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md border border-border/60 bg-muted/30 px-3 py-2 md:rounded-[10px] md:px-3.5 md:py-2.5 dark:border-border dark:bg-background"
             data-testid="text-avg-annual-return"
           >
-            <span className="text-[10px] uppercase tracking-wide text-muted-foreground md:text-xs md:normal-case md:tracking-normal">
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground md:font-semibold md:tracking-[0.8px] md:text-tertiary">
               Priemerné ročné zhodnotenie
               {method === "twr" ? " (TWR)" : ""}
             </span>
@@ -1383,7 +1383,7 @@ function YearMonthPerformance({
       <CardContent className="p-4 pt-3">
         <div className="w-full max-w-full overflow-x-hidden">
           <Table className="w-full min-w-0 text-[10px] md:text-sm">
-            <TableHeader className="[&_th]:h-8 [&_th]:px-1.5 [&_th]:py-1.5 md:[&_th]:h-12 md:[&_th]:px-4 md:[&_th]:py-3">
+            <TableHeader className="[&_th]:h-8 [&_th]:px-1.5 [&_th]:py-1.5 md:[&_th]:h-8 md:[&_th]:px-4 md:[&_th]:py-2">
               <TableRow>
                 <TableHead className="w-6 md:w-8"></TableHead>
                 <TableHead>Obdobie</TableHead>
@@ -1401,7 +1401,7 @@ function YearMonthPerformance({
                 <TableHead className="text-right hidden lg:table-cell">Dividendy</TableHead>
               </TableRow>
             </TableHeader>
-            <TableBody className="[&_td]:px-1.5 [&_td]:py-1.5 md:[&_td]:p-4">
+            <TableBody className="[&_td]:px-1.5 [&_td]:py-1.5 md:[&_td]:px-4 md:[&_td]:py-2.5">
               {data.years.map((year) => {
                 const isOpen = !!expanded[year.year];
                 const yearPct = pctFor(year);
