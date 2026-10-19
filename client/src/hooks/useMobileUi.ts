@@ -1,5 +1,6 @@
 import { useCallback, useLayoutEffect } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useTheme } from "@/hooks/useTheme";
 
 export type MobileUiMode = "classic" | "redesign";
 
@@ -8,11 +9,13 @@ export type MobileUiMode = "classic" | "redesign";
  * selectable. Mobile always uses the Figma redesign; desktop stays classic.
  */
 const REDESIGN_LOCKED = true;
-/** Align with TabBar surface so Android system nav matches the app chrome. */
-const THEME_COLOR = "#15181c";
-const BASE_BG = "#050607";
 
-function applyDocumentMode(active: boolean) {
+/** Dark chrome — Figma Dark mode (TabBar / canvas). */
+const DARK = { themeColor: "#15181c", baseBg: "#050607", scheme: "only dark" } as const;
+/** Light chrome — Figma Light mode (page 05). */
+const LIGHT = { themeColor: "#ffffff", baseBg: "#f3f4f6", scheme: "only light" } as const;
+
+function applyDocumentMode(active: boolean, isLight: boolean) {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
   let meta = document.querySelector('meta[name="theme-color"]');
@@ -23,14 +26,15 @@ function applyDocumentMode(active: boolean) {
   }
   const schemeMeta = document.querySelector('meta[name="color-scheme"]');
   if (active) {
+    const palette = isLight ? LIGHT : DARK;
     root.setAttribute("data-mobile-ui", "redesign");
-    root.style.colorScheme = "only dark";
-    document.body.style.backgroundColor = BASE_BG;
+    root.style.colorScheme = palette.scheme;
+    document.body.style.backgroundColor = palette.baseBg;
     document.querySelectorAll('meta[name="theme-color"]').forEach((el) => {
-      el.setAttribute("content", THEME_COLOR);
+      el.setAttribute("content", palette.themeColor);
     });
-    meta.setAttribute("content", THEME_COLOR);
-    schemeMeta?.setAttribute("content", "only dark");
+    meta.setAttribute("content", palette.themeColor);
+    schemeMeta?.setAttribute("content", palette.scheme);
   } else {
     root.removeAttribute("data-mobile-ui");
     root.style.colorScheme = "";
@@ -40,12 +44,13 @@ function applyDocumentMode(active: boolean) {
   }
 }
 
-/** Keep <html data-mobile-ui> in sync for the whole app (one mount is enough). */
+/** Keep <html data-mobile-ui> + chrome colors in sync with redesign + light/dark. */
 export function MobileUiDocumentSync() {
   const redesign = useMobileRedesign();
+  const { theme } = useTheme();
   useLayoutEffect(() => {
-    applyDocumentMode(redesign);
-  }, [redesign]);
+    applyDocumentMode(redesign, theme === "light");
+  }, [redesign, theme]);
   return null;
 }
 

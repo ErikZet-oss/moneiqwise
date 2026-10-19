@@ -1,11 +1,13 @@
-/* Mobile redesign tokens. Bound to Figma Foundations (Inter + compact scale). */
+/* Mobile redesign tokens. Bound to Figma Foundations (Inter + compact scale).
+   Dark = mode „Dark“ (page 03). Light = mode „Light“ (page 05 · Screens Light). */
 
 [data-mobile-ui="redesign"] {
   --rd-bg-base: #050607;
   --rd-bg-surface: #15181c;
   --rd-bg-surface-raised: #1d2126;
   --rd-bg-surface-hover: #272c32;
-  /* Card / widget fill — Figma linear #21262c → #15181c */
+  /* Card / widget fill — Figma linear surface-highlight → surface */
+  --rd-bg-surface-highlight: #21262c;
   --rd-bg-surface-gradient: linear-gradient(145deg, #21262c 0%, #15181c 100%);
 
   --rd-border-subtle: #272c32;
@@ -135,24 +137,84 @@
   --rd-page-gutter: 12px;
 }
 
+/*
+ * Light mode — Figma page „05 · Screens Light (Mobile 390)“ / variable mode Light.
+ * Layout stays identical; only semantic colors swap.
+ */
+html.light[data-mobile-ui="redesign"] {
+  --rd-bg-base: #f3f4f6;
+  --rd-bg-surface: #ffffff;
+  --rd-bg-surface-raised: #f6f7f9;
+  --rd-bg-surface-hover: #eceef1;
+  --rd-bg-surface-highlight: #f8f9fb;
+  --rd-bg-surface-gradient: linear-gradient(145deg, #f8f9fb 0%, #ffffff 100%);
+
+  --rd-border-subtle: #e3e6ea;
+  --rd-border-strong: #cfd4da;
+
+  --rd-text-primary: #12161b;
+  --rd-text-secondary: #4f5862;
+  --rd-text-tertiary: #868e98;
+  --rd-text-on-brand: #ffffff;
+
+  --rd-profit: #0e9f82;
+  --rd-profit-dim: #ddf4ee;
+  --rd-loss: #d63d5a;
+  --rd-loss-dim: #fbe7eb;
+  --rd-warning: #b97c0a;
+  --rd-warning-dim: #fbf0d9;
+  --rd-info: #2c74c6;
+  --rd-info-dim: #e3eefb;
+  --rd-ai: #8556c0;
+  --rd-ai-dim: #f0e8fa;
+
+  --rd-accent-earnings: #a0731f;
+  --rd-accent-earnings-surface: #fbf6ec;
+  --rd-accent-earnings-border: #eadbba;
+  --rd-accent-position: #1c8c70;
+  --rd-accent-position-surface: #edf7f3;
+  --rd-accent-position-border: #c3e5da;
+  --rd-accent-event: #3a6cb0;
+  --rd-accent-event-surface: #eef3fb;
+  --rd-accent-event-border: #c8d9ef;
+
+  --rd-chart-1: #12b394;
+  --rd-chart-2: #3d8fe0;
+  --rd-chart-3: #9466cf;
+  --rd-chart-4: #e0a11f;
+  --rd-chart-5: #e5536f;
+  --rd-chart-6: #a9b0b9;
+  --rd-chart-benchmark: #e2843a;
+}
+
 /* Prevent mobile browsers from inflating px type when system font size is larger.
-   Also paint html/body/#root dark so Android system nav + iOS Safari chrome
-   never stick on Tailwind light `bg-background` under the redesign shell. */
+   Canvas color follows --rd-bg-base so light/dark both paint chrome correctly. */
 html[data-mobile-ui="redesign"] {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
-  background-color: #050607;
-  color-scheme: only dark;
+  background-color: var(--rd-bg-base);
+  color-scheme: dark;
+}
+
+html.light[data-mobile-ui="redesign"] {
+  color-scheme: light;
 }
 
 html[data-mobile-ui="redesign"] body {
-  /* Override Tailwind @apply bg-background even when .light is on <html>. */
-  background-color: #050607 !important;
+  /* Override Tailwind @apply bg-background even when theme class flips. */
+  background-color: var(--rd-bg-base) !important;
+}
+
+html.dark[data-mobile-ui="redesign"] body {
   color-scheme: only dark;
 }
 
+html.light[data-mobile-ui="redesign"] body {
+  color-scheme: only light;
+}
+
 html[data-mobile-ui="redesign"] #root {
-  background-color: #050607;
+  background-color: var(--rd-bg-base);
   min-height: 100%;
   min-height: 100dvh;
 }
@@ -279,4 +341,3 @@ html[data-mobile-ui="redesign"] #root {
   line-height: var(--rd-leading-data-micro);
   font-variant-numeric: tabular-nums;
 }
-

@@ -97,7 +97,7 @@ export function TabBar() {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--rd-border-subtle,#272c32)] bg-[var(--rd-bg-surface,#15181c)]"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--rd-border-subtle)] bg-[var(--rd-bg-surface)]"
       data-testid="redesign-tab-bar"
       aria-label="Hlavná navigácia"
       style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}

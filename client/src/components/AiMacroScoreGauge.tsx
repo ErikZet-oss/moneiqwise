@@ -14,12 +14,29 @@ const SIZE = {
   lg: { w: 240, stroke: 18, font: "text-4xl", sub: "text-sm" },
 } as const;
 
-/** Figma redesign tokens: loss → warning → profit. */
-const SCORE_RGB = {
-  loss: [240, 102, 126] as const, // --rd-loss #f0667e
-  warning: [242, 184, 75] as const, // --rd-warning #f2b84b
-  profit: [47, 218, 184] as const, // --rd-profit #2fdab8
+/** Fallback RGB when CSS vars unavailable (dark Figma defaults). */
+const SCORE_RGB_FALLBACK = {
+  loss: [240, 102, 126] as const,
+  warning: [242, 184, 75] as const,
+  profit: [47, 218, 184] as const,
 };
+
+function cssRgb(varName: string, fallback: readonly [number, number, number]): [number, number, number] {
+  if (typeof window === "undefined") return [...fallback] as [number, number, number];
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+  const hex = /^#([0-9a-fA-F]{6})$/.exec(raw);
+  if (!hex) return [...fallback] as [number, number, number];
+  const n = Number.parseInt(hex[1]!, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function scoreRgb() {
+  return {
+    loss: cssRgb("--rd-loss", SCORE_RGB_FALLBACK.loss),
+    warning: cssRgb("--rd-warning", SCORE_RGB_FALLBACK.warning),
+    profit: cssRgb("--rd-profit", SCORE_RGB_FALLBACK.profit),
+  };
+}
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
@@ -39,6 +56,7 @@ function mixRgb(
 
 /** Score 0–100 → red → amber → green (Figma health-score-bar / score-factor). */
 export function scoreToBarColor(score: number): string {
+  const SCORE_RGB = scoreRgb();
   const t = Math.max(0, Math.min(100, score)) / 100;
   if (t < 0.5) return mixRgb(SCORE_RGB.loss, SCORE_RGB.warning, t * 2);
   return mixRgb(SCORE_RGB.warning, SCORE_RGB.profit, (t - 0.5) * 2);

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useLayoutEffect, useState, type ReactNode } from "react";
 
 export type Theme = "light" | "dark";
 
@@ -29,8 +29,9 @@ function getInitialTheme(): Theme {
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => getInitialTheme());
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     // Tailwind darkMode: class expects .dark on <html>, not only <body>.
+    // useLayoutEffect so redesign light tokens apply before first paint.
     const root = document.documentElement;
     root.classList.toggle("dark", theme === "dark");
     root.classList.toggle("light", theme === "light");
