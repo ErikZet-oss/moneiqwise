@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   addMonths,
@@ -252,8 +252,18 @@ function EventsCalendarClassic() {
     return eachDayOfInterval({ start: calStart, end: calEnd });
   }, [calendarMonth]);
 
+  const [panelDay, setPanelDay] = useState(() => startOfDay(new Date()));
+  const panelDayIso = format(panelDay, "yyyy-MM-dd");
+  const panelEvents = eventsByDay.get(panelDayIso) ?? [];
+  const upcomingEvents = useMemo(() => {
+    const todayIso = format(startOfDay(new Date()), "yyyy-MM-dd");
+    return filteredEvents.filter((e) => e.date >= todayIso && e.date !== panelDayIso).slice(0, 5);
+  }, [filteredEvents, panelDayIso]);
+
   const openDay = (day: Date) => {
     const iso = format(startOfDay(day), "yyyy-MM-dd");
+    setPanelDay(startOfDay(day));
+    if (typeof window !== "undefined" && window.matchMedia("(min-width: 1280px)").matches) return;
     setSelectedDay({ day, events: eventsByDay.get(iso) ?? [] });
     setDaySheetOpen(true);
   };
@@ -286,6 +296,68 @@ function EventsCalendarClassic() {
       : type === "dividend"
         ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:border-[var(--rd-accent-position-border)] dark:bg-[var(--rd-accent-position-surface)] dark:!text-[var(--rd-accent-position)]"
         : "border-sky-500/30 bg-sky-500/10 text-sky-700 dark:border-[var(--rd-accent-event-border)] dark:bg-[var(--rd-accent-event-surface)] dark:!text-[var(--rd-accent-event)]";
+
+  const renderEventCards = (events: CalendarEvent[]) => (
+    <div className="space-y-2.5">
+      {events.map((ev, idx) => (
+        <div
+          key={`${ev.type}-${ev.title}-${idx}`}
+          className="space-y-2 rounded-[10px] border border-border bg-card p-3 dark:bg-[var(--rd-bg-surface)]"
+        >
+          <div className="flex items-start gap-2.5">
+            <div className="mt-0.5 shrink-0">
+              {ev.ticker ? (
+                <CompanyLogo ticker={ev.ticker} companyName={ev.subtitle} size="sm" />
+              ) : (
+                macroBadge(ev.title)
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[13px] font-semibold leading-[18px]">{ev.title}</span>
+                {typeBadge(ev.type)}
+                {ev.impact === "high" && <Badge variant="destructive">High Impact</Badge>}
+                {ev.session === "BMO" && (
+                  <Badge variant="outline" className="gap-1">
+                    <Sun className="h-3 w-3 text-amber-500" /> BMO
+                  </Badge>
+                )}
+                {ev.session === "AMC" && (
+                  <Badge variant="outline" className="gap-1">
+                    <Moon className="h-3 w-3 text-indigo-500" /> AMC
+                  </Badge>
+                )}
+              </div>
+              <p className="mt-1 text-[12px] leading-4 text-muted-foreground">{ev.subtitle}</p>
+              <a
+                href={ev.infoUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 inline-flex items-center gap-1 text-[12px] font-medium text-primary hover:underline"
+              >
+                Viac info
+                <ExternalLink className="h-3 w-3" />
+              </a>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Button asChild variant="outline" size="sm" className="h-7 gap-1.5 px-2.5 text-[12px] font-medium">
+                  <a href={buildGoogleCalendarUrl(ev)} target="_blank" rel="noreferrer">
+                    <CalendarPlus className="h-3.5 w-3.5" />
+                    Pridať do Google kalendára
+                  </a>
+                </Button>
+                <Button asChild variant="outline" size="sm" className="h-7 gap-1.5 px-2.5 text-[12px] font-medium">
+                  <a href={buildIcsHref(ev)} download={`moneiqwise-${ev.type}-${ev.date}.ics`}>
+                    <CalendarPlus className="h-3.5 w-3.5" />
+                    .ics
+                  </a>
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
   const filterChips: Array<{ type: EventType; letter: string; label: string; active: boolean; toggle: () => void }> = [
     { type: "earnings", letter: "E", label: "Earnings", active: showEarnings, toggle: () => setShowEarnings((v) => !v) },
@@ -335,6 +407,7 @@ function EventsCalendarClassic() {
         </CardContent>
       </Card>
 
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
       <Card>
         <CardHeader className="p-4 pb-2">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -377,7 +450,7 @@ function EventsCalendarClassic() {
                       key={dayIso}
                       type="button"
                       onClick={() => openDay(day)}
-                      className={`w-full min-h-[4.25rem] sm:min-h-[4.75rem] p-1 sm:p-1.5 flex flex-col items-stretch text-left rounded-lg border bg-card dark:bg-[var(--rd-bg-surface)] hover:bg-muted/60 active:bg-muted/60 transition-colors ${!inMonth ? "opacity-40" : ""} ${isToday(day) ? "border-amber-400 dark:border-[var(--rd-warning)]" : "border-border"}`}
+                      className={`w-full min-h-[4.25rem] sm:min-h-[4.75rem] p-1 sm:p-1.5 flex flex-col items-stretch text-left rounded-lg border bg-card dark:bg-[var(--rd-bg-surface)] hover:bg-muted/60 active:bg-muted/60 transition-colors ${!inMonth ? "opacity-40" : ""} ${isToday(day) ? "border-amber-400 dark:border-[var(--rd-warning)]" : "border-border"} ${dayIso === panelDayIso ? "xl:ring-1 xl:ring-primary" : ""}`}
                     >
                       <span className={`px-0.5 text-[11px] font-medium leading-[14px] ${inMonth ? "text-foreground" : "text-muted-foreground"}`}>
                         {format(day, "d")}
@@ -407,80 +480,64 @@ function EventsCalendarClassic() {
         </CardContent>
       </Card>
 
+      <Card className="hidden xl:block" data-testid="events-day-panel">
+        <CardHeader className="space-y-1 p-4 pb-2">
+          <CardTitle className="text-sm font-medium first-letter:uppercase">
+            {format(panelDay, "EEEE d. MMMM yyyy", { locale: sk })}
+          </CardTitle>
+          <CardDescription>
+            {panelEvents.length > 0
+              ? `Plánované udalosti: ${panelEvents.length}`
+              : "V tento deň nie sú pre aktívne filtre žiadne udalosti."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4 p-4 pt-2">
+          {loading ? (
+            <Skeleton className="h-32 w-full" />
+          ) : (
+            panelEvents.length > 0 && renderEventCards(panelEvents)
+          )}
+          {!loading && upcomingEvents.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-tertiary">Najbližšie</p>
+              <div className="flex flex-col">
+                {upcomingEvents.map((ev, idx) => (
+                  <button
+                    key={`${ev.date}-${ev.type}-${ev.title}-${idx}`}
+                    type="button"
+                    onClick={() => openDay(new Date(`${ev.date}T00:00:00`))}
+                    className="flex items-center gap-2.5 rounded-md px-1.5 py-2 text-left hover:bg-muted/60"
+                  >
+                    <span className="w-12 shrink-0 text-[11px] font-medium leading-[14px] text-tertiary tabular-nums">
+                      {format(new Date(`${ev.date}T00:00:00`), "d. M.", { locale: sk })}
+                    </span>
+                    <span className={`shrink-0 rounded-[4px] border px-1.5 py-px text-[10px] font-medium leading-[14px] ${eventChipClass(ev.type)}`}>
+                      {ev.type === "earnings" ? "E" : ev.type === "dividend" ? "D" : "M"}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[12px] font-medium leading-4 text-foreground">{ev.title}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      </div>
+
       <Sheet open={daySheetOpen} onOpenChange={setDaySheetOpen}>
         <SheetContent side="bottom" className="rounded-t-2xl max-h-[90vh] overflow-y-auto px-4 pb-6">
           <SheetHeader className="text-left space-y-1 pr-6">
-            <SheetTitle className="text-base sm:text-lg">
+            <SheetTitle className="text-base sm:text-lg first-letter:uppercase">
               {selectedDay ? format(selectedDay.day, "EEEE d. MMMM yyyy", { locale: sk }) : ""}
             </SheetTitle>
             <SheetDescription className="text-xs sm:text-sm text-left">
               {selectedDay && selectedDay.events.length > 0
-                ? `Planned events: ${selectedDay.events.length}`
-                : "No events in this day for active filters."}
+                ? `Plánované udalosti: ${selectedDay.events.length}`
+                : "V tento deň nie sú pre aktívne filtre žiadne udalosti."}
             </SheetDescription>
           </SheetHeader>
           {selectedDay && selectedDay.events.length > 0 && (
-            <div className="mt-4 space-y-3">
-              {selectedDay.events.map((ev, idx) => (
-                <div key={`${ev.type}-${ev.title}-${idx}`} className="rounded-lg border p-3 space-y-2 bg-card">
-                  <div className="flex items-start gap-2">
-                    <div className="mt-0.5">
-                      {ev.ticker ? (
-                        <CompanyLogo ticker={ev.ticker} companyName={ev.subtitle} size="sm" />
-                      ) : (
-                        macroBadge(ev.title)
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium text-sm">{ev.title}</span>
-                        {typeBadge(ev.type)}
-                        {ev.impact === "high" && <Badge variant="destructive">High Impact</Badge>}
-                        {ev.session === "BMO" && (
-                          <Badge variant="outline" className="gap-1">
-                            <Sun className="h-3 w-3 text-amber-500" /> BMO
-                          </Badge>
-                        )}
-                        {ev.session === "AMC" && (
-                          <Badge variant="outline" className="gap-1">
-                            <Moon className="h-3 w-3 text-indigo-500" /> AMC
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-1">{ev.subtitle}</p>
-                      <a
-                        href={ev.infoUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                      >
-                        More info
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                        <a
-                          href={buildGoogleCalendarUrl(ev)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                        >
-                          <CalendarPlus className="h-3 w-3" />
-                          Pridat do Google kalendara
-                        </a>
-                        <a
-                          href={buildIcsHref(ev)}
-                          download={`moneiqwise-${ev.type}-${ev.date}.ics`}
-                          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                        >
-                          <CalendarPlus className="h-3 w-3" />
-                          Pridat do kalendara (.ics)
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <div className="mt-4">{renderEventCards(selectedDay.events)}</div>
           )}
         </SheetContent>
       </Sheet>

@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarDays, AlertCircle, Wallet, ChevronRight, ChevronDown, Briefcase } from "lucide-react";
+import { CalendarDays, AlertCircle, Wallet, ChevronLeft, ChevronRight, ChevronDown, Briefcase } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell, ReferenceLine } from "recharts";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, eachMonthOfInterval, parseISO, isAfter, isBefore, isSameDay, subDays, isWeekend, startOfDay } from "date-fns";
 import { sk } from "date-fns/locale";
@@ -1175,6 +1175,8 @@ function YearMonthPerformance({
 }) {
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [method, setMethod] = useState<PerformanceMethod>(readStoredPerformanceMethod);
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const [showDetailTable, setShowDetailTable] = useState(false);
 
   useEffect(() => {
     try {
@@ -1279,6 +1281,40 @@ function YearMonthPerformance({
     return format(date, "LLLL", { locale: sk });
   };
 
+  const sortedYears = [...data.years].sort((a, b) => a.year - b.year);
+  const activeYear =
+    sortedYears.find((y) => y.year === selectedYear) ?? sortedYears[sortedYears.length - 1];
+  const activeYearIdx = sortedYears.indexOf(activeYear);
+  const yearWindowStart = Math.max(0, Math.min(activeYearIdx - 5, sortedYears.length - 6));
+  const yearWindow = sortedYears.slice(yearWindowStart, yearWindowStart + 6);
+  const now = new Date();
+  const isCurrentYear = activeYear.year === now.getFullYear();
+  const activeYearPct = pctFor(activeYear);
+  const activeYearSpx = spxFor(activeYear);
+  const monthsByIndex = new Map<number, PerformancePeriodStats>();
+  for (const m of activeYear.months) {
+    const idx = parseInt(m.label.split("/")[0], 10) - 1;
+    if (idx >= 0 && idx < 12) monthsByIndex.set(idx, m);
+  }
+  const monthPcts = Array.from(monthsByIndex.entries())
+    .map(([idx, m]) => ({ idx, pct: pctFor(m) }))
+    .filter((x): x is { idx: number; pct: number } => x.pct != null && Number.isFinite(x.pct));
+  const bestMonth = monthPcts.length ? monthPcts.reduce((a, b) => (b.pct > a.pct ? b : a)) : null;
+  const worstMonth = monthPcts.length ? monthPcts.reduce((a, b) => (b.pct < a.pct ? b : a)) : null;
+  const profitableMonths = monthPcts.filter((x) => x.pct > 0).length;
+  const maxAbsMonthPct = monthPcts.reduce((mx, x) => Math.max(mx, Math.abs(x.pct)), 0);
+  const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  const monthLabelByIndex = (idx: number) =>
+    capitalize(format(new Date(2000, idx, 1), "LLLL", { locale: sk }));
+  const monthTileStyle = (pct: number): CSSProperties => {
+    const strength = maxAbsMonthPct > 0 ? Math.min(1, Math.abs(pct) / maxAbsMonthPct) : 0;
+    const rgb = pct >= 0 ? "47, 218, 184" : "240, 102, 126";
+    return {
+      backgroundColor: `rgba(${rgb}, ${(0.1 + strength * 0.22).toFixed(3)})`,
+      borderColor: `rgba(${rgb}, ${(0.3 + strength * 0.35).toFixed(3)})`,
+    };
+  };
+
   return (
     <Card className="max-w-full overflow-x-hidden">
       <CardHeader className="space-y-2 p-4 pb-2">
@@ -1324,12 +1360,13 @@ function YearMonthPerformance({
               </HelpTip>
             </CardTitle>
             <CardDescription className="text-xs leading-snug md:text-sm">
-              Ročný prehľad s rozbalením na mesiace. Prepni % medzi jednoduchým výpočtom a TWR.
+              Ročný a mesačný prehľad výnosov portfólia. Prepni % medzi jednoduchým výpočtom a TWR.
               {method === "twr" && fetching && !hasTwrData ? (
                 <span className="ml-1 text-muted-foreground">(načítavam TWR…)</span>
               ) : null}
             </CardDescription>
           </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
           <ToggleGroup
             type="single"
             variant="outline"
@@ -1348,6 +1385,46 @@ function YearMonthPerformance({
               TWR
             </ToggleGroupItem>
           </ToggleGroup>
+          <div
+            role="group"
+            aria-label="Výber roka"
+            className="inline-flex items-center gap-0.5 rounded-lg border border-border bg-background p-[3px]"
+            data-testid="profit-year-switcher"
+          >
+            <button
+              type="button"
+              aria-label="Predchádzajúci rok"
+              disabled={activeYearIdx <= 0}
+              onClick={() => setSelectedYear(sortedYears[activeYearIdx - 1]?.year ?? activeYear.year)}
+              className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:text-foreground disabled:opacity-40"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </button>
+            {yearWindow.map((y) => (
+              <button
+                key={y.year}
+                type="button"
+                aria-pressed={y.year === activeYear.year}
+                onClick={() => setSelectedYear(y.year)}
+                data-testid={`button-profit-year-${y.year}`}
+                className={`h-[26px] rounded-md px-2.5 text-[12px] font-medium leading-4 tabular-nums transition-colors ${
+                  y.year === activeYear.year ? "bg-secondary text-foreground" : "text-tertiary hover:text-foreground"
+                }`}
+              >
+                {y.year}
+              </button>
+            ))}
+            <button
+              type="button"
+              aria-label="Nasledujúci rok"
+              disabled={activeYearIdx >= sortedYears.length - 1}
+              onClick={() => setSelectedYear(sortedYears[activeYearIdx + 1]?.year ?? activeYear.year)}
+              className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:text-foreground disabled:opacity-40"
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          </div>
         </div>
         {annualized && (
           <div
@@ -1380,7 +1457,140 @@ function YearMonthPerformance({
           </div>
         )}
       </CardHeader>
-      <CardContent className="p-4 pt-3">
+      <CardContent className="space-y-3.5 p-4 pt-3">
+        <div
+          className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-[10px] border border-border bg-muted/30 px-3.5 py-2.5 dark:bg-[var(--rd-bg-surface)]"
+          data-testid="profit-year-summary"
+        >
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-tertiary">
+              Rok {activeYear.year}{isCurrentYear ? " (YTD)" : ""}
+            </span>
+            <span className="flex items-baseline gap-2">
+              <span
+                className={`text-[22px] font-bold leading-[26px] tracking-[-0.33px] tabular-nums ${
+                  activeYearPct == null ? "text-muted-foreground" : signClass(activeYearPct)
+                }`}
+              >
+                {activeYearPct == null ? "—" : formatPercent(activeYearPct)}
+              </span>
+              <span className={`text-[13px] font-semibold leading-[18px] tabular-nums ${signClass(activeYear.profit)}`}>
+                {activeYear.profit > 0 ? "+" : ""}
+                {formatCurrency(activeYear.profit)}
+              </span>
+            </span>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[11px] leading-[14px] text-tertiary">Najlepší mesiac</span>
+            <span className={`text-[13px] font-semibold leading-[18px] tabular-nums ${bestMonth ? signClass(bestMonth.pct) : "text-muted-foreground"}`}>
+              {bestMonth ? `${monthLabelByIndex(bestMonth.idx)} ${formatPercent(bestMonth.pct)}` : "—"}
+            </span>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[11px] leading-[14px] text-tertiary">Najhorší mesiac</span>
+            <span className={`text-[13px] font-semibold leading-[18px] tabular-nums ${worstMonth ? signClass(worstMonth.pct) : "text-muted-foreground"}`}>
+              {worstMonth ? `${monthLabelByIndex(worstMonth.idx)} ${formatPercent(worstMonth.pct)}` : "—"}
+            </span>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[11px] leading-[14px] text-tertiary">Ziskové mesiace</span>
+            <span className="text-[13px] font-semibold leading-[18px] tabular-nums text-foreground">
+              {profitableMonths} / {monthPcts.length}
+            </span>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[11px] leading-[14px] text-tertiary">
+              S&amp;P 500{isCurrentYear ? " YTD" : ""}
+            </span>
+            <span className="text-[13px] font-semibold leading-[18px] tabular-nums text-orange-500 dark:text-[var(--rd-chart-benchmark)]">
+              {activeYearSpx == null ? "—" : formatPercent(activeYearSpx)}
+            </span>
+          </div>
+          {activeYear.dividends > 0 && (
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[11px] leading-[14px] text-tertiary">Dividendy</span>
+              <span className="text-[13px] font-semibold leading-[18px] tabular-nums text-foreground">
+                {formatCurrency(activeYear.dividends)}
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6" data-testid="profit-month-tiles">
+          {Array.from({ length: 12 }, (_, idx) => {
+            const m = monthsByIndex.get(idx);
+            const mPct = m ? pctFor(m) : null;
+            const isRunning = isCurrentYear && idx === now.getMonth();
+            const isFuture =
+              activeYear.year > now.getFullYear() || (isCurrentYear && idx > now.getMonth());
+            const hasValue = m != null && mPct != null && Number.isFinite(mPct);
+            const mSpx = m ? spxFor(m) : null;
+            const detail = m
+              ? [
+                  `Začiatok: ${formatCurrency(m.startValue)}`,
+                  `Koniec: ${formatCurrency(m.endValue)}`,
+                  `Vklady − výbery: ${formatCurrency(m.netInflow)}`,
+                  `S&P 500: ${mSpx == null ? "—" : formatPercent(mSpx)}`,
+                  `Dividendy: ${m.dividends > 0 ? formatCurrency(m.dividends) : "—"}`,
+                ].join("\n")
+              : undefined;
+            return (
+              <div
+                key={idx}
+                title={detail}
+                data-testid={`tile-perf-month-${activeYear.year}-${idx + 1}`}
+                className={`flex min-w-0 flex-col gap-1 rounded-[10px] border p-3 ${
+                  hasValue ? "" : "border-border bg-muted/20 dark:bg-[var(--rd-bg-surface)]"
+                }`}
+                style={hasValue ? monthTileStyle(mPct as number) : undefined}
+              >
+                <div className="flex min-w-0 items-center gap-1">
+                  <span
+                    className={`min-w-0 flex-1 truncate text-[12px] font-medium leading-4 ${
+                      hasValue ? "text-foreground" : "text-tertiary"
+                    }`}
+                  >
+                    {monthLabelByIndex(idx)}
+                  </span>
+                  {isRunning && (
+                    <span className="shrink-0 rounded-md bg-secondary px-1.5 py-1 text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-muted-foreground">
+                      Prebieha
+                    </span>
+                  )}
+                </div>
+                <span
+                  className={`text-[15px] font-semibold leading-5 tracking-[-0.15px] tabular-nums ${
+                    hasValue ? signClass(mPct as number) : "text-tertiary"
+                  }`}
+                >
+                  {hasValue ? formatPercent(mPct as number) : "—"}
+                </span>
+                <span className={`truncate text-[11px] font-medium leading-[14px] tabular-nums ${hasValue ? "text-muted-foreground" : "text-tertiary"}`}>
+                  {m
+                    ? `${m.profit > 0 ? "+" : ""}${formatCurrency(m.profit)}`
+                    : isFuture
+                      ? "Budúci mesiac"
+                      : "Bez dát"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs"
+          aria-expanded={showDetailTable}
+          onClick={() => setShowDetailTable((v) => !v)}
+          data-testid="button-profit-detail-table"
+        >
+          <ChevronDown className={`mr-1.5 h-3.5 w-3.5 transition-transform ${showDetailTable ? "rotate-180" : ""}`} />
+          {showDetailTable ? "Skryť detailnú tabuľku" : "Detailná tabuľka (všetky roky)"}
+        </Button>
+
+        {showDetailTable && (
         <div className="w-full max-w-full overflow-x-hidden">
           <Table className="w-full min-w-0 text-[10px] md:text-sm">
             <TableHeader className="[&_th]:h-8 [&_th]:px-1.5 [&_th]:py-1.5 md:[&_th]:h-8 md:[&_th]:px-4 md:[&_th]:py-2">
@@ -1556,6 +1766,7 @@ function YearMonthPerformance({
             </TableBody>
           </Table>
         </div>
+        )}
       </CardContent>
     </Card>
   );
