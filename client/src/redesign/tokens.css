@@ -1,7 +1,11 @@
 /* Mobile redesign tokens. Bound to Figma Foundations (Inter + compact scale).
-   Dark = mode „Dark“ (page 03). Light = mode „Light“ (page 05 · Screens Light). */
+   Dark = mode „Dark“ (page 03). Light = mode „Light“ (page 05 · Screens Light).
 
-[data-mobile-ui="redesign"] {
+   IMPORTANT: color tokens live only on `html[data-mobile-ui=…]`.
+   Do NOT put data-mobile-ui on nested shells — that re-applies dark vars and
+   overrides light theme inheritance. */
+
+html[data-mobile-ui="redesign"] {
   --rd-bg-base: #050607;
   --rd-bg-surface: #15181c;
   --rd-bg-surface-raised: #1d2126;
