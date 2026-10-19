@@ -12,9 +12,18 @@ function Formula({ children }: { children: ReactNode }) {
   );
 }
 
+const FAQ_SECTIONS = [
+  "Metodika výpočtov",
+  "Spracovanie dát a import",
+  "Zabezpečenie dát klienta",
+  "Slovník pojmov",
+  "AI Agent — Paper Bot",
+  "Riešenie problémov",
+];
+
 function FaqPageClassic() {
   return (
-    <div className="max-w-3xl mx-auto flex flex-col gap-3 md:gap-6 pb-12">
+    <div className="flex flex-col gap-3 md:gap-6 pb-12">
       <div>
         <h1 className="text-lg font-semibold" data-testid="text-faq-title">
           FAQ — ako Moneiqwise funguje
@@ -24,8 +33,29 @@ function FaqPageClassic() {
         </p>
       </div>
 
-      <div className="prose prose-sm dark:prose-invert max-w-none flex flex-col gap-3 md:gap-6">
-        <Card>
+      <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start">
+      <nav className="hidden lg:block sticky top-0 rounded-xl border border-border bg-card p-3" aria-label="Obsah FAQ">
+        <div className="px-2 pb-2 text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-tertiary">Obsah</div>
+        <ul className="flex flex-col gap-0.5">
+          {FAQ_SECTIONS.map((title, i) => (
+            <li key={title}>
+              <a
+                href={`#faq-sec-${i + 1}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  document.getElementById(`faq-sec-${i + 1}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                className="block rounded-md px-2 py-1.5 text-[12px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              >
+                {i + 1}. {title}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+
+      <div className="prose prose-sm dark:prose-invert max-w-none flex flex-col gap-3 md:gap-6 min-w-0">
+        <Card id="faq-sec-1" className="scroll-mt-4">
           <CardHeader className="p-4 pb-2">
             <CardTitle className="text-sm font-medium">1. Metodika výpočtov</CardTitle>
             <CardDescription>
@@ -103,7 +133,7 @@ function FaqPageClassic() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card id="faq-sec-2" className="scroll-mt-4">
           <CardHeader className="p-4 pb-2">
             <CardTitle className="text-sm font-medium">2. Spracovanie dát a import</CardTitle>
             <CardDescription>Hotovosť, úroky, dividendy a súbory z brokera.</CardDescription>
@@ -136,7 +166,7 @@ function FaqPageClassic() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card id="faq-sec-3" className="scroll-mt-4">
           <CardHeader className="p-4 pb-2">
             <CardTitle className="text-sm font-medium">3. Zabezpečenie dát klienta</CardTitle>
             <CardDescription>Čo je chránené a čo odporúčame nastaviť v produkcii.</CardDescription>
@@ -212,7 +242,7 @@ function FaqPageClassic() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card id="faq-sec-4" className="scroll-mt-4">
           <CardHeader className="p-4 pb-2">
             <CardTitle className="text-sm font-medium">4. Slovník pojmov</CardTitle>
             <CardDescription>Stručné definície.</CardDescription>
@@ -247,7 +277,7 @@ function FaqPageClassic() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card id="faq-sec-5" className="scroll-mt-4">
           <CardHeader className="p-4 pb-2">
             <CardTitle className="text-sm font-medium">5. AI Agent — Paper Bot</CardTitle>
             <CardDescription>
@@ -432,7 +462,7 @@ function FaqPageClassic() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card id="faq-sec-6" className="scroll-mt-4">
           <CardHeader className="p-4 pb-2">
             <CardTitle className="text-sm font-medium">6. Riešenie problémov</CardTitle>
             <CardDescription>Keď niečo nenájdeš alebo import zlyhá.</CardDescription>
@@ -474,6 +504,7 @@ function FaqPageClassic() {
             </section>
           </CardContent>
         </Card>
+      </div>
       </div>
     </div>
   );

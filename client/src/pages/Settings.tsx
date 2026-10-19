@@ -584,14 +584,16 @@ function SettingsClassic() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto flex flex-col gap-3 md:gap-6">
+    <div className="flex flex-col gap-3 pb-8">
       <div>
-        <h1 className="text-lg font-semibold" data-testid="text-settings-title">Údaje</h1>
+        <h1 className="text-lg font-semibold" data-testid="text-settings-title">Nastavenia</h1>
         <p className="text-xs text-muted-foreground">
           Portfóliá, zobrazenie, menu a mena pre prehľad.
         </p>
       </div>
 
+      <div className="grid gap-3 lg:grid-cols-2 lg:items-start">
+      <div className="flex flex-col gap-3 min-w-0">
       <Card>
         <CardHeader className="p-4 pb-2">
           <div className="flex items-center gap-2">
@@ -1118,6 +1120,8 @@ function SettingsClassic() {
         </CardContent>
       </Card>
 
+      </div>
+      <div className="flex flex-col gap-3 min-w-0">
       <Card>
         <CardHeader className="p-4 pb-2">
           <div className="flex items-center gap-2">
@@ -1643,7 +1647,7 @@ function SettingsClassic() {
         </CardContent>
       </Card>
 
-      <Card className="border-destructive/50">
+      <Card className="border-destructive/50 dark:!border-destructive/60 dark:!bg-[var(--rd-loss-dim,transparent)]">
         <CardHeader className="p-4 pb-2">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-destructive" />
@@ -1771,6 +1775,8 @@ function SettingsClassic() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      </div>
+      </div>
     </div>
   );
 }

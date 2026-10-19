@@ -24,8 +24,9 @@ import TaxSummaryMobile from "@/pages/redesign/TaxSummaryMobile";
 import {
   FileDown,
   ShieldCheck,
-  AlertTriangle,
-  BarChart2,
+  Clock,
+  FileText,
+  Info,
 } from "lucide-react";
 
 export type { TaxSummaryApiResponse } from "@/lib/taxSummary";
@@ -95,52 +96,57 @@ function TaxSummaryClassic() {
   );
 
   return (
-    <div className="max-w-4xl mx-auto flex flex-col gap-3 md:gap-6 pb-8">
+    <div className="flex flex-col gap-3 pb-8">
       <div>
         <h1 className="text-lg font-semibold">Daňový asistent</h1>
-        <p className="text-xs text-muted-foreground mt-1">
+        <p className="text-xs md:text-[13px] text-muted-foreground mt-1">
           Ročné súčty pre orientáciu pred podaním a účtovníctvom. Čísla sú v EUR z backendu.
         </p>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4 flex-wrap items-end">
-        <div className="space-y-2 w-full sm:w-44">
-          <Label htmlFor="tax-year">Kalendárny rok</Label>
-          <Select
-            value={String(year)}
-            onValueChange={(v) => setYear(parseInt(v, 10))}
-          >
-            <SelectTrigger id="tax-year" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {yearChoices.map((y) => (
-                <SelectItem key={y} value={String(y)}>
-                  {y}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2 flex-1 min-w-[200px]">
-          <Label>Portfólio</Label>
-          <Select value={portfolio} onValueChange={setPortfolio}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {portfolioList.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <p className="text-xs text-muted-foreground w-full sm:max-w-md">
-          Výber portfólia ovplyvňuje len túto stránku (dáta z API <code className="text-xs">/api/tax-summary</code>).
-        </p>
-      </div>
+      <Card>
+        <CardContent className="flex flex-col sm:flex-row gap-3 sm:gap-4 flex-wrap items-end p-4">
+          <div className="space-y-1.5 w-full sm:w-36">
+            <Label htmlFor="tax-year" className="text-[11px] text-muted-foreground">Kalendárny rok</Label>
+            <Select
+              value={String(year)}
+              onValueChange={(v) => setYear(parseInt(v, 10))}
+            >
+              <SelectTrigger id="tax-year" className="w-full md:h-9 md:text-[13px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {yearChoices.map((y) => (
+                  <SelectItem key={y} value={String(y)}>
+                    {y}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5 w-full sm:w-52">
+            <Label className="text-[11px] text-muted-foreground">Portfólio</Label>
+            <Select value={portfolio} onValueChange={setPortfolio}>
+              <SelectTrigger className="md:h-9 md:text-[13px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {portfolioList.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground w-full sm:w-auto sm:flex-1 sm:pb-2.5">
+            <Info className="h-3.5 w-3.5 shrink-0" />
+            <span>
+              Výber portfólia ovplyvňuje len túto stránku (dáta z API <code className="text-[11px]">/api/tax-summary</code>).
+            </span>
+          </p>
+        </CardContent>
+      </Card>
 
       {query.isLoading && (
         <div className="space-y-4">
@@ -159,29 +165,28 @@ function TaxSummaryClassic() {
 
       {d && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <Card
               className={
-                "border-2 " +
-                (finiteEur(d.realized?.longTermGainsEur) > 0
-                  ? "border-emerald-500/60 bg-emerald-500/5"
-                  : "border-border")
+                finiteEur(d.realized?.longTermGainsEur) > 0
+                  ? "border-emerald-500/60 bg-emerald-500/5 dark:border-[var(--rd-border-strong)] dark:bg-card"
+                  : "border-border"
               }
             >
-              <CardHeader className="p-4 pb-2">
-                <div className="flex items-center gap-2 text-emerald-600">
-                  <ShieldCheck className="h-5 w-5" />
-                  <span className="text-xs font-medium uppercase">V suchu (orient.)</span>
+              <CardHeader className="p-4 pb-2 space-y-1">
+                <div className="flex items-center gap-1.5 text-emerald-600 dark:!text-[var(--rd-profit)]">
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  <span className="text-[10px] font-semibold uppercase leading-3 tracking-[0.8px]">V suchu (orient.)</span>
                 </div>
                 <CardTitle className="text-sm font-medium">{longTermLabel}</CardTitle>
                 <CardDescription>holding ≥ 365 dní, realiz. zisk v EUR (FIFO diely)</CardDescription>
               </CardHeader>
-              <CardContent className="p-4 pt-3">
-                <p className="text-2xl font-semibold leading-tight tracking-tight tabular-nums text-emerald-700 dark:text-emerald-400">
+              <CardContent className="p-4 pt-1">
+                <p className="text-2xl md:text-[22px] md:leading-[26px] font-bold leading-tight tracking-tight tabular-nums text-emerald-700 dark:text-emerald-400 dark:!text-[var(--rd-profit)]">
                   {formatCurrency(finiteEur(d.forForms?.taxExempt?.realizedGainsEur))}
                 </p>
                 {finiteEur(d.forForms?.taxExempt?.realizedLossesEur) > 0.01 && (
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <p className="text-[11px] text-muted-foreground mt-1">
                     Realiz. straty (dlh.):{" "}
                     {formatCurrency(-finiteEur(d.forForms?.taxExempt?.realizedLossesEur))}
                   </p>
@@ -191,25 +196,24 @@ function TaxSummaryClassic() {
 
             <Card
               className={
-                "border-2 " +
-                (finiteEur(d.realized?.netShortTermTaxableEur) > 0
-                  ? "border-orange-500/50 bg-orange-500/5"
-                  : "border-border")
+                finiteEur(d.realized?.netShortTermTaxableEur) > 0
+                  ? "border-orange-500/50 bg-orange-500/5 dark:border-[var(--rd-border-strong)] dark:bg-card"
+                  : "border-border"
               }
             >
-              <CardHeader className="p-4 pb-2">
-                <div className="flex items-center gap-2 text-orange-600">
-                  <BarChart2 className="h-5 w-5" />
-                  <span className="text-xs font-medium uppercase">Krátkodobé</span>
+              <CardHeader className="p-4 pb-2 space-y-1">
+                <div className="flex items-center gap-1.5 text-orange-600 dark:!text-[var(--rd-warning)]">
+                  <Clock className="h-3.5 w-3.5" />
+                  <span className="text-[10px] font-semibold uppercase leading-3 tracking-[0.8px]">Krátkodobé</span>
                 </div>
                 <CardTitle className="text-sm font-medium">{shortTermLabel}</CardTitle>
                 <CardDescription>Zápočet kladné − straty v rámci roka</CardDescription>
               </CardHeader>
-              <CardContent className="p-4 pt-3">
-                <p className="text-2xl font-semibold leading-tight tracking-tight tabular-nums">
+              <CardContent className="p-4 pt-1">
+                <p className="text-2xl md:text-[22px] md:leading-[26px] font-bold leading-tight tracking-tight tabular-nums text-orange-600 dark:!text-[var(--rd-warning)]">
                   {formatCurrency(finiteEur(d.realized?.netShortTermTaxableEur))}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-[11px] text-muted-foreground mt-1">
                   +{formatCurrency(finiteEur(d.realized?.taxableGainsEur))} / −
                   {formatCurrency(finiteEur(d.realized?.taxableLossesEur))} (zisk / strata)
                 </p>
@@ -218,68 +222,72 @@ function TaxSummaryClassic() {
 
             <Card
               className={
-                "border-2 " +
-                (finiteEur(d.skEstimate?.estimatedTotalTaxEur) > 0
-                  ? "border-destructive/50 bg-destructive/5"
-                  : "border-border")
+                finiteEur(d.skEstimate?.estimatedTotalTaxEur) > 0
+                  ? "border-destructive/50 bg-destructive/5 dark:border-[var(--rd-border-strong)] dark:bg-card"
+                  : "border-border"
               }
             >
-              <CardHeader className="p-4 pb-2">
+              <CardHeader className="p-4 pb-2 space-y-1">
                 <div
                   className={
-                    "flex items-center gap-2 " +
+                    "flex items-center gap-1.5 " +
                     (finiteEur(d.skEstimate?.estimatedTotalTaxEur) > 0
-                      ? "text-destructive"
+                      ? "text-destructive dark:!text-[var(--rd-loss)]"
                       : "text-muted-foreground")
                   }
                 >
-                  <AlertTriangle className="h-5 w-5" />
-                  <span className="text-xs font-medium uppercase">Marec / dane</span>
+                  <FileText className="h-3.5 w-3.5" />
+                  <span className="text-[10px] font-semibold uppercase leading-3 tracking-[0.8px]">Marec / dane</span>
                 </div>
                 <CardTitle className="text-sm font-medium">Odhadovaná daň (19 % / pásy)</CardTitle>
                 <CardDescription>Orient. podľa kratk. základu, nie konečné rozhodnutie</CardDescription>
               </CardHeader>
-              <CardContent className="p-4 pt-3">
+              <CardContent className="p-4 pt-1">
                 <p
                   className={
-                    "text-2xl font-semibold leading-tight tracking-tight tabular-nums " +
-                    (finiteEur(d.skEstimate?.estimatedTotalTaxEur) > 0 ? "text-destructive" : "")
+                    "text-2xl md:text-[22px] md:leading-[26px] font-bold leading-tight tracking-tight tabular-nums " +
+                    (finiteEur(d.skEstimate?.estimatedTotalTaxEur) > 0 ? "text-destructive dark:!text-[var(--rd-loss)]" : "")
                   }
                 >
                   {formatCurrency(finiteEur(d.skEstimate?.estimatedTotalTaxEur))}
                 </p>
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-[11px] text-muted-foreground mt-1">
                   Jednoducho 19 %: {formatCurrency(finiteEur(d.skEstimate?.estimatedTaxEur19Simple))}
                 </p>
               </CardContent>
             </Card>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
-            <Button
-              onClick={onDownload}
-              className="gap-2"
-              variant="default"
-              data-testid="button-tax-csv"
-            >
-              <FileDown className="h-4 w-4" />
-              Exportovať pre účtovníctvo
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              Súbor CSV (UTF-8) – realizácie, dividendy a stručná meta. Otvorí sa v Excele.
-            </p>
-          </div>
-
           <Card>
+            <CardContent className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between p-4">
+              <div className="min-w-0 space-y-0.5">
+                <p className="text-[15px] font-semibold leading-5">Exportovať pre účtovníctvo</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Súbor CSV (UTF-8) – realizácie, dividendy a stručná meta. Otvorí sa v Excele.
+                </p>
+              </div>
+              <Button
+                onClick={onDownload}
+                className="gap-2 shrink-0"
+                variant="default"
+                data-testid="button-tax-csv"
+              >
+                <FileDown className="h-4 w-4" />
+                Exportovať CSV
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card className="overflow-hidden">
             <CardHeader className="p-4 pb-2">
               <CardTitle className="text-sm font-medium">Dividendy v roku {d.year}</CardTitle>
               <CardDescription>
                 Hrubá, zrazená (pole commission v appke), čisté – v EUR. Zahraničné DTT nie sú automatická.
               </CardDescription>
             </CardHeader>
-            <CardContent className="p-4 pt-3">
+            <CardContent className="p-4 pt-3 md:p-0 md:pt-1">
               {(d.dividends?.items ?? []).length === 0 ? (
-                <p className="text-sm text-muted-foreground">V tomto roku žiadne dividendy v dátach.</p>
+                <p className="text-sm text-muted-foreground md:px-4 md:pb-4">V tomto roku žiadne dividendy v dátach.</p>
               ) : (
                 <>
                   {(() => {
@@ -292,41 +300,26 @@ function TaxSummaryClassic() {
                       Array.from(new Set(items.map((x) => x.ticker))).length - firstTenTickers.length;
                     return (
                       <>
-                  <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
-                    <div>
-                      <div className="text-muted-foreground">Hrubý súčet</div>
-                      <div className="font-semibold tabular-nums">
+                  <div className="mb-3 grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm md:px-4">
+                    <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 dark:bg-background">
+                      <div className="text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-tertiary">Hrubý súčet</div>
+                      <div className="mt-1 text-[15px] font-semibold tabular-nums">
                         {formatCurrency(finiteEur(d.dividends?.grossEur))}
                       </div>
                     </div>
-                    <div>
-                      <div className="text-muted-foreground">Zrážky (súčet, orient.)</div>
-                      <div className="font-semibold tabular-nums">
+                    <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 dark:bg-background">
+                      <div className="text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-tertiary">Zrážky (súčet, orient.)</div>
+                      <div className="mt-1 text-[15px] font-semibold tabular-nums text-red-600 dark:!text-[var(--rd-loss)]">
                         {formatCurrency(finiteEur(d.dividends?.withholdingEur))}
                       </div>
                     </div>
-                    <div>
-                      <div className="text-muted-foreground">Čisté</div>
-                      <div className="font-semibold tabular-nums text-green-600">
+                    <div className="rounded-lg border border-border bg-muted/30 px-3 py-2.5 dark:bg-background">
+                      <div className="text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-tertiary">Čisté</div>
+                      <div className="mt-1 text-[15px] font-semibold tabular-nums text-green-600 dark:!text-[var(--rd-profit)]">
                         {formatCurrency(finiteEur(d.dividends?.netEur))}
                       </div>
                     </div>
                   </div>
-                  {hiddenTickerCount > 0 && (
-                    <div className="mb-3 flex items-center justify-between gap-2">
-                      <p className="text-xs text-muted-foreground">
-                        Zobrazených prvých {firstTenTickers.length} tickerov z{" "}
-                        {firstTenTickers.length + hiddenTickerCount}.
-                      </p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowAllTickers((v) => !v)}
-                      >
-                        {showAllTickers ? "Zobraziť menej" : "Zobraziť viac"}
-                      </Button>
-                    </div>
-                  )}
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -340,21 +333,36 @@ function TaxSummaryClassic() {
                     <TableBody>
                       {visibleItems.map((r) => (
                         <TableRow key={r.transactionId}>
-                          <TableCell className="font-mono text-sm">{r.date}</TableCell>
-                          <TableCell className="font-mono">{r.ticker}</TableCell>
-                          <TableCell className="text-right tabular-nums">
+                          <TableCell className="text-muted-foreground tabular-nums">{r.date}</TableCell>
+                          <TableCell className="font-semibold">{r.ticker}</TableCell>
+                          <TableCell className="text-right font-semibold tabular-nums">
                             {formatCurrency(finiteEur(r.grossEur))}
                           </TableCell>
                           <TableCell className="text-right tabular-nums text-muted-foreground">
                             {formatCurrency(finiteEur(r.withholdingEur))}
                           </TableCell>
-                          <TableCell className="text-right tabular-nums">
+                          <TableCell className="text-right font-semibold tabular-nums text-green-600 dark:!text-[var(--rd-profit)]">
                             {formatCurrency(finiteEur(r.netEur))}
                           </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
+                  {hiddenTickerCount > 0 && (
+                    <div className="mt-3 flex items-center justify-between gap-2 md:mt-0 md:border-t md:border-border md:px-4 md:py-3">
+                      <p className="text-[11px] text-muted-foreground">
+                        Zobrazených prvých {firstTenTickers.length} tickerov z{" "}
+                        {firstTenTickers.length + hiddenTickerCount}.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowAllTickers((v) => !v)}
+                      >
+                        {showAllTickers ? "Zobraziť menej" : "Zobraziť viac"}
+                      </Button>
+                    </div>
+                  )}
                       </>
                     );
                   })()}
@@ -363,7 +371,7 @@ function TaxSummaryClassic() {
             </CardContent>
           </Card>
 
-          <p className="text-xs text-muted-foreground border-t border-border/60 pt-4 leading-relaxed max-w-3xl">
+          <p className="text-[11px] text-muted-foreground border-t border-border/60 pt-4 leading-relaxed max-w-3xl">
             {d.disclaimer ?? ""}
           </p>
         </>

@@ -526,7 +526,7 @@ function ImportClassic() {
   };
 
   return (
-    <div className="container mx-auto py-6 px-4 max-w-6xl">
+    <div className="flex flex-col gap-3 pb-8">
       <div className="mb-6">
         <h1 className="text-lg font-semibold mb-1">Import brokera</h1>
         <p className="text-xs text-muted-foreground">
@@ -534,7 +534,8 @@ function ImportClassic() {
         </p>
       </div>
 
-      <div className="flex flex-col gap-3 md:gap-6">
+      <div className="flex flex-col gap-3">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] lg:items-start">
         <Card>
           <CardHeader className="p-4 pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -547,19 +548,20 @@ function ImportClassic() {
           </CardHeader>
           <CardContent className="p-4 pt-3">
             <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium mb-2 block">Broker</label>
-                <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+              <div className="shrink-0">
+                <label className="text-[11px] font-medium text-muted-foreground mb-1.5 block">Broker</label>
+                <div className="inline-flex items-center gap-0.5 rounded-lg border border-border bg-background p-[3px]">
                   {IMPORT_BROKERS.map((broker) => (
                     <button
                       key={broker.id}
                       type="button"
                       onClick={() => handleBrokerChange(broker.id)}
                       className={cn(
-                        "inline-flex items-center gap-2 rounded-md border px-3 py-2 text-xs font-medium transition-colors",
+                        "inline-flex h-8 items-center gap-2 rounded-md px-3 text-[12px] font-medium transition-colors",
                         selectedBroker === broker.id
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/50",
+                          ? "bg-secondary text-foreground"
+                          : "text-tertiary hover:text-foreground",
                       )}
                       data-testid={`button-import-broker-${broker.id}`}
                     >
@@ -570,9 +572,8 @@ function ImportClassic() {
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-4">
-                <div className="flex-1">
-                  <label className="text-sm font-medium mb-2 block">Portfólio pre import</label>
+                <div className="flex-1 min-w-0">
+                  <label className="text-[11px] font-medium text-muted-foreground mb-1.5 block">Portfólio pre import</label>
                   <Select value={selectedPortfolio} onValueChange={setSelectedPortfolio}>
                     <SelectTrigger data-testid="select-portfolio">
                       <SelectValue placeholder="Vyberte portfólio" />
@@ -587,7 +588,8 @@ function ImportClassic() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex items-end">
+              </div>
+                <div className="space-y-3">
                   <input
                     type="file"
                     ref={fileInputRef}
@@ -596,9 +598,22 @@ function ImportClassic() {
                     className="hidden"
                     data-testid="input-file-upload"
                   />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isParsing}
+                    className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/20 px-4 py-7 text-center transition-colors hover:bg-muted/40 disabled:opacity-60 dark:bg-background"
+                  >
+                    <span className="flex size-9 items-center justify-center rounded-lg bg-primary/15 text-primary">
+                      <Upload className="h-4 w-4" />
+                    </span>
+                    <span className="text-[13px] font-semibold">Klikni a vyber súbor</span>
+                    <span className="text-[11px] text-muted-foreground">CSV, XLSX, XLS</span>
+                  </button>
                   <Button
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isParsing}
+                    className="w-full"
                     data-testid="button-upload-file"
                   >
                     {isParsing ? (
@@ -614,36 +629,58 @@ function ImportClassic() {
                     )}
                   </Button>
                 </div>
-              </div>
-
-              <Alert>
-                <Info className="h-4 w-4" />
-                <AlertTitle>
-                  {selectedBroker === "xtb" ? "Formát XTB exportu" : "Formát eToro exportu"}
-                </AlertTitle>
-                <AlertDescription>
-                  {selectedBroker === "xtb" ? (
-                    <>
-                      Podporovaný je <strong>nový</strong> XTB export (hárky{" "}
-                      <span className="font-mono text-xs">Cash Operations</span>,{" "}
-                      <span className="font-mono text-xs">Open Positions</span>) aj{" "}
-                      <strong>starý</strong> formát (
-                      <span className="font-mono text-xs">Cash operation history</span>
-                      ). Stĺpce cash: Type, Ticker/Symbol, Time, Amount, Comment, ID.
-                      Otvorené pozície sa použijú na kontrolu voči importovaným nákupom/predajom.
-                    </>
-                  ) : (
-                    <>
-                      Stiahnite Account Statement z eToro (Nastavenia → Account Statement → Download XLS).
-                      Transakcie sa čítajú z hárka Account Activity (akcie, ETF, krypto, vklady,
-                      poplatky). Dividendy z hárka Dividends.
-                    </>
-                  )}
-                </AlertDescription>
-              </Alert>
             </div>
           </CardContent>
         </Card>
+        <Card>
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-medium">
+              {selectedBroker === "xtb" ? "Formát XTB exportu" : "Formát eToro exportu"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 p-4 pt-1">
+            <p className="text-xs leading-relaxed text-muted-foreground md:text-[12px] md:leading-[18px]">
+              {selectedBroker === "xtb" ? (
+                <>
+                  Podporovaný je <strong>nový</strong> XTB export (hárky{" "}
+                  <span className="font-mono text-xs">Cash Operations</span>,{" "}
+                  <span className="font-mono text-xs">Open Positions</span>) aj{" "}
+                  <strong>starý</strong> formát (
+                  <span className="font-mono text-xs">Cash operation history</span>
+                  ). Stĺpce cash: Type, Ticker/Symbol, Time, Amount, Comment, ID.
+                  Otvorené pozície sa použijú na kontrolu voči importovaným nákupom/predajom.
+                </>
+              ) : (
+                <>
+                  Stiahnite Account Statement z eToro (Nastavenia → Account Statement → Download XLS).
+                  Transakcie sa čítajú z hárka Account Activity (akcie, ETF, krypto, vklady,
+                  poplatky). Dividendy z hárka Dividends.
+                </>
+              )}
+            </p>
+            <p className="text-[10px] font-semibold uppercase leading-3 tracking-[0.8px] text-tertiary">
+              Podporované typy transakcií
+            </p>
+            <div className="grid gap-2">
+              {(
+                [
+                  ["Nákup", "Stocks/ETF purchase - automaticky extrahuje množstvo z komentára a vypočíta cenu v EUR", "bg-sky-500/15 text-sky-600 dark:bg-[var(--rd-info-dim)] dark:!text-[var(--rd-info)]"],
+                  ["Predaj", "Stocks/ETF sale - rovnaká logika ako nákup", "bg-amber-500/15 text-amber-700 dark:bg-[var(--rd-warning-dim)] dark:!text-[var(--rd-warning)]"],
+                  ["Dividenda", "Dividend - automaticky extrahuje ticker z komentára ak chýba", "bg-emerald-500/15 text-emerald-700 dark:bg-[var(--rd-profit-dim)] dark:!text-[var(--rd-profit)]"],
+                  ["Daň", "Withholding tax - zrážková daň z dividend", "bg-red-500/15 text-red-600 dark:bg-[var(--rd-loss-dim)] dark:!text-[var(--rd-loss)]"],
+                ] as const
+              ).map(([label, desc, tone]) => (
+                <div key={label} className="flex items-center gap-3 rounded-lg border border-border px-3 py-2.5">
+                  <span className={cn("w-[74px] shrink-0 rounded-md px-1.5 py-1 text-center text-[10px] font-semibold uppercase tracking-[0.5px]", tone)}>
+                    {label}
+                  </span>
+                  <span className="text-[11px] leading-4 text-muted-foreground">{desc}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+        </div>
 
         {parseResult && (
           <>
@@ -873,41 +910,8 @@ function ImportClassic() {
           </>
         )}
 
-        <Card>
-          <CardHeader className="p-4 pb-2">
-            <CardTitle className="text-sm font-medium">Podporované typy transakcií</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-3">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="flex items-start gap-3">
-                <Badge variant="default">Nákup</Badge>
-                <div className="text-sm text-muted-foreground">
-                  Stocks/ETF purchase - automaticky extrahuje množstvo z komentára a vypočíta cenu v EUR
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <Badge variant="secondary">Predaj</Badge>
-                <div className="text-sm text-muted-foreground">
-                  Stocks/ETF sale - rovnaká logika ako nákup
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <Badge variant="outline">Dividenda</Badge>
-                <div className="text-sm text-muted-foreground">
-                  Dividend - automaticky extrahuje ticker z komentára ak chýba
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <Badge variant="destructive">Daň</Badge>
-                <div className="text-sm text-muted-foreground">
-                  Withholding tax - zrážková daň z dividend
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
+        <div className="grid gap-3 lg:grid-cols-2 lg:items-stretch">
+        <Card className="h-full">
           <CardHeader className="p-4 pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Wrench className="h-5 w-5" />
@@ -963,7 +967,7 @@ function ImportClassic() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="h-full">
           <CardHeader className="p-4 pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Wrench className="h-5 w-5" />
@@ -1019,6 +1023,7 @@ function ImportClassic() {
             </div>
           </CardContent>
         </Card>
+        </div>
 
         <Card>
           <CardHeader className="p-4 pb-2">

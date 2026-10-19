@@ -4,7 +4,6 @@ import { format, parseISO } from "date-fns";
 import { sk } from "date-fns/locale";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -22,7 +21,7 @@ import { HelpTip } from "@/components/HelpTip";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import { X, CheckCircle2, Ban, Clock } from "lucide-react";
+import { X, CheckCircle2, Ban, Clock, Mail, UserCheck } from "lucide-react";
 
 type RegistrationFilter = "pending" | "blocked" | "approved" | "all";
 
@@ -42,6 +41,9 @@ const STATUS_LABELS: Record<string, string> = {
   approved: "Schválený",
   blocked: "Zablokovaný",
 };
+
+const segItemClass =
+  "md:h-[26px] md:rounded-md md:border-0 md:px-2.5 md:text-[12px] md:font-medium md:text-tertiary md:hover:bg-transparent md:hover:text-foreground md:data-[state=on]:bg-secondary md:data-[state=on]:text-foreground";
 
 function statusLabel(s: string) {
   return STATUS_LABELS[s] ?? s;
@@ -172,7 +174,7 @@ export default function AdminRegistrations() {
           : null;
 
   return (
-    <div className="max-w-5xl mx-auto flex flex-col gap-3 md:gap-6 px-1 sm:px-0 pb-10">
+    <div className="max-w-5xl md:max-w-none mx-auto flex flex-col gap-3 px-1 sm:px-0 pb-10">
       <div className="space-y-2">
         <div className="flex items-start gap-2">
           <h1 className="text-lg font-semibold leading-tight">Registrácie používateľov</h1>
@@ -191,7 +193,7 @@ export default function AdminRegistrations() {
           </HelpTip>
         </div>
         <p className="text-muted-foreground text-xs">
-          Schválení · zablokovaní · čakajúci — podľa filtra. Na mobile potiahni výber do strany.
+          Schválení · zablokovaní · čakajúci — podľa filtra.<span className="md:hidden"> Na mobile potiahni výber do strany.</span>
         </p>
       </div>
 
@@ -205,7 +207,7 @@ export default function AdminRegistrations() {
             filter === "pending" ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "border-border hover:bg-muted/50",
           )}
         >
-          <div className="flex items-center gap-2 text-muted-foreground text-[11px] sm:text-xs uppercase tracking-wide">
+          <div className="flex items-center gap-2 text-muted-foreground text-[11px] sm:text-xs uppercase tracking-wide md:text-[10px] md:font-semibold md:tracking-[0.8px] md:dark:!text-[var(--rd-warning,hsl(var(--muted-foreground)))]">
             <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             Čakajú
           </div>
@@ -219,7 +221,7 @@ export default function AdminRegistrations() {
             filter === "approved" ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "border-border hover:bg-muted/50",
           )}
         >
-          <div className="flex items-center gap-2 text-muted-foreground text-[11px] sm:text-xs uppercase tracking-wide">
+          <div className="flex items-center gap-2 text-muted-foreground text-[11px] sm:text-xs uppercase tracking-wide md:text-[10px] md:font-semibold md:tracking-[0.8px] md:dark:!text-[var(--rd-profit,hsl(var(--muted-foreground)))]">
             <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-600" />
             Schválení
           </div>
@@ -233,7 +235,7 @@ export default function AdminRegistrations() {
             filter === "blocked" ? "border-primary bg-primary/5 ring-1 ring-primary/20" : "border-border hover:bg-muted/50",
           )}
         >
-          <div className="flex items-center gap-2 text-muted-foreground text-[11px] sm:text-xs uppercase tracking-wide">
+          <div className="flex items-center gap-2 text-muted-foreground text-[11px] sm:text-xs uppercase tracking-wide md:text-[10px] md:font-semibold md:tracking-[0.8px] md:dark:!text-[var(--rd-loss,hsl(var(--muted-foreground)))]">
             <Ban className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-red-500" />
             Zablokovaní
           </div>
@@ -242,7 +244,7 @@ export default function AdminRegistrations() {
       </div>
 
       <Card>
-        <CardHeader className="space-y-3 p-4 pb-2">
+        <CardHeader className="space-y-3 p-4 pb-2 md:flex-row md:items-start md:justify-between md:gap-4 md:space-y-0 md:pb-3">
           <div>
             <CardTitle className="text-sm font-medium">Zoznam e-mailov</CardTitle>
             <CardDescription className="text-xs sm:text-sm">
@@ -252,23 +254,23 @@ export default function AdminRegistrations() {
               {filter === "all" && "Všetci s lokálnym prihlásením"}
             </CardDescription>
           </div>
-          <div className="w-full min-w-0 overflow-x-auto overscroll-x-contain pb-0.5 [-webkit-overflow-scrolling:touch]">
+          <div className="w-full min-w-0 overflow-x-auto overscroll-x-contain pb-0.5 [-webkit-overflow-scrolling:touch] md:w-auto md:shrink-0 md:pb-0">
             <ToggleGroup
               type="single"
               value={filter}
               onValueChange={(v) => v && setFilter(v as RegistrationFilter)}
-              className="flex w-max min-w-full flex-nowrap justify-start gap-1 sm:justify-center sm:flex-wrap"
+              className="flex w-max min-w-full flex-nowrap justify-start gap-1 sm:justify-center sm:flex-wrap md:min-w-0 md:flex-nowrap md:gap-0.5 md:rounded-lg md:border md:border-border md:bg-background md:p-[3px]"
             >
-              <ToggleGroupItem value="pending" className="shrink-0 text-xs px-2.5 data-[state=on]:z-10">
+              <ToggleGroupItem value="pending" className={cn("shrink-0 text-xs px-2.5 data-[state=on]:z-10", segItemClass)}>
                 Čakajú ({counts.pending})
               </ToggleGroupItem>
-              <ToggleGroupItem value="approved" className="shrink-0 text-xs px-2.5 data-[state=on]:z-10">
+              <ToggleGroupItem value="approved" className={cn("shrink-0 text-xs px-2.5 data-[state=on]:z-10", segItemClass)}>
                 Schválení ({counts.approved})
               </ToggleGroupItem>
-              <ToggleGroupItem value="blocked" className="shrink-0 text-xs px-2.5 data-[state=on]:z-10">
+              <ToggleGroupItem value="blocked" className={cn("shrink-0 text-xs px-2.5 data-[state=on]:z-10", segItemClass)}>
                 Zablokovaní ({counts.blocked})
               </ToggleGroupItem>
-              <ToggleGroupItem value="all" className="shrink-0 text-xs px-2.5 data-[state=on]:z-10">
+              <ToggleGroupItem value="all" className={cn("shrink-0 text-xs px-2.5 data-[state=on]:z-10", segItemClass)}>
                 Všetci
               </ToggleGroupItem>
             </ToggleGroup>
@@ -282,7 +284,10 @@ export default function AdminRegistrations() {
               {listQuery.error instanceof Error ? listQuery.error.message : "Chyba načítania."}
             </p>
           ) : rows.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">Žiadne záznamy pre zvolený filter.</p>
+            <div className="py-8 text-center md:rounded-lg md:border md:border-dashed md:border-border md:py-10">
+              <UserCheck className="mx-auto mb-2 hidden h-5 w-5 text-muted-foreground md:block" />
+              <p className="text-sm text-muted-foreground">Žiadne záznamy pre zvolený filter.</p>
+            </div>
           ) : (
             <>
               {/* Mobile: karty */}
@@ -321,46 +326,61 @@ export default function AdminRegistrations() {
                 })}
               </div>
 
-              {/* Desktop: tabuľka */}
-              <div className="hidden md:block overflow-x-auto rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Meno</TableHead>
-                      <TableHead>Stav</TableHead>
-                      <TableHead>Registrovaný</TableHead>
-                      <TableHead className="text-right w-[min(280px,40%)]">Akcie</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {rows.map((row) => {
-                      const name =
-                        [row.firstName, row.lastName].filter(Boolean).join(" ").trim() || "—";
-                      const created =
-                        row.createdAt != null
-                          ? format(parseISO(String(row.createdAt)), "d. MMM yyyy HH:mm", { locale: sk })
-                          : "—";
-                      return (
-                        <TableRow key={row.id}>
-                          <TableCell className="font-mono text-sm max-w-[220px]">{row.email}</TableCell>
-                          <TableCell className="max-w-[140px] truncate">{name}</TableCell>
-                          <TableCell className="text-sm">{statusLabel(row.registrationStatus)}</TableCell>
-                          <TableCell className="text-sm text-muted-foreground whitespace-nowrap">{created}</TableCell>
-                          <TableCell className="text-right align-top">
-                            <RowActions
-                              row={row}
-                              busyUserId={busyUserId}
-                              onApprove={(id) => approveMutation.mutate(id)}
-                              onBlock={(id) => blockMutation.mutate(id)}
-                              onDismissClick={setDismissTarget}
-                            />
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+              {/* Desktop: zoznam riadkov */}
+              <div className="hidden md:block -mx-4 -mb-4 border-t border-border">
+                {rows.map((row) => {
+                  const name =
+                    [row.firstName, row.lastName].filter(Boolean).join(" ").trim() || "—";
+                  const created =
+                    row.createdAt != null
+                      ? format(parseISO(String(row.createdAt)), "d. MMM yyyy HH:mm", { locale: sk })
+                      : "—";
+                  const isPendingRow = row.registrationStatus === "pending";
+                  return (
+                    <div
+                      key={row.id}
+                      className={cn(
+                        "flex items-center gap-3 border-b border-border px-4 py-3 last:border-b-0",
+                        isPendingRow && "dark:bg-[var(--rd-warning-dim,transparent)]",
+                      )}
+                    >
+                      <Mail
+                        className={cn(
+                          "h-4 w-4 shrink-0 text-muted-foreground",
+                          isPendingRow && "dark:!text-[var(--rd-warning,hsl(var(--muted-foreground)))]",
+                        )}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate text-[13px] font-semibold">{row.email}</span>
+                          {name !== "—" && <span className="truncate text-[11px] text-muted-foreground">{name}</span>}
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-muted-foreground">
+                          {statusLabel(row.registrationStatus)} · {created}
+                        </div>
+                      </div>
+                      {!isPendingRow && (
+                        <span
+                          className={cn(
+                            "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.5px]",
+                            row.registrationStatus === "approved"
+                              ? "bg-emerald-500/10 text-emerald-700 dark:bg-[var(--rd-profit-dim,rgba(16,185,129,0.1))] dark:!text-[var(--rd-profit,#34d399)]"
+                              : "bg-red-500/10 text-red-700 dark:bg-[var(--rd-loss-dim,rgba(239,68,68,0.1))] dark:!text-[var(--rd-loss,#f87171)]",
+                          )}
+                        >
+                          {statusLabel(row.registrationStatus)}
+                        </span>
+                      )}
+                      <RowActions
+                        row={row}
+                        busyUserId={busyUserId}
+                        onApprove={(id) => approveMutation.mutate(id)}
+                        onBlock={(id) => blockMutation.mutate(id)}
+                        onDismissClick={setDismissTarget}
+                      />
+                    </div>
+                  );
+                })}
               </div>
             </>
           )}
