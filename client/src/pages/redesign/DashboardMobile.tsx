@@ -78,6 +78,7 @@ import {
   shouldUseExtendedQuotes,
 } from "@/lib/usMarketSession";
 import { fetchUpcomingEnvelope } from "@/lib/upcomingEvents";
+import { assetLotsPortfolioPath } from "@/lib/assetLotsPath";
 import { cn, formatShareQuantity } from "@/lib/utils";
 import {
   Avatar,
@@ -1722,11 +1723,7 @@ export default function DashboardMobile() {
                     row.showAfterHours && row.afterHoursPct != null
                       ? signedPct(row.afterHoursPct)
                       : undefined;
-                  const lotsPath = isAllPortfolios
-                    ? "all"
-                    : h.portfolioId
-                      ? h.portfolioId
-                      : "unassigned";
+                  const lotsPath = assetLotsPortfolioPath(h.portfolioId, portfolioParam);
                   const expandable = canExpandLots(h);
                   const expanded = expandable && expandedHoldingId === rowKey;
                   const lotsSlot = expanded ? (

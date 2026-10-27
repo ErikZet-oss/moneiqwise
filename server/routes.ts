@@ -4359,6 +4359,9 @@ export async function registerRoutes(
               ),
             )
             .orderBy(desc(transactions.transactionDate));
+        } else if (rawPid.startsWith("cat:") || rawPid.includes(",")) {
+          // Category scope (`cat:<id>`) or multi-select CSV — expand via storage.
+          allTx = await storage.getTransactionsByUser(userId, rawPid);
         } else {
           const p = await storage.getPortfolioById(rawPid, userId);
           if (!p) {

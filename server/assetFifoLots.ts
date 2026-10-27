@@ -17,6 +17,8 @@ function eurPerOneUnitOfCcy(ccy: string, rates: AllExchangeRates): number {
 }
 
 export type OpenFifoLotApiRow = {
+  /** Portfólio lotu (`null` = bez portfólia / `__none__`). */
+  portfolioId: string | null;
   acquiredAt: string;
   remainingShares: number;
   pricePerShareLocal: number;
@@ -92,11 +94,13 @@ export function buildOpenFifoLotRowList(
   const tickerUpper = String(tradeTx[0]!.ticker ?? "")
     .trim()
     .toUpperCase();
-  const queue: OpenFifoLot[] = [];
+  const queue: Array<OpenFifoLot & { portfolioId: string | null }> = [];
   for (const [key, lots] of Object.entries(openLots)) {
     if (!key.endsWith(`::${tickerUpper}`)) continue;
+    const pidRaw = key.slice(0, key.length - tickerUpper.length - 2);
+    const portfolioId = !pidRaw || pidRaw === "__none__" ? null : pidRaw;
     for (const lot of lots) {
-      if (lot.remainingShares > 1e-8) queue.push(lot);
+      if (lot.remainingShares > 1e-8) queue.push({ ...lot, portfolioId });
     }
   }
   queue.sort((a, b) => a.acquiredAt.localeCompare(b.acquiredAt));
@@ -107,6 +111,7 @@ export function buildOpenFifoLotRowList(
     const t = taxInfo(lot.acquiredAt, now);
     const pnlReady = pnlEur;
     return {
+      portfolioId: lot.portfolioId,
       acquiredAt: lot.acquiredAt,
       remainingShares: lot.remainingShares,
       pricePerShareLocal: lot.priceLocal,

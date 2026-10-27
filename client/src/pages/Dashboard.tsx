@@ -18,6 +18,7 @@ import { format, parse, parseISO, startOfDay } from "date-fns";
 import { sk } from "date-fns/locale";
 import { queryClient } from "@/lib/queryClient";
 import { fetchUpcomingEnvelope } from "@/lib/upcomingEvents";
+import { assetLotsPortfolioPath } from "@/lib/assetLotsPath";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -168,7 +169,7 @@ function canExpandMobileHoldingLots(holding: HoldingWithCostCurrency): boolean {
 
 function MobileHoldingBuyLotsPanel({
   portfolioId,
-  allPortfolios,
+  portfolioParam,
   ticker,
   currentPrice,
   shares,
@@ -182,8 +183,8 @@ function MobileHoldingBuyLotsPanel({
   getChangeColorFn,
 }: {
   portfolioId: string | null | undefined;
-  /** Pri agregovanom zobrazení „Všetky portfóliá“ holding nemá portfolioId. */
-  allPortfolios: boolean;
+  /** Aktuálny scope z getQueryParam (`all` / `cat:…` / uuid). */
+  portfolioParam: string;
   ticker: string;
   /** Aktuálna trhová cena / ks v zobrazovacej mene. */
   currentPrice: number | null;
@@ -203,12 +204,7 @@ function MobileHoldingBuyLotsPanel({
   formatPercentFn: (value: number) => string;
   getChangeColorFn: (value: number) => string;
 }) {
-  const pathSeg =
-    allPortfolios || portfolioId === "all"
-      ? "all"
-      : portfolioId == null || portfolioId === ""
-        ? "unassigned"
-        : portfolioId;
+  const pathSeg = assetLotsPortfolioPath(portfolioId, portfolioParam);
   const { data, isLoading, isError } = useQuery<{ lots: MobileOpenFifoLot[] }>({
     queryKey: ["/api/portfolios", pathSeg, "asset-lots", ticker],
     queryFn: async () => {
@@ -4156,7 +4152,7 @@ function DashboardClassic() {
                       {isLotsExpanded && canExpandLots ? (
                         <MobileHoldingBuyLotsPanel
                           portfolioId={holding.portfolioId}
-                          allPortfolios={isAllPortfolios}
+                          portfolioParam={portfolioParam}
                           ticker={holding.ticker}
                           currentPrice={Number.isFinite(valuationPrice) ? valuationPrice : null}
                           shares={shares}
@@ -4433,7 +4429,7 @@ function DashboardClassic() {
                             <TableCell colSpan={8} className="bg-muted/25 py-2 px-4">
                               <MobileHoldingBuyLotsPanel
                                 portfolioId={holding.portfolioId}
-                                allPortfolios={isAllPortfolios}
+                                portfolioParam={portfolioParam}
                                 ticker={holding.ticker}
                                 currentPrice={Number.isFinite(valuationPrice) ? valuationPrice : null}
                                 shares={shares}

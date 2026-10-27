@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useLocation, useParams } from "wouter";
 import { format, parseISO, startOfDay, subMonths, subYears } from "date-fns";
 import { sk } from "date-fns/locale";
@@ -100,6 +100,7 @@ type OwnershipActivityResponse = {
 };
 
 type OpenFifoLotRow = {
+  portfolioId?: string | null;
   acquiredAt: string;
   remainingShares: number;
   pricePerShareLocal: number;
@@ -252,34 +253,38 @@ export default function AssetDetailMobile() {
     },
   });
 
-  const lotQueries = useQueries({
-    queries: (data?.positions ?? []).map((pos) => {
-      const pathSeg = pos.portfolioId == null ? "unassigned" : pos.portfolioId;
-      return {
-        queryKey: ["/api/portfolios", pathSeg, "asset-lots", ticker] as const,
-        queryFn: async () => {
-          const res = await fetch(
-            `/api/portfolios/${pathSeg === "unassigned" ? "unassigned" : encodeURIComponent(pathSeg)}/asset-lots?ticker=${encodeURIComponent(ticker)}`,
-            { credentials: "include" },
-          );
-          if (!res.ok) throw new Error("asset-lots");
-          return res.json() as Promise<{ lots: OpenFifoLotRow[] }>;
-        },
-        enabled: !!ticker && !!data && data.ticker !== "CASH" && (data?.positions?.length ?? 0) > 0,
-        staleTime: 60_000,
-      };
-    }),
+  const lotsTicker = data?.ticker || ticker;
+  const {
+    data: lotsPayload,
+    isLoading: lotsLoading,
+    isError: lotsError,
+  } = useQuery<{ lots: OpenFifoLotRow[] }>({
+    queryKey: ["/api/portfolios", "all", "asset-lots", lotsTicker],
+    enabled: !!lotsTicker && !!data && data.ticker !== "CASH" && (data.positions?.length ?? 0) > 0,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/portfolios/all/asset-lots?ticker=${encodeURIComponent(lotsTicker)}`,
+        { credentials: "include" },
+      );
+      if (!res.ok) throw new Error("asset-lots");
+      return res.json();
+    },
   });
 
   const fifoLots = useMemo(() => {
     if (!data?.positions) return [];
-    const out: Array<OpenFifoLotRow & { portfolioName: string }> = [];
-    data.positions.forEach((pos, i) => {
-      const lots = lotQueries[i]?.data?.lots ?? [];
-      for (const lot of lots) out.push({ ...lot, portfolioName: pos.portfolioName });
-    });
-    return out;
-  }, [data?.positions, lotQueries]);
+    const nameByPid = new Map<string | null, string>();
+    for (const pos of data.positions) {
+      nameByPid.set(pos.portfolioId, pos.portfolioName);
+    }
+    return (lotsPayload?.lots ?? []).map((lot) => ({
+      ...lot,
+      portfolioName:
+        nameByPid.get(lot.portfolioId ?? null) ??
+        (lot.portfolioId == null ? "Bez portfólia" : "Portfólio"),
+    }));
+  }, [data?.positions, lotsPayload?.lots]);
 
   const quoteCurrency = data ? getTickerCurrency(data.ticker) : currency;
   const series = useMemo(() => {
@@ -951,7 +956,11 @@ export default function AssetDetailMobile() {
                 </button>
               ) : null}
             </div>
-            {fifoLots.length === 0 ? (
+            {lotsLoading && fifoLots.length === 0 ? (
+              <p className="rd-type-body-sm text-[var(--rd-text-tertiary)]">Načítavam nákupy…</p>
+            ) : lotsError ? (
+              <p className="rd-type-body-sm text-[var(--rd-loss)]">Nákupy sa nepodarilo načítať.</p>
+            ) : fifoLots.length === 0 ? (
               <p className="rd-type-body-sm text-[var(--rd-text-tertiary)]">
                 Žiadne otvorené nákupné dávky.
               </p>
