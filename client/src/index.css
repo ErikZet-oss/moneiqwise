@@ -215,7 +215,9 @@ html:not([data-mobile-ui="redesign"]) {
   --sidebar-text-tertiary: 214 10% 60%;
 }
 
-html.dark:not([data-mobile-ui="redesign"]) {
+/* Also set on body: ThemeProvider adds .dark there, and those vars would otherwise override html. */
+html.dark:not([data-mobile-ui="redesign"]),
+html.dark:not([data-mobile-ui="redesign"]) body {
   /* Figma Foundations · Color (same values as mobile --rd-*) */
   --background: 210 17% 2%;
   --foreground: 200 14% 96%;

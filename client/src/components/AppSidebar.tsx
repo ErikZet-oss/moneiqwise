@@ -208,7 +208,9 @@ export function AppSidebar() {
         <Icon
           className={cn(
             "size-4 shrink-0",
-            active ? "text-sidebar-foreground" : "text-[hsl(var(--sidebar-text-tertiary))]",
+            active
+              ? "text-sidebar-primary"
+              : "text-[hsl(var(--sidebar-text-secondary))]",
           )}
           strokeWidth={1.75}
         />
@@ -246,7 +248,7 @@ export function AppSidebar() {
                     />
                   </span>
                 ) : (
-                  <span className="flex size-[22px] shrink-0 items-center justify-center rounded-md bg-primary/15 text-sidebar-primary">
+                  <span className="flex size-[22px] shrink-0 items-center justify-center rounded-md bg-[var(--rd-profit-dim,hsl(var(--sidebar-primary)/0.15))] text-sidebar-primary">
                     <Layers className="size-[13px]" strokeWidth={2} />
                   </span>
                 )}
@@ -367,10 +369,10 @@ export function AppSidebar() {
 
       <SidebarFooter className="gap-0.5 border-t border-sidebar-border px-4 pb-3.5 pt-2.5">
         <div
-          className="flex items-center gap-2.5 px-2.5 py-[5px]"
+          className="flex items-center gap-2.5 px-2.5 py-[7px]"
           data-testid="button-theme-toggle"
         >
-          <Sun className="size-4 shrink-0 text-[hsl(var(--sidebar-text-tertiary))]" strokeWidth={1.75} />
+          <Sun className="size-4 shrink-0 text-[hsl(var(--sidebar-text-secondary))]" strokeWidth={1.75} />
           <span className="min-w-0 flex-1 text-[13px] leading-[18px] text-[hsl(var(--sidebar-text-secondary))]">
             Svetlý režim
           </span>
@@ -386,7 +388,7 @@ export function AppSidebar() {
           className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-left text-[13px] leading-[18px] text-[hsl(var(--sidebar-text-secondary))] hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
           onClick={handleLogout}
         >
-          <LogOut className="size-4 shrink-0 text-[hsl(var(--sidebar-text-tertiary))]" strokeWidth={1.75} />
+          <LogOut className="size-4 shrink-0 text-[hsl(var(--sidebar-text-secondary))]" strokeWidth={1.75} />
           <span>Odhlásiť sa</span>
         </button>
 
