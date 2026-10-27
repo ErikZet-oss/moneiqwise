@@ -222,17 +222,21 @@ function FaqPageClassic() {
             <section>
               <h3 className="text-sm font-semibold mb-2">Aké sú otváracie hodiny a čo znamená ikona mesiaca?</h3>
               <p>
-                Pre americký trh používame orientačné časové pásma podľa času v Bratislave:
+                Relácie US akcií počítame podľa <strong>America/New_York</strong> (nie natvrdo SEČ),
+                aby sedeli aj týždne, keď EU a USA menia čas v iný deň (±1&nbsp;h voči Bratislave).
               </p>
               <ul className="list-disc pl-5 space-y-2 mt-2">
                 <li>
-                  <strong>PRE_MARKET:</strong> približne 10:00 – 15:30 (pracovné dni)
+                  <strong>PRE_MARKET:</strong> 4:00 – 9:30 ET
                 </li>
                 <li>
-                  <strong>LIVE (hlavná relácia):</strong> 15:30 – 22:00
+                  <strong>LIVE (hlavná relácia):</strong> 9:30 – 16:00 ET (väčšinou 15:30 – 22:00 SEČ/SELČ)
                 </li>
                 <li>
-                  <strong>CLOSED:</strong> mimo týchto hodín a počas víkendu
+                  <strong>POST / OVERNIGHT:</strong> po 16:00 ET až do ďalšieho pre-marketu
+                </li>
+                <li>
+                  <strong>CLOSED:</strong> víkend
                 </li>
               </ul>
               <p className="mt-2">

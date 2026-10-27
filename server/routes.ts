@@ -68,6 +68,10 @@ import {
 } from "./portfolioHistorySeries";
 import { buildCalculationAuditWorkbook } from "./calculationAuditXlsx";
 import { buildOpenFifoLotRowList, loadTradeTransactionsForAssetLots } from "./assetFifoLots";
+import {
+  getUsMarketSessionState,
+  shouldUseExtendedQuotes,
+} from "@shared/usMarketSession";
 import { buildTaxSummary } from "./taxSummary";
 import {
   fetchWatchlistStockSection,
@@ -361,22 +365,7 @@ const CACHE_FILE = path.join(CACHE_DIR, "prices.json");
 const QUOTE_CACHE_VERSION = 25;
 
 function isUsExtendedSessionNow(): boolean {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Europe/Bratislava",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    weekday: "short",
-  }).formatToParts(new Date());
-  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
-  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
-  const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
-  if (weekday.startsWith("Sat") || weekday.startsWith("Sun")) return false;
-  const m = hour * 60 + minute;
-  if (m >= 10 * 60 && m < 15 * 60 + 30) return true;
-  if (m >= 22 * 60 || m < 2 * 60) return true;
-  if (m >= 2 * 60 && m < 10 * 60) return true;
-  return false;
+  return shouldUseExtendedQuotes(getUsMarketSessionState());
 }
 
 function isStaleOvernightInPreMarketCache(_data: unknown): boolean {
@@ -4382,28 +4371,8 @@ export async function registerRoutes(
           pNow = q.price;
         }
         // Extended cenu len mimo RTH; pri zatvorenom trhu ostáva close (regularMarketPrice).
-        const usSession = (() => {
-          const parts = new Intl.DateTimeFormat("en-GB", {
-            timeZone: "Europe/Bratislava",
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: false,
-            weekday: "short",
-          }).formatToParts(now);
-          const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
-          const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
-          const weekday = parts.find((p) => p.type === "weekday")?.value ?? "";
-          const isWeekend = weekday.startsWith("Sat") || weekday.startsWith("Sun");
-          const m = hour * 60 + minute;
-          if (isWeekend) return "CLOSED" as const;
-          if (m >= 10 * 60 && m < 15 * 60 + 30) return "PRE_MARKET" as const;
-          if (m >= 15 * 60 + 30 && m < 22 * 60) return "LIVE" as const;
-          if (m >= 22 * 60 || m < 2 * 60) return "POST_MARKET" as const;
-          if (m >= 2 * 60 && m < 10 * 60) return "OVERNIGHT" as const;
-          return "CLOSED" as const;
-        })();
-        const useExtended =
-          usSession === "PRE_MARKET" || usSession === "POST_MARKET" || usSession === "OVERNIGHT";
+        const usSession = getUsMarketSessionState(now);
+        const useExtended = shouldUseExtendedQuotes(usSession);
         const pre = q?.preMarketPrice;
         if (
           useExtended &&

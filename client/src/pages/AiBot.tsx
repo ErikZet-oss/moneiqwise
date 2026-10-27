@@ -492,8 +492,8 @@ export default function AiBot({ embedded = false }: { embedded?: boolean }) {
               <p className="text-sm font-medium">Automatické behy</p>
               <HelpTip title="Automatické behy">
                 <p>
-                  Pred open ~15:00–15:29 SEČ/SELČ (do US open 15:30) a pred close
-                  ~21:45–21:59 (US close 22:00), pracovné dni.
+                  Pred open ~30 min pred 9:30 ET a pred close ~15 min pred 16:00 ET
+                  (v SEČ/SELČ sa posúva pri zmene času), pracovné dni.
                 </p>
                 <p>
                   Automat spraví brief pre{" "}

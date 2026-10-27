@@ -100,6 +100,7 @@ import {
   getQuoteRefreshIntervalMs,
   getQuoteStaleTimeMs,
   getUsMarketSessionState,
+  getUsRthBratislavaLabels,
   shouldShowExtendedQuote,
   shouldUseExtendedQuotes,
 } from "@/lib/usMarketSession";
@@ -2345,9 +2346,9 @@ function DashboardClassic() {
               </TooltipTrigger>
               <TooltipContent className="max-w-[260px]">
                 <p className="text-xs">
-                  Počas hlavnej relácie US (15:30–22:00 SEČ v pracovný deň) je rebríček z{" "}
-                  <span className="font-medium">dennej zmeny RTH</span>. Mimo toho sa použije predobchodná alebo
-                  poobchodná zmena oproti záverečnej cene RTH, ak ju máme v kotácii.
+                  Počas hlavnej relácie US (9:30–16:00 ET / zvyčajne {getUsRthBratislavaLabels().range} SEČ) je
+                  rebríček z <span className="font-medium">dennej zmeny RTH</span>. Mimo toho sa použije
+                  predobchodná alebo poobchodná zmena oproti záverečnej cene RTH, ak ju máme v kotácii.
                 </p>
               </TooltipContent>
             </Tooltip>
@@ -2417,9 +2418,9 @@ function DashboardClassic() {
               </TooltipTrigger>
               <TooltipContent className="max-w-[260px]">
                 <p className="text-xs">
-                  Počas hlavnej relácie US (15:30–22:00 SEČ v pracovný deň) je rebríček z{" "}
-                  <span className="font-medium">dennej zmeny RTH</span>. Mimo toho sa použije predobchodná alebo
-                  poobchodná zmena oproti záverečnej cene RTH, ak ju máme v kotácii.
+                  Počas hlavnej relácie US (9:30–16:00 ET / zvyčajne {getUsRthBratislavaLabels().range} SEČ) je
+                  rebríček z <span className="font-medium">dennej zmeny RTH</span>. Mimo toho sa použije
+                  predobchodná alebo poobchodná zmena oproti záverečnej cene RTH, ak ju máme v kotácii.
                 </p>
               </TooltipContent>
             </Tooltip>
